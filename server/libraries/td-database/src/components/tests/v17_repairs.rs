@@ -9,6 +9,7 @@
 
 use crate::components::ApiserverComponent;
 use crate::generated_sql::generated;
+use crate::test_utils::domain::PostgresDomain;
 use crate::test_utils::postgres::pool;
 use td_schema::schema::{archive, deltas};
 
@@ -149,9 +150,12 @@ const TABLES: &[&str] = &[
     "executions",
 ];
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn v16_to_v17_ends_live_attempts_of_canceled_runs_postgres() {
-    let db = pool().await;
+async fn v16_to_v17_ends_live_attempts_of_canceled_runs_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = pool(&domain_apiserver_postgres_internals).await;
     db.admin
         .upgrade_source(archive::source(16))
         .await

@@ -33,13 +33,12 @@ td-test = [
     "td-schema/td-test",
     "td-security/td-test",
     "te-system/td-test",
-    "td-tdd?/td-test",
 ]
 dummy = []
 mock-env = []
 test_logging = []
 # `test-utils` exposes the test pool factories in `td_database::test_utils`.
-test-utils = ["dep:td-tdd"]
+test-utils = []
 # `embedded-postgres` enables the in-process Postgres server used by the
 # apiserver's default-when-no-URL path.
 embedded-postgres = ["dep:postgresql_embedded"]
@@ -70,7 +69,6 @@ td-error = { workspace = true }
 td-common = { workspace = true }
 td-schema = { workspace = true }
 td-security = { workspace = true }
-td-tdd = { workspace = true, optional = true }
 te-system = { workspace = true }
 
 # External dependencies

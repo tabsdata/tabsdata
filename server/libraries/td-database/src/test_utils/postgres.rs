@@ -20,8 +20,9 @@
 //!   here starts a server.
 //! - [`pool`] — td-database's own `components`/RLS tests: one schema (left un-upgraded;
 //!   the caller applies it via [`TestDb::upgrade`]) plus the privileged handle and
-//!   superuser connect target those internal tests need, on the domain named by
-//!   [`super::domain::INTERNALS_DOMAIN`].
+//!   superuser connect target those internal tests need, on the
+//!   `apiserver_postgres_internals` domain each of them declares (see
+//!   [`super::domain`]).
 //!
 //! # Project scope in tests
 //!
@@ -35,12 +36,10 @@ use crate::config::{DatabaseConfig, PostgresConnect, RlsRoles, Schema};
 use crate::pool::TdPool;
 #[cfg(test)]
 use crate::test_utils::TestDb;
-use crate::test_utils::test_pool_config;
-use crate::test_utils::{MultiTestDb, TestDbCleanup};
-// Only the crate's own internal factories still boot a server; the macro path
-// takes the connect from its caller.
 #[cfg(test)]
 use crate::test_utils::domain;
+use crate::test_utils::test_pool_config;
+use crate::test_utils::{MultiTestDb, TestDbCleanup};
 
 /// A schema name unique across all concurrent tests, processes and runs: a fresh
 /// UUIDv7 ([`td_common::id::id`]) per provisioned component. Globally unique ⇒ no
@@ -107,15 +106,15 @@ async fn provision_schema(
     (schema, config, admin)
 }
 
-/// A [`TestDb`] on its **own unique schema** of the internals domain, for td-database's
-/// own `components`/RLS tests — which connect their own pools as arbitrary roles via
-/// [`domain::admin_base`] and create their own roles when they need
-/// to mutate role-level state. The schema is superuser-owned and left un-upgraded;
+/// A [`TestDb`] on its **own unique schema** of `internals`, the domain the calling
+/// test declared, for td-database's own `components`/RLS tests — which connect their
+/// own pools as arbitrary roles via [`domain::admin_base`] and create their own roles
+/// when they need to mutate role-level state. The schema is superuser-owned and left un-upgraded;
 /// the caller applies it via [`TestDb::upgrade`]. [`TestDb::drop`] drops the schema.
 #[cfg(test)]
-pub(crate) async fn pool() -> TestDb {
+pub(crate) async fn pool(internals: &domain::PostgresDomain) -> TestDb {
     // Keep the privileged pool open in the `TestDb` — the caller drives `upgrade`.
-    let admin_connect = domain::admin_base();
+    let admin_connect = domain::admin_base(internals);
     let (schema, config, admin) = provision_schema(&admin_connect, 0).await;
     let serving = TdPool::connect(&config).await.expect("postgres test pool");
 
@@ -179,6 +178,7 @@ mod tests {
     use crate::components::{ApiserverComponent, SchemaSource};
     use crate::generated_sql::generated;
     use crate::pool::PoolKind;
+    use crate::test_utils::domain::PostgresDomain;
 
     struct DummySource;
     impl SchemaSource for DummySource {
@@ -214,10 +214,13 @@ mod tests {
             .unwrap()
     }
 
+    #[td_test::domain("apiserver_postgres_internals")]
     #[tokio::test]
-    async fn pools_provisions_each_component_on_its_own_schema() {
+    async fn pools_provisions_each_component_on_its_own_schema(
+        domain_apiserver_postgres_internals: PostgresDomain,
+    ) {
         let db = pools(
-            domain::admin_base(),
+            domain::admin_base(&domain_apiserver_postgres_internals),
             &[&ApiserverComponent, &DummyComponent],
         )
         .await;

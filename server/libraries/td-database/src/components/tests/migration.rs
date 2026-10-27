@@ -15,6 +15,7 @@ use crate::error::DbError;
 use crate::pool::TdPool;
 use crate::sea_query::builder::SeaQueryExt;
 use crate::test_utils::TestDb;
+use crate::test_utils::domain::PostgresDomain;
 use sea_query::{
     Alias, Asterisk, ColumnDef, Expr, ExprTrait, JoinType, Order, Query, SelectStatement, Table,
 };
@@ -239,9 +240,15 @@ async fn assert_ladder_matches_fresh_install(new_db: impl AsyncFn() -> TestDb) {
     }
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn migrated_schema_matches_fresh_install_postgres() {
-    assert_ladder_matches_fresh_install(async || crate::test_utils::postgres::pool().await).await;
+async fn migrated_schema_matches_fresh_install_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    assert_ladder_matches_fresh_install(async || {
+        crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await
+    })
+    .await;
 }
 
 /// A throwaway v1 -> v2 bump whose delta drops a column under a standing
@@ -326,9 +333,12 @@ async fn assert_destructive_delta_clears_standing_views(new_db: impl AsyncFn() -
 /// Two upgraders racing the same fresh schema never reach a raw DDL error.
 /// Whether they overlap at all is up to the scheduler, so the guard is on the
 /// failure mode, not on a loser existing.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn concurrent_upgrades_never_race_the_ladder_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn concurrent_upgrades_never_race_the_ladder_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     let (a, b) = (db.admin.clone(), db.admin.clone());
     let (ra, rb) = tokio::join!(
         tokio::spawn(async move { a.upgrade_source(&DestructiveFixture(2)).await }),
@@ -356,9 +366,12 @@ async fn concurrent_upgrades_never_race_the_ladder_postgres() {
 
 /// The refusal, with the claim deliberately held: advisory locks are
 /// database-wide, so any connection holding the key stands in for a peer.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn upgrade_refuses_a_held_claim_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn upgrade_refuses_a_held_claim_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     let mut holder = db.serving.begin().await.unwrap();
     let key = format!("upgrade:schema:{}", db.admin.schema());
     assert!(holder.try_advisory_xact_lock_text(&key).await.unwrap());
@@ -434,15 +447,22 @@ async fn assert_failed_ladder_rolls_back(new_db: impl AsyncFn() -> TestDb) {
     assert_eq!(view_columns(&db.serving, "fixture_view").await, ["a", "b"]);
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn failed_ladder_rolls_back_postgres() {
-    assert_failed_ladder_rolls_back(async || crate::test_utils::postgres::pool().await).await;
+async fn failed_ladder_rolls_back_postgres(domain_apiserver_postgres_internals: PostgresDomain) {
+    assert_failed_ladder_rolls_back(async || {
+        crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await
+    })
+    .await;
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn destructive_delta_clears_standing_views_postgres() {
+async fn destructive_delta_clears_standing_views_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
     assert_destructive_delta_clears_standing_views(async || {
-        crate::test_utils::postgres::pool().await
+        crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await
     })
     .await;
 }
@@ -534,9 +554,12 @@ impl SchemaSource for RetiringFixture {
     }
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn retired_derived_objects_are_dropped_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn retired_derived_objects_are_dropped_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.admin.upgrade_source(&RetiringFixture(1)).await.unwrap();
     assert_eq!(
         view_columns(&db.serving, RetiringFixture::VIEW).await,

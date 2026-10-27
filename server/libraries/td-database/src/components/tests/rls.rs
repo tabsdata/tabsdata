@@ -15,6 +15,7 @@ use crate::generated_sql::generated;
 use crate::pool::TdPool;
 use crate::pool::options::pg_connect_options;
 use crate::test_utils::domain;
+use crate::test_utils::domain::PostgresDomain;
 use sqlx::postgres::PgPoolOptions;
 use td_schema::ACROSS_PROJECTS_ROLE;
 
@@ -34,21 +35,24 @@ async fn scope(tx: &mut sqlx::Transaction<'static, sqlx::Postgres>, tenant: &str
 /// Row-level security end to end on real Postgres: reads are scoped to the
 /// project, `WITH CHECK` rejects a cross-project insert, an unset GUC fails
 /// closed, and the `across_projects` role spans projects.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn test_rls_project_isolation() {
+async fn test_rls_project_isolation(domain_apiserver_postgres_internals: PostgresDomain) {
     const INSERT: &str = "INSERT INTO collections \
         (id, collection_id, name, description, group_id, collection_type, valid_from, defined_by_id) \
         VALUES ($1::text || '_v', $1, $1, 'd', $2, 'F', now(), 'u')";
     const COUNT: &str = "SELECT count(*) FROM collections";
 
-    let db = crate::test_utils::postgres::pool().await;
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.upgrade().await.unwrap();
 
     // Mirror the serving shape: a login that can switch into either RLS role
     // but inherits neither, so an unswitched transaction is fail-closed.
     let su = PgPoolOptions::new()
         .max_connections(1)
-        .connect_with(pg_connect_options(&domain::admin_base()))
+        .connect_with(pg_connect_options(&domain::admin_base(
+            &domain_apiserver_postgres_internals,
+        )))
         .await
         .unwrap();
     let schema = db.schema();
@@ -83,7 +87,7 @@ async fn test_rls_project_isolation() {
     }
 
     let app_connect = PostgresConnect {
-        options: domain::admin_base().options,
+        options: domain::admin_base(&domain_apiserver_postgres_internals).options,
         username: app_user.clone(),
         password: "app_pw".to_string(),
     };
@@ -204,11 +208,14 @@ async fn test_rls_project_isolation() {
 /// `check()` refuses to start if the **serving** role bypasses RLS. A
 /// misconfigured tenant role with `BYPASSRLS` would silently collapse project
 /// isolation; `check_rls_posture` on the serving pool must catch it.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn test_check_rejects_bypassing_serving_role() {
+async fn test_check_rejects_bypassing_serving_role(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
     use crate::config::DatabaseConfig;
 
-    let db = crate::test_utils::postgres::pool().await;
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.upgrade().await.unwrap();
     ApiserverComponent
         .check(&db.serving)
@@ -220,7 +227,9 @@ async fn test_check_rejects_bypassing_serving_role() {
     // A unique name — roles are cluster-global on the shared server.
     let su = PgPoolOptions::new()
         .max_connections(1)
-        .connect_with(pg_connect_options(&domain::admin_base()))
+        .connect_with(pg_connect_options(&domain::admin_base(
+            &domain_apiserver_postgres_internals,
+        )))
         .await
         .unwrap();
     let bypassing = format!("b_{}", td_common::id::id());
@@ -232,7 +241,7 @@ async fn test_check_rejects_bypassing_serving_role() {
     // Pin the bypassing role so the pool's connections `SET ROLE` it (the
     // superuser may switch to any role).
     let cfg = DatabaseConfig {
-        conn: (domain::admin_base()),
+        conn: (domain::admin_base(&domain_apiserver_postgres_internals)),
         schema: Some(db.schema().clone()),
         roles: Some(RlsRoles {
             in_project: bypassing.clone(),
@@ -258,9 +267,12 @@ async fn test_check_rejects_bypassing_serving_role() {
 /// The SCD2 close-out trigger's predecessor UPDATE succeeds under RLS (the
 /// scoped role sees the row it must close), and FK validation across RLS
 /// tables works; project B then sees no rows.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn test_rls_scd2_close_out_trigger_under_role() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn test_rls_scd2_close_out_trigger_under_role(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.upgrade().await.unwrap();
 
     let mut c = db.begin().await.unwrap();
@@ -323,9 +335,10 @@ async fn test_rls_scd2_close_out_trigger_under_role() {
 /// The scope primitives switch the transaction's role, `scope_in_project`
 /// switches back from a prior cross-project scope, and `scope_global` is the
 /// tenant role with no project.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn test_set_rls_scope_primitive() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn test_set_rls_scope_primitive(domain_apiserver_postgres_internals: PostgresDomain) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.upgrade().await.unwrap();
     let roles = crate::test_utils::postgres::test_rls_roles();
 

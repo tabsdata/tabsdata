@@ -15,21 +15,22 @@ use crate::generated_sql::generated;
 use crate::pool::TdPool;
 use crate::pool::options::pg_connect_options;
 use crate::test_utils::domain;
+use crate::test_utils::domain::PostgresDomain;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use std::time::Duration;
 
-async fn su_pool() -> PgPool {
+async fn su_pool(internals: &PostgresDomain) -> PgPool {
     PgPoolOptions::new()
         .max_connections(1)
-        .connect_with(pg_connect_options(&domain::admin_base()))
+        .connect_with(pg_connect_options(&domain::admin_base(internals)))
         .await
         .unwrap()
 }
 
-fn login(username: &str, password: &str) -> PostgresConnect {
+fn login(internals: &PostgresDomain, username: &str, password: &str) -> PostgresConnect {
     PostgresConnect {
-        options: domain::admin_base().options,
+        options: domain::admin_base(internals).options,
         username: username.to_owned(),
         password: password.to_owned(),
     }
@@ -101,17 +102,25 @@ async fn owner_password_hash(su: &PgPool, owner: &str) -> String {
 
 /// The serving path the apiserver takes: log in as the owner and `SET ROLE`
 /// to the app role.
-async fn owner_login(owner: &str, password: &str, roles: &RlsRoles) -> Result<(), DbError> {
-    let mut config = config(login(owner, password), owner, roles);
+async fn owner_login(
+    internals: &PostgresDomain,
+    owner: &str,
+    password: &str,
+    roles: &RlsRoles,
+) -> Result<(), DbError> {
+    let mut config = config(login(internals, owner, password), owner, roles);
     config.pool.regular.as_mut().unwrap().acquire_timeout = Duration::from_secs(3);
     TdPool::connect(&config).await?.close().await;
     Ok(())
 }
 
 /// Provision, converge, and serve through a plain `CREATEROLE` admin.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn test_provision_as_non_superuser_admin() {
-    let su = su_pool().await;
+async fn test_provision_as_non_superuser_admin(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let su = su_pool(&domain_apiserver_postgres_internals).await;
     let uid = td_common::id::id();
     let admin_role = format!("adm_{uid}");
     let owner = format!("own_{uid}");
@@ -121,9 +130,13 @@ async fn test_provision_as_non_superuser_admin() {
     };
     create_admin(&su, &admin_role).await;
 
-    let admin = AdminPool::connect(&config(login(&admin_role, "adm_pw"), &owner, &roles))
-        .await
-        .unwrap();
+    let admin = AdminPool::connect(&config(
+        login(&domain_apiserver_postgres_internals, &admin_role, "adm_pw"),
+        &owner,
+        &roles,
+    ))
+    .await
+    .unwrap();
     let spec = ProvisionSpec {
         schema: &owner,
         owner: &owner,
@@ -161,7 +174,14 @@ async fn test_provision_as_non_superuser_admin() {
     // fresh salt even for an identical password, so hashes can't express
     // "unchanged".
     admin.provision_schema(&spec).await.unwrap();
-    owner_login(&owner, "owner_pw1", &roles).await.unwrap();
+    owner_login(
+        &domain_apiserver_postgres_internals,
+        &owner,
+        "owner_pw1",
+        &roles,
+    )
+    .await
+    .unwrap();
 
     // Quote and backslash exercise the `format(%L)` quoting of the staged
     // password GUC.
@@ -171,9 +191,23 @@ async fn test_provision_as_non_superuser_admin() {
         ..spec
     };
     admin.provision_schema(&drifted).await.unwrap();
-    owner_login(&owner, hostile_pw, &roles).await.unwrap();
+    owner_login(
+        &domain_apiserver_postgres_internals,
+        &owner,
+        hostile_pw,
+        &roles,
+    )
+    .await
+    .unwrap();
     assert!(
-        owner_login(&owner, "owner_pw1", &roles).await.is_err(),
+        owner_login(
+            &domain_apiserver_postgres_internals,
+            &owner,
+            "owner_pw1",
+            &roles
+        )
+        .await
+        .is_err(),
         "stale password must stop authenticating after convergence"
     );
 
@@ -194,9 +228,12 @@ async fn test_provision_as_non_superuser_admin() {
 /// role phase on the privileged entry, after which the owner — who holds no
 /// `CREATEROLE` — installs a schema whose policies name those roles. Without
 /// the phase the owner's preflight refuses and names every missing object.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn test_upgrade_provisions_roles_on_the_privileged_entry() {
-    let su = su_pool().await;
+async fn test_upgrade_provisions_roles_on_the_privileged_entry(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let su = su_pool(&domain_apiserver_postgres_internals).await;
     let uid = td_common::id::id();
     let owner = format!("own_{uid}");
     let roles = RlsRoles {
@@ -212,9 +249,13 @@ async fn test_upgrade_provisions_roles_on_the_privileged_entry() {
             .await
             .unwrap();
     }
-    let as_owner = AdminPool::connect(&config(login(&owner, "own_pw"), &owner, &roles))
-        .await
-        .unwrap();
+    let as_owner = AdminPool::connect(&config(
+        login(&domain_apiserver_postgres_internals, &owner, "own_pw"),
+        &owner,
+        &roles,
+    ))
+    .await
+    .unwrap();
 
     let refused = as_owner.upgrade(&ApiserverComponent).await.unwrap_err();
     let DbError::MissingAcrossProjectsMembership(sql) = &refused else {
@@ -228,7 +269,7 @@ async fn test_upgrade_provisions_roles_on_the_privileged_entry() {
     }
 
     let privileged = AdminPool::connect(&DatabaseConfig {
-        conn: domain::admin_base(),
+        conn: domain::admin_base(&domain_apiserver_postgres_internals),
         schema: None,
         roles: None,
         pool: crate::test_utils::test_pool_config(),
@@ -276,9 +317,12 @@ async fn test_upgrade_provisions_roles_on_the_privileged_entry() {
 /// credential that would let run 2 converge (pre-16 `CREATEROLE` may
 /// grant/alter any non-superuser role). The batch fails loudly at
 /// `CREATE SCHEMA ... AUTHORIZATION` instead.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn test_provision_leaves_foreign_owner_role_untouched() {
-    let su = su_pool().await;
+async fn test_provision_leaves_foreign_owner_role_untouched(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let su = su_pool(&domain_apiserver_postgres_internals).await;
     let uid = td_common::id::id();
     let admin_role = format!("adm_{uid}");
     let foreign = format!("own_{uid}");
@@ -294,9 +338,13 @@ async fn test_provision_leaves_foreign_owner_role_untouched() {
     .await;
     let hash = owner_password_hash(&su, &foreign).await;
 
-    let admin = AdminPool::connect(&config(login(&admin_role, "adm_pw"), &foreign, &roles))
-        .await
-        .unwrap();
+    let admin = AdminPool::connect(&config(
+        login(&domain_apiserver_postgres_internals, &admin_role, "adm_pw"),
+        &foreign,
+        &roles,
+    ))
+    .await
+    .unwrap();
     let spec = ProvisionSpec {
         schema: &foreign,
         owner: &foreign,
@@ -338,9 +386,12 @@ async fn test_provision_leaves_foreign_owner_role_untouched() {
 /// A superuser admin colliding with an existing foreign role leaves it
 /// byte-untouched (`pg_has_role` is always true for superusers, so the gate
 /// deliberately does not consult it).
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn test_superuser_provision_leaves_colliding_role_untouched() {
-    let su = su_pool().await;
+async fn test_superuser_provision_leaves_colliding_role_untouched(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let su = su_pool(&domain_apiserver_postgres_internals).await;
     let uid = td_common::id::id();
     let foreign = format!("own_{uid}");
     let roles = RlsRoles {
@@ -354,9 +405,13 @@ async fn test_superuser_provision_leaves_colliding_role_untouched() {
     .await;
     let hash = owner_password_hash(&su, &foreign).await;
 
-    let admin = AdminPool::connect(&config(domain::admin_base(), &foreign, &roles))
-        .await
-        .unwrap();
+    let admin = AdminPool::connect(&config(
+        domain::admin_base(&domain_apiserver_postgres_internals),
+        &foreign,
+        &roles,
+    ))
+    .await
+    .unwrap();
     let spec = ProvisionSpec {
         schema: &foreign,
         owner: &foreign,
@@ -392,9 +447,12 @@ async fn test_superuser_provision_leaves_colliding_role_untouched() {
 
 /// A batch that genuinely cannot proceed keeps its provisioning error type,
 /// so `db create` reports the real SQLSTATE.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn test_provision_without_create_privilege_fails() {
-    let su = su_pool().await;
+async fn test_provision_without_create_privilege_fails(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let su = su_pool(&domain_apiserver_postgres_internals).await;
     let uid = td_common::id::id();
     let admin_role = format!("adm_{uid}");
     execute_retrying(
@@ -408,9 +466,13 @@ async fn test_provision_without_create_privilege_fails() {
         in_project: format!("ip_{uid}"),
         across_projects: format!("ap_{uid}"),
     };
-    let admin = AdminPool::connect(&config(login(&admin_role, "adm_pw"), &owner, &roles))
-        .await
-        .unwrap();
+    let admin = AdminPool::connect(&config(
+        login(&domain_apiserver_postgres_internals, &admin_role, "adm_pw"),
+        &owner,
+        &roles,
+    ))
+    .await
+    .unwrap();
     let spec = ProvisionSpec {
         schema: &owner,
         owner: &owner,

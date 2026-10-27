@@ -14,6 +14,7 @@ use crate::generated_sql::generated;
 use crate::pool::TdPool;
 use crate::pool::options::pg_connect_options;
 use crate::test_utils::domain;
+use crate::test_utils::domain::PostgresDomain;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use td_common::id::{Id, id_time};
@@ -138,9 +139,12 @@ async fn seed_run_chain(db: &TdPool) {
 
 /// v2 → v3 stamps every existing run with the prefix it resolves to today:
 /// the collection's own `base_path`, falling back to the project's.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn v2_to_v3_backfills_run_base_path_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn v2_to_v3_backfills_run_base_path_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.admin
         .upgrade_source(archive::source(2))
         .await
@@ -216,9 +220,10 @@ async fn seed_function_versions(db: &TdPool) {
 /// — the same ordering the close-out trigger uses — leaving one open row per
 /// partition and a zero-length interval for the loser of a same-instant pair,
 /// and drops the `_current` snapshot tables.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn v3_to_v4_backfills_valid_to_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn v3_to_v4_backfills_valid_to_postgres(domain_apiserver_postgres_internals: PostgresDomain) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.admin
         .upgrade_source(archive::source(3))
         .await
@@ -325,9 +330,12 @@ fn seed_v3_deleted_function_sql() -> Vec<String> {
 
 /// The ladder ends what a v3 delete left under the tombstone: the system table
 /// and dependency end with the function, and the frozen user table stays open.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn v3_to_v4_closes_the_leftovers_of_a_deleted_function_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn v3_to_v4_closes_the_leftovers_of_a_deleted_function_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.admin
         .upgrade_source(archive::source(3))
         .await
@@ -537,9 +545,12 @@ async fn seed_attempts(db: &TdPool) {
 
 /// An attempt's duplicate v3 materializations of one table collapse into the
 /// settled one.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn v3_materializations_of_one_attempt_collapse_into_the_settled_one_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn v3_materializations_of_one_attempt_collapse_into_the_settled_one_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.admin
         .upgrade_source(archive::source(3))
         .await
@@ -587,9 +598,10 @@ async fn v3_materializations_of_one_attempt_collapse_into_the_settled_one_postgr
 
 /// v3 → v4 drops the pointer logs: every attempt gets an interval by
 /// `triggered_on`, the newest is open, and `Pending`/`Voided` leave no trace.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn v3_to_v4_backfills_attempts_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn v3_to_v4_backfills_attempts_postgres(domain_apiserver_postgres_internals: PostgresDomain) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.admin
         .upgrade_source(archive::source(3))
         .await
@@ -776,9 +788,12 @@ async fn seed_shared_group_ids(db: &TdPool, projects: &[&str]) {
 /// Full v8 → v9 run over seeded projects: the oldest keeps the fixed ids,
 /// the others derive theirs (still UUIDv7 `Id`s), `kind` is stamped, every
 /// referrer follows, the name views resolve, and the new key and FKs enforce.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn v8_to_v9_remints_system_group_ids_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn v8_to_v9_remints_system_group_ids_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.admin
         .upgrade_source(archive::source(8))
         .await
@@ -918,9 +933,12 @@ fn sqlstate<T>(result: Result<T, sqlx::Error>) -> String {
 /// Two re-minted projects sharing the first 25 characters of their ids land on
 /// one group id; the primary key v8 → v9 adds refuses it and the ladder rolls
 /// back.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn v8_to_v9_refuses_projects_whose_ids_collide_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn v8_to_v9_refuses_projects_whose_ids_collide_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.admin
         .upgrade_source(archive::source(8))
         .await
@@ -950,9 +968,12 @@ async fn v8_to_v9_refuses_projects_whose_ids_collide_postgres() {
 /// The upgrade transaction runs outside project scope, so a data delta over a
 /// project-scoped table sees every row without opting in. Asserted from inside
 /// the transaction, the way a delta would observe it.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn the_upgrade_transaction_is_not_project_scoped_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn the_upgrade_transaction_is_not_project_scoped_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     let mut tx = db.admin.begin_upgrade().await.unwrap();
     tx.execute_batch(&[format!(
         "DO $$ BEGIN \
@@ -976,9 +997,12 @@ async fn the_upgrade_transaction_is_not_project_scoped_postgres() {
 /// factories keep the schema superuser-owned, and a superuser bypasses RLS
 /// unconditionally): the membership admits an unscoped write, and a role
 /// without it still sees nothing.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn force_rls_binds_a_non_superuser_owner_postgres() {
-    let su = connect(&domain::admin_base()).await;
+async fn force_rls_binds_a_non_superuser_owner_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let su = connect(&domain::admin_base(&domain_apiserver_postgres_internals)).await;
     let uid = td_common::id::id();
     let (owner, schema) = (format!("own_{uid}"), format!("sch_{uid}"));
 
@@ -1008,7 +1032,7 @@ async fn force_rls_binds_a_non_superuser_owner_postgres() {
             .unwrap();
     }
 
-    let mut identity = domain::admin_base();
+    let mut identity = domain::admin_base(&domain_apiserver_postgres_internals);
     identity.username = owner.clone();
     identity.password = "own_pw".to_owned();
     let as_owner = connect(&identity).await;
@@ -1091,9 +1115,12 @@ async fn force_rls_binds_a_non_superuser_owner_postgres() {
 /// that the upgrade seam opens scope for *both* policy shapes a ladder spans.
 /// Without it the backfills match nothing: the `valid_to` chain would be all
 /// NULL and its `SET NOT NULL` would fail the ladder.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn ladder_backfills_data_under_a_non_superuser_owner_postgres() {
-    let su = connect(&domain::admin_base()).await;
+async fn ladder_backfills_data_under_a_non_superuser_owner_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let su = connect(&domain::admin_base(&domain_apiserver_postgres_internals)).await;
     let uid = td_common::id::id();
     let (owner, schema) = (format!("own_{uid}"), format!("sch_{uid}"));
     let roles = RlsRoles {
@@ -1128,7 +1155,7 @@ async fn ladder_backfills_data_under_a_non_superuser_owner_postgres() {
             .unwrap();
     }
 
-    let mut identity = domain::admin_base();
+    let mut identity = domain::admin_base(&domain_apiserver_postgres_internals);
     identity.username = owner.clone();
     identity.password = "own_pw".to_owned();
     let config = DatabaseConfig {
@@ -1212,9 +1239,12 @@ async fn ladder_backfills_data_under_a_non_superuser_owner_postgres() {
 /// marker without `ADMIN` on it, so `ensure_rls_roles` warns instead of
 /// granting it onward and the `across_projects` role ends up admitting
 /// nobody. The upgrade must refuse before the ladder opens, naming the grant.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn upgrade_refuses_a_missing_across_projects_membership_postgres() {
-    let su = connect(&domain::admin_base()).await;
+async fn upgrade_refuses_a_missing_across_projects_membership_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let su = connect(&domain::admin_base(&domain_apiserver_postgres_internals)).await;
     let uid = td_common::id::id();
     let (owner, schema) = (format!("own_{uid}"), format!("sch_{uid}"));
     let roles = RlsRoles {
@@ -1239,7 +1269,7 @@ async fn upgrade_refuses_a_missing_across_projects_membership_postgres() {
             .unwrap();
     }
 
-    let mut identity = domain::admin_base();
+    let mut identity = domain::admin_base(&domain_apiserver_postgres_internals);
     identity.username = owner.clone();
     identity.password = "own_pw".to_owned();
     let admin = AdminPool::connect(&DatabaseConfig {

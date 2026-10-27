@@ -72,6 +72,7 @@ mod tests {
     use super::*;
     use crate::config::PostgresConfig;
     use crate::test_utils::domain;
+    use crate::test_utils::domain::PostgresDomain;
     use sqlx::postgres::PgPoolOptions;
     use std::collections::BTreeMap;
 
@@ -111,9 +112,12 @@ mod tests {
     /// the startup `options` GUCs, `extra_float_digits`) actually reach the
     /// server — read them back over a live connection. `extra_float_digits: 1`
     /// is deliberate: sqlx sends `2` when unset, so a dropped mapping fails.
+    #[td_test::domain("apiserver_postgres_internals")]
     #[tokio::test]
-    async fn pg_connect_options_reach_the_server() {
-        let base = domain::admin_base();
+    async fn pg_connect_options_reach_the_server(
+        domain_apiserver_postgres_internals: PostgresDomain,
+    ) {
+        let base = domain::admin_base(&domain_apiserver_postgres_internals);
         let connect = PostgresConnect {
             options: PostgresConfig {
                 application_name: Some("td-connect-options-test".to_string()),

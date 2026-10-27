@@ -262,7 +262,8 @@ parallel and isolate completely:
 `domains_py.yaml` — a Rust test run has no business provisioning the domains of the other two
 dozen systems, and nothing in it declares an env-sourced option, so the run needs no
 1Password load beyond the crypto key. That manifest,
-`variant/config/pytest/domains_rs.yaml`, holds `apiserver_postgres` for the db tests and
+`variant/config/pytest/domains_rs.yaml`, holds `apiserver_postgres` for the db tests,
+`apiserver_postgres_internals` for td-database's own suite, and
 `apiserver_s3` / `apiserver_az` / `apiserver_gcs` for the object-store ones — named apart
 from the `s3` / `azureblob` / `gcs` the Python suite reads, because the manifest recreates
 what it names and a Rust run must not clear a domain another suite is reading.
@@ -270,7 +271,7 @@ what it names and a Rust run must not clear a domain another suite is reading.
 The domains are recreated with `--force` on every run, so the db tests start against an
 empty database, no per-test schema outlives the run that made it, and the objects the
 object-store tests write are reclaimed rather than accumulating under a system's staging
-root. All four are **required**: a store missing one fails the provisioning task instead of
+root. All of them are **required**: a store missing one fails the provisioning task instead of
 failing every test that needed it. **Systems** are not this task's business: they are
 long-running and expected to be up, so `tdd system create` / `restart` stay a separate,
 deliberate act.
@@ -300,5 +301,7 @@ set it to `skip`. td-database's own internals suite (`components/tests/*`,
 `pool::connect`) tests the database layer itself rather than apiserver logic, so it needs
 a superuser: it creates and drops cluster-global roles and sets `BYPASSRLS`. It takes that
 from the `apiserver_postgres_internals` domain, whose descriptor carries the owning system's
-superuser. Nothing starts a server for it, so it fails rather than skips when that domain
-cannot be resolved.
+superuser. Each of its tests declares that domain like any other backend test,
+`#[td_test::domain("apiserver_postgres_internals")]` above its test attribute, and hands
+the injected `PostgresDomain` to `test_utils::postgres::pool` / `test_utils::domain::admin_base`,
+so it skips and fails by the same rules.

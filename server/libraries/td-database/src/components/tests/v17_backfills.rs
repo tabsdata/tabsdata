@@ -8,6 +8,7 @@
 //! the topology did later, and a deleted project closes with its groups.
 
 use crate::components::ApiserverComponent;
+use crate::test_utils::domain::PostgresDomain;
 use crate::test_utils::postgres::pool;
 use td_common::id::Id;
 use td_schema::schema::archive;
@@ -59,9 +60,12 @@ const TIMELINE: &str = "to_char(valid_from AT TIME ZONE 'UTC', 'HH24:MI:SS.MS') 
     CASE WHEN valid_to = 'infinity' THEN 'open' \
     ELSE to_char(valid_to AT TIME ZONE 'UTC', 'HH24:MI:SS.MS') END || '/' || defined_by_id";
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn v17_to_v18_backfills_the_entity_timelines_postgres() {
-    let db = pool().await;
+async fn v17_to_v18_backfills_the_entity_timelines_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = pool(&domain_apiserver_postgres_internals).await;
     db.admin
         .upgrade_source(archive::source(17))
         .await

@@ -9,6 +9,7 @@
 use crate::components::ApiserverComponent;
 use crate::generated_sql::generated;
 use crate::pool::TdPool;
+use crate::test_utils::domain::PostgresDomain;
 
 use super::{at_rest, execute, scalars};
 
@@ -62,9 +63,12 @@ async fn interval_chain(db: &TdPool, function_id: &str) -> Vec<String> {
 /// In-order inserts chain intervals: each insert closes its predecessor at
 /// the new `valid_from` and lands open; a same-instant pair leaves the
 /// lower-id row with a zero-length interval — invisible at every T.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn scd2_close_out_chains_and_tie_breaks_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn scd2_close_out_chains_and_tie_breaks_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.admin.upgrade(&ApiserverComponent).await.unwrap();
     seed_prelude(&db.serving).await;
 
@@ -102,9 +106,12 @@ async fn scd2_close_out_chains_and_tie_breaks_postgres() {
 /// An out-of-order insert splices into the chain: it closes the covering
 /// predecessor at its own `valid_from` and takes its successor's start as its
 /// `valid_to` — the open row stays open.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn scd2_close_out_splices_out_of_order_inserts_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn scd2_close_out_splices_out_of_order_inserts_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.admin.upgrade(&ApiserverComponent).await.unwrap();
     seed_prelude(&db.serving).await;
 
@@ -137,9 +144,12 @@ async fn scd2_close_out_splices_out_of_order_inserts_postgres() {
 /// Two transactions inserting into the same partition serialize on the
 /// trigger's per-partition advisory lock: afterwards the chain is intact and
 /// exactly one row is open (the unique partial index enforces the same).
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn scd2_close_out_serializes_concurrent_inserts_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn scd2_close_out_serializes_concurrent_inserts_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.admin.upgrade(&ApiserverComponent).await.unwrap();
     seed_prelude(&db.serving).await;
 
@@ -190,9 +200,12 @@ async fn scd2_close_out_serializes_concurrent_inserts_postgres() {
 /// the close-out's `valid_to`-only UPDATE through: inserting a second patch
 /// version must succeed (it updates the first row's `valid_to`), while a
 /// direct UPDATE of any other column still raises.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn scd2_immutable_guard_carves_out_valid_to_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn scd2_immutable_guard_carves_out_valid_to_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.admin.upgrade(&ApiserverComponent).await.unwrap();
     seed_prelude(&db.serving).await;
     execute(
@@ -312,9 +325,12 @@ async fn attempt_chain(db: &TdPool) -> Vec<String> {
     .await
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn scd2_attempts_chain_on_valid_from_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn scd2_attempts_chain_on_valid_from_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.admin.upgrade(&ApiserverComponent).await.unwrap();
     seed_run_prelude(&db.serving).await;
 
@@ -343,9 +359,12 @@ async fn scd2_attempts_chain_on_valid_from_postgres() {
 }
 
 /// A void closes the open interval by hand and opens nothing.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn scd2_attempts_void_leaves_no_current_row_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn scd2_attempts_void_leaves_no_current_row_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.admin.upgrade(&ApiserverComponent).await.unwrap();
     seed_run_prelude(&db.serving).await;
     execute(&db.serving, &insert_attempt(1, "2026-01-01T01:00:00Z")).await;

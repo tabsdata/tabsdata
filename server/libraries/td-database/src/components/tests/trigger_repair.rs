@@ -6,6 +6,7 @@
 //! no tick sends: they never started, so there is nothing to stop.
 
 use crate::components::ApiserverComponent;
+use crate::test_utils::domain::PostgresDomain;
 use td_schema::schema::archive;
 
 use super::{execute, scalars};
@@ -35,9 +36,12 @@ fn worker(id: u32, status: &str, enabled: bool) -> String {
     )
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn v12_to_v13_stops_the_unstarted_triggers_of_disabled_versions_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn v12_to_v13_stops_the_unstarted_triggers_of_disabled_versions_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.admin
         .upgrade_source(archive::source(12))
         .await

@@ -6,6 +6,7 @@
 //! per run of contiguous row versions naming the same parent.
 
 use crate::components::ApiserverComponent;
+use crate::test_utils::domain::PostgresDomain;
 use crate::test_utils::postgres::pool;
 use td_common::id::Id;
 use td_schema::schema::archive;
@@ -68,9 +69,12 @@ const SEED: &[&str] = &[
        'A', 'infinity', 'DQS', 'tt0')",
 ];
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn v18_to_v19_moves_parents_to_tags_postgres() {
-    let db = pool().await;
+async fn v18_to_v19_moves_parents_to_tags_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = pool(&domain_apiserver_postgres_internals).await;
     db.admin
         .upgrade_source(archive::source(18))
         .await

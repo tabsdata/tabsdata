@@ -5,6 +5,7 @@
 //! v13 → v14 keys every fact by an id minted at its `ts`, through the
 //! delta's `td_mint_id`, which mints the application's `Id`.
 
+use crate::test_utils::domain::PostgresDomain;
 use std::collections::HashSet;
 use std::time::{Duration, SystemTime};
 
@@ -37,9 +38,12 @@ fn at_ms(ms: u64) -> SystemTime {
     SystemTime::UNIX_EPOCH + Duration::from_millis(ms)
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn v13_to_v14_keys_facts_at_their_instant_postgres() {
-    let db = pool().await;
+async fn v13_to_v14_keys_facts_at_their_instant_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = pool(&domain_apiserver_postgres_internals).await;
     db.admin
         .upgrade_source(archive::source(13))
         .await
@@ -76,9 +80,12 @@ async fn v13_to_v14_keys_facts_at_their_instant_postgres() {
     );
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn td_mint_id_mints_application_ids_postgres() {
-    let db = pool().await;
+async fn td_mint_id_mints_application_ids_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = pool(&domain_apiserver_postgres_internals).await;
     db.admin
         .upgrade(&ApiserverComponent)
         .await

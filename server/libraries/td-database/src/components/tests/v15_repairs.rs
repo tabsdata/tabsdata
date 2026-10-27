@@ -9,6 +9,7 @@
 //! live after its attempt ended fails at the attempt's end.
 
 use crate::components::ApiserverComponent;
+use crate::test_utils::domain::PostgresDomain;
 use crate::test_utils::postgres::pool;
 use td_schema::schema::archive;
 
@@ -84,9 +85,12 @@ fn worker(id: u32, worker_type: &str, attempt: &str) -> String {
     )
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn v14_to_v15_settles_what_v13_left_unsettled_postgres() {
-    let db = pool().await;
+async fn v14_to_v15_settles_what_v13_left_unsettled_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = pool(&domain_apiserver_postgres_internals).await;
     db.admin
         .upgrade_source(archive::source(14))
         .await
@@ -196,9 +200,12 @@ const ORPHANS: &[&str] = &[
     "UPDATE triggers SET valid_to = '2026-01-01 13:00:00+00' WHERE id = 'tr1'",
 ];
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn v14_to_v15_drops_rows_outliving_their_function_postgres() {
-    let db = pool().await;
+async fn v14_to_v15_drops_rows_outliving_their_function_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = pool(&domain_apiserver_postgres_internals).await;
     db.admin
         .upgrade_source(archive::source(14))
         .await

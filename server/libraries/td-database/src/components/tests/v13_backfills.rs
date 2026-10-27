@@ -9,6 +9,7 @@
 
 use crate::components::ApiserverComponent;
 use crate::test_utils::TestDb;
+use crate::test_utils::domain::PostgresDomain;
 use td_schema::schema::archive;
 
 use super::{execute, scalars};
@@ -97,8 +98,8 @@ fn materialization(id: u32, attempt: u32, has_data: &str, at: &str) -> String {
     )
 }
 
-async fn v12() -> TestDb {
-    let db = crate::test_utils::postgres::pool().await;
+async fn v12(internals: &PostgresDomain) -> TestDb {
+    let db = crate::test_utils::postgres::pool(internals).await;
     db.admin
         .upgrade_source(archive::source(12))
         .await
@@ -109,9 +110,12 @@ async fn v12() -> TestDb {
     db
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn v12_to_v13_parks_unsettled_materializations_and_splices_the_rest_postgres() {
-    let db = v12().await;
+async fn v12_to_v13_parks_unsettled_materializations_and_splices_the_rest_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = v12(&domain_apiserver_postgres_internals).await;
     let seed = [
         function(1, "f0", "f", "2026-01-01 09:00:00+00"),
         table("t70", "tt0", "t", "2026-01-01 08:00:00+00"),
@@ -158,9 +162,12 @@ async fn v12_to_v13_parks_unsettled_materializations_and_splices_the_rest_postgr
     );
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn v12_to_v13_pins_each_input_to_the_table_version_its_run_read_postgres() {
-    let db = v12().await;
+async fn v12_to_v13_pins_each_input_to_the_table_version_its_run_read_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = v12(&domain_apiserver_postgres_internals).await;
     let seed = [
         function(1, "f0", "f", "2026-01-01 09:00:00+00"),
         table("t70", "tt0", "t", "2026-01-01 08:00:00+00"),
@@ -190,9 +197,12 @@ async fn v12_to_v13_pins_each_input_to_the_table_version_its_run_read_postgres()
     );
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn v12_to_v13_refuses_duplicate_live_names_postgres() {
-    let db = v12().await;
+async fn v12_to_v13_refuses_duplicate_live_names_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = v12(&domain_apiserver_postgres_internals).await;
     for stmt in [
         function(1, "f0", "same", "2026-01-01 09:00:00+00"),
         function(2, "f1", "same", "2026-01-01 09:00:00+00"),

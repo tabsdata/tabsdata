@@ -284,6 +284,7 @@ mod tests {
     use crate::config::{PoolConfig, PoolsConfig, PostgresConfig, PostgresConnect};
     use crate::connection::PgConnectionExt;
     use crate::test_utils::domain;
+    use crate::test_utils::domain::PostgresDomain;
     use std::time::Duration;
     use tracing::log::LevelFilter;
 
@@ -302,11 +303,12 @@ mod tests {
 
     /// The read path's only guard, now that the regular pool carries writes
     /// too: `begin_ro` rejects them per transaction.
+    #[td_test::domain("apiserver_postgres_internals")]
     #[tokio::test]
-    async fn pg_begin_ro_rejects_writes() {
-        let test_db = crate::test_utils::postgres::pool().await;
+    async fn pg_begin_ro_rejects_writes(domain_apiserver_postgres_internals: PostgresDomain) {
+        let test_db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
         let config = crate::test_utils::postgres::schema_connectable(
-            &crate::test_utils::domain::admin_base(),
+            &crate::test_utils::domain::admin_base(&domain_apiserver_postgres_internals),
             test_db.schema(),
         );
         let pool = crate::db(&config).await.unwrap();
@@ -375,10 +377,13 @@ mod tests {
     /// A serving connect whose app role cannot be switched to (missing role —
     /// provisioning never ran) surfaces as [`DbError::AppRoleNotSwitchable`],
     /// not as an opaque pool timeout.
+    #[td_test::domain("apiserver_postgres_internals")]
     #[tokio::test]
-    async fn serving_connect_surfaces_unswitchable_app_role() {
+    async fn serving_connect_surfaces_unswitchable_app_role(
+        domain_apiserver_postgres_internals: PostgresDomain,
+    ) {
         let config = DatabaseConfig {
-            conn: domain::admin_base(),
+            conn: domain::admin_base(&domain_apiserver_postgres_internals),
             schema: Some(Schema::new("public")),
             roles: Some(RlsRoles {
                 in_project: format!("td_no_role_{}", td_common::id::id()),

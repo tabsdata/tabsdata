@@ -13,6 +13,7 @@ use crate::config::{
 };
 use crate::error::DbError;
 use crate::test_utils::domain;
+use crate::test_utils::domain::PostgresDomain;
 use std::time::Duration;
 
 fn roles(uid: &impl std::fmt::Display) -> RlsRoles {
@@ -23,9 +24,9 @@ fn roles(uid: &impl std::fmt::Display) -> RlsRoles {
 }
 
 /// The privileged pool `db create` provisions with.
-fn admin_config(roles: &RlsRoles) -> DatabaseConfig {
+fn admin_config(internals: &PostgresDomain, roles: &RlsRoles) -> DatabaseConfig {
     DatabaseConfig {
-        conn: domain::admin_base(),
+        conn: domain::admin_base(internals),
         schema: None,
         roles: Some(roles.clone()),
         pool: PoolsConfig {
@@ -41,13 +42,13 @@ fn admin_config(roles: &RlsRoles) -> DatabaseConfig {
 }
 
 /// A `database:` map holding the one component this crate's registry carries.
-fn components(schema: &str, roles: &RlsRoles) -> DatabaseComponents {
+fn components(internals: &PostgresDomain, schema: &str, roles: &RlsRoles) -> DatabaseComponents {
     DatabaseComponents::from([(
         APISERVER_COMPONENT_KEY.to_owned(),
         ComponentConfig {
             postgres: PostgresConfig {
                 password: Some("owner_pw".to_owned()),
-                ..domain::admin_base().options
+                ..domain::admin_base(internals).options
             },
             schema: Some(Schema::new(schema)),
             in_project_role: Some(roles.in_project.clone()),
@@ -57,13 +58,18 @@ fn components(schema: &str, roles: &RlsRoles) -> DatabaseComponents {
     )])
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn test_provision_all_refuses_an_already_provisioned_component() {
+async fn test_provision_all_refuses_an_already_provisioned_component(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
     let uid = td_common::id::id();
     let schema = format!("own_{uid}");
     let roles = roles(&uid);
-    let components = components(&schema, &roles);
-    let admin = AdminPool::connect(&admin_config(&roles)).await.unwrap();
+    let components = components(&domain_apiserver_postgres_internals, &schema, &roles);
+    let admin = AdminPool::connect(&admin_config(&domain_apiserver_postgres_internals, &roles))
+        .await
+        .unwrap();
 
     provision_all(&components, &admin).await.unwrap();
     assert!(admin.schema_exists(&schema).await.unwrap());

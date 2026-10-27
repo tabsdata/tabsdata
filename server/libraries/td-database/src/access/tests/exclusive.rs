@@ -10,6 +10,7 @@ use crate::access::Attempt;
 use crate::access::{DbPool, GatedConnection, InProject, ProjectKey, ServiceDbError, XW};
 use crate::domain::DomainPools;
 use crate::test_utils::TestDb;
+use crate::test_utils::domain::PostgresDomain;
 use std::fmt::{Display, Formatter};
 use std::time::Duration;
 
@@ -20,8 +21,8 @@ const WAIT: Duration = Duration::from_millis(300);
 /// A pools registry over one test schema. No `upgrade`: opening a connection
 /// sets the scope GUC and takes an advisory lock, neither of which reads a
 /// table.
-async fn pools() -> (TestDb, DomainPools) {
-    let db = crate::test_utils::postgres::pool().await;
+async fn pools(internals: &PostgresDomain) -> (TestDb, DomainPools) {
+    let db = crate::test_utils::postgres::pool(internals).await;
     let mut pool = db.serving.clone();
     pool.acquire_timeout = WAIT;
     (db, DomainPools::of_apiserver(pool))
@@ -45,9 +46,12 @@ fn project() -> TestProject {
     TestProject(format!("p_{}", td_common::id::id()))
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn exclusive_serializes_the_same_project() {
-    let (_db, pools) = pools().await;
+async fn exclusive_serializes_the_same_project(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let (_db, pools) = pools(&domain_apiserver_postgres_internals).await;
     let db: DbPool<InProject> = DbPool::new(pools, InProject::new(&project()));
 
     let held: GatedConnection<XW, InProject> =
@@ -69,9 +73,12 @@ async fn exclusive_serializes_the_same_project() {
     next.commit().await.unwrap();
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn exclusive_projects_do_not_block_each_other() {
-    let (_db, pools) = pools().await;
+async fn exclusive_projects_do_not_block_each_other(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let (_db, pools) = pools(&domain_apiserver_postgres_internals).await;
     let one: DbPool<InProject> = DbPool::new(pools.clone(), InProject::new(&project()));
     let other: DbPool<InProject> = DbPool::new(pools, InProject::new(&project()));
 

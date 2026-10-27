@@ -9,9 +9,11 @@ use super::{schema_db_version, schema_index_names, schema_table_names, schema_vi
 use crate::components::{ApiserverComponent, SchemaComponent};
 use crate::error::DbError;
 use crate::pool::TdPool;
+use crate::test_utils::domain::PostgresDomain;
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn test_schema_tables_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn test_schema_tables_postgres(domain_apiserver_postgres_internals: PostgresDomain) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.upgrade().await.unwrap();
     assert_eq!(schema_table_names(&db.serving).await, expected_tables());
 }
@@ -50,9 +52,10 @@ fn expected_tables() -> Vec<&'static str> {
     ]
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn test_schema_views_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn test_schema_views_postgres(domain_apiserver_postgres_internals: PostgresDomain) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.upgrade().await.unwrap();
     assert_eq!(schema_view_names(&db.serving).await, expected_views());
 }
@@ -87,9 +90,10 @@ fn expected_views() -> Vec<&'static str> {
     ]
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn test_schema_indices_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn test_schema_indices_postgres(domain_apiserver_postgres_internals: PostgresDomain) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.upgrade().await.unwrap();
     assert_indices(&db.serving).await;
 }
@@ -229,9 +233,10 @@ async fn assert_indices(db: &TdPool) {
     assert_eq!(schema_index_names(db).await, expected);
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn test_schema_version_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn test_schema_version_postgres(domain_apiserver_postgres_internals: PostgresDomain) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.upgrade().await.unwrap();
     assert_eq!(
         schema_db_version(&db).await,
@@ -239,9 +244,10 @@ async fn test_schema_version_postgres() {
     );
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn test_schema_applies_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn test_schema_applies_postgres(domain_apiserver_postgres_internals: PostgresDomain) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.upgrade().await.expect("schema upgrade on postgres");
     ApiserverComponent
         .check(&db.serving)
@@ -251,9 +257,10 @@ async fn test_schema_applies_postgres() {
 
 /// A 1.x database lacks the `tabsdata_version` row and must be rejected by the
 /// major-version gate before any db_version comparison runs.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn test_pre_2_0_database_rejected() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn test_pre_2_0_database_rejected(domain_apiserver_postgres_internals: PostgresDomain) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.upgrade().await.unwrap();
 
     super::execute(

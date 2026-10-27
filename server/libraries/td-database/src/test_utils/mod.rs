@@ -25,7 +25,8 @@ use std::ops::Deref;
 use std::time::Duration;
 use tracing::warn;
 
-pub mod domain;
+#[cfg(test)]
+pub(crate) mod domain;
 pub mod postgres;
 
 pub use crate::generated_sql::generated;

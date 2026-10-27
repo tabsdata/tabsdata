@@ -10,6 +10,7 @@
 
 use crate::generated_sql::generated;
 use crate::test_utils::TestDb;
+use crate::test_utils::domain::PostgresDomain;
 use crate::test_utils::postgres::pool;
 use td_schema::SchemaSource;
 use td_schema::schema::{Delta, SchemaDelta};
@@ -66,8 +67,11 @@ async fn scalar(db: &TestDb, sql: impl Into<String>) -> i64 {
 
 /// On a fresh install the pool creates the `tabsdata_system` ledger and records
 /// `db_version`, even though the source's `build` does neither.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn ledger_and_version_created_by_shared_logic() {
+async fn ledger_and_version_created_by_shared_logic(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
     // The source's own install script never touches the shared ledger.
     let build = td_schema::schema::install_script(&WidgetSource { version: 1 }).join("\n");
     assert!(
@@ -75,7 +79,7 @@ async fn ledger_and_version_created_by_shared_logic() {
         "the source must declare only its own content, got: {build}"
     );
 
-    let db = pool().await;
+    let db = pool(&domain_apiserver_postgres_internals).await;
     let system = &db.admin;
     system
         .upgrade_source(&WidgetSource { version: 1 })
@@ -99,9 +103,10 @@ async fn ledger_and_version_created_by_shared_logic() {
 
 /// An upgrade applies the `SchemaDelta` and advances `db_version` through the
 /// shared logic — the delta never touches the version row itself.
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn upgrade_advances_version_via_delta() {
-    let db = pool().await;
+async fn upgrade_advances_version_via_delta(domain_apiserver_postgres_internals: PostgresDomain) {
+    let db = pool(&domain_apiserver_postgres_internals).await;
     let system = &db.admin;
 
     system

@@ -7,12 +7,13 @@
 use crate::components::ApiserverComponent;
 use crate::generated_sql::generated;
 use crate::test_utils::TestDb;
+use crate::test_utils::domain::PostgresDomain;
 use crate::test_utils::postgres::pool;
 
 use super::{at_rest, execute};
 
-async fn prelude() -> TestDb {
-    let db = pool().await;
+async fn prelude(internals: &PostgresDomain) -> TestDb {
+    let db = pool(internals).await;
     db.admin.upgrade(&ApiserverComponent).await.unwrap();
     for stmt in [
         "INSERT INTO projects (id, project_id, name, description, base_path, valid_from, \
@@ -41,9 +42,12 @@ fn function(counter: usize, function_id: &str, valid_from: &str) -> String {
     )
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn topology_rows_change_only_by_opening_and_closing_postgres() {
-    let db = prelude().await;
+async fn topology_rows_change_only_by_opening_and_closing_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = prelude(&domain_apiserver_postgres_internals).await;
     execute(&db.serving, function(1, "f-a", "2026-01-01T00:00:00Z")).await;
     for stmt in [
         "UPDATE functions SET enabled = false WHERE function_id = 'f-a'",

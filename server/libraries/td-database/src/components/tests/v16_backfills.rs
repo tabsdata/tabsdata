@@ -8,6 +8,7 @@
 //! its trigger.
 
 use crate::components::ApiserverComponent;
+use crate::test_utils::domain::PostgresDomain;
 use crate::test_utils::postgres::pool;
 use td_common::id::Id;
 use td_schema::schema::archive;
@@ -46,9 +47,12 @@ const SEED: &[&str] = &[
      VALUES (11, 'p0', 'c0', 1, 'f0', '2026-01-01 11:00:00+00', 'u0')",
 ];
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn v15_to_v16_numbers_topology_history_and_executions_postgres() {
-    let db = pool().await;
+async fn v15_to_v16_numbers_topology_history_and_executions_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = pool(&domain_apiserver_postgres_internals).await;
     db.admin
         .upgrade_source(archive::source(15))
         .await

@@ -7,6 +7,7 @@
 
 use super::{count_rows, fetch_text};
 use crate::test_utils::TestDb;
+use crate::test_utils::domain::PostgresDomain;
 use td_security::{
     ENCODED_ID_PERM_DEFAULT_CREATE_PROJECTS, ENCODED_ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS,
     ENCODED_ID_PERM_SYS_ADMIN_CREATE_PROJECTS, ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ACCESS,
@@ -16,9 +17,12 @@ use td_security::{
     ENCODED_ID_USER_ROLE_ADMIN_SYS_ADMIN,
 };
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn test_tabsdata_db_default_users_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn test_tabsdata_db_default_users_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.upgrade().await.unwrap();
     let id = fetch_text(
         &db.serving,
@@ -29,9 +33,12 @@ async fn test_tabsdata_db_default_users_postgres() {
     assert_eq!(id, ENCODED_ID_USER_ADMIN);
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn test_tabsdata_db_default_roles_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn test_tabsdata_db_default_roles_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.upgrade().await.unwrap();
     test_default_roles_body(&db).await;
 }
@@ -52,9 +59,12 @@ async fn test_default_roles_body(db: &TestDb) {
     assert_eq!(count_rows(&db.serving, "roles").await, 3);
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn test_tabsdata_db_default_user_roles_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn test_tabsdata_db_default_user_roles_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.upgrade().await.unwrap();
     test_default_user_roles_body(&db).await;
 }
@@ -77,9 +87,12 @@ async fn test_default_user_roles_body(db: &TestDb) {
     assert_eq!(count_rows(&db.serving, "users_roles").await, 2);
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn test_tabsdata_db_default_permissions_postgres() {
-    let db = crate::test_utils::postgres::pool().await;
+async fn test_tabsdata_db_default_permissions_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
     db.upgrade().await.unwrap();
     test_default_permissions_body(&db).await;
 }
