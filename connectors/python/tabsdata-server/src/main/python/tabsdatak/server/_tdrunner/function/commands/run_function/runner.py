@@ -55,7 +55,7 @@ from tabsdatak.server._tdrunner.function._commons.solver.secrets import (
     StorageSecrets,
     take_project_secret,
 )
-from tabsdatak.server._tdrunner.function._handlers.inputs import InputSource
+from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,
 )
@@ -202,7 +202,7 @@ def _output_table_names(info: FunctionInfo) -> list[str]:
     return list(info.output_tables)
 
 
-def _scan_input(source: InputSource) -> pl.LazyFrame:
+def _scan_input(source: TableFile) -> pl.LazyFrame:
     try:
         return source.scan()
     except Exception as error:
@@ -226,7 +226,7 @@ def _build_input(record: InputRecord, *, info: FunctionInfo):
     from tabsdatak.tableframe import TableFrame
     from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 
-    source = InputSource.of(record)
+    source = TableFile.of(record)
     if source is None:
         return None
     lf = _scan_input(source)
@@ -292,7 +292,7 @@ def _build_chunked_input(records: tuple[InputRecord, ...]):
     from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 
     sources = [
-        source for source in (InputSource.of(record) for record in records) if source
+        source for source in (TableFile.of(record) for record in records) if source
     ]
     if not sources:
         return None

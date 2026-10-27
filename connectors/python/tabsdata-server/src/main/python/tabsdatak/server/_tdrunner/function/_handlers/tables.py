@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import polars as pl
 
 from tabsdatak.common._storage import frames
@@ -11,26 +13,36 @@ from tabsdatak.common._storage.mounts import (
     AnonymousMountDeclaration,
     MountDeclaration,
 )
+from tabsdatak.server._tdrunner.function._commons.document.request import Location
 from tabsdatak.server._tdrunner.function._commons.manifests.input import InputRecord
 
 
-class InputSource:
-    def __init__(self, uri: str, declaration: MountDeclaration) -> None:
+class TableFile:
+    def __init__(
+        self,
+        uri: str,
+        declaration: MountDeclaration = AnonymousMountDeclaration(),
+    ) -> None:
         self.uri = uri
         self.declaration = declaration
 
     @classmethod
-    def of(cls, record: InputRecord) -> InputSource | None:
+    def stored(cls, location: Location) -> TableFile:
+        return cls(location.uri, location.mount_declaration())
+
+    @classmethod
+    def local(cls, path: Path) -> TableFile:
+        return cls(path.absolute().as_uri())
+
+    @classmethod
+    def of(cls, record: InputRecord) -> TableFile | None:
         if record.location is not None:
-            location = record.location
-            return cls(location.uri, location.mount_declaration())
+            return cls.stored(record.location)
         if record.file is not None:
-            return cls(record.file, AnonymousMountDeclaration())
+            return cls.local(Path(record.file))
         return None
 
     def scan(self) -> pl.LazyFrame:
-        # [TODO: tabsdatak.tableframe scan and sink migration] revisit when
-        # tabsdatak.tableframe ships scan and sink methods.
         frame = frames.scan_parquet(frames.target(self.uri, self.declaration))
         frame.collect_schema()
         return frame
