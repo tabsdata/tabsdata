@@ -7,6 +7,7 @@
 
 use crate::components::ApiserverComponent;
 use crate::pool::TdPool;
+use crate::test_utils::domain::PostgresDomain;
 use crate::test_utils::postgres::pool;
 use td_schema::schema::archive;
 
@@ -23,9 +24,12 @@ async fn uuid_instance_id(db: &TdPool) -> String {
     id
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn fresh_install_keeps_its_instance_id_postgres() {
-    let db = pool().await;
+async fn fresh_install_keeps_its_instance_id_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = pool(&domain_apiserver_postgres_internals).await;
     db.upgrade().await.unwrap();
     let id = uuid_instance_id(&db.serving).await;
 
@@ -33,9 +37,12 @@ async fn fresh_install_keeps_its_instance_id_postgres() {
     assert_eq!(db.serving.instance_id().await.unwrap(), id);
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn v19_to_v20_mints_an_instance_id_postgres() {
-    let db = pool().await;
+async fn v19_to_v20_mints_an_instance_id_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let db = pool(&domain_apiserver_postgres_internals).await;
     db.admin
         .upgrade_source(archive::source(19))
         .await
@@ -49,11 +56,14 @@ async fn v19_to_v20_mints_an_instance_id_postgres() {
     uuid_instance_id(&db.serving).await;
 }
 
+#[td_test::domain("apiserver_postgres_internals")]
 #[tokio::test]
-async fn fresh_installs_get_distinct_instance_ids_postgres() {
-    let first = pool().await;
+async fn fresh_installs_get_distinct_instance_ids_postgres(
+    domain_apiserver_postgres_internals: PostgresDomain,
+) {
+    let first = pool(&domain_apiserver_postgres_internals).await;
     first.upgrade().await.unwrap();
-    let second = pool().await;
+    let second = pool(&domain_apiserver_postgres_internals).await;
     second.upgrade().await.unwrap();
     assert_ne!(
         first.serving.instance_id().await.unwrap(),
