@@ -79,7 +79,8 @@ class OutputShapeMismatchError(CommandRuntimeException):
 
 class OutputWriteFailedError(CommandRuntimeException):
     """A LazyFrame returned by the user function couldn't be sunk
-    to its target parquet."""
+    to its target parquet, or the written parquet's stats couldn't
+    be read."""
 
     exit_code = 19
 
@@ -210,7 +211,7 @@ class RunFunctionErrorCode(ErrorCode):
         OutputWriteFailedError,
         "failed to write output {table!r} to {path}: {detail}",
     )
-    # ``_sink_outputs`` ``sink_parquet`` failure.
+    # ``_sink_outputs`` ``TableFile.sink`` or ``collect_all`` failure.
 
     RF_17 = ErrorDef(
         OutputsManifestWriteFailedError,
@@ -231,3 +232,15 @@ class RunFunctionErrorCode(ErrorCode):
     )
     # ``drain_ctx_to_state_or_raise`` -- ctx scratch couldn't be
     # persisted.
+
+    RF_20 = ErrorDef(
+        BadRequestError,
+        "output {table!r} has no location in the request",
+    )
+    # ``_output_targets`` output table the request does not declare.
+
+    RF_21 = ErrorDef(
+        OutputWriteFailedError,
+        "failed to read the stats of output {table!r} at {path}: {detail}",
+    )
+    # ``_read_stats`` ``TableFile.stats`` failure.

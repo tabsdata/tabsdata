@@ -131,6 +131,14 @@ def _write_parquet(path: Path, **columns):
     pq.write_table(table, path)
 
 
+STATS = {
+    "column_count": 2,
+    "row_count": 3,
+    "schema_hash": "sha256:abc",
+    "data_bytes": 640,
+}
+
+
 # --- responder fixture ---
 
 
@@ -190,12 +198,10 @@ def test_main_writes_response_and_posts_done(monkeypatch, tmp_path, responder):
         system_output=[{"table": "td-initial-values"}],
     )
     state_dir = tmp_path / "state"
-    customers_parquet = tmp_path / "out" / "slot0" / "customers.parquet"
-    _write_parquet(customers_parquet, id=[1, 2, 3], name=["a", "b", "c"])
     _write_parquet(state_dir / "td-initial-values.parquet", offset=[42])
     manifest = _write_manifest(
         tmp_path / "outputs_manifest.yaml",
-        [{"name": "customers", "file": str(customers_parquet)}],
+        [{"name": "customers", "uri": "s3://b/customers.t", "stats": STATS}],
     )
 
     out = tmp_path / "response.yaml"
@@ -215,10 +221,8 @@ def test_main_writes_response_and_posts_done(monkeypatch, tmp_path, responder):
     # The on-disk artifact stays YAML for human readability/audit.
     yaml_artifact = yaml.safe_load(out.read_bytes())
     by_name = {e["table"]: e for e in yaml_artifact["output"]}
-    assert by_name["customers"]["info"]["row_count"] == 3
-    assert by_name["customers"]["info"]["column_count"] == 2
-    assert by_name["customers"]["info"]["schema_hash"].startswith("sha256:")
-    assert by_name["customers"]["info"]["data_bytes"] > 0
+    assert by_name["customers"]["info"] == STATS
+    assert by_name["td-initial-values"]["info"]["schema_hash"].startswith("sha256:")
     assert by_name["td-initial-values"]["info"]["row_count"] == 1
     assert by_name["td-initial-values"]["info"]["column_count"] == 1
     assert by_name["td-initial-values"]["info"]["data_bytes"] > 0
@@ -247,11 +251,9 @@ def test_main_stops_without_failed_when_done_is_stale(monkeypatch, tmp_path, res
     request_yaml = _write_request(
         tmp_path / "request.yaml", output=[{"table": "customers"}]
     )
-    customers_parquet = tmp_path / "out" / "slot0" / "customers.parquet"
-    _write_parquet(customers_parquet, id=[1])
     manifest = _write_manifest(
         tmp_path / "outputs_manifest.yaml",
-        [{"name": "customers", "file": str(customers_parquet)}],
+        [{"name": "customers", "uri": "s3://b/customers.t", "stats": STATS}],
     )
     _set_argv(
         monkeypatch,
@@ -268,16 +270,16 @@ def test_main_stops_without_failed_when_done_is_stale(monkeypatch, tmp_path, res
     assert statuses == ["Done"]
 
 
-def test_main_no_info_when_manifest_file_is_null(monkeypatch, tmp_path, responder):
-    """A manifest entry with `file: null` (user returned None for that
-    slot) yields a NoData entry in the response."""
+def test_main_no_info_when_manifest_stats_are_null(monkeypatch, tmp_path, responder):
+    """A manifest entry without stats (user returned None for that slot)
+    yields a NoData entry in the response."""
     base_url, request_log, _ = responder
     request_yaml = _write_request(
         tmp_path / "request.yaml", output=[{"table": "missing"}]
     )
     manifest = _write_manifest(
         tmp_path / "outputs_manifest.yaml",
-        [{"name": "missing", "file": None}],
+        [{"name": "missing", "uri": None, "stats": None}],
     )
     out = tmp_path / "response.yaml"
     journal = _write_journal(tmp_path / "journal.yaml")

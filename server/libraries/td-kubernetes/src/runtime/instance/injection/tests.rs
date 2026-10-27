@@ -555,9 +555,9 @@ fn value(spec: &PodSpec, container: &str, name: &str) -> Option<String> {
 
 #[test]
 fn dataflow_envs_reach_every_container_of_a_function_pod() {
-    let mut spec = build_pod_spec_with(&["run-function", "prep-upload-tables"]);
+    let mut spec = build_pod_spec_with(&["run-function", "report-completion"]);
     apply_dataflow_envs(DATAFLOW_CONFIG, &function_placement(), &mut spec).expect("ok");
-    for container in ["run-function", "prep-upload-tables"] {
+    for container in ["run-function", "report-completion"] {
         for (name, expected) in [
             (
                 ENV_TD_DATAFLOW__TEMPORARY_FOLDER,

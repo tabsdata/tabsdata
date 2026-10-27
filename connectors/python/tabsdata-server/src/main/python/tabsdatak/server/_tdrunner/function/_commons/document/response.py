@@ -4,10 +4,8 @@
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
-import pyarrow.parquet as pq
 import yaml
 from pydantic import model_validator
 
@@ -15,12 +13,9 @@ from tabsdatak.common._configuration.document.loader import DocumentModel, load
 from tabsdatak.error import ErrorCode
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
-    OutputEntry,
     OutputManifest,
+    TableStats,
 )
-
-SCHEMA_HASH_PREFIX = "sha256:"
-PARQUET_SUFFIX = ".parquet"
 
 SINGLE_WRITTEN_TABLE = "A written table must be exactly one of NoData or Data"
 
@@ -28,40 +23,9 @@ JSON_MODE = "json"
 PYTHON_MODE = "python"
 
 
-class TableInfo(DocumentModel):
-    column_count: int
-    row_count: int
-    schema_hash: str
-    data_bytes: int | None = None
-
-    @classmethod
-    def from_parquet(cls, path: Path) -> TableInfo:
-        schema = pq.read_schema(path)
-        schema_bytes = schema.serialize().to_pybytes()
-        return cls(
-            column_count=len(schema),
-            row_count=int(pq.read_metadata(path).num_rows),
-            schema_hash=SCHEMA_HASH_PREFIX + hashlib.sha256(schema_bytes).hexdigest(),
-            data_bytes=path.stat().st_size,
-        )
-
-
 class TableEntry(DocumentModel):
     table: str
-    info: TableInfo | None = None
-
-    @classmethod
-    def output(cls, entry: OutputEntry) -> TableEntry:
-        if entry.file is None:
-            return cls(table=entry.name)
-        return cls(table=entry.name, info=TableInfo.from_parquet(Path(entry.file)))
-
-    @classmethod
-    def state(cls, name: str, state_dir: Path) -> TableEntry:
-        parquet = state_dir / f"{name}{PARQUET_SUFFIX}"
-        if not parquet.exists():
-            return cls(table=name)
-        return cls(table=name, info=TableInfo.from_parquet(parquet))
+    info: TableStats | None = None
 
 
 class Response(DocumentModel):
@@ -72,7 +36,7 @@ class Response(DocumentModel):
         cls,
         request: Request,
         manifest: OutputManifest,
-        state_dir: Path,
+        state: dict[str, TableStats],
         error: ErrorCode,
     ) -> Response:
         produced = {entry.name: entry for entry in manifest.outputs}
@@ -80,9 +44,11 @@ class Response(DocumentModel):
         for table in request.output:
             if table.table not in produced:
                 raise error.exception(table=table.table)
-            entries.append(TableEntry.output(produced[table.table]))
+            entries.append(
+                TableEntry(table=table.table, info=produced[table.table].stats)
+            )
         for table in request.system_output:
-            entries.append(TableEntry.state(table.table, state_dir))
+            entries.append(TableEntry(table=table.table, info=state.get(table.table)))
         return cls(output=tuple(entries))
 
     @classmethod
@@ -109,7 +75,7 @@ class WrittenNoData(DocumentModel):
 
 class WrittenData(DocumentModel):
     table: str
-    info: TableInfo
+    info: TableStats
 
 
 class WrittenTable(DocumentModel):

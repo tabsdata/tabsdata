@@ -62,6 +62,24 @@ def test_ranged_chunks_keep_their_order(tmp_path: Path, source: Path, ranged: No
     assert b"".join(transfer.chunks(stored(tmp_path))) == source.read_bytes()
 
 
+def test_size_of_a_stored_object(tmp_path: Path, source: Path):
+    transfer.upload(source, stored(tmp_path))
+    assert transfer.size(stored(tmp_path)) == SIZE
+
+
+def test_read_range_returns_the_bytes_between_start_and_end(
+    tmp_path: Path, source: Path
+):
+    transfer.upload(source, stored(tmp_path))
+    tail = transfer.read_range(stored(tmp_path), SIZE - 8, SIZE)
+    assert tail == source.read_bytes()[-8:]
+
+
+def test_size_of_a_missing_object_fails(tmp_path: Path):
+    with pytest.raises(FileNotFoundError):
+        transfer.size(stored(tmp_path))
+
+
 def test_failed_download_leaves_no_files(tmp_path: Path):
     missing = StorageLocation(uri=(tmp_path / "store" / "missing.bin").as_uri())
     target = tmp_path / "out" / "missing.bin"

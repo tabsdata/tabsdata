@@ -60,7 +60,13 @@ from tabsdatak.common._archive.bundle import build_bundle
 #     request copies only the state tables;
 #   * the inputs manifest holds `tables` records (`file`, `location`, version
 #     fields), read and written through `InputManifest` / `InputRecord`; the
-#     outputs manifest through `OutputManifest` / `OutputEntry`.
+#     outputs manifest through `OutputManifest` / `OutputEntry`, whose entries
+#     carry the written table's `uri` and footer `stats` instead of a `file`;
+#   * prep-upload-tables and its transporter step are gone: run-function sinks
+#     publisher and transformer outputs straight to the request's output
+#     locations, so the `out_dir/slot*` parquets and the tables-upload request
+#     no longer exist; report-completion takes the output stats from the
+#     outputs manifest.
 pytestmark = [
     pytest.mark.unit,
     pytest.mark.tabsdatak,

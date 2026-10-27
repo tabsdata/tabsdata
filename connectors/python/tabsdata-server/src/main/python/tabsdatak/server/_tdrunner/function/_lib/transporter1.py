@@ -20,17 +20,10 @@ from tabsdatak.server._tdrunner.function._commons.document.request import (
     Location,
     Request,
 )
-from tabsdatak.server._tdrunner.function._commons.manifests.output import (
-    OutputManifest,
-)
 
 logger = logging.getLogger(__name__)
 
 HANDLER = TransporterHandler1()
-
-
-class OutputTableNotInManifestError(ValueError):
-    pass
 
 
 def endpoint_for(location: Location) -> Endpoint:
@@ -70,28 +63,6 @@ def build_upload_state_request(
         if not source_path.exists():
             continue
         pairs.append((local_endpoint(source_path), endpoint_for(table.location)))
-    return HANDLER.make_request(pairs)
-
-
-def build_upload_tables_request(
-    request: Request, manifest: OutputManifest
-) -> TransporterCopyRequest:
-    files_by_name: dict[str, str | None] = {
-        entry.name: entry.file for entry in manifest.outputs
-    }
-    pairs: list[tuple[Endpoint, Endpoint]] = []
-    for table in request.output:
-        if table.location is None:
-            continue
-        if table.table not in files_by_name:
-            raise OutputTableNotInManifestError(
-                f"Output table {table.table!r} declared in request "
-                f"has no entry in the outputs manifest."
-            )
-        source = files_by_name[table.table]
-        if source is None:
-            continue
-        pairs.append((local_endpoint(Path(source)), endpoint_for(table.location)))
     return HANDLER.make_request(pairs)
 
 

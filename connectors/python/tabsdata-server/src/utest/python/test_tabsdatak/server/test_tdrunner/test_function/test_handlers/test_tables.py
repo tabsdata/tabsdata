@@ -4,9 +4,11 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import polars as pl
+import pyarrow.parquet as pq
 import pytest
 
 from tabsdatak.common._storage.mounts import (
@@ -16,7 +18,15 @@ from tabsdatak.common._storage.mounts import (
 )
 from tabsdatak.server._tdrunner.function._commons.document.request import Location
 from tabsdatak.server._tdrunner.function._commons.manifests.input import InputRecord
-from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
+from tabsdatak.server._tdrunner.function._commons.manifests.output import TableStats
+from tabsdatak.server._tdrunner.function._handlers.tables import (
+    TableFile,
+    TableFileError,
+)
+from tabsdatak.tableframe import TableFrame
+from tabsdatak.tableframe._engine.constant.column.prefixes import (
+    TD_SYSTEM_COLUMN_PREFIX,
+)
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -87,3 +97,86 @@ def test_scan_rejects_a_mount_without_its_options(monkeypatch):
     table = TableFile.stored(Location(uri="s3://b/t.parquet", env_prefix="ROOT"))
     with pytest.raises(MountError):
         table.scan()
+
+
+def test_sink_is_lazy_until_collected(tmp_path):
+    path = tmp_path / "nested" / "t.parquet"
+    plan = TableFile.local(path).sink(TableFrame.from_polars(FRAME), public=False)
+    assert not path.exists()
+    pl.collect_all([plan], engine="streaming")
+    assert pl.read_parquet(path).select("id").equals(FRAME)
+
+
+def test_sink_to_a_stored_location_creates_its_folders(tmp_path):
+    path = tmp_path / "data" / "v1" / "0.t"
+    table = TableFile.stored(Location(uri=path.as_uri(), env_prefix="ROOT"))
+    pl.collect_all(
+        [table.sink(TableFrame.from_polars(FRAME), public=False)], engine="streaming"
+    )
+    assert pl.read_parquet(path).select("id").equals(FRAME)
+
+
+@pytest.mark.parametrize("public", [False, True])
+def test_sink_keeps_system_columns_only_when_native(tmp_path, public):
+    path = tmp_path / "t.parquet"
+    pl.collect_all(
+        [TableFile.local(path).sink(TableFrame.from_polars(FRAME), public=public)],
+        engine="streaming",
+    )
+    columns = pl.read_parquet_schema(path)
+    assert any(c.startswith(TD_SYSTEM_COLUMN_PREFIX) for c in columns) is not public
+    assert "id" in columns
+
+
+def test_stats_match_the_whole_file(tmp_path):
+    path = written(tmp_path)
+    schema = pq.read_schema(path)
+    assert TableFile.local(path).stats() == TableStats(
+        column_count=len(schema),
+        row_count=FRAME.height,
+        schema_hash="sha256:"
+        + hashlib.sha256(schema.serialize().to_pybytes()).hexdigest(),
+        data_bytes=path.stat().st_size,
+    )
+
+
+def test_stats_of_a_stored_table(tmp_path):
+    path = written(tmp_path)
+    table = TableFile.stored(Location(uri=path.as_uri(), env_prefix="ROOT"))
+    assert table.stats() == TableFile.local(path).stats()
+
+
+def test_stats_of_an_empty_table(tmp_path):
+    path = tmp_path / "empty.parquet"
+    FRAME.clear().write_parquet(path)
+    stats = TableFile.local(path).stats()
+    assert (stats.column_count, stats.row_count) == (1, 0)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        b"",
+        b"PAR1",
+        b"PAR1" + b"x" * 64,
+        b"PAR1" + b"x" * 64 + b"xxxxPAR1",
+    ],
+    ids=["empty", "magic only", "no trailer", "truncated footer"],
+)
+def test_stats_reject_a_file_that_is_not_a_parquet(tmp_path, content):
+    path = tmp_path / "t.parquet"
+    path.write_bytes(content)
+    with pytest.raises(TableFileError):
+        TableFile.local(path).stats()
+
+
+def test_stats_reject_a_footer_that_is_not_parquet_metadata(tmp_path):
+    path = tmp_path / "t.parquet"
+    path.write_bytes(b"PAR1" + b"x" * 64 + (16).to_bytes(4, "little") + b"PAR1")
+    with pytest.raises(TableFileError, match="unreadable footer"):
+        TableFile.local(path).stats()
+
+
+def test_stats_of_a_missing_file_fail(tmp_path):
+    with pytest.raises(Exception):
+        TableFile.local(tmp_path / "absent.parquet").stats()

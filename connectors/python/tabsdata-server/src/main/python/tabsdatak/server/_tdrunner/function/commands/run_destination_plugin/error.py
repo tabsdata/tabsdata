@@ -52,8 +52,8 @@ class PluginFailedError(_PluginFailedError):
 
 
 class BadManifestError(_BadManifestError):
-    """Outputs manifest missing, unreadable, malformed, or contains a
-    ``file: null`` entry (subscribers must return concrete frames for
+    """Outputs manifest missing, unreadable, malformed, or contains an
+    entry without a ``uri`` (subscribers must return concrete frames for
     every slot)."""
 
     exit_code = 16
@@ -112,4 +112,4 @@ class RunDestinationPluginErrorCode(ErrorCode):
             "a concrete frame for every output slot"
         ),
     )
-    # ``_tables_from_manifest`` rejects a ``file: null`` entry.
+    # ``_tables_from_manifest`` rejects an entry without a ``uri``.

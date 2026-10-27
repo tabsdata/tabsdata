@@ -164,6 +164,18 @@ def download(source: StorageLocation, target: Path) -> int:
     return written
 
 
+def size(source: StorageLocation) -> int:
+    root, name = split(source.uri)
+    return obstore.head(store(root, source.options), name)[SIZE_KEY]
+
+
+def read_range(source: StorageLocation, start: int, end: int) -> bytes:
+    root, name = split(source.uri)
+    return bytes(
+        obstore.get_range(store(root, source.options), name, start=start, end=end)
+    )
+
+
 def upload(source: Path, target: StorageLocation) -> int:
     root, name = split(target.uri)
     obstore.put(store(root, target.options), name, source)

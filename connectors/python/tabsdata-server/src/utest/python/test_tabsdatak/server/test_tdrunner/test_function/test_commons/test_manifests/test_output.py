@@ -7,43 +7,71 @@ from __future__ import annotations
 import pytest
 import yaml
 
+from tabsdatak.server._tdrunner.function._commons.manifests.manifest import (
+    ManifestError,
+)
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputEntry,
     OutputManifest,
+    TableStats,
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
+
+STATS = TableStats(column_count=2, row_count=3, schema_hash="sha256:abc", data_bytes=64)
+STATS_DOCUMENT = {
+    "column_count": 2,
+    "row_count": 3,
+    "schema_hash": "sha256:abc",
+    "data_bytes": 64,
+}
 
 
 def test_write_produces_the_outputs_document(tmp_path):
     path = tmp_path / "outputs.yaml"
     OutputManifest(
         outputs=(
-            OutputEntry(name="a", file="/a.parquet"),
+            OutputEntry(name="a", uri="s3://b/a.t", stats=STATS),
             OutputEntry(name="b"),
         )
     ).write(path)
     assert yaml.safe_load(path.read_text()) == {
         "outputs": [
-            {"name": "a", "file": "/a.parquet"},
-            {"name": "b", "file": None},
+            {"name": "a", "uri": "s3://b/a.t", "stats": STATS_DOCUMENT},
+            {"name": "b", "uri": None, "stats": None},
         ]
     }
 
 
-def test_load_keeps_a_null_file_as_not_modified(tmp_path):
+def test_load_keeps_an_entry_without_data_as_not_modified(tmp_path):
     path = tmp_path / "outputs.yaml"
-    path.write_text("outputs: [{name: a, file: null}]\n")
-    assert OutputManifest.load(path).outputs == (OutputEntry(name="a"),)
+    path.write_text("outputs: [{name: a, uri: null, stats: null}, {name: b}]\n")
+    assert OutputManifest.load(path).outputs == (
+        OutputEntry(name="a"),
+        OutputEntry(name="b"),
+    )
 
 
-def test_load_keeps_files_and_null_files_apart(tmp_path):
+def test_load_reads_the_stats(tmp_path):
     path = tmp_path / "outputs.yaml"
     path.write_text(
-        "outputs: [{name: a, file: /a.parquet}, {name: b, file: null}, {name: c}]\n"
+        yaml.safe_dump({
+            "outputs": [{"name": "a", "uri": "s3://b/a.t", "stats": STATS_DOCUMENT}]
+        })
     )
     assert OutputManifest.load(path).outputs == (
-        OutputEntry(name="a", file="/a.parquet"),
-        OutputEntry(name="b"),
-        OutputEntry(name="c"),
+        OutputEntry(name="a", uri="s3://b/a.t", stats=STATS),
     )
+
+
+@pytest.mark.parametrize("missing", sorted(STATS_DOCUMENT))
+def test_load_rejects_incomplete_stats(tmp_path, missing):
+    stats = {key: value for key, value in STATS_DOCUMENT.items() if key != missing}
+    path = tmp_path / "outputs.yaml"
+    path.write_text(
+        yaml.safe_dump({
+            "outputs": [{"name": "a", "uri": "s3://b/a.t", "stats": stats}]
+        })
+    )
+    with pytest.raises(ManifestError, match=missing):
+        OutputManifest.load(path)

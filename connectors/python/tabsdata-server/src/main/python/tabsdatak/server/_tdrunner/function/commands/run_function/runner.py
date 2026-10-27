@@ -49,6 +49,7 @@ from tabsdatak.server._tdrunner.function._commons.manifests.manifest import (
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputEntry,
     OutputManifest,
+    TableStats,
 )
 from tabsdatak.server._tdrunner.function._commons.solver.secrets import (
     ProjectSecret,
@@ -343,16 +344,43 @@ def _invoke_user_function(func, call_args: list, output_tables: list[str]) -> tu
     return result
 
 
+def _output_targets(
+    request: Request,
+    info: FunctionInfo,
+    output_tables: list[str],
+    out_dir: Path,
+) -> list[TableFile]:
+    """Where each output table is written.
+
+    Publisher / transformer outputs are stored tables, written straight
+    to the location the request assigns them. Subscriber outputs feed a
+    destination plugin, so they stay in `<out_dir>/slot<i>/<table>.parquet`.
+    """
+    if isinstance(info, SubscriberInfo):
+        return [
+            TableFile.local(out_dir / f"slot{i}" / f"{table_name}.parquet")
+            for i, table_name in enumerate(output_tables)
+        ]
+    locations = {table.table: table.location for table in request.output}
+    targets = []
+    for table_name in output_tables:
+        if table_name not in locations:
+            raise RunFunctionErrorCode.RF_20.exception(table=table_name)
+        targets.append(TableFile.stored(locations[table_name]))
+    return targets
+
+
 def _sink_outputs(
     result: tuple,
     output_tables: list[str],
-    out_dir: Path,
+    targets: list[TableFile],
     *,
     public: bool,
     checks: list[Check] | None = None,
 ) -> OutputManifest:
-    """Sink each non-None output to `<out_dir>/slot<i>/<table>.parquet`,
-    settle the data-quality checks, and build the outputs-manifest entries.
+    """Sink each non-None output to its target, settle the data-quality
+    checks, and build the outputs-manifest entries with the stats read
+    from each written file's footer.
 
     Publisher / transformer outputs become stored tables, so they sink
     natively with the framework's persisted system columns. Subscriber
@@ -363,35 +391,21 @@ def _sink_outputs(
     Every output is written, and every check evaluated, in one streaming
     pass, so the plan the outputs share runs once.
     """
-    entries: list[OutputEntry] = []
     plans: list[pl.LazyFrame] = []
-    written: list[str] = []
-    for i, (table_name, value) in enumerate(
-        zip(
-            output_tables,
-            result,
-        )
-    ):
+    written: list[tuple[str, TableFile]] = []
+    for table_name, value, target in zip(output_tables, result, targets):
         if value is None:
-            entries.append(OutputEntry(name=table_name))
             continue
-        slot_dir = out_dir / f"slot{i}"
-        destination = slot_dir / f"{table_name}.parquet"
         try:
-            slot_dir.mkdir(parents=True, exist_ok=True)
-            if public:
-                plans.append(value._sink_public_plan(destination))
-            else:
-                plans.append(value._sink_native_plan(destination))
+            plans.append(target.sink(value, public=public))
         except Exception as error:
             raise RunFunctionErrorCode.RF_16.exception(
                 cause=error,
                 table=table_name,
-                path=destination,
+                path=target.uri,
                 detail=str(error),
             )
-        written.append(table_name)
-        entries.append(OutputEntry(name=table_name, file=str(destination.absolute())))
+        written.append((table_name, target))
     pending = checks or []
     if plans or pending:
         try:
@@ -402,8 +416,8 @@ def _sink_outputs(
         except Exception as error:
             raise RunFunctionErrorCode.RF_16.exception(
                 cause=error,
-                table=", ".join(written),
-                path=out_dir,
+                table=", ".join(table_name for table_name, _ in written),
+                path=", ".join(target.uri for _, target in written),
                 detail=str(error),
             )
         for check, verdict in zip(
@@ -411,7 +425,30 @@ def _sink_outputs(
             results[len(plans) :],
         ):
             check.enforce(verdict)
-    return OutputManifest(outputs=tuple(entries))
+    entries = {
+        table_name: OutputEntry(
+            name=table_name, uri=target.uri, stats=_read_stats(table_name, target)
+        )
+        for table_name, target in written
+    }
+    return OutputManifest(
+        outputs=tuple(
+            entries.get(table_name, OutputEntry(name=table_name))
+            for table_name in output_tables
+        )
+    )
+
+
+def _read_stats(table_name: str, target: TableFile) -> TableStats:
+    try:
+        return target.stats()
+    except Exception as error:
+        raise RunFunctionErrorCode.RF_21.exception(
+            cause=error,
+            table=table_name,
+            path=target.uri,
+            detail=str(error),
+        )
 
 
 def run(args: argparse.Namespace) -> int:
@@ -543,12 +580,12 @@ def run(args: argparse.Namespace) -> int:
     outputs_manifest = _sink_outputs(
         result,
         output_tables,
-        out_dir,
+        _output_targets(request, info, output_tables, out_dir),
         public=isinstance(info, SubscriberInfo),
         checks=checks,
     )
     outputs = outputs_manifest.outputs
-    written = sum(1 for entry in outputs if entry.file is not None)
+    written = sum(1 for entry in outputs if entry.stats is not None)
     logger.info(
         "User function returned %d slot(s) for tables %s; %d written, %d returned None",
         len(outputs),

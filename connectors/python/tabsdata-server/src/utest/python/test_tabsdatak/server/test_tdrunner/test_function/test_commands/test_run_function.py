@@ -7,7 +7,7 @@
 Covers:
   * Helper-function unit tests (`_load_function_def`,
     `_infer_table_modes`, `_materialize_input_slot`,
-    `_invoke_user_function`, `_sink_outputs`).
+    `_invoke_user_function`, `_output_targets`, `_sink_outputs`).
   * `main()` error paths and end-to-end happy path: bundle a real
     publisher, write an inputs manifest pointing at a real parquet,
     invoke `main()`, verify the output parquet contents + the
@@ -31,7 +31,10 @@ import yaml
 from tabsdatak._info import PublisherInfo
 from tabsdatak.api import FunctionCtx, TableFrameSpec, TableFramesSpec
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
-from tabsdatak.server._tdrunner.function._commons.document.request import Location
+from tabsdatak.server._tdrunner.function._commons.document.request import (
+    Location,
+    Request,
+)
 from tabsdatak.server._tdrunner.function._commons.solver.secrets import ProjectSecret
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
@@ -54,6 +57,7 @@ from tabsdatak.server._tdrunner.function.commands.run_function import (
     _load_function_def,
     _materialize_input_slot,
     _output_table_names,
+    _output_targets,
     _scan_input,
     _sink_outputs,
     main,
@@ -68,6 +72,7 @@ from tabsdatak.server._tdrunner.function.commands.run_function.error import (
     OutputShapeMismatchError,
     OutputsManifestWriteFailedError,
     OutputWriteFailedError,
+    RunFunctionErrorCode,
     UserFunctionFailedError,
 )
 from tabsdatak.spi import DestContext, SrcPluginCtx, TableMode
@@ -300,8 +305,27 @@ def _output_table(entry: dict, index: int) -> dict:
     return {"Table": table}
 
 
-def _write_request(path: Path) -> Path:
-    path.write_text(yaml.safe_dump({"Function": {"info": _info()}}))
+def _stored(root: Path, table: str) -> Path:
+    return root / "storage" / f"{table}.t"
+
+
+def _stored_output(root: Path, table: str, index: int) -> dict:
+    location = {"uri": _stored(root, table).as_uri(), "env_prefix": "ROOT"}
+    return _output_table({"table": table, "location": location}, index)
+
+
+def _write_request(path: Path, *outputs: str) -> Path:
+    path.write_text(
+        yaml.safe_dump({
+            "Function": {
+                "info": _info(),
+                "output": [
+                    _stored_output(path.parent, table, index)
+                    for index, table in enumerate(outputs)
+                ],
+            }
+        })
+    )
     return path
 
 
@@ -738,39 +762,86 @@ def test_invoke_user_function_wrong_element_type_raises_shape_mismatch():
         _invoke_user_function(fn, [_fake_table_frame()], ["t1"])
 
 
+# --- unit: _output_targets ----------------------------------------------
+
+
+def _request(tmp_path: Path, *outputs: str) -> Request:
+    return Request.load(
+        _write_request(tmp_path / "request.yaml", *outputs), RunFunctionErrorCode.RF_1
+    )
+
+
+def test_output_targets_of_a_publisher_are_their_stored_locations(
+    tmp_path, fixture_publisher
+):
+    targets = _output_targets(
+        _request(tmp_path, "untouched", "my_table"),
+        fixture_publisher,
+        ["my_table", "untouched"],
+        tmp_path / "out",
+    )
+    assert [target.uri for target in targets] == [
+        _stored(tmp_path, "my_table").as_uri(),
+        _stored(tmp_path, "untouched").as_uri(),
+    ]
+
+
+def test_output_targets_reject_a_table_without_location(tmp_path, fixture_publisher):
+    with pytest.raises(BadRequestError, match="untouched"):
+        _output_targets(
+            _request(tmp_path, "my_table"),
+            fixture_publisher,
+            ["my_table", "untouched"],
+            tmp_path / "out",
+        )
+
+
+def test_output_targets_of_a_subscriber_are_local_slots(tmp_path, subscriber_bundle):
+    info = _load_function_def(subscriber_bundle)
+    targets = _output_targets(_request(tmp_path), info, ["out_0", "out_1"], tmp_path)
+    assert [target.uri for target in targets] == [
+        (tmp_path / "slot0" / "out_0.parquet").as_uri(),
+        (tmp_path / "slot1" / "out_1.parquet").as_uri(),
+    ]
+
+
 # --- unit: _sink_outputs ------------------------------------------------
+
+
+def _targets(tmp_path: Path, *tables: str) -> list[TableFile]:
+    return [TableFile.local(_stored(tmp_path, table)) for table in tables]
 
 
 def test_sink_outputs_writes_each_table_frame(tmp_path):
     result = (_fake_table_frame(), _fake_table_frame())
-    entries = _sink_outputs(result, ["t1", "t2"], tmp_path, public=False).outputs
-    assert len(entries) == 2
-    for i, entry in enumerate(entries):
-        assert entry.name == f"t{i + 1}"
-        assert entry.file is not None
-        assert Path(entry.file).is_file()
-        # File path layout matches the documented slot<i>/<name>.parquet.
-        assert Path(entry.file).parent.name == f"slot{i}"
-        assert Path(entry.file).name == f"t{i + 1}.parquet"
+    targets = _targets(tmp_path, "t1", "t2")
+    entries = _sink_outputs(result, ["t1", "t2"], targets, public=False).outputs
+    assert [entry.name for entry in entries] == ["t1", "t2"]
+    for entry, target in zip(entries, targets):
+        assert entry.uri == target.uri
+        assert entry.stats == target.stats()
+        assert entry.stats.row_count == 1
 
 
-def test_sink_outputs_none_value_records_null_file(tmp_path):
+def test_sink_outputs_none_value_records_no_uri_nor_stats(tmp_path):
     result = (None, _fake_table_frame())
-    entries = _sink_outputs(result, ["t1", "t2"], tmp_path, public=False).outputs
+    entries = _sink_outputs(
+        result, ["t1", "t2"], _targets(tmp_path, "t1", "t2"), public=False
+    ).outputs
     assert entries[0] == OutputEntry(name="t1")
-    assert entries[1].file is not None
-    # No slot0 dir should have been created (we skipped the sink).
-    assert not (tmp_path / "slot0").exists()
-    assert (tmp_path / "slot1").is_dir()
+    assert entries[1].stats is not None
+    assert not _stored(tmp_path, "t1").exists()
 
 
 def test_sink_outputs_write_failure_maps_to_output_write_failed(tmp_path, monkeypatch):
-    def broken_sink(self, dest):
+    def broken_sink(self, *arguments):
         raise RuntimeError("disk full")
 
     monkeypatch.setattr(TableFrame, "_sink_native_plan", broken_sink)
-    with pytest.raises(OutputWriteFailedError):
-        _sink_outputs((_fake_table_frame(),), ["t1"], tmp_path, public=False)
+    with pytest.raises(OutputWriteFailedError, match="t1.t"):
+        _sink_outputs(
+            (_fake_table_frame(),), ["t1"], _targets(tmp_path, "t1"), public=False
+        )
 
 
 def test_sink_outputs_failure_while_writing_maps_to_output_write_failed(
@@ -779,7 +850,7 @@ def test_sink_outputs_failure_while_writing_maps_to_output_write_failed(
     def fail(batch):
         raise RuntimeError("disk full")
 
-    def failing_sink(self, destination):
+    def failing_sink(self, *arguments):
         return pl.LazyFrame({"x": [1]}).map_batches(fail)
 
     monkeypatch.setattr(TableFrame, "_sink_native_plan", failing_sink)
@@ -787,9 +858,40 @@ def test_sink_outputs_failure_while_writing_maps_to_output_write_failed(
         _sink_outputs(
             (_fake_table_frame(), _fake_table_frame()),
             ["t1", "t2"],
-            tmp_path,
+            _targets(tmp_path, "t1", "t2"),
             public=False,
         )
+
+
+def test_sink_outputs_unreadable_stats_map_to_output_write_failed(
+    tmp_path, monkeypatch
+):
+    def unreadable(self):
+        raise OSError("gone")
+
+    monkeypatch.setattr(TableFile, "stats", unreadable)
+    with pytest.raises(OutputWriteFailedError, match="stats of output 't1'"):
+        _sink_outputs(
+            (_fake_table_frame(),), ["t1"], _targets(tmp_path, "t1"), public=False
+        )
+
+
+def test_sink_outputs_writes_every_output_in_one_pass(tmp_path, monkeypatch):
+    collected = []
+    collect_all = pl.collect_all
+
+    def counting(plans, **options):
+        collected.append(len(plans))
+        return collect_all(plans, **options)
+
+    monkeypatch.setattr(pl, "collect_all", counting)
+    _sink_outputs(
+        (_fake_table_frame(), _fake_table_frame(), None),
+        ["t1", "t2", "t3"],
+        _targets(tmp_path, "t1", "t2", "t3"),
+        public=False,
+    )
+    assert collected == [2]
 
 
 def test_sink_outputs_native_keeps_system_columns(tmp_path):
@@ -797,10 +899,10 @@ def test_sink_outputs_native_keeps_system_columns(tmp_path):
         TD_SYSTEM_COLUMN_PREFIX,
     )
 
-    entries = _sink_outputs(
-        (_fake_table_frame(),), ["t1"], tmp_path, public=False
-    ).outputs
-    columns = pl.scan_parquet(entries[0].file).collect_schema().names()
+    _sink_outputs(
+        (_fake_table_frame(),), ["t1"], _targets(tmp_path, "t1"), public=False
+    )
+    columns = pl.read_parquet_schema(_stored(tmp_path, "t1"))
     assert any(c.startswith(TD_SYSTEM_COLUMN_PREFIX) for c in columns)
 
 
@@ -810,10 +912,8 @@ def test_sink_outputs_public_drops_internal_columns(tmp_path):
         TD_SYSTEM_COLUMN_PREFIX,
     )
 
-    entries = _sink_outputs(
-        (_fake_table_frame(),), ["t1"], tmp_path, public=True
-    ).outputs
-    columns = pl.scan_parquet(entries[0].file).collect_schema().names()
+    _sink_outputs((_fake_table_frame(),), ["t1"], _targets(tmp_path, "t1"), public=True)
+    columns = pl.read_parquet_schema(_stored(tmp_path, "t1"))
     assert not any(
         c.startswith((TD_SYSTEM_COLUMN_PREFIX, TD_CONNECTOR_SYSTEM_COLUMN_PREFIX))
         for c in columns
@@ -865,7 +965,7 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
     """Real publisher, real bundle, real inputs manifest pointing at a
     real parquet. Invoke main(); verify outputs."""
     # Write the request.
-    request_path = _write_request(tmp_path / "request.yaml")
+    request_path = _write_request(tmp_path / "request.yaml", "my_table", "untouched")
 
     # Write a sample parquet and an inputs manifest pointing at it.
     raw_parquet = tmp_path / "raw" / "rows.parquet"
@@ -892,12 +992,13 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
     rc = main()
     assert rc == 0, f"main() returned {rc}"
 
-    # One output parquet was written for `my_table` (the function
-    # returned a LazyFrame), nothing for `untouched` (function
-    # returned None).
-    my_table_file = out_dir / "slot0" / "my_table.parquet"
+    # One output was written to its stored location for `my_table` (the
+    # function returned a LazyFrame), nothing for `untouched` (function
+    # returned None), and nothing locally.
+    my_table_file = _stored(tmp_path, "my_table")
     assert my_table_file.is_file()
-    assert not (out_dir / "slot1" / "untouched.parquet").exists()
+    assert not _stored(tmp_path, "untouched").exists()
+    assert not list(out_dir.rglob("*.parquet"))
 
     # The user function added a `marker` column; the underlying data
     # comes through unchanged.
@@ -907,15 +1008,20 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
     assert df["id"].to_list() == [1, 2, 3]
     assert df["name"].to_list() == ["a", "b", "c"]
 
-    # Outputs manifest shape: my_table → file, untouched → null.
+    # Outputs manifest shape: my_table → uri and stats, untouched → null.
     data = yaml.safe_load(outputs_manifest.read_text())
     assert list(data.keys()) == ["outputs"]
     assert len(data["outputs"]) == 2
     e1, e2 = data["outputs"]
     assert e1["name"] == "my_table"
-    assert e1["file"] is not None
-    assert Path(e1["file"]).samefile(my_table_file)
-    assert e2 == {"name": "untouched", "file": None}
+    assert e1["uri"] == my_table_file.as_uri()
+    assert e1["stats"] == {
+        "column_count": len(pl.read_parquet_schema(my_table_file)),
+        "row_count": 3,
+        "schema_hash": e1["stats"]["schema_hash"],
+        "data_bytes": my_table_file.stat().st_size,
+    }
+    assert e2 == {"name": "untouched", "uri": None, "stats": None}
 
     assert liveness.exists()
 
@@ -924,7 +1030,7 @@ def test_main_outputs_manifest_write_failure(
     tmp_path, built_bundle, monkeypatch, http_ok_url
 ):
     """If the outputs-manifest write fails, surface OutputsManifestWriteFailedError."""
-    request_path = _write_request(tmp_path / "request.yaml")
+    request_path = _write_request(tmp_path / "request.yaml", "my_table", "untouched")
     raw_parquet = tmp_path / "raw" / "rows.parquet"
     _write_sample_parquet(raw_parquet)
     inputs_manifest = tmp_path / "inputs.yaml"
@@ -960,7 +1066,7 @@ def test_main_multi_cardinality_publisher_concatenates_two_slots(
     flow with input_count > 1 on the publisher path — guards against
     the regression where _input_count was hardcoded to 1 for
     publishers."""
-    request_path = _write_request(tmp_path / "request.yaml")
+    request_path = _write_request(tmp_path / "request.yaml", "concat")
 
     # One parquet per slot.
     a_parquet = tmp_path / "raw" / "a.parquet"
@@ -992,7 +1098,7 @@ def test_main_multi_cardinality_publisher_concatenates_two_slots(
     rc = main()
     assert rc == 0, f"main() returned {rc}"
 
-    concat_file = out_dir / "slot0" / "concat.parquet"
+    concat_file = _stored(tmp_path, "concat")
     assert concat_file.is_file()
     df = pl.read_parquet(concat_file)
     # Both inputs got concatenated (2 + 2 rows).
@@ -1007,7 +1113,7 @@ def test_main_multi_cardinality_transformer_with_mixed_modes(
     one output. Exercises the full _run() flow with input_count > 1 on
     the transformer path AND with mixed slot modes — guards against
     regressions in both per-slot mode inference and the slot count."""
-    request_path = _write_request(tmp_path / "request.yaml")
+    request_path = _write_request(tmp_path / "request.yaml", "merged")
 
     # Three input parquets: a (SINGLE), b (ARRAY, one file), c (SINGLE).
     a = tmp_path / "raw" / "a.parquet"
@@ -1042,7 +1148,7 @@ def test_main_multi_cardinality_transformer_with_mixed_modes(
     rc = main()
     assert rc == 0, f"main() returned {rc}"
 
-    merged_file = out_dir / "slot0" / "merged.parquet"
+    merged_file = _stored(tmp_path, "merged")
     assert merged_file.is_file()
     df = pl.read_parquet(merged_file)
     assert df.height == 3
@@ -1053,7 +1159,7 @@ def test_main_transformer_with_a_udf(
     tmp_path, udf_transformer_bundle, monkeypatch, http_ok_url
 ):
     bundle, broken = udf_transformer_bundle
-    request_path = _write_request(tmp_path / "request.yaml")
+    request_path = _write_request(tmp_path / "request.yaml", "t_out")
     source = tmp_path / "raw" / "in.parquet"
     _write_sample_parquet(source)
     inputs_manifest = tmp_path / "inputs.yaml"
@@ -1078,7 +1184,7 @@ def test_main_transformer_with_a_udf(
         assert exit_code == OutputWriteFailedError.exit_code
         return
     assert exit_code == 0, f"main() returned {exit_code}"
-    df = pl.read_parquet(out_dir / "slot0" / "t_out.parquet")
+    df = pl.read_parquet(_stored(tmp_path, "t_out"))
     assert df.select("id", "name", "doubled", "label").to_dicts() == [
         {"id": 1, "name": "a", "doubled": 2, "label": "A"},
         {"id": 2, "name": "b", "doubled": 4, "label": "B"},
@@ -1091,7 +1197,9 @@ def test_main_evaluates_a_udf_once_per_row_with_data_quality(
     tmp_path, quality_udf_transformer_bundle, monkeypatch, http_ok_url
 ):
     bundle, module, failing = quality_udf_transformer_bundle
-    request_path = _write_request(tmp_path / "request.yaml")
+    request_path = _write_request(
+        tmp_path / "request.yaml", "t_out", "t_out_quality", "t_out_quality_summary"
+    )
     source = tmp_path / "raw" / "in.parquet"
     _write_sample_parquet(source)
     inputs_manifest = tmp_path / "inputs.yaml"
@@ -1117,7 +1225,9 @@ def test_main_evaluates_a_udf_once_per_row_with_data_quality(
         assert exit_code != 0
         return
     assert exit_code == 0, f"main() returned {exit_code}"
-    stored = {path.stem: pl.read_parquet(path) for path in out_dir.glob("*/*.parquet")}
+    stored = {
+        path.stem: pl.read_parquet(path) for path in (tmp_path / "storage").glob("*.t")
+    }
     assert set(stored) == {"t_out", "t_out_quality", "t_out_quality_summary"}
     assert stored["t_out"]["doubled"].to_list() == [2, 4, 6]
     summary = stored["t_out_quality_summary"]
@@ -1261,7 +1371,11 @@ def _write_inputs_manifest_for(input_files: list[str], path: Path) -> None:
 
 
 def _request_with_state_slots(
-    path: Path, *, state_in_name: str = "iv-in", state_out_name: str = "iv-out"
+    path: Path,
+    *,
+    outputs: tuple[str, ...] = ("my_table",),
+    state_in_name: str = "iv-in",
+    state_out_name: str = "iv-out",
 ) -> Path:
     info = _info()
     info["execution_id"] = 2
@@ -1271,7 +1385,10 @@ def _request_with_state_slots(
         yaml.safe_dump({
             "Function": {
                 "info": info,
-                "output": [_output_table({"table": "my_table"}, 0)],
+                "output": [
+                    _stored_output(path.parent, table, index)
+                    for index, table in enumerate(outputs)
+                ],
                 "system_input": [
                     _input_table(
                         {
@@ -1412,7 +1529,9 @@ def test_main_function_without_ctx_does_not_touch_state(
     """The original publisher (no ctx param) must not produce a
     state-out file -- a function with no ctx is signaling that it
     doesn't care about state."""
-    req = _request_with_state_slots(tmp_path / "request.yaml")
+    req = _request_with_state_slots(
+        tmp_path / "request.yaml", outputs=("my_table", "untouched")
+    )
     inputs_manifest = tmp_path / "inputs.yaml"
     _write_inputs_manifest_for([str(_seed_input_parquet(tmp_path))], inputs_manifest)
     out_dir = tmp_path / "out"
@@ -1541,7 +1660,7 @@ def test_main_ctx_aware_transformer_hydrates_and_drains(
         decorated_name="my_transformer",
     )
 
-    req = _request_with_state_slots(tmp_path / "request.yaml")
+    req = _request_with_state_slots(tmp_path / "request.yaml", outputs=("t_out",))
     inputs_manifest = tmp_path / "inputs.yaml"
     _write_inputs_manifest_for([str(_seed_input_parquet(tmp_path))], inputs_manifest)
     out_dir = tmp_path / "out"

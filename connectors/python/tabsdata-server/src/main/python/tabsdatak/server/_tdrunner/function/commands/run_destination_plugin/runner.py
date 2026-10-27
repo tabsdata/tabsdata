@@ -18,6 +18,7 @@ from pathlib import Path
 
 from tabsdatak._connectors import get_dest
 from tabsdatak._info import KIND_SUBSCRIBER_DEF, SubscriberInfo
+from tabsdatak.common._storage.transfer import local_path
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
 from tabsdatak.server._tdrunner.function._commons.manifests.manifest import (
     ManifestError,
@@ -78,11 +79,11 @@ def _resolve_plugin(info: SubscriberInfo):
 def _tables_from_manifest(manifest: OutputManifest) -> list[Path]:
     tables: list[Path] = []
     for slot, entry in enumerate(manifest.outputs):
-        if entry.file is None:
+        if entry.uri is None:
             raise RunDestinationPluginErrorCode.RDP_8.exception(
                 slot=slot, name=entry.name
             )
-        tables.append(Path(entry.file))
+        tables.append(local_path(entry.uri))
     return tables
 
 
@@ -120,7 +121,7 @@ def run(args: argparse.Namespace) -> int:
     # Contract: a subscriber that returns None for every output slot produced no
     # new data this run, so the destination plugin must NOT be invoked (skip the
     # external write) rather than erroring on the null slots.
-    if entries and all(entry.file is None for entry in entries):
+    if entries and all(entry.uri is None for entry in entries):
         logger.info(
             "Subscriber produced no data (all %d output slot(s) null); "
             "skipping %s.write_out",

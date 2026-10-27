@@ -7,10 +7,13 @@
 The penultimate step of the function-runner chain. Reads the inputs
 manifest, materializes each input slot as a polars `LazyFrame` (or a
 list of LazyFrames for ARRAY-mode slots), invokes the user-decorated
-function, and sinks each returned `LazyFrame` to a parquet under
-`--out-dir`. Emits an outputs manifest at `--outputs-manifest` mapping
-each declared output table to the parquet it produced (or `null` if
-the function returned `None` for that table — "not modified this run").
+function, and sinks each returned table in one streaming pass: a
+publisher or transformer output straight to the storage location the
+request assigns it, a subscriber output to a parquet under `--out-dir`
+for the destination plugin. Emits an outputs manifest at
+`--outputs-manifest` with the URI and the footer stats of each written
+table (neither, if the function returned `None` for that table — "not
+modified this run").
 
 Kind-agnostic: handles `publisherDef`, `transformerDef`, and
 `subscriberDef`. The input slot mode (SINGLE vs ARRAY) is inferred
@@ -44,6 +47,7 @@ from tabsdatak.server._tdrunner.function.commands.run_function.runner import (
     _load_function_def,
     _materialize_input_slot,
     _output_table_names,
+    _output_targets,
     _scan_input,
     _sink_outputs,
     run,
@@ -56,6 +60,7 @@ __all__ = [
     "_load_function_def",
     "_materialize_input_slot",
     "_output_table_names",
+    "_output_targets",
     "_scan_input",
     "_sink_outputs",
     "run",
@@ -78,10 +83,12 @@ MAN = (
     "input slot from --inputs-manifest as a polars LazyFrame "
     "(single-mode slots → one LazyFrame; array-mode slots → list of "
     "LazyFrames), invokes the user function, and sinks each returned "
-    "table to <out-dir>/slot<i>/<table_name>.parquet. Writes an "
-    "outputs manifest at --outputs-manifest mapping each output "
-    "table to its parquet (or null if the function returned None). "
-    "Handles publisherDef, transformerDef, and subscriberDef bundles."
+    "table: publisher and transformer outputs to the storage location "
+    "the request assigns them, subscriber outputs to "
+    "<out-dir>/slot<i>/<table_name>.parquet. Writes an outputs manifest "
+    "at --outputs-manifest with each written table's URI and stats "
+    "(neither if the function returned None). Handles publisherDef, "
+    "transformerDef, and subscriberDef bundles."
 )
 
 
@@ -105,15 +112,19 @@ def _build_parser():
     parser.add_argument(
         "--out-dir",
         required=True,
-        help="Directory where the function's output parquets are written",
+        help=(
+            "Working directory of the function, where subscriber output "
+            "parquets are written"
+        ),
     )
     parser.add_argument(
         "--outputs-manifest",
         required=True,
         help=(
             "Path where this command writes the YAML outputs manifest "
-            "mapping each output table to its parquet file (or null if "
-            "the function returned None). Consumed by prep-upload-state."
+            "with each output table's URI and stats (neither if the "
+            "function returned None). Consumed by run-destination-plugin "
+            "and report-completion."
         ),
     )
     parser.add_argument(

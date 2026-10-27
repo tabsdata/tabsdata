@@ -22,7 +22,6 @@ from tabsdatak.server._tdrunner.function.commands import (
     prep_localize_state,
     prep_upload_raw,
     prep_upload_state,
-    prep_upload_tables,
     report_completion,
     run_destination_plugin,
     run_function,
@@ -254,17 +253,6 @@ class Driver:
         )
         self.transport("shuttle/state-request.yaml", "shuttle/state-report.yaml")
 
-    def upload_tables(self) -> None:
-        self.step(
-            prep_upload_tables,
-            "prep-upload-tables",
-            request=self.request,
-            outputs_manifest=self.path("fn/out/outputs-manifest.yaml"),
-            out=self.path("shuttle/tables-request.yaml"),
-            storage_config=self.storage,
-        )
-        self.transport("shuttle/tables-request.yaml", "shuttle/tables-report.yaml")
-
     def complete(self) -> None:
         self.step(
             report_completion,
@@ -305,12 +293,10 @@ class Driver:
         self.transport("shuttle/raw-request.yaml", "shuttle/raw-report.yaml")
         self.run_function("fn/in/enriched-inputs-manifest.yaml")
         self.upload_state()
-        self.upload_tables()
 
     def transformer(self) -> None:
         self.run_function("fn/in/inputs-manifest.yaml")
         self.upload_state()
-        self.upload_tables()
 
     def subscriber(self, connection: Path) -> None:
         self.run_function("fn/in/inputs-manifest.yaml")

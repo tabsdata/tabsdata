@@ -12,20 +12,9 @@ from tabsdatak.server._tdrunner.function._commons.document.request import (
     AnyRequest,
     Request,
 )
-from tabsdatak.server._tdrunner.function._commons.manifests.output import (
-    OutputManifest,
-)
 from tabsdatak.server._tdrunner.function._lib import transporter1, transporter2
 from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
 from tabsdatak.server._tdrunner.function._lib.mounts import load_mount_option_keys
-
-match TRANSPORTER_MODE:
-    case 1:
-        OutputTableNotInManifestError = transporter1.OutputTableNotInManifestError
-    case 2:
-        OutputTableNotInManifestError = transporter2.OutputTableNotInManifestError
-    case _:
-        raise CommandErrorCode.CMD_5.exception(mode=TRANSPORTER_MODE)
 
 
 def build_localize_state_request(
@@ -74,23 +63,6 @@ def build_upload_state_request(
             option_keys = load_mount_option_keys(storage_config_file)
             return transporter2.build_upload_state_request(
                 request, state_dir, option_keys
-            )
-        case _:
-            raise CommandErrorCode.CMD_5.exception(mode=TRANSPORTER_MODE)
-
-
-def build_upload_tables_request(
-    request: Request,
-    manifest: OutputManifest,
-    storage_config_file: Path,
-) -> Any:
-    match TRANSPORTER_MODE:
-        case 1:
-            return transporter1.build_upload_tables_request(request, manifest)
-        case 2:
-            option_keys = load_mount_option_keys(storage_config_file)
-            return transporter2.build_upload_tables_request(
-                request, manifest, option_keys
             )
         case _:
             raise CommandErrorCode.CMD_5.exception(mode=TRANSPORTER_MODE)

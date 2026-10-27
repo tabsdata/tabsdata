@@ -18,17 +18,10 @@ from tabsdatak.server._tdrunner.function._commons.document.request import (
     Location,
     Request,
 )
-from tabsdatak.server._tdrunner.function._commons.manifests.output import (
-    OutputManifest,
-)
 from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
 from tabsdatak.server._tdrunner.function._lib.mounts import secret_env_name
 
 logger = logging.getLogger(__name__)
-
-
-class OutputTableNotInManifestError(ValueError):
-    pass
 
 
 class ServerTransporterHandler2(TransporterHandler2):
@@ -95,34 +88,6 @@ def build_upload_state_request(
             continue
         pairs.append((
             local_location(source_path),
-            handler.location_for(table.location),
-        ))
-    return handler.make_request(pairs)
-
-
-def build_upload_tables_request(
-    request: Request,
-    manifest: OutputManifest,
-    option_keys: dict[str, list[str]],
-) -> transporter2.CopyRequest:
-    handler = ServerTransporterHandler2(option_keys)
-    files_by_name: dict[str, str | None] = {
-        entry.name: entry.file for entry in manifest.outputs
-    }
-    pairs: list[tuple[transporter2.Location, transporter2.Location]] = []
-    for table in request.output:
-        if table.location is None:
-            continue
-        if table.table not in files_by_name:
-            raise OutputTableNotInManifestError(
-                f"Output table {table.table!r} declared in request "
-                f"has no entry in the outputs manifest."
-            )
-        source = files_by_name[table.table]
-        if source is None:
-            continue
-        pairs.append((
-            local_location(Path(source)),
             handler.location_for(table.location),
         ))
     return handler.make_request(pairs)

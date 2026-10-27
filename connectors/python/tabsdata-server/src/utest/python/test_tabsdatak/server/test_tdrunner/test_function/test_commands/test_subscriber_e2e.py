@@ -60,7 +60,9 @@ from tabsdatak.common._archive.bundle import build_bundle
 #     request copies only the state tables;
 #   * the inputs manifest holds `tables` records (`file`, `location`, version
 #     fields), read and written through `InputManifest` / `InputRecord`; the
-#     outputs manifest through `OutputManifest` / `OutputEntry`.
+#     outputs manifest through `OutputManifest` / `OutputEntry`, whose entries
+#     carry the written parquet's `uri` (a `file://` one under `out_dir/slot*`)
+#     and footer `stats` instead of a `file`.
 pytestmark = [
     pytest.mark.unit,
     pytest.mark.tabsdatak,

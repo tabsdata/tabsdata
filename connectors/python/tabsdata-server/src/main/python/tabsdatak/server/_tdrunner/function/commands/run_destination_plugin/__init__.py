@@ -87,7 +87,7 @@ def _build_parser():
         help=(
             "Path to the YAML outputs manifest produced by run-function. "
             "Entries are consumed positionally — one parquet per slot in "
-            "declaration order. Entries with `file: null` are rejected "
+            "declaration order. Entries without a `uri` are rejected "
             "(subscribers must return concrete frames for every slot)."
         ),
     )

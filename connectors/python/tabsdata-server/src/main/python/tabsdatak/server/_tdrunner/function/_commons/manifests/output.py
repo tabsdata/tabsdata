@@ -10,9 +10,18 @@ from tabsdatak.server._tdrunner.function._commons.manifests.manifest import Mani
 
 
 @dataclass(frozen=True)
+class TableStats:
+    column_count: int
+    row_count: int
+    schema_hash: str
+    data_bytes: int
+
+
+@dataclass(frozen=True)
 class OutputEntry:
     name: str
-    file: str | None = None
+    uri: str | None = None
+    stats: TableStats | None = None
 
 
 @dataclass(frozen=True)

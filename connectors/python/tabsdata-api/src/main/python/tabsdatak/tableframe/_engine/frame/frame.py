@@ -239,34 +239,42 @@ class EngineFrame(BaseFrame):
     def _sink_public(self, path) -> None:
         self._sink_public_plan(path).collect(engine="streaming")
 
-    def _sink_native_plan(self, path):
+    def _sink_native_plan(self, path, storage_options=None):
         return self._sink_plan(
             self._persisted(),
             path,
+            storage_options,
         )
 
-    def _sink_user_plan(self, path):
+    def _sink_user_plan(self, path, storage_options=None):
         return self._sink_plan(
             self._strip(drop_system_columns=True),
             path,
+            storage_options,
         )
 
-    def _sink_public_plan(self, path):
+    def _sink_public_plan(self, path, storage_options=None):
         return self._sink_plan(
             self._strip(
                 drop_system_columns=True,
                 drop_internal_columns=True,
             ),
             path,
+            storage_options,
         )
 
-    def _sink_plan(self, lf, path):
+    def _sink_plan(self, lf, path, storage_options=None):
         from tabsdatak.tableframe._core.hooks import get_sink_observer
 
         observer = get_sink_observer(type(self))
         if observer is not None:
             lf = observer(lf, "sink_parquet", path)
-        return lf.sink_parquet(path, engine="streaming", lazy=True)
+        return lf.sink_parquet(
+            path,
+            storage_options=storage_options,
+            engine="streaming",
+            lazy=True,
+        )
 
     # Construction surface. Class methods so cls is the concrete subclass and the
     # wrapped result is a TableFrame; each normalizes its input to a polars

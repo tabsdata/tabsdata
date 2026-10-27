@@ -315,8 +315,8 @@ def test_resolve_plugin_unknown_dest_raises_no_plugin(fixture_subscriber, monkey
 def test_tables_from_manifest_happy():
     manifest = OutputManifest(
         outputs=(
-            OutputEntry(name="out_0", file="/a.parquet"),
-            OutputEntry(name="out_1", file="/b.parquet"),
+            OutputEntry(name="out_0", uri="file:///a.parquet"),
+            OutputEntry(name="out_1", uri="file:///b.parquet"),
         )
     )
     tables = _tables_from_manifest(manifest)
@@ -330,10 +330,10 @@ def test_tables_from_manifest_empty_entries_yields_empty_list():
 
 def test_tables_from_manifest_null_entry_raises_bad_manifest():
     """Subscribers must return concrete frames for every slot — a
-    `file: null` entry is a contract violation here."""
+    entry without a `uri` is a contract violation here."""
     manifest = OutputManifest(
         outputs=(
-            OutputEntry(name="out_0", file="/a.parquet"),
+            OutputEntry(name="out_0", uri="file:///a.parquet"),
             OutputEntry(name="out_1"),
         )
     )
@@ -493,9 +493,9 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
     )
 
     outputs_manifest = tmp_path / "outputs.yaml"
-    OutputManifest(outputs=(OutputEntry(name="out_0", file=str(raw_parquet)),)).write(
-        outputs_manifest
-    )
+    OutputManifest(
+        outputs=(OutputEntry(name="out_0", uri=raw_parquet.as_uri()),)
+    ).write(outputs_manifest)
 
     # The connection (with the dest base_path) now comes from the
     # connection file the runtime loads, not from the function descriptor.
@@ -534,9 +534,9 @@ def _shipping_setup(tmp_path, built_bundle, monkeypatch, http_ok_url):
     raw_parquet.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(pa.table({"id": [1], "name": ["a"]}), raw_parquet)
     outputs_manifest = tmp_path / "outputs.yaml"
-    OutputManifest(outputs=(OutputEntry(name="out_0", file=str(raw_parquet)),)).write(
-        outputs_manifest
-    )
+    OutputManifest(
+        outputs=(OutputEntry(name="out_0", uri=raw_parquet.as_uri()),)
+    ).write(outputs_manifest)
     conn_file = _write_connection_file(
         tmp_path / "connection.yaml", tmp_path / "dest_out"
     )

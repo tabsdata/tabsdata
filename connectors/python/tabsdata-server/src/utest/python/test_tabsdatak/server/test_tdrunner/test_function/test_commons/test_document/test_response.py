@@ -7,7 +7,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import polars as pl
 import pytest
 import yaml
 from pydantic import ValidationError
@@ -18,19 +17,19 @@ from tabsdatak.server._tdrunner.function._commons.document.request import Reques
 from tabsdatak.server._tdrunner.function._commons.document.response import (
     Response,
     TableEntry,
-    TableInfo,
     WrittenNoData,
     WrittenTable,
 )
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputEntry,
     OutputManifest,
+    TableStats,
 )
 from tabsdatak.server._tdrunner.function._lib.errors import CommandRuntimeException
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
-INFO = TableInfo(column_count=3, row_count=10, schema_hash="sha256:abc", data_bytes=64)
+INFO = TableStats(column_count=3, row_count=10, schema_hash="sha256:abc", data_bytes=64)
 MINIMAL = Path(__file__).parent / "resources" / "minimal_publisher_request.yaml"
 
 
@@ -46,11 +45,6 @@ class ResponseErrorCode(ErrorCode):
 def written(tmp_path: Path, document: Any) -> Path:
     path = tmp_path / "response.yaml"
     path.write_text(document if isinstance(document, str) else yaml.safe_dump(document))
-    return path
-
-
-def parquet(path: Path) -> Path:
-    pl.DataFrame({"a": [1, 2], "b": ["x", "y"]}).write_parquet(path)
     return path
 
 
@@ -108,33 +102,28 @@ def test_function_output_tags_each_written_table():
     }
 
 
-def test_table_info_measures_a_parquet(tmp_path: Path):
-    path = parquet(tmp_path / "t.parquet")
-    info = TableInfo.from_parquet(path)
-    assert (info.column_count, info.row_count) == (2, 2)
-    assert info.schema_hash.startswith("sha256:")
-    assert info.data_bytes == path.stat().st_size
-
-
-def test_entries_without_data_have_no_info(tmp_path: Path):
-    assert TableEntry.output(OutputEntry(name="t")).info is None
-    assert TableEntry.state("absent", tmp_path).info is None
-
-
-def test_build_resolves_outputs_and_state(tmp_path: Path):
+def test_build_takes_the_stats_of_outputs_and_state():
     request = Request.load(MINIMAL, ResponseErrorCode.READ)
-    state = tmp_path / "state"
-    state.mkdir()
     manifest = OutputManifest(
-        outputs=(
-            OutputEntry(name="customers", file=str(parquet(tmp_path / "c.parquet"))),
-        )
+        outputs=(OutputEntry(name="customers", uri="s3://b/c.t", stats=INFO),)
     )
-    response = Response.build(request, manifest, state, ResponseErrorCode.MISMATCH)
-    customers, state_table = response.output
-    assert customers.table == "customers"
-    assert customers.info.row_count == 2
-    assert state_table == TableEntry(table="td-initial-values")
+    response = Response.build(
+        request, manifest, {"td-initial-values": INFO}, ResponseErrorCode.MISMATCH
+    )
+    assert response.output == (
+        TableEntry(table="customers", info=INFO),
+        TableEntry(table="td-initial-values", info=INFO),
+    )
+
+
+def test_build_reports_no_data_without_stats():
+    request = Request.load(MINIMAL, ResponseErrorCode.READ)
+    manifest = OutputManifest(outputs=(OutputEntry(name="customers"),))
+    response = Response.build(request, manifest, {}, ResponseErrorCode.MISMATCH)
+    assert response.output == (
+        TableEntry(table="customers"),
+        TableEntry(table="td-initial-values"),
+    )
 
 
 def test_build_rejects_an_output_missing_from_the_manifest(tmp_path: Path):
@@ -143,7 +132,7 @@ def test_build_rejects_an_output_missing_from_the_manifest(tmp_path: Path):
         Response.build(
             request,
             OutputManifest(outputs=()),
-            tmp_path,
+            {},
             ResponseErrorCode.MISMATCH,
         )
 

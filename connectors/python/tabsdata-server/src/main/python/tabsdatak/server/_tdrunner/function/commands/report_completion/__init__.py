@@ -12,10 +12,10 @@ end time into the journal, and posts a `Done` callback to the responder
 carrying the response as the function `output`.
 
 For each declared `request.output` table the response includes a
-`Data` entry with column_count / row_count / schema_hash if the
-matching outputs-manifest entry carries a non-null `file:`, or a
-`NoData` entry (table name only) when the entry's `file:` is `null`
-(the user function returned `None` for that slot).
+`Data` entry with the stats run-function read from the written table's
+footer (column_count / row_count / schema_hash / data_bytes), or a
+`NoData` entry (table name only) when the outputs-manifest entry has no
+stats (the user function returned `None` for that slot).
 
 For each declared `request.system_output` table the response includes
 a `Data` entry if `<state_dir>/<name>.parquet` exists, or `NoData`

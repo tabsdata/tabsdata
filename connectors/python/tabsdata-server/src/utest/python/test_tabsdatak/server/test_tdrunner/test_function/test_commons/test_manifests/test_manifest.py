@@ -21,6 +21,7 @@ from tabsdatak.server._tdrunner.function._commons.manifests.manifest import (
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputEntry,
     OutputManifest,
+    TableStats,
 )
 from tabsdatak.server._tdrunner.function._commons.manifests.state import (
     StateEntry,
@@ -64,11 +65,20 @@ SAMPLES = {
     "outputs": Sample(
         manifest=OutputManifest(
             outputs=(
-                OutputEntry(name="a", file="/a.parquet"),
+                OutputEntry(
+                    name="a",
+                    uri="s3://b/a.t",
+                    stats=TableStats(
+                        column_count=1,
+                        row_count=2,
+                        schema_hash="sha256:abc",
+                        data_bytes=64,
+                    ),
+                ),
                 OutputEntry(name="b"),
             )
         ),
-        entry_without_required_field={"file": "/a.parquet"},
+        entry_without_required_field={"uri": "s3://b/a.t"},
     ),
     "state": Sample(
         manifest=StateManifest(

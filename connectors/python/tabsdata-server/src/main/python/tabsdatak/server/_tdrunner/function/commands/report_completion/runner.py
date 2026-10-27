@@ -24,14 +24,27 @@ from tabsdatak.server._tdrunner.function._commons.manifests.manifest import (
 )
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputManifest,
+    TableStats,
 )
 from tabsdatak.server._tdrunner.function._commons.run.command import notify_status_done
+from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.server._tdrunner.function._lib.journal import Journal
 from tabsdatak.server._tdrunner.function.commands.report_completion.error import (
     ReportCompletionErrorCode,
 )
 
 logger = logging.getLogger(__name__)
+
+PARQUET_SUFFIX = ".parquet"
+
+
+def _state_stats(request: Request, state_dir: Path) -> dict[str, TableStats]:
+    stats = {}
+    for table in request.system_output:
+        path = state_dir / f"{table.table}{PARQUET_SUFFIX}"
+        if path.exists():
+            stats[table.table] = TableFile.local(path).stats()
+    return stats
 
 
 def run(args: argparse.Namespace) -> int:
@@ -63,7 +76,7 @@ def run(args: argparse.Namespace) -> int:
     response = Response.build(
         request,
         manifest,
-        state_dir,
+        _state_stats(request, state_dir),
         ReportCompletionErrorCode.RC_3,
     )
     data_count = sum(1 for e in response.output if e.info is not None)
