@@ -45,6 +45,7 @@ pub(crate) mod v15;
 pub(crate) mod v16;
 pub(crate) mod v17;
 pub(crate) mod v18;
+pub(crate) mod v19;
 pub(crate) mod v2;
 pub(crate) mod v3;
 pub(crate) mod v4;
@@ -78,6 +79,7 @@ pub(crate) const ARCHIVES: [&'static dyn SchemaSource; ARCHIVED] = [
     &v16::Source,
     &v17::Source,
     &v18::Source,
+    &v19::Source,
 ];
 
 /// The [`SchemaSource`] for an archived version.

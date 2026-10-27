@@ -56,6 +56,7 @@ pub(crate) mod v15_to_v16;
 pub(crate) mod v16_to_v17;
 pub(crate) mod v17_to_v18;
 pub(crate) mod v18_to_v19;
+pub(crate) mod v19_to_v20;
 pub(crate) mod v1_to_v2;
 pub(crate) mod v2_to_v3;
 pub(crate) mod v3_to_v4;
@@ -115,6 +116,7 @@ pub fn get(target_version: usize) -> Delta {
         17 => rung::<v16_to_v17::Migration>(),
         18 => rung::<v17_to_v18::Migration>(),
         19 => rung::<v18_to_v19::Migration>(),
+        20 => rung::<v19_to_v20::Migration>(),
         _ => panic!("No delta migration for version {target_version}"),
     }
 }

@@ -21,8 +21,8 @@ use sqlx::PgPool;
 use std::cmp::Ordering;
 use td_schema::SchemaSource;
 use td_schema::{
-    CURRENT_TABSDATA_VERSION, DB_EDITION_NAME, DB_VERSION_NAME, TABSDATA_VERSION_NAME,
-    TabsdataSystem,
+    CURRENT_TABSDATA_VERSION, DB_EDITION_NAME, DB_VERSION_NAME, INSTANCE_ID_NAME,
+    TABSDATA_VERSION_NAME, TabsdataSystem,
 };
 use te_system::edition::{Compatible, Edition, TabsdataEdition};
 use tracing::debug;
@@ -96,6 +96,17 @@ pub async fn check_db_version(pool: &PgPool, source: &dyn SchemaSource) -> Resul
         ))),
         Ordering::Greater => Err(DbError::DatabaseIsNewer(version.to_string(), current)),
     }
+}
+
+pub(crate) async fn instance_id(exec: impl SeaExecutor) -> Result<String, DbError> {
+    read_system_value(exec, INSTANCE_ID_NAME)
+        .await?
+        .ok_or_else(|| {
+            DbError::DatabaseCorrupted(format!(
+                "Missing '{INSTANCE_ID_NAME}' row in '{}'",
+                TabsdataSystem::Table.to_string()
+            ))
+        })
 }
 
 /// Read the major Tabsdata version. Pre-2.0 databases lack this row; a missing

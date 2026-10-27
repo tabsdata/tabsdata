@@ -13,6 +13,7 @@ pub(crate) mod executions;
 pub(crate) mod function_runs;
 pub(crate) mod functions;
 pub(crate) mod groups;
+pub(crate) mod instance;
 pub(crate) mod internal;
 pub(crate) mod logical_versions;
 pub(crate) mod metrics;
@@ -285,6 +286,7 @@ mod tests {
             (FLAT, "get_snapshot_global"),
             (FLAT, "get_user"),
             (FLAT, "info"),
+            (FLAT, "instance"),
             (FLAT, "list_by_function_version"),
             (FLAT, "list_by_table_data_version"),
             (FLAT, "list_collections"),
@@ -434,6 +436,7 @@ mod tests {
             ("GET", "/function-versions/{function_version}/bundle"),
             ("GET", "/function-versions/{function_version}/executions"),
             ("GET", "/inflight"),
+            ("GET", "/instance"),
             ("GET", "/metrics"),
             ("GET", "/projects"),
             ("GET", "/projects/{project}"),
@@ -660,6 +663,7 @@ mod tests {
             "/function-versions/{function_version}/bundle",
             "/function-versions/{function_version}/executions",
             "/inflight",
+            "/instance",
             "/internal/function-runs/{function_run}/workers/{worker}",
             "/internal/function-versions/{function_version}/download-state",
             "/internal/function-versions/{function_version}/execute",

@@ -2,10 +2,10 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use sea_query::{InsertStatement, Query};
+use sea_query::{Expr, InsertStatement, Query};
 
 use crate::schema::Entity;
-use crate::{CURRENT_TABSDATA_VERSION, TABSDATA_VERSION_NAME, TabsdataSystem};
+use crate::{CURRENT_TABSDATA_VERSION, INSTANCE_ID_NAME, TABSDATA_VERSION_NAME, TabsdataSystem};
 
 pub(super) struct Defs;
 
@@ -13,8 +13,7 @@ impl Entity for Defs {
     // The `tabsdata_system` table itself is created by the pool's shared
     // create/upgrade path (`td_schema::tabsdata_system_ddl`) before this build
     // runs, for every schema — not declared here. Likewise `db_version` is
-    // written by the pool. This entity only seeds the apiserver-specific
-    // major-version gate row.
+    // written by the pool. This entity only seeds the apiserver-specific rows.
     fn seeds(&self) -> Vec<InsertStatement> {
         vec![
             // Major-version marker. Gate-checked at startup before db_version so
@@ -25,6 +24,11 @@ impl Entity for Defs {
                 .into_table(TabsdataSystem::Table)
                 .columns([TabsdataSystem::Name, TabsdataSystem::Value])
                 .values_panic([TABSDATA_VERSION_NAME.into(), CURRENT_TABSDATA_VERSION.to_string().into()])
+                .to_owned(),
+            Query::insert()
+                .into_table(TabsdataSystem::Table)
+                .columns([TabsdataSystem::Name, TabsdataSystem::Value])
+                .values_panic([INSTANCE_ID_NAME.into(), Expr::cust("gen_random_uuid()::text")])
                 .to_owned(),
         ]
     }

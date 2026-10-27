@@ -26,6 +26,7 @@ pub const DB_VERSION_NAME: &str = "db_version";
 /// this row are treated as `1` (pre-2.0) and refused.
 pub const TABSDATA_VERSION_NAME: &str = "tabsdata_version";
 pub const DB_EDITION_NAME: &str = "edition";
+pub const INSTANCE_ID_NAME: &str = "instance_id";
 
 /// Session variable carrying the request's project. The row-level-security
 /// policies compare `project_id` against it and the project-scoped column

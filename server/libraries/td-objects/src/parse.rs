@@ -236,6 +236,8 @@ pub const UNDERSCORE_NAME_PATTERN: &str = concat!("^", UNDERSCORE_IDENTIFIER_PAT
 
 pub const SECRET_NAME_PATTERN: &str = "^[A-Za-z][A-Za-z0-9]*(_[A-Za-z0-9]+)*$";
 
+pub const UUID_PATTERN: &str = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
+
 pub fn parse_email(s: impl Into<String>) -> Result<String, TdError> {
     const EMAIL_PATTERN: &str = "[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}";
 

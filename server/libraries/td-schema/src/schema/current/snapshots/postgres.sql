@@ -732,6 +732,8 @@ CREATE STATISTICS "metrics_facts___grouping___stx" (ndistinct) ON "side", "edge_
 
 INSERT INTO "tabsdata_system" ("name", "value") VALUES ('tabsdata_version', '2')
 
+INSERT INTO "tabsdata_system" ("name", "value") VALUES ('instance_id', gen_random_uuid()::text)
+
 INSERT INTO "users" ("id", "name", "full_name", "email", "created_on", "created_by_id", "modified_on", "modified_by_id", "password_hash", "password_set_on", "password_must_change", "enabled", "system") VALUES ('00000000000000000000000000', 'system', 'System', NULL, CURRENT_TIMESTAMP, '00000000000000000000000000', CURRENT_TIMESTAMP, '00000000000000000000000000', '!', CURRENT_TIMESTAMP, FALSE, FALSE, TRUE)
 
 INSERT INTO "users" ("id", "name", "full_name", "email", "created_on", "created_by_id", "modified_on", "modified_by_id", "password_hash", "password_set_on", "password_must_change", "enabled", "system") VALUES ('00000000000000000000000004', 'admin', 'Administrator', NULL, CURRENT_TIMESTAMP, '00000000000000000000000000', CURRENT_TIMESTAMP, '00000000000000000000000000', '$argon2id$v=19$m=19456,t=2,p=1$ULTV//eju00aMbzZXAORyg$4+7GgsoT3e7lHElgWA2v0OYQHr5SBQzYY3pcUy0/YDM', CURRENT_TIMESTAMP, FALSE, TRUE, FALSE)

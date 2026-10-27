@@ -18,7 +18,9 @@ use td_common::signal::terminate;
 use td_common::status::ExitStatus;
 use td_common::task_group::TaskGroup;
 use td_database::access::{DbPool, Global};
+use td_error::TdError;
 use td_execution::SchedulerNotify;
+use td_objects::types::basic::InstanceId;
 use td_process::launcher::cli::Cli;
 use td_queries::initialize_logical_ids;
 use td_services::execution::services::runtime_info::RuntimeContext;
@@ -108,6 +110,18 @@ pub fn run() {
                 ExitStatus::GeneralError
             })?;
 
+            let instance_id = db
+                .instance_id()
+                .await
+                .map_err(TdError::from)
+                .and_then(InstanceId::try_from)
+                .map_err(|e| {
+                    error!("Error reading the instance id: {e:#?}");
+                    ExitStatus::GeneralError
+                })?;
+            info!("Instance: {instance_id}");
+            let instance_id = Ctx::new(instance_id);
+
             let mount_defs = config.storage_mounts().map_err(|e| {
                 error!("Error creating storage: {e:#?}");
                 ExitStatus::GeneralError
@@ -176,6 +190,7 @@ pub fn run() {
                 serving_pools.clone(),
                 storage.clone(),
                 runtime_context.clone(),
+                instance_id,
                 scheduler_notify.clone(),
                 bridge.clone(),
                 authz_registry.clone(),

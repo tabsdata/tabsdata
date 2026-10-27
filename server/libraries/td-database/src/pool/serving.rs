@@ -144,6 +144,11 @@ impl TdPool {
         crate::pool::state::db_version(&self.pool).await
     }
 
+    /// The random identity the database was created with.
+    pub async fn instance_id(&self) -> Result<String, DbError> {
+        crate::pool::state::instance_id(&self.pool).await
+    }
+
     /// Verify the recorded major Tabsdata version is the one this binary speaks.
     pub(crate) async fn check_tabsdata_version(&self) -> Result<(), DbError> {
         crate::pool::state::check_tabsdata_version(&self.pool).await

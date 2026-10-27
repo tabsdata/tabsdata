@@ -428,3 +428,11 @@ Unrelated to `db_version` and `tabsdata_version`. The `edition` row in
 `tabsdata_system` tracks the Tabsdata edition (community / enterprise / etc.)
 and has its own check/upgrade path in `td_database::pool`. See that module for
 details.
+
+## Instance identity (`instance_id` row)
+
+The `instance_id` row in `tabsdata_system` holds a random UUID minted by
+PostgreSQL (`gen_random_uuid()`) when the database is created, or by the v19 →
+v20 delta for databases created before it. It never changes for the life of
+the database. The apiserver reads it once at startup and serves it on
+`GET /instance`; clients key per-instance state on it.

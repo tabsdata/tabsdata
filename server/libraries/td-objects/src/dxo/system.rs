@@ -2,8 +2,15 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::types::basic::InstanceId;
+
 #[ta_objects::Dto]
 pub struct Pong {}
+
+#[ta_objects::Dto]
+pub struct Instance {
+    pub instance_id: InstanceId,
+}
 
 #[ta_objects::Dto]
 pub struct ApiStatus {

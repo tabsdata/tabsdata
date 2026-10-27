@@ -18,6 +18,7 @@ use td_database::access::{DbPool, Global};
 use td_database::domain::DomainPools;
 use td_execution::{RecoveryConfig, SchedulerConfig, SchedulerNotify, TransactionBy};
 use td_objects::types::addresses::ApiServerAddresses;
+use td_objects::types::basic::InstanceId;
 use td_security::config::PasswordHashingConfig;
 #[cfg(feature = "test-utils")]
 use td_security::token::config::MaxTokenDays;
@@ -69,6 +70,7 @@ pub struct Services {
     pub resources_dir: Ctx<Option<PathBuf>>,
     pub storage: Ctx<Storage>,
     pub runtime_context: Ctx<RuntimeContext>,
+    pub instance_id: Ctx<InstanceId>,
     pub transaction_by: Ctx<TransactionBy>,
     pub scheduler_notify: Ctx<SchedulerNotify>,
     pub scheduler_config: Ctx<SchedulerConfig>,
@@ -108,6 +110,9 @@ impl Default for Services {
             resources_dir: Ctx::new(None),
             storage: Ctx::new(Storage::default()),
             runtime_context: Ctx::new(RuntimeContext::default()),
+            instance_id: Ctx::new(
+                InstanceId::try_from("00000000-0000-0000-0000-000000000000").unwrap(),
+            ),
             transaction_by: Ctx::new(TransactionBy::default()),
             scheduler_notify: Ctx::new(SchedulerNotify::new()),
             scheduler_config: Ctx::new(SchedulerConfig::default()),

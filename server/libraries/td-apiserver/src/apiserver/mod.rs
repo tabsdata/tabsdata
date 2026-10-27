@@ -17,6 +17,7 @@ use td_database::components::ServingPools;
 use td_error::TdError;
 use td_execution::{RecoveryConfig, SchedulerConfig, SchedulerNotify};
 use td_objects::types::addresses::InternalServerEndpoint;
+use td_objects::types::basic::InstanceId;
 use td_services::Services;
 use td_services::execution::services::runtime_info::RuntimeContext;
 use td_services::internal_api::InternalApi;
@@ -69,6 +70,7 @@ impl ApiServerCtx {
         serving_pools: ServingPools,
         storage: Ctx<Storage>,
         runtime_context: Ctx<RuntimeContext>,
+        instance_id: Ctx<InstanceId>,
         scheduler_notify: Ctx<SchedulerNotify>,
         bridge: Ctx<BridgeProviderHandle>,
         authz_registry: Arc<AuthzRegistry>,
@@ -98,6 +100,7 @@ impl ApiServerCtx {
             resources_dir: Ctx::new(config.resources_folder.clone()),
             storage: storage.clone(),
             runtime_context: runtime_context.clone(),
+            instance_id,
             transaction_by: Ctx::new(config.transaction_by.clone()),
             scheduler_notify: scheduler_notify.clone(),
             scheduler_config: Ctx::new(SchedulerConfig {

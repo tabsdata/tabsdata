@@ -40,6 +40,7 @@ mod v16_backfills;
 mod v17_backfills;
 mod v17_repairs;
 mod v19_backfills;
+mod v20_instance_id;
 use crate::generated_sql::generated;
 use crate::pool::TdPool;
 use crate::test_utils::TestDb;

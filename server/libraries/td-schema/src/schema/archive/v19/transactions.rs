@@ -1,0 +1,251 @@
+//
+// Copyright 2026 Tabsdata Inc.
+//
+
+use sea_query::{
+    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, IntoIden, JoinType,
+    Query, Table, TableCreateStatement,
+};
+
+use super::collections::{Collections, LastCollection};
+use super::executions::Executions;
+use super::groups::Groups;
+use super::logical_function_runs::{LogicalFunctionRuns, RUN_ACTIVE, RUN_AWAITING, RUN_BLOCKED, RUN_TERMINALS, run_status_count};
+use super::physical_function_runs::PhysicalFunctionRuns;
+use super::projects::{LastProject, Projects};
+use super::users::Users;
+use crate::schema::Entity;
+use crate::schema::render::name_or_id;
+use crate::schema::sql::scd2::{closed_version, label_of, last_version_of};
+use crate::schema::sql::{Children, Instants, Parent, Physical, RollupArm, RollupDef, Runs, ViewDef};
+use crate::schema::sql::{id_column, logical_id_column};
+
+#[derive(Iden, Clone, Copy)]
+#[iden = "transactions__with_names"]
+pub struct TransactionsWithNames;
+
+#[derive(Iden, Clone, Copy, strum::EnumIter)]
+pub enum Transactions {
+    Table,
+    Id,
+    ProjectId,
+    CollectionId,
+    ExecutionId,
+    TransactionBy,
+    TransactionKey,
+    TriggeredOn,
+    TriggeredById,
+    GroupId,
+    Status,
+    StartedOn,
+    EndedOn,
+}
+
+/// The transaction status ladder, ranked by run class: anything active keeps
+/// it running, then anything blocked stalls it, a yank marks it, a Done run
+/// awaits the commit or the discard the scheduler settles, and only then is it
+/// Committed or, failing that, Canceled. A transaction is atomic: it is
+/// Committed only when every run is, and Canceled once any run is and none is
+/// left to settle.
+const TRANSACTION_LADDER: &[RollupArm] = &[
+    RollupArm::All { all: &["S"], status: "S" },
+    RollupArm::Any {
+        any: RUN_ACTIVE,
+        status: "R",
+    },
+    RollupArm::Any {
+        any: RUN_BLOCKED,
+        status: "L",
+    },
+    RollupArm::Any { any: &["Y"], status: "Y" },
+    RollupArm::Any {
+        any: RUN_AWAITING,
+        status: "R",
+    },
+    RollupArm::All { all: &["C"], status: "C" },
+];
+
+/// A transaction in one of these never leaves it.
+pub(super) const TRANSACTION_TERMINALS: &[&str] = &["C", "X", "Y"];
+
+pub(super) struct Defs;
+
+impl Entity for Defs {
+    fn create_tables(&self) -> Vec<TableCreateStatement> {
+        vec![
+            Table::create()
+                .table(Transactions::Table)
+                .col(logical_id_column(Transactions::Id).not_null().primary_key())
+                .col(id_column(Transactions::ProjectId).not_null())
+                .col(id_column(Transactions::CollectionId).not_null())
+                .col(logical_id_column(Transactions::ExecutionId).not_null())
+                .col(ColumnDef::new(Transactions::TransactionBy).text().not_null())
+                .col(ColumnDef::new(Transactions::TransactionKey).text().not_null())
+                .col(ColumnDef::new(Transactions::TriggeredOn).timestamp_with_time_zone().not_null())
+                .col(id_column(Transactions::TriggeredById).not_null())
+                .col(id_column(Transactions::GroupId).not_null())
+                .col(ColumnDef::new(Transactions::Status).text().not_null().default("S"))
+                .col(ColumnDef::new(Transactions::StartedOn).timestamp_with_time_zone().null())
+                .col(ColumnDef::new(Transactions::EndedOn).timestamp_with_time_zone().null())
+                .foreign_key(
+                    ForeignKey::create()
+                        .from(Transactions::Table, Transactions::ExecutionId)
+                        .to(Executions::Table, Executions::Id)
+                        .on_delete(ForeignKeyAction::Restrict)
+                        .on_update(ForeignKeyAction::Restrict),
+                )
+                .to_owned(),
+        ]
+    }
+
+    fn create_indices(&self) -> Vec<IndexCreateStatement> {
+        vec![
+            // The group-delete RESTRICT FK probe (see `collections`).
+            Index::create()
+                .name("transactions___group_id__project_id___idx")
+                .table(Transactions::Table)
+                .col(Transactions::GroupId)
+                .col(Transactions::ProjectId)
+                .to_owned(),
+            Index::create()
+                .name("transactions___execution_id__triggered_on__id___idx")
+                .table(Transactions::Table)
+                .col(Transactions::ExecutionId)
+                .col(Transactions::TriggeredOn)
+                .col(Transactions::Id)
+                .to_owned(),
+            // Keyset pagination: `ORDER BY id` under the tenant predicate.
+            Index::create()
+                .name("transactions___project_id__id___idx")
+                .table(Transactions::Table)
+                .col(Transactions::ProjectId)
+                .col(Transactions::Id)
+                .to_owned(),
+            // The transaction list's default time ordering.
+            Index::create()
+                .name("transactions___project_id__triggered_on__id___idx")
+                .table(Transactions::Table)
+                .col(Transactions::ProjectId)
+                .col(Transactions::TriggeredOn)
+                .col(Transactions::Id)
+                .to_owned(),
+            Index::create()
+                .name("transactions___triggered_on__id___idx")
+                .table(Transactions::Table)
+                .col(Transactions::TriggeredOn)
+                .col(Transactions::Id)
+                .to_owned(),
+            Index::create()
+                .name("transactions___project_id__status__triggered_on__id___idx")
+                .table(Transactions::Table)
+                .col(Transactions::ProjectId)
+                .col(Transactions::Status)
+                .col(Transactions::TriggeredOn)
+                .col(Transactions::Id)
+                .to_owned(),
+            Index::create()
+                .name("transactions___project_id__started_on__id___idx")
+                .table(Transactions::Table)
+                .col(Transactions::ProjectId)
+                .col(Transactions::StartedOn)
+                .col(Transactions::Id)
+                .to_owned(),
+        ]
+    }
+
+    fn create_views(&self) -> Vec<ViewDef> {
+        let groups_alias = Alias::new("groups_for_transactions");
+        vec![ViewDef::new(
+            TransactionsWithNames,
+            Query::select()
+                .expr(Expr::col((Transactions::Table, Asterisk)))
+                .expr_as(
+                    label_of(LastCollection, Collections::Name, (Transactions::Table, Transactions::CollectionId)),
+                    Alias::new("collection"),
+                )
+                .expr_as(closed_version(LastCollection), Alias::new("collection_deleted"))
+                .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
+                .expr_as(
+                    name_or_id((Users::Table, Users::Name), (Transactions::Table, Transactions::TriggeredById)),
+                    Alias::new("triggered_by"),
+                )
+                .expr_as(
+                    name_or_id((groups_alias.clone(), Groups::Name), (Transactions::Table, Transactions::GroupId)),
+                    Alias::new("group"),
+                )
+                .expr_as(label_of(LastProject, Projects::Name, (Transactions::Table, Transactions::ProjectId)), Alias::new("project"))
+                .expr_as(
+                    run_status_count(LogicalFunctionRuns::TransactionId, (Transactions::Table, Transactions::Id)),
+                    Alias::new("function_run_status_count"),
+                )
+                .from(Transactions::Table)
+                .join_as(
+                    JoinType::LeftJoin,
+                    Collections::Table,
+                    LastCollection,
+                    last_version_of(
+                        Collections::Table,
+                        LastCollection,
+                        Collections::CollectionId,
+                        (Transactions::Table, Transactions::CollectionId),
+                    ),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Executions::Table,
+                    Expr::col((Transactions::Table, Transactions::ExecutionId)).equals((Executions::Table, Executions::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Users::Table,
+                    Expr::col((Transactions::Table, Transactions::TriggeredById)).equals((Users::Table, Users::Id)),
+                )
+                .join_as(
+                    JoinType::LeftJoin,
+                    Projects::Table,
+                    LastProject,
+                    last_version_of(Projects::Table, LastProject, Projects::ProjectId, (Transactions::Table, Transactions::ProjectId)),
+                )
+                .join_as(
+                    JoinType::LeftJoin,
+                    Groups::Table,
+                    groups_alias.clone(),
+                    last_version_of(Groups::Table, groups_alias.clone(), Groups::GroupId, (Transactions::Table, Transactions::GroupId)),
+                )
+                .to_owned(),
+        )]
+    }
+}
+
+pub fn rollup() -> RollupDef {
+    RollupDef {
+        parent: Parent {
+            table: Transactions::Table.into_iden(),
+            id: Transactions::Id.into_iden(),
+            status: Transactions::Status.into_iden(),
+            started_on: Transactions::StartedOn.into_iden(),
+            ended_on: Transactions::EndedOn.into_iden(),
+        },
+        children: Children {
+            table: LogicalFunctionRuns::Table.into_iden(),
+            parent: LogicalFunctionRuns::TransactionId.into_iden(),
+            status: LogicalFunctionRuns::Status.into_iden(),
+        },
+        runs: Runs {
+            table: LogicalFunctionRuns::Table.into_iden(),
+            id: LogicalFunctionRuns::Id.into_iden(),
+            parent: LogicalFunctionRuns::TransactionId.into_iden(),
+        },
+        physical: Physical {
+            table: PhysicalFunctionRuns::Table.into_iden(),
+            id: PhysicalFunctionRuns::Id.into_iden(),
+            parent: PhysicalFunctionRuns::TransactionId.into_iden(),
+            started_on: PhysicalFunctionRuns::StartedOn.into_iden(),
+            ended_on: PhysicalFunctionRuns::EndedOn.into_iden(),
+        },
+        instants: Instants::Attempts,
+        ladder: TRANSACTION_LADDER,
+        fallback: "X",
+        finished: RUN_TERMINALS,
+    }
+}

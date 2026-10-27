@@ -4,7 +4,8 @@
 
 use crate::dxo::table::TableDBWithNames;
 use crate::parse::{
-    DATA_LOCATION_REGEX, NAME_PATTERN, SECRET_NAME_PATTERN, UNDERSCORE_NAME_PATTERN, parse_email,
+    DATA_LOCATION_REGEX, NAME_PATTERN, SECRET_NAME_PATTERN, UNDERSCORE_NAME_PATTERN, UUID_PATTERN,
+    parse_email,
 };
 use crate::types::basic::{CollectionId, GroupId, ProjectId, UserId};
 use crate::types::label::Label;
@@ -206,6 +207,10 @@ impl GroupName {
         Self(DESTINATION_GROUP.to_string())
     }
 }
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(regex = UUID_PATTERN, expected = "a lowercase hyphenated UUID")]
+pub struct InstanceId(String);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub struct SchemaFieldName(String);
