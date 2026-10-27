@@ -103,7 +103,7 @@ class RunDestinationPluginErrorCode(ErrorCode):
         BadManifestError,
         "could not load outputs manifest {path}: {detail}",
     )
-    # ``load_outputs_manifest_or_raise`` failure (missing / malformed).
+    # ``OutputManifest.load`` ``ManifestError`` (missing / malformed).
 
     RDP_8 = ErrorDef(
         BadManifestError,

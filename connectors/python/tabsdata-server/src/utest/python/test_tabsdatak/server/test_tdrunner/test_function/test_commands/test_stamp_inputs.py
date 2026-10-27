@@ -5,7 +5,6 @@
 """Tests for the stamp-inputs command.
 
 Covers:
-  * `_load_inputs_manifest_or_fail` exception-mapping shim
   * `_stamp_file` (read parquet → stamp → write parquet)
   * `main()` error paths (bad request, bad manifest)
   * end-to-end happy path: write a raw parquet + inputs manifest by
@@ -23,9 +22,9 @@ import pytest
 import yaml
 
 from tabsdatak.server._tdrunner.function._commons.manifests.input import (
-    build_entry,
-    build_table_record,
-    write_inputs_manifest,
+    InputEntry,
+    InputManifest,
+    InputRecord,
 )
 from tabsdatak.server._tdrunner.function._lib.system_columns import (
     EMPTY_TIMESTAMP,
@@ -97,21 +96,13 @@ def _data_version(
     )
 
 
-def _slot_entry(name: str, table_pos: int, files: list[str]) -> dict:
-    """Build an inputs-manifest entry from a list of parquet paths.
-
-    One table record per file, each with a sequential ``input_idx`` and
-    the single-version sentinel ``version_pos`` (-1).
-    """
-    return build_entry(
+def _slot_entry(name: str, table_pos: int, files: list[str]) -> InputEntry:
+    return InputEntry(
         name=name,
         table_pos=table_pos,
-        tables=[
-            build_table_record(
-                file=file, metadata=None, input_idx=index, version_pos=-1
-            )
-            for index, file in enumerate(files)
-        ],
+        tables=tuple(
+            InputRecord(file=file, input_idx=index) for index, file in enumerate(files)
+        ),
     )
 
 
@@ -267,9 +258,8 @@ def test_main_end_to_end_happy_path(tmp_path, monkeypatch, http_ok_url):
 
     raw_parquet = _write_user_parquet(tmp_path / "raw" / "rows.parquet")
     inputs_manifest = tmp_path / "inputs.yaml"
-    write_inputs_manifest(
-        [_slot_entry("in_1", 0, [str(raw_parquet)])],
-        inputs_manifest,
+    InputManifest(inputs=(_slot_entry("in_1", 0, [str(raw_parquet)]),)).write(
+        inputs_manifest
     )
 
     enriched_dir = tmp_path / "enriched"
@@ -340,10 +330,7 @@ def test_main_empty_slot_passes_through(tmp_path, monkeypatch, http_ok_url):
     request_path = _write_request(tmp_path / "request.yaml")
 
     inputs_manifest = tmp_path / "inputs.yaml"
-    write_inputs_manifest(
-        [_slot_entry("in_1", 0, [])],
-        inputs_manifest,
-    )
+    InputManifest(inputs=(_slot_entry("in_1", 0, []),)).write(inputs_manifest)
 
     enriched_dir = tmp_path / "enriched"
     enriched_manifest = tmp_path / "enriched.yaml"

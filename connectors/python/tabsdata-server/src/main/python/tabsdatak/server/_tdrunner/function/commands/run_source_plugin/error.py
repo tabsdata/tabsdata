@@ -132,7 +132,7 @@ class RunSourcePluginErrorCode(ErrorCode):
         ManifestWriteFailedError,
         "failed to write inputs manifest {path}: {detail}",
     )
-    # ``write_inputs_manifest`` ``OSError``.
+    # ``InputManifest.write`` ``OSError``.
 
     RSP_9 = ErrorDef(
         BadStateInError,

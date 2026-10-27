@@ -32,14 +32,14 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
 )
 from tabsdatak.server._tdrunner.function._commons.run.version import version
 from tabsdatak.server._tdrunner.function.commands.prep_localize_state.runner import (
-    _build_inputs_manifest_entries,
-    _build_state_manifest_entries,
+    _build_inputs_manifest,
+    _build_state_manifest,
     run,
 )
 
 __all__ = [
-    "_build_inputs_manifest_entries",
-    "_build_state_manifest_entries",
+    "_build_inputs_manifest",
+    "_build_state_manifest",
     "run",
     "main",
 ]

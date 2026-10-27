@@ -18,10 +18,10 @@ from pathlib import Path
 
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
 from tabsdatak.server._tdrunner.function._commons.manifests.input import (
-    MANIFEST_FILE_KEY,
-    MANIFEST_INPUT_IDX_KEY,
-    MANIFEST_TABLES_KEY,
-    load_inputs_manifest_or_raise,
+    InputManifest,
+)
+from tabsdatak.server._tdrunner.function._commons.manifests.manifest import (
+    ManifestError,
 )
 from tabsdatak.server._tdrunner.function._lib.transporter import (
     build_upload_raw_request,
@@ -34,16 +34,13 @@ from tabsdatak.server._tdrunner.function.commands.prep_upload_raw.error import (
 logger = logging.getLogger(__name__)
 
 
-def _raw_files(entries: list[dict]) -> list[tuple[int, Path]]:
-    files: list[tuple[int, Path]] = []
-    for entry in entries:
-        for record in entry.get(MANIFEST_TABLES_KEY) or []:
-            file = record.get(MANIFEST_FILE_KEY)
-            idx = record.get(MANIFEST_INPUT_IDX_KEY)
-            if file is None or idx is None:
-                continue
-            files.append((idx, Path(file)))
-    return files
+def _raw_files(manifest: InputManifest) -> list[tuple[int, Path]]:
+    return [
+        (record.input_idx, Path(record.file))
+        for entry in manifest.inputs
+        for record in entry.tables
+        if record.file is not None and record.input_idx is not None
+    ]
 
 
 def run(args: argparse.Namespace) -> int:
@@ -59,13 +56,16 @@ def run(args: argparse.Namespace) -> int:
             "The request carries no raw-data location; this function ingests "
             "nothing, so there is no raw data to upload"
         )
-    entries = load_inputs_manifest_or_raise(
-        inputs_manifest_path, PrepUploadRawErrorCode.PUR_2
-    )
-    raw_files = _raw_files(entries)
+    try:
+        manifest = InputManifest.load(inputs_manifest_path)
+    except ManifestError as error:
+        raise PrepUploadRawErrorCode.PUR_2.exception(
+            cause=error, path=inputs_manifest_path, detail=str(error)
+        )
+    raw_files = _raw_files(manifest)
     logger.debug(
         "Enriched manifest has %d slot(s) holding %d stamped parquet(s): %s",
-        len(entries),
+        len(manifest.inputs),
         len(raw_files),
         raw_files,
     )

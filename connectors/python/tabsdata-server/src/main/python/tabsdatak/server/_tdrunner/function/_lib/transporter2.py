@@ -21,8 +21,7 @@ from tabsdatak.server._tdrunner.function._commons.document.request import (
     Request,
 )
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
-    MANIFEST_FILE_KEY,
-    MANIFEST_NAME_KEY,
+    OutputManifest,
 )
 from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
 from tabsdatak.server._tdrunner.function._lib.mounts import secret_env_name
@@ -122,13 +121,12 @@ def build_upload_state_request(
 
 def build_upload_tables_request(
     request: Request,
-    manifest_entries: list[dict],
+    manifest: OutputManifest,
     option_keys: dict[str, list[str]],
 ) -> transporter2.CopyRequest:
     handler = ServerTransporterHandler2(option_keys)
     files_by_name: dict[str, str | None] = {
-        entry[MANIFEST_NAME_KEY]: entry.get(MANIFEST_FILE_KEY)
-        for entry in manifest_entries
+        entry.name: entry.file for entry in manifest.outputs
     }
     pairs: list[tuple[transporter2.Location, transporter2.Location]] = []
     for table in request.output:

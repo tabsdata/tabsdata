@@ -21,14 +21,13 @@ from tabsdatak.server._tdrunner.function._commons.document.request import (
     Request,
 )
 from tabsdatak.server._tdrunner.function._commons.manifests.input import (
-    build_entry,
-    build_table_record,
-    write_inputs_manifest,
+    InputEntry,
+    InputManifest,
+    InputRecord,
 )
 from tabsdatak.server._tdrunner.function._commons.manifests.state import (
-    MANIFEST_FILES_KEY,
-    MANIFEST_NAME_KEY,
-    write_state_manifest,
+    StateEntry,
+    StateManifest,
 )
 from tabsdatak.server._tdrunner.function._lib.transporter import (
     build_localize_state_request,
@@ -42,74 +41,53 @@ from tabsdatak.server._tdrunner.function.commands.prep_localize_state.error impo
 logger = logging.getLogger(__name__)
 
 
-def _build_inputs_manifest_entries(request: Request, in_dir: Path) -> list[dict]:
-    """One manifest entry per `request.input` entry (positional argument).
-
-    A plain table entry yields one table record; a multi-version
-    dependency yields one record per member, in `version_pos` order. A
-    member with `location is None` keeps its record with a null `file`,
-    so downstream `_materialize_input_slot` preserves its position as a
-    `None` value. An `is_empty` dependency yields no records.
-    """
-    entries: list[dict] = []
+def _build_inputs_manifest(request: Request, in_dir: Path) -> InputManifest:
+    entries: list[InputEntry] = []
     for entry in request.input:
         is_empty = isinstance(entry, InputTableVersions) and entry.is_empty
-        members = entry.tables
-        records: list[dict] = []
+        records: list[InputRecord] = []
         if not is_empty:
             for member, path in localized_input_files(in_dir, entry):
-                if member.location is None:
-                    file = None
-                else:
-                    file = str(path.absolute())
                 records.append(
-                    build_table_record(
-                        file=file,
-                        metadata=None,
+                    InputRecord(
+                        file=None if member.location is None else str(path.absolute()),
                         input_idx=member.input_idx,
                         version_pos=member.version_pos,
-                        execution_id=(
-                            None
-                            if member.execution_id is None
-                            else str(member.execution_id)
-                        ),
-                        transaction_id=(
-                            None
-                            if member.transaction_id is None
-                            else str(member.transaction_id)
-                        ),
-                        physical_table_data_version_id=(
-                            None
-                            if member.physical_table_data_version_id is None
-                            else str(member.physical_table_data_version_id)
+                        execution_id=_text(member.execution_id),
+                        transaction_id=_text(member.transaction_id),
+                        physical_table_data_version_id=_text(
+                            member.physical_table_data_version_id
                         ),
                         triggered_on=member.triggered_on,
                     )
                 )
         entries.append(
-            build_entry(
-                name=members[0].table,
-                table_pos=members[0].table_pos,
-                tables=records,
+            InputEntry(
+                name=entry.tables[0].table,
+                table_pos=entry.tables[0].table_pos,
                 is_empty=is_empty,
+                tables=tuple(records),
             )
         )
-    return entries
+    return InputManifest(inputs=tuple(entries))
 
 
-def _build_state_manifest_entries(request: Request, state_dir: Path) -> list[dict]:
-    """One `{name, files}` entry per `request.system_input` table."""
-    entries: list[dict] = []
-    for table in request.system_input:
-        if table.location is None:
-            files: list[str] = []
-        else:
-            files = [str((state_dir / f"{table.table}.parquet").absolute())]
-        entries.append({
-            MANIFEST_NAME_KEY: table.table,
-            MANIFEST_FILES_KEY: files,
-        })
-    return entries
+def _build_state_manifest(request: Request, state_dir: Path) -> StateManifest:
+    return StateManifest(
+        state=tuple(
+            StateEntry(
+                name=table.table,
+                files=()
+                if table.location is None
+                else (str((state_dir / f"{table.table}.parquet").absolute()),),
+            )
+            for table in request.system_input
+        )
+    )
+
+
+def _text(value: str | int | None) -> str | None:
+    return None if value is None else str(value)
 
 
 def run(args: argparse.Namespace) -> int:
@@ -146,33 +124,33 @@ def run(args: argparse.Namespace) -> int:
             cause=exc, path=out_path, detail=str(exc)
         )
 
-    inputs_entries = _build_inputs_manifest_entries(request, in_dir)
+    inputs_manifest = _build_inputs_manifest(request, in_dir)
     try:
-        write_inputs_manifest(inputs_entries, inputs_manifest_path)
+        inputs_manifest.write(inputs_manifest_path)
     except OSError as exc:
         raise PrepLocalizeStateErrorCode.PLS_4.exception(
             cause=exc, path=inputs_manifest_path, detail=str(exc)
         )
     logger.debug(
         "Wrote inputs manifest with %d entr%s: %s -> %s",
-        len(inputs_entries),
-        "y" if len(inputs_entries) == 1 else "ies",
-        inputs_entries,
+        len(inputs_manifest.inputs),
+        "y" if len(inputs_manifest.inputs) == 1 else "ies",
+        inputs_manifest.inputs,
         inputs_manifest_path,
     )
 
-    state_entries = _build_state_manifest_entries(request, state_dir)
+    state_manifest = _build_state_manifest(request, state_dir)
     try:
-        write_state_manifest(state_entries, state_manifest_path)
+        state_manifest.write(state_manifest_path)
     except OSError as exc:
         raise PrepLocalizeStateErrorCode.PLS_5.exception(
             cause=exc, path=state_manifest_path, detail=str(exc)
         )
     logger.debug(
         "Wrote state manifest with %d entr%s: %s -> %s",
-        len(state_entries),
-        "y" if len(state_entries) == 1 else "ies",
-        state_entries,
+        len(state_manifest.state),
+        "y" if len(state_manifest.state) == 1 else "ies",
+        state_manifest.state,
         state_manifest_path,
     )
     logger.info("Localize-state preparation complete")

@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
 from pathlib import Path
 
 import pyarrow.parquet as pq
@@ -16,8 +15,8 @@ from tabsdatak.common._configuration.document.loader import DocumentModel, load
 from tabsdatak.error import ErrorCode
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
-    MANIFEST_FILE_KEY,
-    MANIFEST_NAME_KEY,
+    OutputEntry,
+    OutputManifest,
 )
 
 SCHEMA_HASH_PREFIX = "sha256:"
@@ -27,16 +26,6 @@ SINGLE_WRITTEN_TABLE = "A written table must be exactly one of NoData or Data"
 
 JSON_MODE = "json"
 PYTHON_MODE = "python"
-
-
-@dataclass(frozen=True)
-class ManifestEntry:
-    name: str
-    file: str | None
-
-    @classmethod
-    def of(cls, entry: dict) -> ManifestEntry:
-        return cls(name=entry[MANIFEST_NAME_KEY], file=entry.get(MANIFEST_FILE_KEY))
 
 
 class TableInfo(DocumentModel):
@@ -62,7 +51,7 @@ class TableEntry(DocumentModel):
     info: TableInfo | None = None
 
     @classmethod
-    def output(cls, entry: ManifestEntry) -> TableEntry:
+    def output(cls, entry: OutputEntry) -> TableEntry:
         if entry.file is None:
             return cls(table=entry.name)
         return cls(table=entry.name, info=TableInfo.from_parquet(Path(entry.file)))
@@ -82,11 +71,11 @@ class Response(DocumentModel):
     def build(
         cls,
         request: Request,
-        manifest: list[ManifestEntry],
+        manifest: OutputManifest,
         state_dir: Path,
         error: ErrorCode,
     ) -> Response:
-        produced = {entry.name: entry for entry in manifest}
+        produced = {entry.name: entry for entry in manifest.outputs}
         entries = []
         for table in request.output:
             if table.table not in produced:

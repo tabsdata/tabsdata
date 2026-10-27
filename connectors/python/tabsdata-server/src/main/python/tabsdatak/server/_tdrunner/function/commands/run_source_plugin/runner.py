@@ -33,9 +33,9 @@ from tabsdatak.server._tdrunner.function._commons.document.request import (
     Request,
 )
 from tabsdatak.server._tdrunner.function._commons.manifests.input import (
-    build_entry,
-    build_table_record,
-    write_inputs_manifest,
+    InputEntry,
+    InputManifest,
+    InputRecord,
 )
 from tabsdatak.server._tdrunner.function._lib.connection import load_connection
 from tabsdatak.server._tdrunner.function._lib.endpoint import UnsupportedSchemeError
@@ -294,25 +294,25 @@ def _write_inputs_manifest(
             returned=len(produced), expected=cardinality
         )
 
-    entries = [
-        build_entry(
-            name=parameters[i],
-            table_pos=i,
-            tables=[
-                build_table_record(
-                    file=_normalise_table_file(f.file),
-                    metadata=f.metadata,
-                    input_idx=None,
-                    version_pos=-1,
-                )
-                for f in produced[i]
-            ],
+    manifest = InputManifest(
+        inputs=tuple(
+            InputEntry(
+                name=parameters[position],
+                table_pos=position,
+                tables=tuple(
+                    InputRecord(
+                        file=_normalise_table_file(table.file),
+                        metadata=table.metadata,
+                    )
+                    for table in produced[position]
+                ),
+            )
+            for position in range(cardinality)
         )
-        for i in range(cardinality)
-    ]
+    )
 
     try:
-        write_inputs_manifest(entries, path)
+        manifest.write(path)
     except OSError as exc:
         raise RunSourcePluginErrorCode.RSP_8.exception(
             cause=exc, path=path, detail=str(exc)

@@ -18,12 +18,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
-from tabsdatak.server._tdrunner.function._commons.document.response import (
-    ManifestEntry,
-    Response,
+from tabsdatak.server._tdrunner.function._commons.document.response import Response
+from tabsdatak.server._tdrunner.function._commons.manifests.manifest import (
+    ManifestError,
 )
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
-    load_outputs_manifest_or_raise,
+    OutputManifest,
 )
 from tabsdatak.server._tdrunner.function._commons.run.command import notify_status_done
 from tabsdatak.server._tdrunner.function._lib.journal import Journal
@@ -42,15 +42,18 @@ def run(args: argparse.Namespace) -> int:
 
     logger.info("Building and submitting function-run response")
     request = Request.load(request_path, ReportCompletionErrorCode.RC_1)
-    manifest_entries = load_outputs_manifest_or_raise(
-        outputs_manifest_path, ReportCompletionErrorCode.RC_2
-    )
+    try:
+        manifest = OutputManifest.load(outputs_manifest_path)
+    except ManifestError as error:
+        raise ReportCompletionErrorCode.RC_2.exception(
+            cause=error, path=outputs_manifest_path, detail=str(error)
+        )
     logger.debug(
         "Outputs manifest has %d entr%s: %s; request declares %d output "
         "table(s): %s + %d system_output table(s): %s",
-        len(manifest_entries),
-        "y" if len(manifest_entries) == 1 else "ies",
-        manifest_entries,
+        len(manifest.outputs),
+        "y" if len(manifest.outputs) == 1 else "ies",
+        manifest.outputs,
         len(request.output),
         request.output,
         len(request.system_output),
@@ -59,7 +62,7 @@ def run(args: argparse.Namespace) -> int:
 
     response = Response.build(
         request,
-        [ManifestEntry.of(entry) for entry in manifest_entries],
+        manifest,
         state_dir,
         ReportCompletionErrorCode.RC_3,
     )

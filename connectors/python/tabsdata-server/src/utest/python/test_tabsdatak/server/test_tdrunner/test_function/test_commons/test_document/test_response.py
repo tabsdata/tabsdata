@@ -16,12 +16,15 @@ from tabsdatak.common._configuration.document.error import DocumentException
 from tabsdatak.error import ErrorCode, ErrorDef
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
 from tabsdatak.server._tdrunner.function._commons.document.response import (
-    ManifestEntry,
     Response,
     TableEntry,
     TableInfo,
     WrittenNoData,
     WrittenTable,
+)
+from tabsdatak.server._tdrunner.function._commons.manifests.output import (
+    OutputEntry,
+    OutputManifest,
 )
 from tabsdatak.server._tdrunner.function._lib.errors import CommandRuntimeException
 
@@ -114,7 +117,7 @@ def test_table_info_measures_a_parquet(tmp_path: Path):
 
 
 def test_entries_without_data_have_no_info(tmp_path: Path):
-    assert TableEntry.output(ManifestEntry(name="t", file=None)).info is None
+    assert TableEntry.output(OutputEntry(name="t")).info is None
     assert TableEntry.state("absent", tmp_path).info is None
 
 
@@ -122,12 +125,11 @@ def test_build_resolves_outputs_and_state(tmp_path: Path):
     request = Request.load(MINIMAL, ResponseErrorCode.READ)
     state = tmp_path / "state"
     state.mkdir()
-    manifest = [
-        ManifestEntry.of({
-            "name": "customers",
-            "file": str(parquet(tmp_path / "c.parquet")),
-        })
-    ]
+    manifest = OutputManifest(
+        outputs=(
+            OutputEntry(name="customers", file=str(parquet(tmp_path / "c.parquet"))),
+        )
+    )
     response = Response.build(request, manifest, state, ResponseErrorCode.MISMATCH)
     customers, state_table = response.output
     assert customers.table == "customers"
@@ -138,7 +140,12 @@ def test_build_resolves_outputs_and_state(tmp_path: Path):
 def test_build_rejects_an_output_missing_from_the_manifest(tmp_path: Path):
     request = Request.load(MINIMAL, ResponseErrorCode.READ)
     with pytest.raises(MismatchFailure, match="customers"):
-        Response.build(request, [], tmp_path, ResponseErrorCode.MISMATCH)
+        Response.build(
+            request,
+            OutputManifest(outputs=()),
+            tmp_path,
+            ResponseErrorCode.MISMATCH,
+        )
 
 
 @pytest.mark.parametrize(

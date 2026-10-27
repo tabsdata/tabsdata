@@ -17,8 +17,11 @@ import logging
 from pathlib import Path
 
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
+from tabsdatak.server._tdrunner.function._commons.manifests.manifest import (
+    ManifestError,
+)
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
-    load_outputs_manifest_or_raise,
+    OutputManifest,
 )
 from tabsdatak.server._tdrunner.function._lib.transporter import (
     OutputTableNotInManifestError,
@@ -40,24 +43,25 @@ def run(args: argparse.Namespace) -> int:
 
     logger.info("Preparing upload-tables transporter request")
     request = Request.load(request_path, PrepUploadTablesErrorCode.PUT_1)
-    manifest_entries = load_outputs_manifest_or_raise(
-        outputs_manifest_path, PrepUploadTablesErrorCode.PUT_2
-    )
+    try:
+        manifest = OutputManifest.load(outputs_manifest_path)
+    except ManifestError as error:
+        raise PrepUploadTablesErrorCode.PUT_2.exception(
+            cause=error, path=outputs_manifest_path, detail=str(error)
+        )
     logger.debug(
         "Outputs manifest has %d entr%s: %s (from %s); "
         "request declares %d output table(s): %s",
-        len(manifest_entries),
-        "y" if len(manifest_entries) == 1 else "ies",
-        manifest_entries,
+        len(manifest.outputs),
+        "y" if len(manifest.outputs) == 1 else "ies",
+        manifest.outputs,
         outputs_manifest_path,
         len(request.output),
         request.output,
     )
 
     try:
-        copy_req = build_upload_tables_request(
-            request, manifest_entries, storage_config
-        )
+        copy_req = build_upload_tables_request(request, manifest, storage_config)
     except OutputTableNotInManifestError as exc:
         raise PrepUploadTablesErrorCode.PUT_3.exception(cause=exc, detail=str(exc))
     if not copy_req.pairs:

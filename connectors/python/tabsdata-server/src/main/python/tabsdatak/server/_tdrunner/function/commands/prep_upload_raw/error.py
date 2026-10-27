@@ -50,7 +50,7 @@ class PrepUploadRawErrorCode(ErrorCode):
         BadManifestError,
         "could not load enriched inputs manifest {path}: {detail}",
     )
-    # ``load_inputs_manifest_or_raise``.
+    # ``InputManifest.load`` ``ManifestError``.
 
     PUR_3 = ErrorDef(
         BadEndpointSchemeError,

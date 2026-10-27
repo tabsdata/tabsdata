@@ -19,10 +19,11 @@ from pathlib import Path
 from tabsdatak._connectors import get_dest
 from tabsdatak._info import KIND_SUBSCRIBER_DEF, SubscriberInfo
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
+from tabsdatak.server._tdrunner.function._commons.manifests.manifest import (
+    ManifestError,
+)
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
-    MANIFEST_FILE_KEY,
-    MANIFEST_NAME_KEY,
-    load_outputs_manifest_or_raise,
+    OutputManifest,
 )
 from tabsdatak.server._tdrunner.function._commons.run.command import (
     notify_step_destination_write,
@@ -74,23 +75,14 @@ def _resolve_plugin(info: SubscriberInfo):
     return dest_def.plugin()
 
 
-def _tables_from_manifest(entries: list[dict]) -> list[Path]:
-    """Convert outputs-manifest entries to a positional list of
-    `TableFileSpec` (parquet) paths for `DestPlugin.write_out`.
-
-    Subscribers must produce a concrete frame for every slot; an
-    entry with `file: null` is a contract violation here and surfaces
-    as `BadManifestError`. (`DestPlugin.write_out`'s signature does
-    not allow None entries, so the framework cannot pass them
-    through.)
-    """
+def _tables_from_manifest(manifest: OutputManifest) -> list[Path]:
     tables: list[Path] = []
-    for i, entry in enumerate(entries):
-        file = entry.get(MANIFEST_FILE_KEY)
-        name = entry.get(MANIFEST_NAME_KEY, f"slot{i}")
-        if file is None:
-            raise RunDestinationPluginErrorCode.RDP_8.exception(slot=i, name=name)
-        tables.append(Path(file))
+    for slot, entry in enumerate(manifest.outputs):
+        if entry.file is None:
+            raise RunDestinationPluginErrorCode.RDP_8.exception(
+                slot=slot, name=entry.name
+            )
+        tables.append(Path(entry.file))
     return tables
 
 
@@ -118,13 +110,17 @@ def run(args: argparse.Namespace) -> int:
         type(conn).__name__,
     )
 
-    entries = load_outputs_manifest_or_raise(
-        outputs_manifest_path, RunDestinationPluginErrorCode.RDP_7
-    )
+    try:
+        manifest = OutputManifest.load(outputs_manifest_path)
+    except ManifestError as error:
+        raise RunDestinationPluginErrorCode.RDP_7.exception(
+            cause=error, path=outputs_manifest_path, detail=str(error)
+        )
+    entries = manifest.outputs
     # Contract: a subscriber that returns None for every output slot produced no
     # new data this run, so the destination plugin must NOT be invoked (skip the
     # external write) rather than erroring on the null slots.
-    if entries and all(e.get(MANIFEST_FILE_KEY) is None for e in entries):
+    if entries and all(entry.file is None for entry in entries):
         logger.info(
             "Subscriber produced no data (all %d output slot(s) null); "
             "skipping %s.write_out",
@@ -132,7 +128,7 @@ def run(args: argparse.Namespace) -> int:
             type(plugin).__name__,
         )
         return 0
-    tables = _tables_from_manifest(entries)
+    tables = _tables_from_manifest(manifest)
     logger.debug(
         "Outputs manifest has %d entries: %s; "
         "passing %d table frame(s) to the plugin: %s",

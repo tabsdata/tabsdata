@@ -67,10 +67,10 @@ class PrepLocalizeStateErrorCode(ErrorCode):
         InputsManifestWriteFailedError,
         "failed to write {path}: {detail}",
     )
-    # ``write_inputs_manifest`` ``OSError``.
+    # ``InputManifest.write`` ``OSError``.
 
     PLS_5 = ErrorDef(
         StateManifestWriteFailedError,
         "failed to write {path}: {detail}",
     )
-    # ``write_state_manifest`` ``OSError``.
+    # ``StateManifest.write`` ``OSError``.

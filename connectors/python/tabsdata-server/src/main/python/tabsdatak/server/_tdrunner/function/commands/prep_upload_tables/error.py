@@ -58,7 +58,7 @@ class PrepUploadTablesErrorCode(ErrorCode):
         BadManifestError,
         "could not load outputs manifest {path}: {detail}",
     )
-    # ``load_outputs_manifest_or_raise``.
+    # ``OutputManifest.load`` ``ManifestError``.
 
     PUT_3 = ErrorDef(
         ManifestMismatchError,

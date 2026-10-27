@@ -12,6 +12,9 @@ from tabsdatak.server._tdrunner.function._commons.document.request import (
     AnyRequest,
     Request,
 )
+from tabsdatak.server._tdrunner.function._commons.manifests.output import (
+    OutputManifest,
+)
 from tabsdatak.server._tdrunner.function._lib import transporter1, transporter2
 from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
 from tabsdatak.server._tdrunner.function._lib.mounts import load_mount_option_keys
@@ -81,16 +84,16 @@ def build_upload_state_request(
 
 def build_upload_tables_request(
     request: Request,
-    manifest_entries: list[dict[str, Any]],
+    manifest: OutputManifest,
     storage_config_file: Path,
 ) -> Any:
     match TRANSPORTER_MODE:
         case 1:
-            return transporter1.build_upload_tables_request(request, manifest_entries)
+            return transporter1.build_upload_tables_request(request, manifest)
         case 2:
             option_keys = load_mount_option_keys(storage_config_file)
             return transporter2.build_upload_tables_request(
-                request, manifest_entries, option_keys
+                request, manifest, option_keys
             )
         case _:
             raise CommandErrorCode.CMD_5.exception(mode=TRANSPORTER_MODE)

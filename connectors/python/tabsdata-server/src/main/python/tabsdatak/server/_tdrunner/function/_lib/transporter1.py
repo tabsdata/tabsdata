@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
 
 from tabsdatak.common._transporter.handler.handler1 import (
     Endpoint,
@@ -24,8 +23,7 @@ from tabsdatak.server._tdrunner.function._commons.document.request import (
     Request,
 )
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
-    MANIFEST_FILE_KEY,
-    MANIFEST_NAME_KEY,
+    OutputManifest,
 )
 
 logger = logging.getLogger(__name__)
@@ -94,11 +92,10 @@ def build_upload_state_request(
 
 
 def build_upload_tables_request(
-    request: Request, manifest_entries: list[dict[str, Any]]
+    request: Request, manifest: OutputManifest
 ) -> TransporterCopyRequest:
     files_by_name: dict[str, str | None] = {
-        entry[MANIFEST_NAME_KEY]: entry.get(MANIFEST_FILE_KEY)
-        for entry in manifest_entries
+        entry.name: entry.file for entry in manifest.outputs
     }
     pairs: list[tuple[Endpoint, Endpoint]] = []
     for table in request.output:

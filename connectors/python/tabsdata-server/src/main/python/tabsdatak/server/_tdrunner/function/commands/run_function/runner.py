@@ -38,9 +38,17 @@ from tabsdatak.api import FunctionCtx
 from tabsdatak.common._actions.dataquality.record import Check
 from tabsdatak.server._tdrunner import dataquality
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
-from tabsdatak.server._tdrunner.function._commons.manifests import (
-    input as inputs_manifest,
-    output as outputs_manifest,
+from tabsdatak.server._tdrunner.function._commons.manifests.input import (
+    InputEntry,
+    InputManifest,
+    InputRecord,
+)
+from tabsdatak.server._tdrunner.function._commons.manifests.manifest import (
+    ManifestError,
+)
+from tabsdatak.server._tdrunner.function._commons.manifests.output import (
+    OutputEntry,
+    OutputManifest,
 )
 from tabsdatak.server._tdrunner.function._commons.solver.secrets import (
     ProjectSecret,
@@ -213,35 +221,7 @@ def _scan_parquet_or_fail(path: Path) -> pl.LazyFrame:
     return lf
 
 
-def _input_version(record: dict):
-    """Build a `DataVersion` from a manifest table record's version fields."""
-    from tabsdatak.tableframe._engine.model.frame import DataVersion
-
-    execution_id = record.get(inputs_manifest.MANIFEST_EXECUTION_ID_KEY)
-    transaction_id = record.get(inputs_manifest.MANIFEST_TRANSACTION_ID_KEY)
-    physical_table_data_version_id = record.get(
-        inputs_manifest.MANIFEST_PHYSICAL_TABLE_DATA_VERSION_ID_KEY
-    )
-    triggered_on = record.get(inputs_manifest.MANIFEST_TRIGGERED_ON_KEY)
-    if (
-        execution_id is None
-        or transaction_id is None
-        or physical_table_data_version_id is None
-        or triggered_on is None
-    ):
-        return None
-    return (
-        DataVersion
-        .builder()
-        .with_execution(str(execution_id))
-        .with_transaction(str(transaction_id))
-        .with_version(str(physical_table_data_version_id))
-        .with_timestamp(triggered_on)
-        .build()
-    )
-
-
-def _build_input(record: dict, *, info: FunctionInfo):
+def _build_input(record: InputRecord, *, info: FunctionInfo):
     """Wrap one manifest table record into a `TableFrame`.
 
     A record with a null `file` (a version member with no physical data)
@@ -255,10 +235,9 @@ def _build_input(record: dict, *, info: FunctionInfo):
     from tabsdatak.tableframe import TableFrame
     from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 
-    file = record.get(inputs_manifest.MANIFEST_FILE_KEY)
-    if file is None:
+    if record.file is None:
         return None
-    lf = _scan_parquet_or_fail(Path(file))
+    lf = _scan_parquet_or_fail(Path(record.file))
     if isinstance(info, (PublisherInfo, StreamPublisherInfo)):
         # Stream-publisher inputs are also publisher-side: the
         # ``stamp-inputs`` step (0070) wrote enriched parquets with
@@ -271,13 +250,13 @@ def _build_input(record: dict, *, info: FunctionInfo):
     return TableFrame._build(
         lf,
         CreationMode.MUT,
-        idx=record.get(inputs_manifest.MANIFEST_INPUT_IDX_KEY),
-        version=_input_version(record),
+        idx=record.input_idx,
+        version=record.version(),
     )
 
 
 def _materialize_input_slot(
-    entry: dict,
+    entry: InputEntry,
     *,
     table_mode: TableMode,
     info: FunctionInfo,
@@ -299,7 +278,7 @@ def _materialize_input_slot(
       * any records      → `list[TableFrame | None]`, one element per
         record in order (null-`file` members stay as `None`)
     """
-    records = entry.get(inputs_manifest.MANIFEST_TABLES_KEY) or []
+    records = entry.tables
     if table_mode is TableMode.SINGLE:
         if len(records) == 0:
             return None
@@ -308,23 +287,19 @@ def _materialize_input_slot(
         if isinstance(info, (PublisherInfo, StreamPublisherInfo)):
             return _build_chunked_input(records)
         raise RunFunctionErrorCode.RF_11.exception(count=len(records))
-    if entry.get(inputs_manifest.MANIFEST_IS_EMPTY_KEY):
+    if entry.is_empty:
         return []
     return [_build_input(record, info=info) for record in records]
 
 
-def _build_chunked_input(records: list[dict]):
+def _build_chunked_input(records: tuple[InputRecord, ...]):
     """One `TableFrame` over the files a source plugin wrote for one
     publisher input: the chunks are scanned lazily and concatenated,
     widening a column whose type differs between chunks."""
     from tabsdatak.tableframe import TableFrame
     from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 
-    files = [
-        record[inputs_manifest.MANIFEST_FILE_KEY]
-        for record in records
-        if record.get(inputs_manifest.MANIFEST_FILE_KEY) is not None
-    ]
+    files = [record.file for record in records if record.file is not None]
     if not files:
         return None
     scans = [_scan_parquet_or_fail(Path(file)) for file in files]
@@ -381,7 +356,7 @@ def _sink_outputs(
     *,
     public: bool,
     checks: list[Check] | None = None,
-) -> list[dict]:
+) -> OutputManifest:
     """Sink each non-None output to `<out_dir>/slot<i>/<table>.parquet`,
     settle the data-quality checks, and build the outputs-manifest entries.
 
@@ -394,7 +369,7 @@ def _sink_outputs(
     Every output is written, and every check evaluated, in one streaming
     pass, so the plan the outputs share runs once.
     """
-    entries: list[dict] = []
+    entries: list[OutputEntry] = []
     plans: list[pl.LazyFrame] = []
     written: list[str] = []
     for i, (table_name, value) in enumerate(
@@ -404,10 +379,7 @@ def _sink_outputs(
         )
     ):
         if value is None:
-            entries.append({
-                outputs_manifest.MANIFEST_NAME_KEY: table_name,
-                outputs_manifest.MANIFEST_FILE_KEY: None,
-            })
+            entries.append(OutputEntry(name=table_name))
             continue
         slot_dir = out_dir / f"slot{i}"
         destination = slot_dir / f"{table_name}.parquet"
@@ -425,10 +397,7 @@ def _sink_outputs(
                 detail=str(error),
             )
         written.append(table_name)
-        entries.append({
-            outputs_manifest.MANIFEST_NAME_KEY: table_name,
-            outputs_manifest.MANIFEST_FILE_KEY: str(destination.absolute()),
-        })
+        entries.append(OutputEntry(name=table_name, file=str(destination.absolute())))
     pending = checks or []
     if plans or pending:
         try:
@@ -448,7 +417,7 @@ def _sink_outputs(
             results[len(plans) :],
         ):
             check.enforce(verdict)
-    return entries
+    return OutputManifest(outputs=tuple(entries))
 
 
 def run(args: argparse.Namespace) -> int:
@@ -469,9 +438,12 @@ def run(args: argparse.Namespace) -> int:
         type(info).__name__,
         bundle_dir,
     )
-    entries = inputs_manifest.load_inputs_manifest_or_raise(
-        inputs_manifest_path, RunFunctionErrorCode.RF_5
-    )
+    try:
+        entries = InputManifest.load(inputs_manifest_path).inputs
+    except ManifestError as error:
+        raise RunFunctionErrorCode.RF_5.exception(
+            cause=error, path=inputs_manifest_path, detail=str(error)
+        )
     logger.debug(
         "Inputs manifest has %d slot(s): %s; manifest path %s",
         len(entries),
@@ -574,27 +546,26 @@ def run(args: argparse.Namespace) -> int:
             [derived.name for derived in dq_result.derived],
         )
 
-    entries_out = _sink_outputs(
+    outputs_manifest = _sink_outputs(
         result,
         output_tables,
         out_dir,
         public=isinstance(info, SubscriberInfo),
         checks=checks,
     )
-    written = sum(
-        1 for e in entries_out if e.get(outputs_manifest.MANIFEST_FILE_KEY) is not None
-    )
+    outputs = outputs_manifest.outputs
+    written = sum(1 for entry in outputs if entry.file is not None)
     logger.info(
         "User function returned %d slot(s) for tables %s; %d written, %d returned None",
-        len(entries_out),
+        len(outputs),
         output_tables,
         written,
-        len(entries_out) - written,
+        len(outputs) - written,
     )
-    logger.debug("Outputs manifest entries: %s", entries_out)
+    logger.debug("Outputs manifest entries: %s", outputs)
 
     try:
-        outputs_manifest.write_outputs_manifest(entries_out, outputs_manifest_path)
+        outputs_manifest.write(outputs_manifest_path)
     except OSError as exc:
         raise RunFunctionErrorCode.RF_17.exception(
             cause=exc, path=outputs_manifest_path, detail=str(exc)

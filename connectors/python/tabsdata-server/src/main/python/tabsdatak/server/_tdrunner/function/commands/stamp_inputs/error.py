@@ -56,7 +56,7 @@ class StampInputsErrorCode(ErrorCode):
         BadManifestError,
         "could not load inputs manifest {path}: {detail}",
     )
-    # ``load_inputs_manifest_or_raise``.
+    # ``InputManifest.load`` ``ManifestError``.
 
     SI_3 = ErrorDef(
         BadInputParquetError,
@@ -81,4 +81,4 @@ class StampInputsErrorCode(ErrorCode):
         ManifestWriteFailedError,
         "failed to write enriched inputs manifest {path}: {detail}",
     )
-    # ``write_inputs_manifest`` ``OSError``.
+    # ``InputManifest.write`` ``OSError``.

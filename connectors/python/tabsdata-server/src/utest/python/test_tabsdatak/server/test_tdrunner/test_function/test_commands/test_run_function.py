@@ -38,9 +38,12 @@ from tabsdatak.server._tdrunner.function._lib.initial_values import (
     write_initial_values,
 )
 from tabsdatak.server._tdrunner.function._commons.manifests.input import (
-    build_entry,
-    build_table_record,
-    write_inputs_manifest,
+    InputEntry,
+    InputManifest,
+    InputRecord,
+)
+from tabsdatak.server._tdrunner.function._commons.manifests.output import (
+    OutputEntry,
 )
 from tabsdatak.server._tdrunner.function.commands.run_function import (
     _FunctionContext,
@@ -87,21 +90,13 @@ def _write_sample_parquet(path: Path) -> None:
     pl.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]}).write_parquet(path)
 
 
-def _slot_entry(name: str, table_pos: int, files: list[str]) -> dict:
-    """Build an inputs-manifest entry from a list of parquet paths.
-
-    One table record per file, each carrying a sequential ``input_idx``
-    and the single-version sentinel ``version_pos`` (-1).
-    """
-    return build_entry(
+def _slot_entry(name: str, table_pos: int, files: list[str]) -> InputEntry:
+    return InputEntry(
         name=name,
         table_pos=table_pos,
-        tables=[
-            build_table_record(
-                file=file, metadata=None, input_idx=index, version_pos=-1
-            )
-            for index, file in enumerate(files)
-        ],
+        tables=tuple(
+            InputRecord(file=file, input_idx=index) for index, file in enumerate(files)
+        ),
     )
 
 
@@ -729,22 +724,22 @@ def test_invoke_user_function_wrong_element_type_raises_shape_mismatch():
 
 def test_sink_outputs_writes_each_table_frame(tmp_path):
     result = (_fake_table_frame(), _fake_table_frame())
-    entries = _sink_outputs(result, ["t1", "t2"], tmp_path, public=False)
+    entries = _sink_outputs(result, ["t1", "t2"], tmp_path, public=False).outputs
     assert len(entries) == 2
     for i, entry in enumerate(entries):
-        assert entry["name"] == f"t{i + 1}"
-        assert entry["file"] is not None
-        assert Path(entry["file"]).is_file()
+        assert entry.name == f"t{i + 1}"
+        assert entry.file is not None
+        assert Path(entry.file).is_file()
         # File path layout matches the documented slot<i>/<name>.parquet.
-        assert Path(entry["file"]).parent.name == f"slot{i}"
-        assert Path(entry["file"]).name == f"t{i + 1}.parquet"
+        assert Path(entry.file).parent.name == f"slot{i}"
+        assert Path(entry.file).name == f"t{i + 1}.parquet"
 
 
 def test_sink_outputs_none_value_records_null_file(tmp_path):
     result = (None, _fake_table_frame())
-    entries = _sink_outputs(result, ["t1", "t2"], tmp_path, public=False)
-    assert entries[0] == {"name": "t1", "file": None}
-    assert entries[1]["file"] is not None
+    entries = _sink_outputs(result, ["t1", "t2"], tmp_path, public=False).outputs
+    assert entries[0] == OutputEntry(name="t1")
+    assert entries[1].file is not None
     # No slot0 dir should have been created (we skipped the sink).
     assert not (tmp_path / "slot0").exists()
     assert (tmp_path / "slot1").is_dir()
@@ -783,8 +778,10 @@ def test_sink_outputs_native_keeps_system_columns(tmp_path):
         TD_SYSTEM_COLUMN_PREFIX,
     )
 
-    entries = _sink_outputs((_fake_table_frame(),), ["t1"], tmp_path, public=False)
-    columns = pl.scan_parquet(entries[0]["file"]).collect_schema().names()
+    entries = _sink_outputs(
+        (_fake_table_frame(),), ["t1"], tmp_path, public=False
+    ).outputs
+    columns = pl.scan_parquet(entries[0].file).collect_schema().names()
     assert any(c.startswith(TD_SYSTEM_COLUMN_PREFIX) for c in columns)
 
 
@@ -794,8 +791,10 @@ def test_sink_outputs_public_drops_internal_columns(tmp_path):
         TD_SYSTEM_COLUMN_PREFIX,
     )
 
-    entries = _sink_outputs((_fake_table_frame(),), ["t1"], tmp_path, public=True)
-    columns = pl.scan_parquet(entries[0]["file"]).collect_schema().names()
+    entries = _sink_outputs(
+        (_fake_table_frame(),), ["t1"], tmp_path, public=True
+    ).outputs
+    columns = pl.scan_parquet(entries[0].file).collect_schema().names()
     assert not any(
         c.startswith((TD_SYSTEM_COLUMN_PREFIX, TD_CONNECTOR_SYSTEM_COLUMN_PREFIX))
         for c in columns
@@ -853,9 +852,8 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
     raw_parquet = tmp_path / "raw" / "rows.parquet"
     _write_sample_parquet(raw_parquet)
     inputs_manifest = tmp_path / "inputs.yaml"
-    write_inputs_manifest(
-        [_slot_entry("in_1", 0, [str(raw_parquet)])],
-        inputs_manifest,
+    InputManifest(inputs=(_slot_entry("in_1", 0, [str(raw_parquet)]),)).write(
+        inputs_manifest
     )
 
     out_dir = tmp_path / "fn_out"
@@ -911,9 +909,8 @@ def test_main_outputs_manifest_write_failure(
     raw_parquet = tmp_path / "raw" / "rows.parquet"
     _write_sample_parquet(raw_parquet)
     inputs_manifest = tmp_path / "inputs.yaml"
-    write_inputs_manifest(
-        [_slot_entry("in_1", 0, [str(raw_parquet)])],
-        inputs_manifest,
+    InputManifest(inputs=(_slot_entry("in_1", 0, [str(raw_parquet)]),)).write(
+        inputs_manifest
     )
 
     # Point --outputs-manifest at an existing directory → write fails.
@@ -954,13 +951,12 @@ def test_main_multi_cardinality_publisher_concatenates_two_slots(
     pl.DataFrame({"id": [10, 11], "name": ["b1", "b2"]}).write_parquet(b_parquet)
 
     inputs_manifest = tmp_path / "inputs.yaml"
-    write_inputs_manifest(
-        [
+    InputManifest(
+        inputs=(
             _slot_entry("in_a", 0, [str(a_parquet)]),
             _slot_entry("in_b", 1, [str(b_parquet)]),
-        ],
-        inputs_manifest,
-    )
+        )
+    ).write(inputs_manifest)
 
     out_dir = tmp_path / "fn_out"
     outputs_manifest = tmp_path / "outputs.yaml"
@@ -1004,14 +1000,13 @@ def test_main_multi_cardinality_transformer_with_mixed_modes(
     pl.DataFrame({"id": [3], "name": ["c"]}).write_parquet(c)
 
     inputs_manifest = tmp_path / "inputs.yaml"
-    write_inputs_manifest(
-        [
+    InputManifest(
+        inputs=(
             _slot_entry("a", 0, [str(a)]),
             _slot_entry("b", 1, [str(b)]),
             _slot_entry("c", 2, [str(c)]),
-        ],
-        inputs_manifest,
-    )
+        )
+    ).write(inputs_manifest)
 
     out_dir = tmp_path / "fn_out"
     outputs_manifest = tmp_path / "outputs.yaml"
@@ -1043,7 +1038,9 @@ def test_main_transformer_with_a_udf(
     source = tmp_path / "raw" / "in.parquet"
     _write_sample_parquet(source)
     inputs_manifest = tmp_path / "inputs.yaml"
-    write_inputs_manifest([_slot_entry("t_in", 0, [str(source)])], inputs_manifest)
+    InputManifest(inputs=(_slot_entry("t_in", 0, [str(source)]),)).write(
+        inputs_manifest
+    )
     out_dir = tmp_path / "fn_out"
     _set_argv(
         monkeypatch,
@@ -1079,7 +1076,9 @@ def test_main_evaluates_a_udf_once_per_row_with_data_quality(
     source = tmp_path / "raw" / "in.parquet"
     _write_sample_parquet(source)
     inputs_manifest = tmp_path / "inputs.yaml"
-    write_inputs_manifest([_slot_entry("t_in", 0, [str(source)])], inputs_manifest)
+    InputManifest(inputs=(_slot_entry("t_in", 0, [str(source)]),)).write(
+        inputs_manifest
+    )
     out_dir = tmp_path / "fn_out"
     _set_argv(
         monkeypatch,
@@ -1118,9 +1117,8 @@ def test_main_manifest_length_mismatch_returns_bad_manifest(
     pl.DataFrame({"id": [1]}).write_parquet(a_parquet)
 
     inputs_manifest = tmp_path / "inputs.yaml"
-    write_inputs_manifest(
-        [_slot_entry("in_a", 0, [str(a_parquet)])],
-        inputs_manifest,
+    InputManifest(inputs=(_slot_entry("in_a", 0, [str(a_parquet)]),)).write(
+        inputs_manifest
     )
 
     _set_argv(
@@ -1240,7 +1238,7 @@ def ctx_aware_built_bundle(tmp_path, monkeypatch) -> Path:
 def _write_inputs_manifest_for(input_files: list[str], path: Path) -> None:
     """Helper: write a minimal inputs manifest mapping ``in_1`` to
     ``input_files`` (ARRAY mode → list)."""
-    write_inputs_manifest([_slot_entry("in_1", 0, input_files)], path)
+    InputManifest(inputs=(_slot_entry("in_1", 0, input_files),)).write(path)
 
 
 def _request_with_state_slots(

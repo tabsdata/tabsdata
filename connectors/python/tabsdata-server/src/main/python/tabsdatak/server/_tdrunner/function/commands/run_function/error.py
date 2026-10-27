@@ -133,7 +133,7 @@ class RunFunctionErrorCode(ErrorCode):
         BadManifestError,
         "could not load inputs manifest {path}: {detail}",
     )
-    # ``load_inputs_manifest_or_raise``.
+    # ``InputManifest.load`` ``ManifestError``.
 
     RF_6 = ErrorDef(
         BadUserCodeError,
@@ -216,7 +216,7 @@ class RunFunctionErrorCode(ErrorCode):
         OutputsManifestWriteFailedError,
         "failed to write outputs manifest {path}: {detail}",
     )
-    # ``write_outputs_manifest`` ``OSError``.
+    # ``OutputManifest.write`` ``OSError``.
 
     RF_18 = ErrorDef(
         BadStateInError,

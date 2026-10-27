@@ -30,9 +30,8 @@ from tabsdatak._info import SubscriberInfo
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
-    MANIFEST_FILE_KEY,
-    MANIFEST_NAME_KEY,
-    write_outputs_manifest,
+    OutputEntry,
+    OutputManifest,
 )
 from tabsdatak.server._tdrunner.function.commands.run_destination_plugin import (
     _DestContext,
@@ -314,28 +313,32 @@ def test_resolve_plugin_unknown_dest_raises_no_plugin(fixture_subscriber, monkey
 
 
 def test_tables_from_manifest_happy():
-    entries = [
-        {MANIFEST_NAME_KEY: "out_0", MANIFEST_FILE_KEY: "/a.parquet"},
-        {MANIFEST_NAME_KEY: "out_1", MANIFEST_FILE_KEY: "/b.parquet"},
-    ]
-    tables = _tables_from_manifest(entries)
+    manifest = OutputManifest(
+        outputs=(
+            OutputEntry(name="out_0", file="/a.parquet"),
+            OutputEntry(name="out_1", file="/b.parquet"),
+        )
+    )
+    tables = _tables_from_manifest(manifest)
     assert tables == [Path("/a.parquet"), Path("/b.parquet")]
     assert all(isinstance(t, Path) for t in tables)
 
 
 def test_tables_from_manifest_empty_entries_yields_empty_list():
-    assert _tables_from_manifest([]) == []
+    assert _tables_from_manifest(OutputManifest(outputs=())) == []
 
 
 def test_tables_from_manifest_null_entry_raises_bad_manifest():
     """Subscribers must return concrete frames for every slot — a
     `file: null` entry is a contract violation here."""
-    entries = [
-        {MANIFEST_NAME_KEY: "out_0", MANIFEST_FILE_KEY: "/a.parquet"},
-        {MANIFEST_NAME_KEY: "out_1", MANIFEST_FILE_KEY: None},
-    ]
+    manifest = OutputManifest(
+        outputs=(
+            OutputEntry(name="out_0", file="/a.parquet"),
+            OutputEntry(name="out_1"),
+        )
+    )
     with pytest.raises(BadManifestError):
-        _tables_from_manifest(entries)
+        _tables_from_manifest(manifest)
 
 
 # --- unit: _invoke_write_out -------------------------------------------
@@ -457,10 +460,7 @@ def test_main_all_null_manifest_skips_write_out(
         tmp_path / "connection.yaml", tmp_path / "dest_out"
     )
     outputs_manifest = tmp_path / "outputs.yaml"
-    write_outputs_manifest(
-        [{MANIFEST_NAME_KEY: "out_0", MANIFEST_FILE_KEY: None}],
-        outputs_manifest,
-    )
+    OutputManifest(outputs=(OutputEntry(name="out_0"),)).write(outputs_manifest)
     _set_argv(
         monkeypatch,
         req,
@@ -493,9 +493,8 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
     )
 
     outputs_manifest = tmp_path / "outputs.yaml"
-    write_outputs_manifest(
-        [{MANIFEST_NAME_KEY: "out_0", MANIFEST_FILE_KEY: str(raw_parquet)}],
-        outputs_manifest,
+    OutputManifest(outputs=(OutputEntry(name="out_0", file=str(raw_parquet)),)).write(
+        outputs_manifest
     )
 
     # The connection (with the dest base_path) now comes from the
@@ -535,9 +534,8 @@ def _shipping_setup(tmp_path, built_bundle, monkeypatch, http_ok_url):
     raw_parquet.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(pa.table({"id": [1], "name": ["a"]}), raw_parquet)
     outputs_manifest = tmp_path / "outputs.yaml"
-    write_outputs_manifest(
-        [{MANIFEST_NAME_KEY: "out_0", MANIFEST_FILE_KEY: str(raw_parquet)}],
-        outputs_manifest,
+    OutputManifest(outputs=(OutputEntry(name="out_0", file=str(raw_parquet)),)).write(
+        outputs_manifest
     )
     conn_file = _write_connection_file(
         tmp_path / "connection.yaml", tmp_path / "dest_out"

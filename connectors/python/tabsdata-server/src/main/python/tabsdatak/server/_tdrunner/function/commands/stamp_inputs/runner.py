@@ -14,19 +14,19 @@ from __future__ import annotations
 
 import argparse
 import logging
+from dataclasses import replace
 from pathlib import Path
 
 import polars as pl
 
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
 from tabsdatak.server._tdrunner.function._commons.manifests.input import (
-    MANIFEST_FILE_KEY,
-    MANIFEST_INPUT_IDX_KEY,
-    MANIFEST_METADATA_KEY,
-    MANIFEST_NAME_KEY,
-    MANIFEST_TABLES_KEY,
-    load_inputs_manifest_or_raise,
-    write_inputs_manifest,
+    InputEntry,
+    InputManifest,
+    InputRecord,
+)
+from tabsdatak.server._tdrunner.function._commons.manifests.manifest import (
+    ManifestError,
 )
 from tabsdatak.server._tdrunner.function.commands.stamp_inputs.error import (
     StampInputsErrorCode,
@@ -85,11 +85,16 @@ def run(args: argparse.Namespace) -> int:
 
     logger.info("Stamping framework system columns onto inputs")
     request = Request.load(request_path, StampInputsErrorCode.SI_1)
-    entries = load_inputs_manifest_or_raise(inputs_manifest, StampInputsErrorCode.SI_2)
+    try:
+        manifest = InputManifest.load(inputs_manifest)
+    except ManifestError as error:
+        raise StampInputsErrorCode.SI_2.exception(
+            cause=error, path=inputs_manifest, detail=str(error)
+        )
     logger.debug(
         "Loaded inputs manifest with %d slot(s): %s from %s",
-        len(entries),
-        entries,
+        len(manifest.inputs),
+        manifest.inputs,
         inputs_manifest,
     )
 
@@ -114,28 +119,24 @@ def run(args: argparse.Namespace) -> int:
     # The assigned idx is recorded on each table record so downstream steps
     # read it from the manifest instead of regenerating it.
     idx = IdxGenerator()
-    enriched_entries: list[dict] = []
+    enriched_entries: list[InputEntry] = []
     total_stamped = 0
-    for slot_idx, entry in enumerate(entries):
-        name = entry.get(MANIFEST_NAME_KEY, f"slot{slot_idx}")
-        records = entry.get(MANIFEST_TABLES_KEY) or []
+    for slot_idx, entry in enumerate(manifest.inputs):
         logger.debug(
             "Slot %d (%s): %d table record(s) to stamp: %s",
             slot_idx,
-            name,
-            len(records),
-            records,
+            entry.name,
+            len(entry.tables),
+            entry.tables,
         )
 
         slot_dir = enriched_dir / f"slot{slot_idx}"
-        enriched_records: list[dict] = []
-        for record in records:
-            src = record.get(MANIFEST_FILE_KEY)
-            metadata = record.get(MANIFEST_METADATA_KEY)
-            if src is None:
+        enriched_records: list[InputRecord] = []
+        for record in entry.tables:
+            if record.file is None:
                 enriched_records.append(record)
                 continue
-            src_path = Path(src)
+            src_path = Path(record.file)
             dest_path = slot_dir / src_path.name
             assigned = idx()
             _stamp_file(
@@ -143,22 +144,21 @@ def run(args: argparse.Namespace) -> int:
                 dest_path,
                 version=version,
                 idx=assigned,
-                metadata=metadata,
+                metadata=record.metadata,
             )
-            enriched_records.append({
-                **record,
-                MANIFEST_FILE_KEY: str(dest_path.absolute()),
-                MANIFEST_INPUT_IDX_KEY: assigned,
-            })
+            enriched_records.append(
+                replace(
+                    record,
+                    file=str(dest_path.absolute()),
+                    input_idx=assigned,
+                )
+            )
             total_stamped += 1
 
-        enriched_entries.append({
-            **entry,
-            MANIFEST_TABLES_KEY: enriched_records,
-        })
+        enriched_entries.append(replace(entry, tables=tuple(enriched_records)))
 
     try:
-        write_inputs_manifest(enriched_entries, enriched_manifest)
+        InputManifest(inputs=tuple(enriched_entries)).write(enriched_manifest)
     except OSError as exc:
         raise StampInputsErrorCode.SI_6.exception(
             cause=exc, path=enriched_manifest, detail=str(exc)
