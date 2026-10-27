@@ -119,10 +119,24 @@ def test_build_connector_recipes_empty_when_tabsdata_missing():
     assert build_connector_recipes((other,), TabsdataEdition.OPEN_SOURCE) == ()
 
 
-def test_build_connector_recipes_empty_when_tabsdata_is_wheel(tmp_path: Path):
+def test_build_connector_recipes_skips_connectors_installed_another_way(
+    monkeypatch, tmp_path: Path
+):
     wheel_path = tmp_path / "tabsdata-2.0.0.whl"
     tabsdata = make_recipe(
         TABSDATA_PACKAGE, install=InstallRecipe.WHEEL, location=wheel_path
+    )
+    editable = make_recipe("tabsdata-api", install=InstallRecipe.EDITABLE)
+
+    class PackageStub:
+        def __init__(self, name, mandatory: bool = False):
+            self.name = name
+
+        def recipe(self):
+            return editable
+
+    monkeypatch.setattr(
+        "tabsdatak.common._interpreter.python.pyvenv.Package", PackageStub
     )
     assert build_connector_recipes((tabsdata,), TabsdataEdition.OPEN_SOURCE) == ()
 
@@ -218,7 +232,9 @@ def test_render_package_includes_url_when_set():
     assert "url=git+https://github.com/owner/repo@aed77fb" in line
 
 
-@pytest.mark.parametrize("install", [InstallRecipe.URL, InstallRecipe.VCS])
+@pytest.mark.parametrize(
+    "install", [InstallRecipe.URL, InstallRecipe.VCS, InstallRecipe.WHEEL]
+)
 def test_build_connector_recipes_reads_installed_connectors_for_direct_references(
     monkeypatch, install
 ):
