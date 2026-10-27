@@ -2,9 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-- name: anthropic
-  type: anthropic
-  api-key$: ANTHROPIC__API_KEY
 - name: azureblob
   type: azureblob
   container$: AZ__CONTAINER
@@ -55,9 +52,6 @@
   type: mysql
 - name: mysqlcdc
   type: mysqlcdc
-- name: openai
-  type: openai
-  api-key$: OPENAI__API_KEY
 - name: oracle
   type: oracle
 - name: postgres

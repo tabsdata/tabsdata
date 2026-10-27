@@ -2,9 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-- name: anthropic
-  type: anthropic
-  api-key$: ANTHROPIC__API_KEY
 - name: azureblob
   type: azureblob
   container$: AZ__CONTAINER
@@ -35,9 +32,6 @@
   hmac-access-key$: GCS__HMAC_ACCESS_KEY
   hmac-secret-key$: GCS__HMAC_SECRET_KEY
   sys-path$: GCS__SYS_PATH
-- name: openai
-  type: openai
-  api-key$: OPENAI__API_KEY
 - name: s3
   type: s3
   bucket$: S3__BUCKET

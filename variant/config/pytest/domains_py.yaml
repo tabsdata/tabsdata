@@ -2,8 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-- name: anthropic
-  sys: anthropic
 - name: azureblob
   sys: azureblob
 - name: azureblob_world_xs
@@ -86,8 +84,6 @@
   sys: mysqlcdc
   model: employees
   size: 1
-- name: openai
-  sys: openai
 - name: oracle
   sys: oracle
 - name: oracle_employees_xs

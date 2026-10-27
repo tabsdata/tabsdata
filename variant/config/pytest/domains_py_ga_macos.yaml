@@ -2,8 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-- name: anthropic
-  sys: anthropic
 - name: azureblob
   sys: azureblob
 - name: azureblob_world_xs
@@ -34,8 +32,6 @@
   sys: gcs
   model: world
   size: 200
-- name: openai
-  sys: openai
 - name: s3
   sys: s3
 - name: s3_world_xs
