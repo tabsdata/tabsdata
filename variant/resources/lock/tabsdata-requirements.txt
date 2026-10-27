@@ -125,7 +125,7 @@ protobuf==7.36.2
 psutil==7.2.2
 py-cpuinfo==9.0.0
 pyarrow==26.0.0
-pyasn1==0.6.4
+pyasn1==0.6.5
 pyasn1-modules==0.4.2
 pybreaker==1.4.1
 pycountries==1.2.1

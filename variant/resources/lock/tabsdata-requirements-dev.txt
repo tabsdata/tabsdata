@@ -148,7 +148,7 @@ psycopg2-binary==2.9.13
 py-cpuinfo==9.0.0
 py-serializable==2.1.0
 py-spy==0.4.2
-pyasn1==0.6.4
+pyasn1==0.6.5
 pyasn1-modules==0.4.2
 pycparser==3.12 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
 pydantic==2.14.1
@@ -169,7 +169,7 @@ pytest-reporter-html1==0.9.5
 pytest-timeout==2.4.0
 pytest-xdist==3.8.0
 python-dateutil==2.9.0.post0
-python-discovery==1.6.4
+python-discovery==1.6.5
 python-dotenv==1.2.4
 python-on-whales==0.81.0
 python-slugify==9.1.3

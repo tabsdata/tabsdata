@@ -978,9 +978,9 @@ dependencies = [
 
 [[package]]
 name = "brotli"
-version = "9.1.0"
+version = "9.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6737ce8b81460bf9407909f73ff50bf13f7cb8577e1e76715f57ed0eba58ba44"
+checksum = "627b7cfb0578f0eafce087a90fcd40add1231900b69e4d4de2d456260a4f5d81"
 dependencies = [
  "alloc-no-stdlib 3.0.0",
  "alloc-stdlib 0.3.0",
@@ -1355,7 +1355,7 @@ version = "0.4.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cae36683101b2899f48bd31f8db9839437356188e3b1ff23096e73dab09ba8fe"
 dependencies = [
- "brotli 9.1.0",
+ "brotli 9.1.1",
  "bzip2",
  "compression-core",
  "deflate64",
@@ -6803,7 +6803,7 @@ dependencies = [
  "arrow-schema",
  "arrow-select",
  "base64 0.23.1",
- "brotli 9.1.0",
+ "brotli 9.1.1",
  "bytes",
  "chrono",
  "flate2",
@@ -10274,6 +10274,7 @@ dependencies = [
  "td-schema",
  "td-security",
  "td-tdd",
+ "td-test",
  "te-system",
  "temp-env",
  "thiserror 2.0.21",
@@ -10761,6 +10762,7 @@ dependencies = [
  "homedir",
  "serde",
  "serde_json",
+ "serde_yaml 0.9.34+deprecated",
  "td-build",
  "td-common",
  "temp-env",
