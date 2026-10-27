@@ -42,22 +42,82 @@ fn resolve_domains_language
     assert false
 end
 
-fn default_domains_manifest
-    language = set ${1}
-    if eq ${language} "rs"
-        return ${BACKENDS_RS_DOMAINS_MANIFEST}
-    end
-
+fn ga_manifest
+    stem = set ${1}
     on_ga = get_env TD_ON_GA
     if eq ${on_ga} "true"
         target_os = get_env TDX_OS
         target_os = trim ${target_os}
         target_os_empty = is_empty ${target_os}
         if not ${target_os_empty}
-            return ${BACKENDS_MANIFEST_FOLDER}/domains_py_ga_${target_os}.yaml
+            return ${BACKENDS_MANIFEST_FOLDER}/${stem}_ga_${target_os}.yaml
         end
     end
-    return ${BACKENDS_PY_DOMAINS_MANIFEST}
+    return ""
+end
+
+fn default_domains_manifest
+    language = set ${1}
+    if eq ${language} "rs"
+        override = get_env TD_OVERRIDE_RS_DOMAINS_MANIFEST
+        fallback = set ${BACKENDS_RS_DOMAINS_MANIFEST}
+    else
+        override = get_env TD_OVERRIDE_PY_DOMAINS_MANIFEST
+        fallback = set ${BACKENDS_PY_DOMAINS_MANIFEST}
+    end
+    override = trim ${override}
+    override_empty = is_empty ${override}
+    if not ${override_empty}
+        override = absolute_manifest_path ${override}
+        return ${override}
+    end
+
+    ga = ga_manifest domains_${language}
+    ga_empty = is_empty ${ga}
+    if not ${ga_empty}
+        return ${ga}
+    end
+    return ${fallback}
+end
+
+fn default_systems_manifest
+    override = get_env TD_OVERRIDE_SYSTEMS_MANIFEST
+    override = trim ${override}
+    override_empty = is_empty ${override}
+    if not ${override_empty}
+        override = absolute_manifest_path ${override}
+        return ${override}
+    end
+
+    ga = ga_manifest systems
+    ga_empty = is_empty ${ga}
+    if not ${ga_empty}
+        return ${ga}
+    end
+    return ${BACKENDS_SYSTEMS_MANIFEST}
+end
+
+fn resolve_systems_manifest
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    manifest = set ""
+    take_next = set false
+    for argument in ${arguments}
+        if ${take_next}
+            manifest = set ${argument}
+            take_next = set false
+        elseif eq ${argument} "--systems-manifest"
+            take_next = set true
+        end
+    end
+
+    manifest = trim ${manifest}
+    manifest_empty = is_empty ${manifest}
+    if ${manifest_empty}
+        manifest = default_systems_manifest
+    else
+        manifest = absolute_manifest_path ${manifest}
+    end
+    return ${manifest}
 end
 
 fn absolute_manifest_path
@@ -94,18 +154,11 @@ fn resolve_domains_manifest
     manifest = trim ${manifest}
     manifest_empty = is_empty ${manifest}
     if ${manifest_empty}
-        override = get_env TD_OVERRIDE_DOMAINS_MANIFEST
-        override = trim ${override}
-        override_empty = is_empty ${override}
-        if ${override_empty}
-            manifest = default_domains_manifest ${language}
-        else
-            manifest = set ${BACKENDS_MANIFEST_FOLDER}/${override}
-        end
+        manifest = default_domains_manifest ${language}
     else
         manifest = absolute_manifest_path ${manifest}
     end
     return ${manifest}
 end
 
-trace "📌 Duckscript 'domain' library loaded"
+trace "📌 Duckscript 'backends' library loaded"

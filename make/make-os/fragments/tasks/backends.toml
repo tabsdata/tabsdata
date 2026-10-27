@@ -194,6 +194,7 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
     !include_files ./make/make-os/libraries/tdd.ds
+    !include_files ./make/make-os/libraries/backends.ds
 
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
@@ -206,10 +207,12 @@ script = [
             echo "Options:"
             echo "  --systems-manifest <FILE>  Path to the systems manifest YAML."
             echo "                             Default: ${BACKENDS_SYSTEMS_MANIFEST}"
+            echo "                             (systems_ga_<os>.yaml on GA)."
             echo "                             When no argument is given, the"
             echo "                             TD_OVERRIDE_SYSTEMS_MANIFEST environment"
             echo "                             variable, if set, selects a file by name"
-            echo "                             from ${BACKENDS_MANIFEST_FOLDER}."
+            echo "                             from ${BACKENDS_MANIFEST_FOLDER}, or by path"
+            echo "                             when absolute."
             echo ""
             exit 0
         end
@@ -219,38 +222,7 @@ script = [
     cm_run_task __os__set_crypto
     cm_run_task __os__set_secrets
 
-    manifest = set ""
-    take_next = set false
-    for argument in ${arguments}
-        if ${take_next}
-            manifest = set ${argument}
-            take_next = set false
-        elseif eq ${argument} "--systems-manifest"
-            take_next = set true
-        end
-    end
-    manifest = trim ${manifest}
-    if is_empty ${manifest}
-        override = get_env TD_OVERRIDE_SYSTEMS_MANIFEST
-        override = trim ${override}
-        if is_empty ${override}
-            manifest = set ${BACKENDS_SYSTEMS_MANIFEST}
-        else
-            manifest = set ${BACKENDS_MANIFEST_FOLDER}/${override}
-        end
-    else
-        absolute = starts_with ${manifest} "/"
-        if not ${absolute}
-            absolute = starts_with ${manifest} "\\"
-        end
-        if not ${absolute}
-            second = substring ${manifest} 1 2
-            absolute = eq ${second} ":"
-        end
-        if not ${absolute}
-            manifest = set ${BACKENDS_MANIFEST_FOLDER}/${manifest}
-        end
-    end
+    manifest = resolve_systems_manifest
 
     info "📄 Using systems manifest: ${manifest}"
     info "🛠️ Creating backend systems..."
@@ -271,6 +243,7 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
     !include_files ./make/make-os/libraries/tdd.ds
+    !include_files ./make/make-os/libraries/backends.ds
 
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
@@ -283,10 +256,12 @@ script = [
             echo "Options:"
             echo "  --systems-manifest <FILE>  Path to the systems manifest YAML."
             echo "                             Default: ${BACKENDS_SYSTEMS_MANIFEST}"
+            echo "                             (systems_ga_<os>.yaml on GA)."
             echo "                             When no argument is given, the"
             echo "                             TD_OVERRIDE_SYSTEMS_MANIFEST environment"
             echo "                             variable, if set, selects a file by name"
-            echo "                             from ${BACKENDS_MANIFEST_FOLDER}."
+            echo "                             from ${BACKENDS_MANIFEST_FOLDER}, or by path"
+            echo "                             when absolute."
             echo ""
             echo "The domains of both test suites are destroyed first."
             echo ""
@@ -300,38 +275,7 @@ script = [
     cm_run_task __os__set_crypto
     cm_run_task __os__set_secrets
 
-    manifest = set ""
-    take_next = set false
-    for argument in ${arguments}
-        if ${take_next}
-            manifest = set ${argument}
-            take_next = set false
-        elseif eq ${argument} "--systems-manifest"
-            take_next = set true
-        end
-    end
-    manifest = trim ${manifest}
-    if is_empty ${manifest}
-        override = get_env TD_OVERRIDE_SYSTEMS_MANIFEST
-        override = trim ${override}
-        if is_empty ${override}
-            manifest = set ${BACKENDS_SYSTEMS_MANIFEST}
-        else
-            manifest = set ${BACKENDS_MANIFEST_FOLDER}/${override}
-        end
-    else
-        absolute = starts_with ${manifest} "/"
-        if not ${absolute}
-            absolute = starts_with ${manifest} "\\"
-        end
-        if not ${absolute}
-            second = substring ${manifest} 1 2
-            absolute = eq ${second} ":"
-        end
-        if not ${absolute}
-            manifest = set ${BACKENDS_MANIFEST_FOLDER}/${manifest}
-        end
-    end
+    manifest = resolve_systems_manifest
 
     info "📄 Using systems manifest: ${manifest}"
     info "💥 Destroying backend systems..."
@@ -425,7 +369,7 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
     !include_files ./make/make-os/libraries/tdd.ds
-    !include_files ./make/make-os/libraries/domain.ds
+    !include_files ./make/make-os/libraries/backends.ds
 
     with_domains = get_env TD_WITH_DOMAINS
     if eq ${with_domains} "false"
@@ -457,7 +401,7 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
     !include_files ./make/make-os/libraries/tdd.ds
-    !include_files ./make/make-os/libraries/domain.ds
+    !include_files ./make/make-os/libraries/backends.ds
 
     with_domains = get_env TD_WITH_DOMAINS
     if eq ${with_domains} "false"
@@ -491,7 +435,7 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
     !include_files ./make/make-os/libraries/tdd.ds
-    !include_files ./make/make-os/libraries/domain.ds
+    !include_files ./make/make-os/libraries/backends.ds
 
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
@@ -507,10 +451,14 @@ script = [
             echo "  --domains-manifest <FILE>  Path to the domains manifest YAML."
             echo "                             Default: ${BACKENDS_PY_DOMAINS_MANIFEST} (--python)"
             echo "                             Default: ${BACKENDS_RS_DOMAINS_MANIFEST} (--rust)"
+            echo "                             (domains_<py|rs>_ga_<os>.yaml on GA)."
             echo "                             When no argument is given, the"
-            echo "                             TD_OVERRIDE_DOMAINS_MANIFEST environment"
-            echo "                             variable, if set, selects a file by name"
-            echo "                             from ${BACKENDS_MANIFEST_FOLDER}."
+            echo "                             TD_OVERRIDE_PY_DOMAINS_MANIFEST (--python)"
+            echo "                             or TD_OVERRIDE_RS_DOMAINS_MANIFEST (--rust)"
+            echo "                             environment variable, if set, selects a"
+            echo "                             file by name from ${BACKENDS_MANIFEST_FOLDER},"
+            echo "                             or by path when absolute. Test runs honour"
+            echo "                             them too."
             echo ""
             exit 0
         end
@@ -568,7 +516,7 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
     !include_files ./make/make-os/libraries/tdd.ds
-    !include_files ./make/make-os/libraries/domain.ds
+    !include_files ./make/make-os/libraries/backends.ds
 
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
@@ -584,10 +532,14 @@ script = [
             echo "  --domains-manifest <FILE>  Path to the domains manifest YAML."
             echo "                             Default: ${BACKENDS_PY_DOMAINS_MANIFEST} (--python)"
             echo "                             Default: ${BACKENDS_RS_DOMAINS_MANIFEST} (--rust)"
+            echo "                             (domains_<py|rs>_ga_<os>.yaml on GA)."
             echo "                             When no argument is given, the"
-            echo "                             TD_OVERRIDE_DOMAINS_MANIFEST environment"
-            echo "                             variable, if set, selects a file by name"
-            echo "                             from ${BACKENDS_MANIFEST_FOLDER}."
+            echo "                             TD_OVERRIDE_PY_DOMAINS_MANIFEST (--python)"
+            echo "                             or TD_OVERRIDE_RS_DOMAINS_MANIFEST (--rust)"
+            echo "                             environment variable, if set, selects a"
+            echo "                             file by name from ${BACKENDS_MANIFEST_FOLDER},"
+            echo "                             or by path when absolute. Test runs honour"
+            echo "                             them too."
             echo ""
             exit 0
         end
@@ -626,7 +578,7 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
     !include_files ./make/make-os/libraries/tdd.ds
-    !include_files ./make/make-os/libraries/domain.ds
+    !include_files ./make/make-os/libraries/backends.ds
 
     with_domains = get_env TD_WITH_DOMAINS
     if eq ${with_domains} "false"

@@ -1,0 +1,14 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+- name: apiserver_postgres
+  sys: postgres
+- name: apiserver_postgres_internals
+  sys: postgres
+- name: apiserver_s3
+  sys: s3
+- name: apiserver_az
+  sys: azureblob
+- name: apiserver_gcs
+  sys: gcs

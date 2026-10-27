@@ -84,7 +84,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
-    !include_files ./make/make-os/libraries/domain.ds
+    !include_files ./make/make-os/libraries/backends.ds
     !include_files ./make/make-os/libraries/tdd.ds
 
     manifest = default_domains_manifest rs
@@ -124,7 +124,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
-    !include_files ./make/make-os/libraries/domain.ds
+    !include_files ./make/make-os/libraries/backends.ds
     !include_files ./make/make-os/libraries/tdd.ds
 
     manifest = default_domains_manifest rs

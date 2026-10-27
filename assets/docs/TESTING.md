@@ -274,8 +274,15 @@ provisioned yourself. Point the tests at a different one with `TD_TEST_DB_DOMAIN
 
 Every domain task takes a mandatory `--python` or `--rust` to say which suite's domains it
 means: `cargo make domains_create --rust`, `cargo make domains_destroy --python`. The
-manifests are named to match, `domains_py.yaml` and `domains_rs.yaml`, with the GA Python
-variants as `domains_py_ga_<os>.yaml`.
+manifests are named to match, `domains_py.yaml` and `domains_rs.yaml`. On GA each platform
+has its own, `domains_<py|rs>_ga_<os>.yaml` and `systems_ga_<os>.yaml`, picked by
+`TDX_OS`: the macOS and Windows runners have no containers, so their manifests list only
+the backends that are not one, and the tests of the rest skip there as not offered.
+`--domains-manifest <FILE>` picks another one for a
+single task; `TD_OVERRIDE_PY_DOMAINS_MANIFEST` / `TD_OVERRIDE_RS_DOMAINS_MANIFEST` (a file
+name in `variant/config/pytest`, or an absolute path) replace a suite's manifest everywhere —
+the test runs that create the domains and the tasks that destroy them alike — so the two can
+never disagree.
 
 The domain descriptor carries the owning system's superuser as `SYS_ADMIN_USER` /
 `SYS_ADMIN_PASSWORD`, which is what the per-test path connects as: creating and dropping
