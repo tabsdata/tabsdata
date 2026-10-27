@@ -20,6 +20,18 @@ def _neutralize_ai_agent_env(monkeypatch):
     for var in ("GEMINI_CLI", "CLAUDECODE", "CODEX_THREAD_ID", "TDK_IN_AGENT"):
         monkeypatch.delenv(var, raising=False)
 
+
+@pytest.fixture(autouse=True)
+def _neutralize_forced_terminal(monkeypatch):
+    # rich-click forces a styled terminal when FORCE_COLOR, PY_COLORS or
+    # GITHUB_ACTIONS is set, deciding it once at import, and rich honours
+    # FORCE_COLOR on every console; their ANSI codes would split the messages
+    # the tests look for.
+    monkeypatch.setattr("rich_click.rich_click.FORCE_TERMINAL", None)
+    for var in ("FORCE_COLOR", "PY_COLORS"):
+        monkeypatch.delenv(var, raising=False)
+
+
 from test_tabsdatak.bootest import enrich_sys_path
 from test_tabsdatak.cli.bootest import TESTING_RESOURCES_PATH
 
