@@ -84,8 +84,10 @@ async fn get_table_download(
             },
         ))
         .in_project(p.project_id);
-    let stream = services.clone().table_download(request).await?.data;
-    collect(stream).await
+    match services.clone().table_download(request).await?.data {
+        Some(stream) => collect(stream).await,
+        None => Ok(Bytes::new()),
+    }
 }
 
 /// Raw data written under the prefix stamped on the run keeps downloading

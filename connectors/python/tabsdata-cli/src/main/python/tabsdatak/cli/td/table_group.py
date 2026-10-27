@@ -17,6 +17,7 @@ from tabsdatak.cli.cli_utils import (
     hint_common_solutions,
     logical_prompt,
     max_result_option,
+    output_format,
     present,
     proj_option,
     render,
@@ -44,6 +45,47 @@ def _size_mb(data_bytes) -> str | None:
     if data_bytes is None:
         return None
     return f"{int(data_bytes) / (1024 * 1024):.2f}"
+
+
+NO_DATA_AT_VERSION = "The table holds no data at that version"
+
+
+def render_no_data(ctx: click.Context) -> None:
+    if output_format(ctx) == "table":
+        click.echo(NO_DATA_AT_VERSION)
+    else:
+        render(ctx, data=None)
+
+
+UNCOMMITTED_VERSION_STATES = {
+    "Scheduled": "is still in progress",
+    "Run Requested": "is still in progress",
+    "Rescheduled": "is still in progress",
+    "Running": "is still in progress",
+    "Error": "is still in progress",
+    "Done": "is done and awaiting commit",
+    "Failed": "failed",
+    "On Hold": "is on hold",
+    "Canceled": "was canceled",
+    "Yanked": "was yanked",
+}
+
+
+def warn_uncommitted_version(
+    server: TabsdataServer, coll: str, name: str, version: str | None, has_data: bool
+) -> None:
+    if not version:
+        return
+    found = server.list_dataversions(coll, name, filter=f"id:eq:{version}")
+    state = UNCOMMITTED_VERSION_STATES.get(found[0].status) if found else None
+    if state is None:
+        return
+    served = (
+        "showing data from an earlier committed version"
+        if has_data
+        else "no earlier committed version holds data"
+    )
+    click.echo(f"Warning: version {version} {state}; {served}", err=True)
 
 
 def table_data_view(
@@ -209,9 +251,10 @@ def download(
             at_trx=at_trx,
             version=version,
         )
+        warn_uncommitted_version(server, coll, name, version, downloaded is not None)
 
         if downloaded is None:
-            click.echo("The table holds no data at that version; no file was written")
+            click.echo(f"{NO_DATA_AT_VERSION}; no file was written")
         else:
             click.echo("Table downloaded successfully")
 
@@ -457,6 +500,11 @@ def data(
             sql=sql,
             extra_cols=extra_cols,
         )
+        warn_uncommitted_version(server, coll, name, version, table_data is not None)
+
+        if table_data is None:
+            render_no_data(ctx)
+            return
 
         # table_data is a polars DataFrame -> its rows are the full info.
         render(
@@ -565,6 +613,11 @@ def schema(
             version=version,
             extra_cols=extra_cols,
         )
+        warn_uncommitted_version(server, coll, name, version, table_schema is not None)
+
+        if table_schema is None:
+            render_no_data(ctx)
+            return
 
         def _view():
             return TableView(

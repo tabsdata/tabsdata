@@ -40,7 +40,7 @@ async fn table_sample(
     storage: Ctx<Storage>,
     gated_conn: &mut GatedConnection<RO, InProject>,
     request: TableSampleRequest,
-) -> Result<BoxedSyncStream, TdError> {
+) -> Result<Option<BoxedSyncStream>, TdError> {
     let (project, request) = request.into_parts();
     let (ctx, (collection, table, at, uncommitted, offset, len, format, sql, extra_cols)) =
         request.into_parts();
@@ -56,6 +56,9 @@ async fn table_sample(
         &uncommitted.uncommitted,
     )
     .await?;
+    let Some(location) = location else {
+        return Ok(None);
+    };
 
     let table_name = table_db.name.clone();
     get_table_sample(
@@ -68,6 +71,7 @@ async fn table_sample(
         &table_name,
         &location,
     )
+    .map(Some)
 }
 
 #[cfg(test)]
@@ -285,7 +289,7 @@ mod tests {
             at_time: &AtTime,
             offset: i64,
             len: i64,
-        ) -> Result<Bytes, TdError> {
+        ) -> Result<Option<Bytes>, TdError> {
             let service = Services {
                 storage,
                 ..Services::with_defaults(db)
@@ -320,11 +324,10 @@ mod tests {
                 .in_project(project_id);
             let response = service.table_sample(request).await;
             match response {
-                Ok(response) => {
-                    let mut data = response.data.into_inner();
-                    let bytes = data.next().await.unwrap()?;
-                    Ok(bytes)
-                }
+                Ok(response) => match response.data {
+                    Some(data) => Ok(Some(data.into_inner().next().await.unwrap()?)),
+                    None => Ok(None),
+                },
                 Err(err) => Err(err),
             }
         }
@@ -355,11 +358,7 @@ mod tests {
         .await?;
 
         assert_eq!(bytes_with_ids, bytes_with_names);
-        let df = ParquetReader::new(Cursor::new(&bytes_with_names))
-            .finish()
-            .unwrap();
-        let expected = DataFrame::default();
-        assert_eq!(df, expected);
+        assert!(bytes_with_names.is_none());
 
         let bytes_with_ids = get_sample(
             db.clone(),
@@ -386,7 +385,7 @@ mod tests {
         .await?;
 
         assert_eq!(bytes_with_ids, bytes_with_names);
-        let df = ParquetReader::new(Cursor::new(&bytes_with_names))
+        let df = ParquetReader::new(Cursor::new(bytes_with_names.as_ref().unwrap()))
             .finish()
             .unwrap();
         let expected = DataFrame::new_infer_height(vec![
@@ -422,7 +421,7 @@ mod tests {
         .await?;
 
         assert_eq!(bytes_with_ids, bytes_with_names);
-        let df = ParquetReader::new(Cursor::new(&bytes_with_names))
+        let df = ParquetReader::new(Cursor::new(bytes_with_names.as_ref().unwrap()))
             .finish()
             .unwrap();
         let expected = DataFrame::new_infer_height(vec![
@@ -458,7 +457,7 @@ mod tests {
         .await?;
 
         assert_eq!(bytes_with_ids, bytes_with_names);
-        let df = ParquetReader::new(Cursor::new(&bytes_with_names))
+        let df = ParquetReader::new(Cursor::new(bytes_with_names.as_ref().unwrap()))
             .finish()
             .unwrap();
         let expected = DataFrame::new_infer_height(vec![
@@ -479,7 +478,9 @@ mod tests {
             1,
         )
         .await?;
-        let df = ParquetReader::new(Cursor::new(&bytes)).finish().unwrap();
+        let df = ParquetReader::new(Cursor::new(bytes.as_ref().unwrap()))
+            .finish()
+            .unwrap();
         let expected = DataFrame::new_infer_height(vec![
             Int64Chunked::new("i".into(), &[1]).into_column(),
             StringChunked::new("s".into(), &["b"]).into_column(),
@@ -498,7 +499,9 @@ mod tests {
             1,
         )
         .await?;
-        let df = ParquetReader::new(Cursor::new(&bytes)).finish().unwrap();
+        let df = ParquetReader::new(Cursor::new(bytes.as_ref().unwrap()))
+            .finish()
+            .unwrap();
         let expected = DataFrame::new_infer_height(vec![
             Int64Chunked::new("i".into(), &[2]).into_column(),
             StringChunked::new("s".into(), &["a"]).into_column(),

@@ -74,7 +74,7 @@ pub fn get_table_sample(
     sql: &Option<Sql>,
     extra_cols: &ExtraCols,
     table_name: &TableName,
-    table_path: &Option<SPath>,
+    table_path: &SPath,
 ) -> Result<BoxedSyncStream, TdError> {
     fn write_sample(mut dataframe: DataFrame, format: &FileFormat) -> Result<Bytes, SampleError> {
         let mut buffer = Vec::new();
@@ -101,7 +101,7 @@ pub fn get_table_sample(
         Ok(Bytes::from(buffer))
     }
 
-    let bytes = if let Some(table_path) = table_path {
+    let bytes = {
         let (url, mount_def) = storage.to_external_uri(table_path)?;
         let url_str = url.to_string();
         let pl_path = PlRefPath::new(url_str.as_str());
@@ -141,11 +141,6 @@ pub fn get_table_sample(
 
             let lazy_frame = lazy_frame.slice(0, **len as IdxSize);
             let dataframe = lazy_frame.collect().map_err(SampleError::LazyFrameError)?;
-            write_sample(dataframe, format)
-        })?
-    } else {
-        tokio::task::block_in_place(move || {
-            let dataframe = DataFrame::default();
             write_sample(dataframe, format)
         })?
     };
@@ -232,7 +227,7 @@ mod tests {
             &sql,
             &extra_cols,
             &TableName::try_from("my_table").unwrap(),
-            &Some(table_path),
+            &table_path,
         )?;
 
         let stream = stream.into_inner();
@@ -555,95 +550,6 @@ mod tests {
                 }
             }
         }
-        Ok(())
-    }
-
-    //noinspection DuplicatedCode
-    async fn test_get_table_sample_not_found(
-        format: FileFormat,
-        sql: Option<Sql>,
-    ) -> Result<PathBuf, TdError> {
-        let test_dir = td_common::tdtestdir!();
-        let mount_def = td_storage::MountDef::builder()
-            .id("root")
-            .path("/")
-            .uri(format!(
-                "{}{}/",
-                if cfg!(windows) { "file:///" } else { "file://" },
-                test_dir.to_str().unwrap()
-            ))
-            .build()?;
-        let storage = td_storage::Storage::from(vec![mount_def])?;
-
-        let stream = get_table_sample(
-            &storage,
-            &SampleOffset::default(),
-            &SampleLen::default(),
-            &format,
-            &sql,
-            &ExtraCols::None,
-            &TableName::try_from("my_table").unwrap(),
-            &None,
-        )?;
-
-        let stream = stream.into_inner();
-        let bytes = stream.try_collect::<Vec<_>>().await?;
-        let bytes = bytes
-            .iter()
-            .flat_map(|b| b.iter())
-            .cloned()
-            .collect::<Vec<_>>();
-        let file_out = test_dir.join("output");
-        File::create_new(&file_out)
-            .unwrap()
-            .write_all(&bytes)
-            .unwrap();
-        Ok(file_out)
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_get_table_sample_csv_not_found() -> Result<(), TdError> {
-        let file = test_get_table_sample_not_found(FileFormat::Csv, None).await?;
-
-        let content = std::fs::read_to_string(&file).unwrap();
-        assert!(content.trim().is_empty());
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_get_table_sample_json_not_found() -> Result<(), TdError> {
-        let file = test_get_table_sample_not_found(FileFormat::Json, None).await?;
-
-        let content = std::fs::read_to_string(&file).unwrap();
-        assert!(content.trim().is_empty());
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_get_table_sample_parquet_not_found() -> Result<(), TdError> {
-        let file = test_get_table_sample_not_found(FileFormat::Parquet, None).await?;
-
-        // Parquet is never empty, so we check the schema is empty.
-        let file = File::open(file).unwrap();
-        let df = ParquetReader::new(file).finish().unwrap();
-        assert!(df.get_column_names().is_empty());
-        assert_eq!(df.height(), 0);
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_get_table_sample_sql_not_found() -> Result<(), TdError> {
-        let file = test_get_table_sample_not_found(
-            FileFormat::Csv,
-            Some(Sql::try_from(
-                "select id, name from my_table where id in (1,2,5,6)",
-            )?),
-        )
-        .await?;
-
-        let content = std::fs::read_to_string(&file).unwrap();
-        println!("Content: {content}");
-        assert!(content.trim().is_empty());
         Ok(())
     }
 }

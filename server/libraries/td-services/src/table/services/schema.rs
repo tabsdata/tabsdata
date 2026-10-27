@@ -38,7 +38,7 @@ async fn table_schema(
     storage: Ctx<Storage>,
     gated_conn: &mut GatedConnection<RO, InProject>,
     request: TableSchemaRequest,
-) -> Result<TableSchema, TdError> {
+) -> Result<Option<TableSchema>, TdError> {
     let (project, request) = request.into_parts();
     let (ctx, (collection, table, at, uncommitted, extra_cols)) = request.into_parts();
     let grant = authz
@@ -53,7 +53,9 @@ async fn table_schema(
         &uncommitted.uncommitted,
     )
     .await?;
-    get_table_schema(&storage, &extra_cols.extra_cols, &location)
+    location
+        .map(|location| get_table_schema(&storage, &extra_cols.extra_cols, &location))
+        .transpose()
 }
 
 #[td_error]
@@ -65,7 +67,7 @@ enum SchemaError {
 pub fn get_table_schema(
     storage: &Storage,
     extra_cols: &ExtraCols,
-    table_path: &Option<SPath>,
+    table_path: &SPath,
 ) -> Result<TableSchema, TdError> {
     fn get_schema(mut lazy_frame: LazyFrame) -> Result<TableSchema, TdError> {
         let schema = lazy_frame
@@ -78,33 +80,25 @@ pub fn get_table_schema(
         Ok(TableSchema { fields: schema })
     }
 
-    if let Some(table_path) = table_path {
-        let (url, mount_def) = storage.to_external_uri(table_path)?;
-        let url_str = url.to_string();
-        let pl_path = PlRefPath::new(url_str.as_str());
-        let cloud_config = CloudOptions::from_untyped_config(pl_path.scheme(), mount_def.options())
-            .map_err(StorageServiceError::CouldNotCreateStorageConfig)?;
-        let parquet_config = ScanArgsParquet {
-            cloud_options: Some(cloud_config),
-            ..ScanArgsParquet::default()
-        };
+    let (url, mount_def) = storage.to_external_uri(table_path)?;
+    let url_str = url.to_string();
+    let pl_path = PlRefPath::new(url_str.as_str());
+    let cloud_config = CloudOptions::from_untyped_config(pl_path.scheme(), mount_def.options())
+        .map_err(StorageServiceError::CouldNotCreateStorageConfig)?;
+    let parquet_config = ScanArgsParquet {
+        cloud_options: Some(cloud_config),
+        ..ScanArgsParquet::default()
+    };
 
-        tokio::task::block_in_place(move || {
-            let lazy_frame =
-                LazyFrame::scan_parquet(PlRefPath::new(url_str.as_str()), parquet_config)
-                    .map_err(StorageServiceError::CouldNoCreateLazyFrameToGetSchema)?;
+    tokio::task::block_in_place(move || {
+        let lazy_frame = LazyFrame::scan_parquet(PlRefPath::new(url_str.as_str()), parquet_config)
+            .map_err(StorageServiceError::CouldNoCreateLazyFrameToGetSchema)?;
 
-            let lazy_frame = drop_extra_columns(lazy_frame, extra_cols)
-                .map_err(StorageServiceError::CouldNoCreateLazyFrameToGetSchema)?;
+        let lazy_frame = drop_extra_columns(lazy_frame, extra_cols)
+            .map_err(StorageServiceError::CouldNoCreateLazyFrameToGetSchema)?;
 
-            get_schema(lazy_frame)
-        })
-    } else {
-        tokio::task::block_in_place(move || {
-            let lazy_frame = LazyFrame::default();
-            get_schema(lazy_frame)
-        })
-    }
+        get_schema(lazy_frame)
+    })
 }
 
 #[cfg(test)]
@@ -312,7 +306,7 @@ mod tests {
             collection: &str,
             table: &str,
             at_time: &AtTime,
-        ) -> Result<TableSchema, TdError> {
+        ) -> Result<Option<TableSchema>, TdError> {
             let service = Services {
                 storage,
                 ..Services::with_defaults(db)
@@ -351,8 +345,7 @@ mod tests {
             &at_times[0],
         )
         .await?;
-        let response = response_with_ids.fields;
-        assert_eq!(*response, vec![]);
+        assert!(response_with_ids.is_none());
 
         let response_with_names = get_schema(
             db.clone(),
@@ -363,8 +356,7 @@ mod tests {
             &at_times[0],
         )
         .await?;
-        let response = response_with_names.fields;
-        assert_eq!(*response, vec![]);
+        assert!(response_with_names.is_none());
 
         let response_with_ids = get_schema(
             db.clone(),
@@ -387,7 +379,7 @@ mod tests {
         .await?;
         assert_eq!(response_with_ids, response_with_names);
 
-        let response = response_with_ids.fields;
+        let response = response_with_ids.unwrap().fields;
         assert_eq!(
             *response,
             vec![
@@ -424,7 +416,7 @@ mod tests {
         .await?;
         assert_eq!(response_with_ids, response_with_names);
 
-        let response = response_with_ids.fields;
+        let response = response_with_ids.unwrap().fields;
         assert_eq!(
             *response,
             vec![
@@ -461,7 +453,7 @@ mod tests {
         .await?;
         assert_eq!(response_with_ids, response_with_names);
 
-        let response = response_with_ids.fields;
+        let response = response_with_ids.unwrap().fields;
         assert_eq!(
             *response,
             vec![

@@ -982,6 +982,56 @@ def test_download_table_forwards_what_the_table_download_returns(tmp_path):
     assert server.download_table("coll", "orders", str(destination)) is None
 
 
+def _parquet(frame) -> bytes:
+    import io
+
+    buffer = io.BytesIO()
+    frame.write_parquet(buffer)
+    return buffer.getvalue()
+
+
+def test_sample_reads_the_parquet_sample():
+    from unittest.mock import MagicMock
+
+    import polars as pl
+
+    connection = MagicMock()
+    frame = pl.DataFrame({"n": [1, 2]})
+    connection.table_get_sample.return_value = MagicMock(content=_parquet(frame))
+    table = ts.Table(connection, "coll", "orders")
+    assert table.sample(len=2).equals(frame)
+
+
+def test_sample_of_a_version_without_data_is_none():
+    from unittest.mock import MagicMock
+
+    connection = MagicMock()
+    connection.table_get_sample.return_value = MagicMock(content=b"")
+    table = ts.Table(connection, "coll", "orders")
+    assert table.sample() is None
+
+
+def test_get_schema_returns_the_fields():
+    from unittest.mock import MagicMock
+
+    connection = MagicMock()
+    fields = [{"name": "n", "type": "i64"}]
+    connection.table_get_schema.return_value.json.return_value = {
+        "data": {"fields": fields}
+    }
+    table = ts.Table(connection, "coll", "orders")
+    assert table.get_schema() == fields
+
+
+def test_get_schema_of_a_version_without_data_is_none():
+    from unittest.mock import MagicMock
+
+    connection = MagicMock()
+    connection.table_get_schema.return_value.json.return_value = {"data": None}
+    table = ts.Table(connection, "coll", "orders")
+    assert table.get_schema() is None
+
+
 def test_a_worker_loads_its_own_status(monkeypatch):
     from unittest.mock import MagicMock
 

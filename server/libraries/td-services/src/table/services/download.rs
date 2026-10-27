@@ -25,7 +25,7 @@ async fn table_download(
     request: WithinProject<
         ReadRequest<(CollectionParam, TableParam, AtTimeParam, UncommittedParam)>,
     >,
-) -> Result<BoxedSyncStream, TdError> {
+) -> Result<Option<BoxedSyncStream>, TdError> {
     let (project, request) = request.into_parts();
     let (ctx, (collection, table, at, uncommitted)) = request.into_parts();
     let grant = authz
@@ -40,7 +40,10 @@ async fn table_download(
         &uncommitted.uncommitted,
     )
     .await?;
-    get_table_download(&storage, &location).await
+    match location {
+        Some(location) => get_table_download(&storage, &location).await.map(Some),
+        None => Ok(None),
+    }
 }
 
 #[cfg(test)]
@@ -143,10 +146,11 @@ pub(crate) mod tests {
                 ))
                 .in_project(project_id);
             let service = context.clone();
-            let response = service.table_download(request).await?.data;
-            let mut stream = response.into_inner();
-            let bytes_with_ids = match stream.next().await {
-                Some(res) => res?,
+            let bytes_with_ids = match service.table_download(request).await?.data {
+                Some(stream) => match stream.into_inner().next().await {
+                    Some(res) => res?,
+                    None => Bytes::new(),
+                },
                 None => Bytes::new(),
             };
             let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
@@ -164,10 +168,11 @@ pub(crate) mod tests {
                 ))
                 .in_project(project_id);
             let service = context.clone();
-            let response = service.table_download(request).await?.data;
-            let mut stream = response.into_inner();
-            let bytes_with_names = match stream.next().await {
-                Some(res) => res?,
+            let bytes_with_names = match service.table_download(request).await?.data {
+                Some(stream) => match stream.into_inner().next().await {
+                    Some(res) => res?,
+                    None => Bytes::new(),
+                },
                 None => Bytes::new(),
             };
             assert_eq!(bytes_with_ids, bytes_with_names);

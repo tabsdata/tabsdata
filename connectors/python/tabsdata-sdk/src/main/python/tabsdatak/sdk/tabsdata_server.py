@@ -2896,7 +2896,7 @@ class Table:
         at_trx: Transaction | str | None = None,
         version: DataVersion | str | None = None,
         extra_cols: str = None,
-    ) -> List[dict]:
+    ) -> List[dict] | None:
         """
         Get the schema of a table for a given version. The version can be a
             fixed version or a relative one (HEAD, HEAD^, and HEAD~## syntax).
@@ -2908,7 +2908,8 @@ class Table:
                 or 'all'.
 
         Returns:
-            list: The schema of the table.
+            list | None: The schema of the table, or None when the table holds
+                no data at that version.
 
         Raises:
             APIServerError: If the schema could not be obtained.
@@ -2937,7 +2938,7 @@ class Table:
                     id=version,
                 )
             at = dataversion.created_at
-        return (
+        schema = (
             self.connection
             .table_get_schema(
                 self.collection.name,
@@ -2947,7 +2948,8 @@ class Table:
             )
             .json()
             .get("data")
-        )["fields"]
+        )
+        return None if schema is None else schema["fields"]
 
     def refresh(self) -> Table:
         self.id = None
@@ -2965,11 +2967,11 @@ class Table:
         len: int = None,
         sql: str = None,
         extra_cols: str = None,
-    ) -> pl.DataFrame:
+    ) -> pl.DataFrame | None:
         """
-        Get a sample of a table for a given version as a parquet file. The
-            version can be a fixed version or a relative one (HEAD, HEAD^,
-            and HEAD~## syntax).
+        Get a sample of a table for a given version as a parquet file, or None
+            when the table holds no data at that version. The version can be a
+            fixed version or a relative one (HEAD, HEAD^, and HEAD~## syntax).
 
         Args:
             offset (int, optional): The offset of the sample.
@@ -3019,6 +3021,8 @@ class Table:
             sql=sql,
             extra_cols=extra_cols,
         ).content
+        if not parquet_frame:
+            return None
         return pl.read_parquet(parquet_frame)
 
     def __eq__(self, other):
@@ -5431,7 +5435,7 @@ class TabsdataServer:
         at_trx: Transaction | str | None = None,
         version: DataVersion | str | None = None,
         extra_cols: str = None,
-    ) -> List[dict]:
+    ) -> List[dict] | None:
         """
         Get the schema of a table for a given version. The version can be a
             fixed version or a relative one (HEAD, HEAD^, and HEAD~## syntax).
@@ -5445,7 +5449,8 @@ class TabsdataServer:
                 or 'all'.
 
         Returns:
-            list: The schema of the table.
+            list | None: The schema of the table, or None when the table holds
+                no data at that version.
 
         Raises:
             APIServerError: If the schema could not be obtained.
@@ -5512,11 +5517,11 @@ class TabsdataServer:
         len: int = None,
         sql: str = None,
         extra_cols: str = None,
-    ) -> pl.DataFrame:
+    ) -> pl.DataFrame | None:
         """
-        Get a sample of a table for a given version as a parquet file. The
-            version can be a fixed version or a relative one (HEAD, HEAD^,
-            and HEAD~## syntax).
+        Get a sample of a table for a given version as a parquet file, or None
+            when the table holds no data at that version. The version can be a
+            fixed version or a relative one (HEAD, HEAD^, and HEAD~## syntax).
 
         Args:
             collection_name (str): The name of the collection.

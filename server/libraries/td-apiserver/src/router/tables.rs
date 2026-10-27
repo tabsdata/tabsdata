@@ -53,7 +53,7 @@ pub async fn delete_table(
     path = "/projects/{project}/collections/{collection}/tables/{table}/download",
     tag(TABLES_TAG),
     content_type = "application/vnd.apache.parquet",
-    doc = "Download a table as a parquet file"
+    doc = "Download a table as a parquet file; 204 when the table has no data at that version"
 )]
 pub async fn download(
     State(state): State<Services>,
@@ -67,8 +67,10 @@ pub async fn download(
     let request = context
         .read((collection, table, at, uncommitted))
         .in_project(project_id);
-    let stream = state.table_download(request).await?.data;
-    Ok(DownloadResponse::parquet(stream))
+    Ok(match state.table_download(request).await?.data {
+        Some(stream) => DownloadResponse::parquet(stream),
+        None => DownloadResponse::no_content(),
+    })
 }
 
 #[apiserver_path(
@@ -154,7 +156,7 @@ pub async fn list_data_versions(
     path = "/projects/{project}/collections/{collection}/tables/{table}/sample",
     tag(TABLES_TAG),
     content_type = "text/csv",
-    doc = "Get a sample of a table"
+    doc = "Get a sample of a table; 204 when the table has no data at that version"
 )]
 #[allow(clippy::too_many_arguments)]
 pub async fn sample(
@@ -184,8 +186,10 @@ pub async fn sample(
             extra_cols,
         ))
         .in_project(project_id);
-    let stream = state.table_sample(request).await?.data;
-    Ok(DownloadResponse::csv(stream))
+    Ok(match state.table_sample(request).await?.data {
+        Some(stream) => DownloadResponse::csv(stream),
+        None => DownloadResponse::no_content(),
+    })
 }
 
 #[apiserver_path(
@@ -195,7 +199,7 @@ pub async fn sample(
     method(get),
     path = "/projects/{project}/collections/{collection}/tables/{table}/schema",
     tag(TABLES_TAG),
-    doc = "Get the schema of a table"
+    doc = "Get the schema of a table; null when the table has no data at that version"
 )]
 #[allow(clippy::too_many_arguments)]
 pub async fn schema(
@@ -207,7 +211,7 @@ pub async fn schema(
     Query(at): Query<AtTimeParam>,
     Query(uncommitted): Query<UncommittedParam>,
     Query(extra_cols): Query<ExtraColsParam>,
-) -> Result<GetStatus<TableSchema>, ErrorStatus> {
+) -> Result<GetStatus<Option<TableSchema>>, ErrorStatus> {
     let request = context
         .read((collection, table, at, uncommitted, extra_cols))
         .in_project(project_id);

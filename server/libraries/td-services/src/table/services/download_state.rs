@@ -71,7 +71,10 @@ async fn table_state_download(
         &uncommitted.uncommitted,
     )
     .await?;
-    get_table_download(&storage, &location).await
+    match location {
+        Some(location) => get_table_download(&storage, &location).await,
+        None => Ok(BoxedSyncStream::empty()),
+    }
 }
 
 pub fn get_table_at_id_name(

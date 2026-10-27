@@ -28,7 +28,7 @@ pub const CONTENT_TYPE_PEM: &str = "application/x-pem-file";
 const IMMUTABLE_MAX_AGE: Duration = Duration::from_secs(31_536_000); // 1 year
 
 pub struct DownloadResponse {
-    stream: BoxedSyncStream,
+    stream: Option<BoxedSyncStream>,
     content_type: &'static str,
     disposition: Option<HeaderValue>,
     etag: Option<ETag>,
@@ -39,8 +39,19 @@ pub struct DownloadResponse {
 impl DownloadResponse {
     pub fn new(stream: BoxedSyncStream, content_type: &'static str) -> Self {
         Self {
-            stream,
+            stream: Some(stream),
             content_type,
+            disposition: None,
+            etag: None,
+            cache_control: None,
+            if_none_match: None,
+        }
+    }
+
+    pub fn no_content() -> Self {
+        Self {
+            stream: None,
+            content_type: CONTENT_TYPE_OCTET_STREAM,
             disposition: None,
             etag: None,
             cache_control: None,
@@ -133,7 +144,10 @@ impl IntoResponse for DownloadResponse {
             return resp;
         }
 
-        let mut resp = self.stream.into_response();
+        let Some(stream) = self.stream else {
+            return StatusCode::NO_CONTENT.into_response();
+        };
+        let mut resp = stream.into_response();
         let h = resp.headers_mut();
         h.insert(CONTENT_TYPE, HeaderValue::from_static(self.content_type));
         if let Some(d) = self.disposition {
@@ -182,6 +196,14 @@ mod tests {
         assert!(resp.headers().get(ETAG_NAME).is_none());
         assert!(resp.headers().get(CACHE_CONTROL).is_none());
         assert_eq!(body_bytes(resp).await, b"hello");
+    }
+
+    #[tokio::test]
+    async fn no_content_has_no_body_and_no_content_type() {
+        let resp = DownloadResponse::no_content().into_response();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        assert!(resp.headers().get(CONTENT_TYPE).is_none());
+        assert!(body_bytes(resp).await.is_empty());
     }
 
     #[tokio::test]

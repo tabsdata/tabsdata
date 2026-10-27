@@ -1300,6 +1300,57 @@ def test_table_data_view_options_need_the_table_format(tmp_path, options, named)
     client.sample_table.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "argv, call",
+    [
+        (["table", "data", "-c", "coll-a", "--name", "tbl-a"], "sample_table"),
+        (["table", "schema", "-c", "coll-a", "--name", "tbl-a"], "get_table_schema"),
+    ],
+)
+def test_table_reads_say_when_the_table_holds_no_data(tmp_path, argv, call):
+    client = _client()
+    getattr(client, call).return_value = None
+
+    result = _invoke(argv, client=client, tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert "The table holds no data at that version" in result.output
+
+    result = _invoke([*argv, "-o", "json"], client=client, tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) is None
+
+
+@pytest.mark.parametrize(
+    "rows, served",
+    [
+        (pl.DataFrame({"a": [1]}), "showing data from an earlier committed version"),
+        (None, "no earlier committed version holds data"),
+    ],
+)
+def test_table_data_warns_when_the_version_is_not_committed(tmp_path, rows, served):
+    client = _client()
+    client.sample_table.return_value = rows
+    client.list_dataversions.return_value = [MagicMock(status="Failed")]
+
+    argv = ["table", "data", "-c", "coll-a", "--name", "tbl-a", "--version", "dv-6"]
+    result = _invoke([*argv, "-o", "json"], client=client, tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert f"Warning: version dv-6 failed; {served}" in result.stderr
+    expected = None if rows is None else [{"a": 1}]
+    assert json.loads(result.stdout) == expected
+
+
+def test_table_data_does_not_warn_for_a_committed_version(tmp_path):
+    client = _client()
+    client.sample_table.return_value = pl.DataFrame({"a": [1]})
+    client.list_dataversions.return_value = [MagicMock(status="Committed")]
+
+    argv = ["table", "data", "-c", "coll-a", "--name", "tbl-a", "--version", "dv-6"]
+    result = _invoke(argv, client=client, tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert "Warning" not in result.stderr
+
+
 def test_fn_patches_names_its_author_only_from_defined_by(tmp_path):
     client = _client()
     row = {**_PATCHES[0], "defined_by": None, "defined_by_id": "UID_AUTHOR"}
