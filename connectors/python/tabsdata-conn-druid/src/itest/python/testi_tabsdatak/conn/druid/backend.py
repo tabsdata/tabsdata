@@ -149,13 +149,25 @@ class DruidStore:
         been replaced. The Broker's SQL catalog keeps reporting a replaced
         datasource's old columns (as all-null) until its next metadata refresh, a
         minute out by default, so a test asserting on the ingested schema reads the
-        segments rather than a ``SELECT *``."""
-        rows = self._query(
-            "SELECT dimensions FROM sys.segments "
-            "WHERE datasource = ? AND is_active = 1",
-            table,
+        segments rather than a ``SELECT *``. ``sys.segments`` can trail the rows
+        being queryable, so it polls until the live segments show up."""
+
+        @retry(
+            retry=retry_if_exception_type(Exception),
+            wait=wait_fixed(POLL_SECONDS),
+            stop=stop_after_delay(POLL_TIMEOUT_SECONDS),
+            reraise=True,
         )
-        return {name for row in rows for name in json.loads(row["dimensions"])}
+        def poll() -> set[str]:
+            rows = self._query(
+                "SELECT dimensions FROM sys.segments "
+                "WHERE datasource = ? AND is_active = 1",
+                table,
+            )
+            assert rows, f"{table}: no live segments yet"
+            return {name for row in rows for name in json.loads(row["dimensions"])}
+
+        return poll()
 
     def drop_table(self, table: str) -> None:
         # Best-effort: a datasource an aborted write never created answers 404, and
