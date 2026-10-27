@@ -51,6 +51,16 @@ import yaml
 
 from tabsdatak.common._archive.bundle import build_bundle
 
+# Legacy: skipped since TD-2292 and superseded by the function API goldens
+# (`test_function_api/`), namely `test_function_subscriber_api`. Not ported to later
+# refactors; reviving this module needs at least:
+#   * prep-localize-state no longer takes `--in-dir`; input tables are no
+#     longer copied to a local folder: their records carry the storage
+#     `location` and run-function scans it, so the localize transporter
+#     request copies only the state tables;
+#   * the inputs manifest holds `tables` records (`file`, `location`, version
+#     fields), read and written through `InputManifest` / `InputRecord`; the
+#     outputs manifest through `OutputManifest` / `OutputEntry`.
 pytestmark = [
     pytest.mark.unit,
     pytest.mark.tabsdatak,

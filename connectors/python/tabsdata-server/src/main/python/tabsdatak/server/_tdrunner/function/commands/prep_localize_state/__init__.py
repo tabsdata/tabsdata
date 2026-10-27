@@ -5,16 +5,17 @@
 """prep-localize-state command.
 
 Step 4a of the function-runner chain. Reads request.yaml, builds the
-transporter copy request that pulls input + state-in tables from cloud
-storage to local disk, and writes it to ``--out``. Step 4b
-(`run-transporter`) consumes it.
+transporter copy request that pulls the state-in tables from storage to
+local disk, and writes it to ``--out``. Step 4b (`run-transporter`)
+consumes it. Input tables are not copied: `run-function` scans them
+where they are stored.
 
-Also writes two manifests describing what was localized:
+Also writes two manifests:
 
-  * ``--inputs-manifest``: one entry per ``request.input`` table, with
-    ``files`` pointing at ``<in_dir>/<name>.parquet``. The transformer
-    path of `run-function` consumes this; the publisher path
-    overwrites it with the source-plugin-produced manifest.
+  * ``--inputs-manifest``: one entry per ``request.input`` table, each
+    record carrying the table's storage ``location``. The transformer
+    and subscriber paths of `run-function` consume this; the publisher
+    path overwrites it with the source-plugin-produced manifest.
   * ``--state-manifest``: one entry per ``request.system_input``
     table, with ``files`` pointing at ``<state_dir>/<name>.parquet``.
     No consumer reads this in the current chain — it exists so future
@@ -48,16 +49,16 @@ VERSION = version()
 GENERATION = 1
 INFO = (
     "prep-localize-state — generate the transporter request that pulls "
-    "input + state-in tables to local, plus the inputs and state manifests"
+    "the state-in tables to local, plus the inputs and state manifests"
 )
 MAN = (
-    "prep-localize-state --request <PATH> --in-dir <PATH> "
+    "prep-localize-state --request <PATH> "
     "--state-dir <PATH> --out <PATH> --inputs-manifest <PATH> "
     "--state-manifest <PATH> --liveness <PATH>\n\n"
     "Reads request.yaml, generates the transporter copy YAML for "
-    "localising the input and system-input tables (writes to --out). "
+    "localising the system-input tables (writes to --out). "
     "Writes an inputs manifest at --inputs-manifest with one entry per "
-    "request.input table (files at <in_dir>/<name>.parquet), and a "
+    "request.input table (records carry each table's storage location), and a "
     "state manifest at --state-manifest with one entry per "
     "request.system_input table (files at <state_dir>/<name>.parquet)."
 )
@@ -72,12 +73,6 @@ def _build_parser():
         manual=MAN,
     )
     parser.add_argument("--request", required=True, help="Path to request.yaml")
-    parser.add_argument(
-        "--in-dir",
-        required=True,
-        dest="in_dir",
-        help="Local destination dir for input tables",
-    )
     parser.add_argument(
         "--state-dir",
         required=True,
@@ -95,7 +90,7 @@ def _build_parser():
         dest="inputs_manifest",
         help=(
             "Path to write the inputs manifest (one entry per "
-            "request.input table, pointing at the localized parquets)"
+            "request.input table, pointing at its storage location)"
         ),
     )
     parser.add_argument(

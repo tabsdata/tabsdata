@@ -161,7 +161,7 @@ class RunFunctionErrorCode(ErrorCode):
         BadInputParquetError,
         "failed to scan input parquet {path}: {detail}",
     )
-    # ``_scan_parquet_or_fail`` ``pl.scan_parquet`` failure.
+    # ``_scan_input`` mount or ``scan_parquet`` failure.
 
     RF_10 = ErrorDef(
         BadManifestError,

@@ -31,7 +31,9 @@ import yaml
 from tabsdatak._info import PublisherInfo
 from tabsdatak.api import FunctionCtx, TableFrameSpec, TableFramesSpec
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
+from tabsdatak.server._tdrunner.function._commons.document.request import Location
 from tabsdatak.server._tdrunner.function._commons.solver.secrets import ProjectSecret
+from tabsdatak.server._tdrunner.function._handlers.inputs import InputSource
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function._lib.initial_values import (
     read_initial_values,
@@ -52,7 +54,7 @@ from tabsdatak.server._tdrunner.function.commands.run_function import (
     _load_function_def,
     _materialize_input_slot,
     _output_table_names,
-    _scan_parquet_or_fail,
+    _scan_input,
     _sink_outputs,
     main,
 )
@@ -538,21 +540,38 @@ def test_infer_table_modes_wrong_annotation_raises_bad_user_code():
         _infer_table_modes(_fn_wrong_annotation)
 
 
-# --- unit: _scan_parquet_or_fail ----------------------------------------
+# --- unit: _scan_input --------------------------------------------------
 
 
-def test_scan_parquet_happy(tmp_path):
+def test_scan_input_happy(tmp_path):
     p = tmp_path / "x.parquet"
     _write_sample_parquet(p)
-    lf = _scan_parquet_or_fail(p)
+    lf = _scan_input(InputSource.of(InputRecord(file=str(p))))
     assert isinstance(lf, pl.LazyFrame)
 
 
-def test_scan_parquet_garbage_raises_bad_input_parquet(tmp_path):
+def test_scan_input_garbage_raises_bad_input_parquet(tmp_path):
     p = tmp_path / "x.parquet"
     p.write_bytes(b"not a parquet")
     with pytest.raises(BadInputParquetError):
-        _scan_parquet_or_fail(p)
+        _scan_input(InputSource.of(InputRecord(file=str(p))))
+
+
+def test_scan_input_from_a_stored_location(tmp_path):
+    p = tmp_path / "x.parquet"
+    _write_sample_parquet(p)
+    record = InputRecord(location=Location(uri=p.as_uri(), env_prefix="ROOT"))
+    lf = _scan_input(InputSource.of(record))
+    assert lf.collect()["name"].to_list() == ["a", "b", "c"]
+
+
+def test_scan_input_with_an_unusable_mount_raises_bad_input_parquet(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__REGION", "eu")
+    record = InputRecord(location=Location(uri="s3://b/x.parquet", env_prefix="ROOT"))
+    with pytest.raises(BadInputParquetError, match="s3://b/x.parquet"):
+        _scan_input(InputSource.of(record))
 
 
 # --- unit: _materialize_input_slot --------------------------------------

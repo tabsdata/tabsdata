@@ -452,8 +452,6 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
-            - --in-dir
-            - $(CONTAINER_ROOT)/tabsdata/shared/in
             - --state-dir
             - $(CONTAINER_ROOT)/tabsdata/shared/state
             - --out

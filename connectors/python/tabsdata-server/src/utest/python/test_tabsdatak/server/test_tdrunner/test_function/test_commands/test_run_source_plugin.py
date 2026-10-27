@@ -672,6 +672,7 @@ def test_write_inputs_manifest_happy(tmp_path, fixture_publisher):
     def _record(file, metadata=None):
         return {
             "file": file,
+            "location": None,
             "metadata": metadata,
             "input_idx": None,
             "version_pos": -1,

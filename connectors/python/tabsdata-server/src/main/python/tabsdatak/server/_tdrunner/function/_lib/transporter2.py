@@ -15,8 +15,6 @@ from tabsdatak.common._transporter.invoker import transporter2
 from tabsdatak.server._tdrunner.function._commons.document.request import (
     RAW_SUFFIX,
     AnyRequest,
-    InputTable,
-    InputTableVersions,
     Location,
     Request,
 )
@@ -51,30 +49,13 @@ class ServerTransporterHandler2(TransporterHandler2):
         return transporter2.Location(uri=location.uri, configs=configs)
 
 
-def localized_input_files(
-    in_dir: Path, entry: InputTable | InputTableVersions
-) -> list[tuple[InputTable, Path]]:
-    if isinstance(entry, InputTableVersions):
-        return [
-            (member, in_dir / f"{member.table}.{member.version_pos}.parquet")
-            for member in entry.tables
-        ]
-    return [(entry, in_dir / f"{entry.table}.parquet")]
-
-
 def build_localize_state_request(
     request: Request,
-    in_dir: Path,
     state_dir: Path,
     option_keys: dict[str, list[str]],
 ) -> transporter2.CopyRequest:
     handler = ServerTransporterHandler2(option_keys)
     pairs: list[tuple[transporter2.Location, transporter2.Location]] = []
-    for entry in request.input:
-        for member, path in localized_input_files(in_dir, entry):
-            if member.location is None:
-                continue
-            pairs.append((handler.location_for(member.location), local_location(path)))
     for table in request.system_input:
         if table.location is None:
             continue

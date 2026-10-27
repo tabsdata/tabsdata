@@ -20,7 +20,7 @@ class BadRequestError(_BadRequestError):
 
 
 class BadEndpointSchemeError(_BadEndpointSchemeError):
-    """An input or state-in location uses a URI scheme this command
+    """A state-in location uses a URI scheme this command
     doesn't know how to fetch from."""
 
     exit_code = 11
@@ -53,7 +53,7 @@ class PrepLocalizeStateErrorCode(ErrorCode):
 
     PLS_2 = ErrorDef(
         BadEndpointSchemeError,
-        "unsupported scheme in an input/state location: {detail}",
+        "unsupported scheme in a state location: {detail}",
     )
     # ``build_localize_state_request`` ``UnsupportedSchemeError``.
 

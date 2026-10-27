@@ -44,7 +44,7 @@ from tabsdatak.server._tdrunner.function.commands.run_function.runner import (
     _load_function_def,
     _materialize_input_slot,
     _output_table_names,
-    _scan_parquet_or_fail,
+    _scan_input,
     _sink_outputs,
     run,
 )
@@ -56,7 +56,7 @@ __all__ = [
     "_load_function_def",
     "_materialize_input_slot",
     "_output_table_names",
-    "_scan_parquet_or_fail",
+    "_scan_input",
     "_sink_outputs",
     "run",
     "main",

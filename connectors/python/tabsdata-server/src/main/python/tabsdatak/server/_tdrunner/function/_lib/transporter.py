@@ -22,27 +22,24 @@ from tabsdatak.server._tdrunner.function._lib.mounts import load_mount_option_ke
 match TRANSPORTER_MODE:
     case 1:
         OutputTableNotInManifestError = transporter1.OutputTableNotInManifestError
-        localized_input_files = transporter1.localized_input_files
     case 2:
         OutputTableNotInManifestError = transporter2.OutputTableNotInManifestError
-        localized_input_files = transporter2.localized_input_files
     case _:
         raise CommandErrorCode.CMD_5.exception(mode=TRANSPORTER_MODE)
 
 
 def build_localize_state_request(
     request: Request,
-    in_dir: Path,
     state_dir: Path,
     storage_config_file: Path,
 ) -> Any:
     match TRANSPORTER_MODE:
         case 1:
-            return transporter1.build_localize_state_request(request, in_dir, state_dir)
+            return transporter1.build_localize_state_request(request, state_dir)
         case 2:
             option_keys = load_mount_option_keys(storage_config_file)
             return transporter2.build_localize_state_request(
-                request, in_dir, state_dir, option_keys
+                request, state_dir, option_keys
             )
         case _:
             raise CommandErrorCode.CMD_5.exception(mode=TRANSPORTER_MODE)

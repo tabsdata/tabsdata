@@ -31,7 +31,6 @@ from tabsdatak.server._tdrunner.function._commons.manifests.state import (
 )
 from tabsdatak.server._tdrunner.function._lib.transporter import (
     build_localize_state_request,
-    localized_input_files,
     write_transporter_request,
 )
 from tabsdatak.server._tdrunner.function.commands.prep_localize_state.error import (
@@ -41,16 +40,16 @@ from tabsdatak.server._tdrunner.function.commands.prep_localize_state.error impo
 logger = logging.getLogger(__name__)
 
 
-def _build_inputs_manifest(request: Request, in_dir: Path) -> InputManifest:
+def _build_inputs_manifest(request: Request) -> InputManifest:
     entries: list[InputEntry] = []
     for entry in request.input:
         is_empty = isinstance(entry, InputTableVersions) and entry.is_empty
         records: list[InputRecord] = []
         if not is_empty:
-            for member, path in localized_input_files(in_dir, entry):
+            for member in entry.tables:
                 records.append(
                     InputRecord(
-                        file=None if member.location is None else str(path.absolute()),
+                        location=member.location,
                         input_idx=member.input_idx,
                         version_pos=member.version_pos,
                         execution_id=_text(member.execution_id),
@@ -92,7 +91,6 @@ def _text(value: str | int | None) -> str | None:
 
 def run(args: argparse.Namespace) -> int:
     request_path = Path(args.request)
-    in_dir = Path(args.in_dir)
     state_dir = Path(args.state_dir)
     out_path = Path(args.out)
     inputs_manifest_path = Path(args.inputs_manifest)
@@ -109,7 +107,7 @@ def run(args: argparse.Namespace) -> int:
         request.system_input,
     )
 
-    copy_req = build_localize_state_request(request, in_dir, state_dir, storage_config)
+    copy_req = build_localize_state_request(request, state_dir, storage_config)
     logger.debug(
         "Localize-state copy request has %d pair(s): %s; writing to %s",
         len(copy_req.pairs),
@@ -124,7 +122,7 @@ def run(args: argparse.Namespace) -> int:
             cause=exc, path=out_path, detail=str(exc)
         )
 
-    inputs_manifest = _build_inputs_manifest(request, in_dir)
+    inputs_manifest = _build_inputs_manifest(request)
     try:
         inputs_manifest.write(inputs_manifest_path)
     except OSError as exc:

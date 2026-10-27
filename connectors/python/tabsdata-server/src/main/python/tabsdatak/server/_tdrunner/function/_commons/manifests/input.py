@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from tabsdatak.server._tdrunner.function._commons.document.request import Location
 from tabsdatak.server._tdrunner.function._commons.manifests.manifest import Manifest
 from tabsdatak.spi import MetadataSpec
 
@@ -15,6 +16,7 @@ SINGLE_VERSION_POS = -1
 @dataclass(frozen=True)
 class InputRecord:
     file: str | None = None
+    location: Location | None = None
     metadata: MetadataSpec | None = None
     input_idx: int | None = None
     version_pos: int = SINGLE_VERSION_POS

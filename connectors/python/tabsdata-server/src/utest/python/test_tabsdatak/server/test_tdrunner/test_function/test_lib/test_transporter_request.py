@@ -133,7 +133,7 @@ def _request(
 
 def test_localize_empty_request_yields_no_pairs(tmp_path):
     r = _request()
-    out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
+    out = build_localize_state_request(r, tmp_path / "state")
     assert out.pairs == ()
 
 
@@ -150,21 +150,20 @@ def test_localize_skips_system_input_table_without_location(tmp_path):
             _input_table("t2", location=None),
         )
     )
-    out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
+    out = build_localize_state_request(r, tmp_path / "state")
     assert len(out.pairs) == 1
     assert isinstance(out.pairs[0].source, S3Endpoint)
 
 
-def test_localize_skips_input_table_without_location(tmp_path):
+def test_localize_leaves_input_tables_where_they_are_stored(tmp_path):
     r = _request(
         inputs=(
             _input_table("i1", location=None),
             _input_table("i2", location=Location(uri="s3://b/i2.parquet")),
         )
     )
-    out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
-    assert len(out.pairs) == 1
-    assert "in/i2.parquet" in out.pairs[0].target.url
+    out = build_localize_state_request(r, tmp_path / "state")
+    assert out.pairs == ()
 
 
 def test_upload_outputs_all_system_outputs(tmp_path):
@@ -203,15 +202,14 @@ def test_upload_skips_system_output_whose_state_file_is_absent(tmp_path):
     assert "present.parquet" in out.pairs[0].source.url
 
 
-def test_localize_handles_input_and_system_input_in_order(tmp_path):
+def test_localize_copies_only_the_system_input(tmp_path):
     r = _request(
         inputs=(_input_table("i1", location=Location(uri="s3://b/i1.parquet")),),
         system_input=(_input_table("s1", location=Location(uri="s3://b/s1.parquet")),),
     )
-    out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
-    assert len(out.pairs) == 2
-    assert "in/i1.parquet" in out.pairs[0].target.url
-    assert "state/s1.parquet" in out.pairs[1].target.url
+    out = build_localize_state_request(r, tmp_path / "state")
+    assert len(out.pairs) == 1
+    assert "state/s1.parquet" in out.pairs[0].target.url
 
 
 # --- endpoint mapping by scheme ---
@@ -220,7 +218,7 @@ def test_localize_handles_input_and_system_input_in_order(tmp_path):
 @pytest.mark.parametrize("uri", ["s3://b/x.parquet"])
 def test_s3_endpoint(uri, tmp_path):
     r = _request(system_input=(_input_table("t", location=Location(uri=uri)),))
-    out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
+    out = build_localize_state_request(r, tmp_path / "state")
     src = out.pairs[0].source
     assert isinstance(src, S3Endpoint)
     assert src.url == uri
@@ -235,7 +233,7 @@ def test_s3_endpoint(uri, tmp_path):
 )
 def test_azure_endpoint(uri, tmp_path):
     r = _request(system_input=(_input_table("t", location=Location(uri=uri)),))
-    out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
+    out = build_localize_state_request(r, tmp_path / "state")
     src = out.pairs[0].source
     assert isinstance(src, AzureEndpoint)
     assert src.url == uri
@@ -249,7 +247,7 @@ def test_gcs_endpoint(tmp_path):
             _input_table("t", location=Location(uri="gs://bucket/x.parquet")),
         )
     )
-    out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
+    out = build_localize_state_request(r, tmp_path / "state")
     src = out.pairs[0].source
     assert isinstance(src, GCSEndpoint)
     assert src.configs.service_account_key == EnvRef(name="GCP_SERVICE_ACCOUNT_KEY")
@@ -261,7 +259,7 @@ def test_local_file_endpoint(tmp_path):
             _input_table("t", location=Location(uri="file:///foo/x.parquet")),
         )
     )
-    out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
+    out = build_localize_state_request(r, tmp_path / "state")
     src = out.pairs[0].source
     assert isinstance(src, LocalFileEndpoint)
     assert src.url == "file:///foo/x.parquet"
@@ -272,7 +270,7 @@ def test_unsupported_scheme_raises(tmp_path):
         system_input=(_input_table("t", location=Location(uri="ftp://x/y.parquet")),)
     )
     with pytest.raises(UnsupportedSchemeError, match="ftp"):
-        build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
+        build_localize_state_request(r, tmp_path / "state")
 
 
 # --- env_prefix handling ---
@@ -287,7 +285,7 @@ def test_env_prefix_canonical_when_none(tmp_path):
             ),
         )
     )
-    out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
+    out = build_localize_state_request(r, tmp_path / "state")
     src = out.pairs[0].source
     assert src.configs.access_key == EnvRef(name="AWS_ACCESS_KEY_ID")
 
@@ -301,7 +299,7 @@ def test_env_prefix_prepended(tmp_path):
             ),
         )
     )
-    out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
+    out = build_localize_state_request(r, tmp_path / "state")
     src = out.pairs[0].source
     assert src.configs.access_key == EnvRef(name="STAGE_AWS_ACCESS_KEY_ID")
     assert src.configs.secret_key == EnvRef(name="STAGE_AWS_SECRET_ACCESS_KEY")
@@ -367,7 +365,7 @@ def test_yaml_emits_copy_v1_tag(tmp_path):
     r = _request(
         system_input=(_input_table("t", location=Location(uri="s3://b/t.parquet")),)
     )
-    req = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
+    req = build_localize_state_request(r, tmp_path / "state")
     text = dump_transporter_request(req)
     assert text.startswith("!CopyV1")
     assert "!S3" in text

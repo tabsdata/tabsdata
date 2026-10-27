@@ -55,6 +55,7 @@ def test_write_produces_the_inputs_document(tmp_path):
                 "tables": [
                     {
                         "file": "/a.parquet",
+                        "location": None,
                         "metadata": {"k": "v"},
                         "input_idx": 3,
                         "version_pos": -1,
@@ -65,6 +66,7 @@ def test_write_produces_the_inputs_document(tmp_path):
                     },
                     {
                         "file": None,
+                        "location": None,
                         "metadata": None,
                         "input_idx": None,
                         "version_pos": -1,

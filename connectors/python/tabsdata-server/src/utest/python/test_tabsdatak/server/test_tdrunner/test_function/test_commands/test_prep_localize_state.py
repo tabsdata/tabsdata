@@ -28,7 +28,6 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 def _set_argv(
     monkeypatch,
     request_path,
-    in_dir,
     state_dir,
     out,
     inputs_manifest,
@@ -51,8 +50,6 @@ def _set_argv(
             "prep-localize-state",
             "--request",
             str(request_path),
-            "--in-dir",
-            str(in_dir),
             "--state-dir",
             str(state_dir),
             "--out",
@@ -130,7 +127,6 @@ def test_main_writes_transporter_yaml(monkeypatch, tmp_path, http_ok_url):
     rc = main_with_args(
         monkeypatch,
         request_yaml,
-        tmp_path / "in",
         tmp_path / "state",
         out,
         inputs_manifest,
@@ -157,7 +153,6 @@ def test_main_handles_empty_system_input(monkeypatch, tmp_path, http_ok_url):
     rc = main_with_args(
         monkeypatch,
         request_yaml,
-        tmp_path / "in",
         tmp_path / "state",
         out,
         inputs_manifest,
@@ -170,8 +165,8 @@ def test_main_handles_empty_system_input(monkeypatch, tmp_path, http_ok_url):
 
 
 def test_main_inputs_manifest_lists_input_tables(monkeypatch, tmp_path, http_ok_url):
-    """One inputs-manifest entry per request.input table, files pointing
-    at <in_dir>/<name>.parquet."""
+    """One inputs-manifest entry per request.input table, each record
+    pointing at the table's storage location."""
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         inputs=[
@@ -185,13 +180,11 @@ def test_main_inputs_manifest_lists_input_tables(monkeypatch, tmp_path, http_ok_
             },
         ],
     )
-    in_dir = tmp_path / "in"
     inputs_manifest = tmp_path / "inputs.yaml"
     state_manifest = tmp_path / "state.yaml"
     rc = main_with_args(
         monkeypatch,
         request_yaml,
-        in_dir,
         tmp_path / "state",
         tmp_path / "transporter.yaml",
         inputs_manifest,
@@ -202,21 +195,23 @@ def test_main_inputs_manifest_lists_input_tables(monkeypatch, tmp_path, http_ok_
     assert rc == 0
     data = yaml.safe_load(inputs_manifest.read_text())
     assert [e["name"] for e in data["inputs"]] == ["t_a", "t_b"]
-    assert [t["file"] for t in data["inputs"][0]["tables"]] == [
-        str((in_dir / "t_a.parquet").absolute()),
+    assert [t["location"] for t in data["inputs"][0]["tables"]] == [
+        {"uri": "s3://bucket/a.parquet", "env_prefix": None},
     ]
-    assert [t["file"] for t in data["inputs"][1]["tables"]] == [
-        str((in_dir / "t_b.parquet").absolute()),
+    assert [t["location"] for t in data["inputs"][1]["tables"]] == [
+        {"uri": "s3://bucket/b.parquet", "env_prefix": None},
     ]
+    assert [t["file"] for e in data["inputs"] for t in e["tables"]] == [None, None]
+    assert "a.parquet" not in (tmp_path / "transporter.yaml").read_text()
 
 
 def test_main_inputs_manifest_empty_files_for_null_location(
     monkeypatch, tmp_path, http_ok_url
 ):
     """A request.input entry with `location is None` produces a manifest
-    entry that is not empty but whose single table record carries a null
-    `file` (so downstream materialisation preserves the slot position as
-    a `None` value)."""
+    entry that is not empty but whose single table record carries neither
+    `file` nor `location` (so downstream materialisation preserves the
+    slot position as a `None` value)."""
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         inputs=[{"table": "t_x"}],  # no location
@@ -226,7 +221,6 @@ def test_main_inputs_manifest_empty_files_for_null_location(
     rc = main_with_args(
         monkeypatch,
         request_yaml,
-        tmp_path / "in",
         tmp_path / "state",
         tmp_path / "transporter.yaml",
         inputs_manifest,
@@ -239,7 +233,7 @@ def test_main_inputs_manifest_empty_files_for_null_location(
     assert [e["name"] for e in data["inputs"]] == ["t_x"]
     entry = data["inputs"][0]
     assert entry["is_empty"] is False
-    assert [t["file"] for t in entry["tables"]] == [None]
+    assert [(t["file"], t["location"]) for t in entry["tables"]] == [(None, None)]
 
 
 def test_main_state_manifest_lists_system_input_tables(
@@ -265,7 +259,6 @@ def test_main_state_manifest_lists_system_input_tables(
     rc = main_with_args(
         monkeypatch,
         request_yaml,
-        tmp_path / "in",
         state_dir,
         tmp_path / "transporter.yaml",
         tmp_path / "inputs.yaml",
@@ -295,7 +288,6 @@ def test_main_state_manifest_empty_when_no_system_input(
     rc = main_with_args(
         monkeypatch,
         request_yaml,
-        tmp_path / "in",
         tmp_path / "state",
         tmp_path / "transporter.yaml",
         tmp_path / "inputs.yaml",
@@ -320,7 +312,6 @@ def test_main_state_manifest_empty_files_for_null_location(
     rc = main_with_args(
         monkeypatch,
         request_yaml,
-        tmp_path / "in",
         tmp_path / "state",
         tmp_path / "transporter.yaml",
         tmp_path / "inputs.yaml",
@@ -336,7 +327,6 @@ def test_main_state_manifest_empty_files_for_null_location(
 def main_with_args(
     monkeypatch,
     request_path,
-    in_dir,
     state_dir,
     out,
     inputs_manifest,
@@ -348,7 +338,6 @@ def main_with_args(
     _set_argv(
         monkeypatch,
         request_path,
-        in_dir,
         state_dir,
         out,
         inputs_manifest,
@@ -366,7 +355,6 @@ def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path, http_ok
     rc = main_with_args(
         monkeypatch,
         tmp_path / "no-request.yaml",
-        tmp_path / "in",
         tmp_path / "state",
         tmp_path / "out.yaml",
         tmp_path / "inputs.yaml",
@@ -383,7 +371,6 @@ def test_main_malformed_request_returns_bad_request(monkeypatch, tmp_path, http_
     rc = main_with_args(
         monkeypatch,
         bad,
-        tmp_path / "in",
         tmp_path / "state",
         tmp_path / "out.yaml",
         tmp_path / "inputs.yaml",
@@ -414,7 +401,6 @@ def test_main_unsupported_scheme_returns_unsupported_scheme(
     rc = main_with_args(
         monkeypatch,
         request_yaml,
-        tmp_path / "in",
         tmp_path / "state",
         tmp_path / "out.yaml",
         tmp_path / "inputs.yaml",
@@ -432,7 +418,6 @@ def test_main_write_error_returns_write_failed(monkeypatch, tmp_path, http_ok_ur
     rc = main_with_args(
         monkeypatch,
         request_yaml,
-        tmp_path / "in",
         tmp_path / "state",
         out_dir,
         tmp_path / "inputs.yaml",
@@ -453,7 +438,6 @@ def test_main_inputs_manifest_write_failure_maps_to_inputs_manifest_failed(
     rc = main_with_args(
         monkeypatch,
         request_yaml,
-        tmp_path / "in",
         tmp_path / "state",
         tmp_path / "transporter.yaml",
         bad_target,
@@ -474,7 +458,6 @@ def test_main_state_manifest_write_failure_maps_to_state_manifest_failed(
     rc = main_with_args(
         monkeypatch,
         request_yaml,
-        tmp_path / "in",
         tmp_path / "state",
         tmp_path / "transporter.yaml",
         tmp_path / "inputs.yaml",

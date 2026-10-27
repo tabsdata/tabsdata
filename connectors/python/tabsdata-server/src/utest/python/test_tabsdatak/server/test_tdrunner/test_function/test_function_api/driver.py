@@ -223,7 +223,6 @@ class Driver:
             prep_localize_state,
             "prep-localize-state",
             request=self.request,
-            in_dir=self.path("in"),
             state_dir=self.path("state"),
             out=self.path("shuttle/localize-request.yaml"),
             inputs_manifest=self.path("fn/in/inputs-manifest.yaml"),

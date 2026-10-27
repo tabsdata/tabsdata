@@ -55,6 +55,7 @@ from tabsdatak.server._tdrunner.function._commons.solver.secrets import (
     StorageSecrets,
     take_project_secret,
 )
+from tabsdatak.server._tdrunner.function._handlers.inputs import InputSource
 from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,
 )
@@ -201,31 +202,21 @@ def _output_table_names(info: FunctionInfo) -> list[str]:
     return list(info.output_tables)
 
 
-def _scan_parquet_or_fail(path: Path) -> pl.LazyFrame:
-    """Open `path` as a `pl.LazyFrame`, validating the file eagerly.
-
-    `pl.scan_parquet` itself is lazy and won't touch the file until
-    you ask for its schema or collect — so a bad parquet would
-    silently slip past us and only blow up inside the user function.
-    We fetch the schema here as a cheap header read to surface
-    corruption / wrong-format failures with the right exit code at
-    the right layer.
-    """
+def _scan_input(source: InputSource) -> pl.LazyFrame:
     try:
-        # [TODO: tabsdatak.tableframe scan and sink migration] revisit when
-        # tabsdatak.tableframe ships scan and sink methods.
-        lf = pl.scan_parquet(path)
-        lf.collect_schema()
-    except Exception as exc:
-        raise RunFunctionErrorCode.RF_9.exception(cause=exc, path=path, detail=str(exc))
-    return lf
+        return source.scan()
+    except Exception as error:
+        raise RunFunctionErrorCode.RF_9.exception(
+            cause=error, path=source.uri, detail=str(error)
+        )
 
 
 def _build_input(record: InputRecord, *, info: FunctionInfo):
     """Wrap one manifest table record into a `TableFrame`.
 
-    A record with a null `file` (a version member with no physical data)
-    yields `None`, preserving its position in a multi-version slot.
+    A record with neither `file` nor `location` (a version member with no
+    physical data) yields `None`, preserving its position in a
+    multi-version slot.
     Publisher inputs are the enriched parquets stamp-inputs already wrote, so
     they keep their system columns as-is (TAB). The transformer / subscriber inputs
     are stored tables whose pristine columns are regenerated for a fresh
@@ -235,9 +226,10 @@ def _build_input(record: InputRecord, *, info: FunctionInfo):
     from tabsdatak.tableframe import TableFrame
     from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 
-    if record.file is None:
+    source = InputSource.of(record)
+    if source is None:
         return None
-    lf = _scan_parquet_or_fail(Path(record.file))
+    lf = _scan_input(source)
     if isinstance(info, (PublisherInfo, StreamPublisherInfo)):
         # Stream-publisher inputs are also publisher-side: the
         # ``stamp-inputs`` step (0070) wrote enriched parquets with
@@ -266,7 +258,7 @@ def _materialize_input_slot(
 
     SINGLE mode:
       * no records      → `None`
-      * one record      → `TableFrame` (or `None` for a null `file`)
+      * one record      → `TableFrame` (or `None` for a record without data)
       * many records    → for a publisher, the files a source plugin
         wrote for one table (a query read in chunks), concatenated into
         one `TableFrame`; for a transformer or subscriber they would be
@@ -276,7 +268,7 @@ def _materialize_input_slot(
     ARRAY mode:
       * `is_empty` entry → `[]`
       * any records      → `list[TableFrame | None]`, one element per
-        record in order (null-`file` members stay as `None`)
+        record in order (members without data stay as `None`)
     """
     records = entry.tables
     if table_mode is TableMode.SINGLE:
@@ -299,10 +291,12 @@ def _build_chunked_input(records: tuple[InputRecord, ...]):
     from tabsdatak.tableframe import TableFrame
     from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 
-    files = [record.file for record in records if record.file is not None]
-    if not files:
+    sources = [
+        source for source in (InputSource.of(record) for record in records) if source
+    ]
+    if not sources:
         return None
-    scans = [_scan_parquet_or_fail(Path(file)) for file in files]
+    scans = [_scan_input(source) for source in sources]
     return TableFrame._build(pl.concat(scans, how="vertical_relaxed"), CreationMode.TAB)
 
 

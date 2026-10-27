@@ -17,8 +17,6 @@ from tabsdatak.common._transporter.handler.handler1 import (
 from tabsdatak.server._tdrunner.function._commons.document.request import (
     RAW_SUFFIX,
     AnyRequest,
-    InputTable,
-    InputTableVersions,
     Location,
     Request,
 )
@@ -39,26 +37,10 @@ def endpoint_for(location: Location) -> Endpoint:
     return endpoint_from_location(location.uri, location.env_prefix)
 
 
-def localized_input_files(
-    in_dir: Path, entry: InputTable | InputTableVersions
-) -> list[tuple[InputTable, Path]]:
-    if isinstance(entry, InputTableVersions):
-        return [
-            (member, in_dir / f"{member.table}.{member.version_pos}.parquet")
-            for member in entry.tables
-        ]
-    return [(entry, in_dir / f"{entry.table}.parquet")]
-
-
 def build_localize_state_request(
-    request: Request, in_dir: Path, state_dir: Path
+    request: Request, state_dir: Path
 ) -> TransporterCopyRequest:
     pairs: list[tuple[Endpoint, Endpoint]] = []
-    for entry in request.input:
-        for member, path in localized_input_files(in_dir, entry):
-            if member.location is None:
-                continue
-            pairs.append((endpoint_for(member.location), local_endpoint(path)))
     for table in request.system_input:
         if table.location is None:
             continue
