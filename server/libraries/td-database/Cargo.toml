@@ -94,4 +94,5 @@ serde_yaml = { workspace = true }
 serial_test = { workspace = true }
 temp-env = { workspace = true }
 td-database = { workspace = true, features = ["td-test"] }
+td-test = { workspace = true }
 

@@ -46,6 +46,7 @@ td-build = { workspace = true }
 homedir = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+serde_yaml = { workspace = true }
 
 [dev-dependencies]
 td-common = { workspace = true, features = ["td-test"] }
