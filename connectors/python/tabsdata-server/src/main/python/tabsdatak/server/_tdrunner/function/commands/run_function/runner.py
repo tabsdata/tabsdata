@@ -38,14 +38,14 @@ from tabsdatak.api import FunctionCtx
 from tabsdatak.common._actions.dataquality.record import Check
 from tabsdatak.server._tdrunner import dataquality
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
+from tabsdatak.server._tdrunner.function._commons.manifests import (
+    input as inputs_manifest,
+    output as outputs_manifest,
+)
 from tabsdatak.server._tdrunner.function._commons.solver.secrets import (
     ProjectSecret,
     StorageSecrets,
     take_project_secret,
-)
-from tabsdatak.server._tdrunner.function._lib import (
-    inputs_manifest,
-    outputs_manifest,
 )
 from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,

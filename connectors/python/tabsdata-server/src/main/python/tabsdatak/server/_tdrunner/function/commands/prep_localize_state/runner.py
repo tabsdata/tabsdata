@@ -20,12 +20,12 @@ from tabsdatak.server._tdrunner.function._commons.document.request import (
     InputTableVersions,
     Request,
 )
-from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
+from tabsdatak.server._tdrunner.function._commons.manifests.input import (
     build_entry,
     build_table_record,
     write_inputs_manifest,
 )
-from tabsdatak.server._tdrunner.function._lib.state_manifest import (
+from tabsdatak.server._tdrunner.function._commons.manifests.state import (
     MANIFEST_FILES_KEY,
     MANIFEST_NAME_KEY,
     write_state_manifest,

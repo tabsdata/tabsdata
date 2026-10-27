@@ -32,6 +32,11 @@ from tabsdatak.server._tdrunner.function._commons.document.request import (
     Location,
     Request,
 )
+from tabsdatak.server._tdrunner.function._commons.manifests.input import (
+    build_entry,
+    build_table_record,
+    write_inputs_manifest,
+)
 from tabsdatak.server._tdrunner.function._lib.connection import load_connection
 from tabsdatak.server._tdrunner.function._lib.endpoint import UnsupportedSchemeError
 from tabsdatak.server._tdrunner.function._lib.function_def import (
@@ -40,11 +45,6 @@ from tabsdatak.server._tdrunner.function._lib.function_def import (
 from tabsdatak.server._tdrunner.function._lib.initial_values import (
     drain_ctx_to_state_or_raise,
     hydrate_ctx_from_state_or_raise,
-)
-from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
-    build_entry,
-    build_table_record,
-    write_inputs_manifest,
 )
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
 from tabsdatak.server._tdrunner.function._lib.stage_backend import (

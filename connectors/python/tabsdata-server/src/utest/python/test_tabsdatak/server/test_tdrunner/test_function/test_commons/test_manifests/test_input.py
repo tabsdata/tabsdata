@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Tests for `tabsdatak.server._tdrunner.function._lib.inputs_manifest`.
+"""Tests for `tabsdatak.server._tdrunner.function._commons.manifests.input`.
 
 Covers the shared inputs-manifest reader/writer used by
 `run-source-plugin`, `stamp-inputs`, and (eventually) `run-function`.
@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
+from tabsdatak.server._tdrunner.function._commons.manifests.input import (
     MANIFEST_FILE_KEY,
     MANIFEST_IS_EMPTY_KEY,
     MANIFEST_NAME_KEY,

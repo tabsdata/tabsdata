@@ -15,7 +15,7 @@ from pydantic import model_validator
 from tabsdatak.common._configuration.document.loader import DocumentModel, load
 from tabsdatak.error import ErrorCode
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
-from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
+from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     MANIFEST_FILE_KEY,
     MANIFEST_NAME_KEY,
 )

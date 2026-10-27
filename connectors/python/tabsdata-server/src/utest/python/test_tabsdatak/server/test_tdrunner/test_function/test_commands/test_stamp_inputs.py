@@ -22,7 +22,7 @@ import polars as pl
 import pytest
 import yaml
 
-from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
+from tabsdatak.server._tdrunner.function._commons.manifests.input import (
     build_entry,
     build_table_record,
     write_inputs_manifest,

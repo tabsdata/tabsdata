@@ -19,17 +19,17 @@ from pathlib import Path
 from tabsdatak._connectors import get_dest
 from tabsdatak._info import KIND_SUBSCRIBER_DEF, SubscriberInfo
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
+from tabsdatak.server._tdrunner.function._commons.manifests.output import (
+    MANIFEST_FILE_KEY,
+    MANIFEST_NAME_KEY,
+    load_outputs_manifest_or_raise,
+)
 from tabsdatak.server._tdrunner.function._commons.run.command import (
     notify_step_destination_write,
 )
 from tabsdatak.server._tdrunner.function._lib.connection import load_connection
 from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,
-)
-from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
-    MANIFEST_FILE_KEY,
-    MANIFEST_NAME_KEY,
-    load_outputs_manifest_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
 from tabsdatak.server._tdrunner.function.commands.run_destination_plugin.error import (

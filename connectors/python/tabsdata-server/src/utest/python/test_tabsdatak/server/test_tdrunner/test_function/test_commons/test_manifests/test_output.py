@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Tests for `tabsdatak.server._tdrunner.function._lib.outputs_manifest`.
+"""Tests for `tabsdatak.server._tdrunner.function._commons.manifests.output`.
 
 Mirrors `test_inputs_manifest.py` — the shapes are deliberately
 parallel, with `file:` (singular) replacing `files:` (list) and `null`
@@ -20,7 +20,7 @@ from tabsdatak.error import ErrorCode, ErrorDef
 from tabsdatak.server._tdrunner.function._lib.errors import (
     CommandRuntimeException,
 )
-from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
+from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     MANIFEST_FILE_KEY,
     MANIFEST_NAME_KEY,
     InvalidOutputsManifestError,

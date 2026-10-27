@@ -22,11 +22,11 @@ from tabsdatak.server._tdrunner.function._commons.document.response import (
     ManifestEntry,
     Response,
 )
-from tabsdatak.server._tdrunner.function._commons.run.command import notify_status_done
-from tabsdatak.server._tdrunner.function._lib.journal import Journal
-from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
+from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     load_outputs_manifest_or_raise,
 )
+from tabsdatak.server._tdrunner.function._commons.run.command import notify_status_done
+from tabsdatak.server._tdrunner.function._lib.journal import Journal
 from tabsdatak.server._tdrunner.function.commands.report_completion.error import (
     ReportCompletionErrorCode,
 )

@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Tests for `tabsdatak.server._tdrunner.function._lib.state_manifest`.
+"""Tests for `tabsdatak.server._tdrunner.function._commons.manifests.state`.
 
 Schema parallels `inputs_manifest` (same `{name, files}` per entry)
 but lives under the distinct top-level `state:` key. Tests mirror the
@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tabsdatak.server._tdrunner.function._lib.state_manifest import (
+from tabsdatak.server._tdrunner.function._commons.manifests.state import (
     MANIFEST_FILES_KEY,
     MANIFEST_NAME_KEY,
     InvalidStateManifestError,

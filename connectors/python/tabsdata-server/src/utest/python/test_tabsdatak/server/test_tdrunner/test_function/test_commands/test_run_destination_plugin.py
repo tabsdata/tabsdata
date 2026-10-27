@@ -29,7 +29,7 @@ import yaml
 from tabsdatak._info import SubscriberInfo
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
-from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
+from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     MANIFEST_FILE_KEY,
     MANIFEST_NAME_KEY,
     write_outputs_manifest,

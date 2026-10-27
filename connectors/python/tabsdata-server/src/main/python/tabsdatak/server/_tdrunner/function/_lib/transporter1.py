@@ -23,7 +23,7 @@ from tabsdatak.server._tdrunner.function._commons.document.request import (
     Location,
     Request,
 )
-from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
+from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     MANIFEST_FILE_KEY,
     MANIFEST_NAME_KEY,
 )

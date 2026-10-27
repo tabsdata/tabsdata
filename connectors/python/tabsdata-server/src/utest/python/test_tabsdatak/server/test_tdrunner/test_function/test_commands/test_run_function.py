@@ -37,7 +37,7 @@ from tabsdatak.server._tdrunner.function._lib.initial_values import (
     read_initial_values,
     write_initial_values,
 )
-from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
+from tabsdatak.server._tdrunner.function._commons.manifests.input import (
     build_entry,
     build_table_record,
     write_inputs_manifest,

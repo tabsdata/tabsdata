@@ -19,7 +19,7 @@ from pathlib import Path
 import polars as pl
 
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
-from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
+from tabsdatak.server._tdrunner.function._commons.manifests.input import (
     MANIFEST_FILE_KEY,
     MANIFEST_INPUT_IDX_KEY,
     MANIFEST_METADATA_KEY,

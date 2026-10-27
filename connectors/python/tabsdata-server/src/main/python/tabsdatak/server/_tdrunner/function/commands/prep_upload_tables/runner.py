@@ -17,7 +17,7 @@ import logging
 from pathlib import Path
 
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
-from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
+from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     load_outputs_manifest_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.transporter import (
