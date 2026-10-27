@@ -6,9 +6,9 @@
 
 use crate::dxo::query_filters::{DimensionFilter, TimeWindow, WindowAlign, WindowUnit};
 use crate::types::basic::{
-    ByteCount, CollectionId, CollectionLabel, EpochMs, FunctionRunCount, GroupId, GroupLabel,
-    IncludePrivate, IncludeReplaced, LogicalFunctionRunStatus, ProjectId, ProjectLabel, RowCount,
-    TableCount, TableVersionCount, WindowSpan,
+    ByteCount, CollectionId, CollectionLabel, ConnectionKind, EpochMs, FunctionRunCount, GroupId,
+    GroupLabel, IncludePrivate, IncludeReplaced, LogicalFunctionRunStatus, ProjectId, ProjectLabel,
+    RowCount, TableCount, TableVersionCount, WindowSpan,
 };
 use std::collections::BTreeMap;
 use ta_objects::{TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
@@ -87,6 +87,7 @@ pub struct NodeRow {
     pub kind: NodeKind,
     pub collection_id: Option<CollectionId>,
     pub collection_name: Option<CollectionLabel>,
+    pub connection: Option<ConnectionKind>,
     pub group_id: Option<GroupId>,
     pub group_name: Option<GroupLabel>,
     pub logical_tables_out: TableCount,

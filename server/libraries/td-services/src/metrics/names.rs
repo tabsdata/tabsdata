@@ -11,18 +11,20 @@ use td_database::access::{AccessMode, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::connection::ConnectionDB;
 use td_objects::dxo::group::GroupDB;
 use td_objects::dxo::metrics_facts::MetricsTableRow;
 use td_objects::dxo::project::ProjectDB;
 use td_objects::types::basic::{
-    CollectionId, CollectionLabel, CollectionName, GroupId, GroupLabel, GroupName, ProjectId,
-    ProjectLabel, ProjectName,
+    CollectionId, CollectionLabel, CollectionName, ConnectionId, ConnectionKind, GroupId,
+    GroupLabel, GroupName, ProjectId, ProjectLabel, ProjectName,
 };
 use td_queries::Queries;
 
 #[derive(Default)]
 pub(crate) struct Names {
     collections: HashMap<CollectionId, CollectionName>,
+    connections: HashMap<CollectionId, ConnectionKind>,
     groups: HashMap<GroupId, GroupName>,
     projects: HashMap<ProjectId, ProjectName>,
 }
@@ -62,18 +64,29 @@ impl Names {
         let groups: Vec<GroupDB> = conn.scd2().chunked().fetch_all(&group_ids, ()).await?;
         let projects: Vec<ProjectDB> = conn.scd2().chunked().fetch_all(&project_ids, ()).await?;
 
+        let connection_of: HashMap<ConnectionId, CollectionId> = collections
+            .iter()
+            .filter_map(|c| c.connection_id.map(|id| (id, c.collection_id)))
+            .collect();
+        let connection_ids: Vec<ConnectionId> = connection_of.keys().copied().collect();
+        let connections: Vec<ConnectionDB> = conn.chunked().fetch_all(&connection_ids, ()).await?;
+
         Ok(Self {
+            connections: connections
+                .iter()
+                .filter_map(|c| connection_of.get(&c.id).map(|id| (*id, c.kind.clone())))
+                .collect(),
             collections: collections
-                .into_iter()
-                .map(|c| (c.base.collection_id, c.base.name))
+                .iter()
+                .map(|c| (c.collection_id, c.name.clone()))
                 .collect(),
             groups: groups
-                .into_iter()
-                .map(|g| (g.base.group_id, g.base.name))
+                .iter()
+                .map(|g| (g.group_id, g.name.clone()))
                 .collect(),
             projects: projects
-                .into_iter()
-                .map(|p| (p.base.project_id, p.base.name))
+                .iter()
+                .map(|p| (p.project_id, p.name.clone()))
                 .collect(),
         })
     }
@@ -83,6 +96,10 @@ impl Names {
             || CollectionLabel::new(Label::Deleted(*id)),
             CollectionLabel::new,
         ))
+    }
+
+    pub(crate) fn connection(&self, id: &CollectionId) -> Option<ConnectionKind> {
+        self.connections.get(id).cloned()
     }
 
     pub(crate) fn group(&self, id: &GroupId) -> Option<GroupLabel> {

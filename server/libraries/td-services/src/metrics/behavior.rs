@@ -5,8 +5,11 @@
 //! `/metrics` end to end, from the worker callback to the response.
 
 use crate::Services;
+use crate::collection::services::connection::test_support::create_collection;
 use crate::execution::services::callback::tests::test_callback;
 use crate::execution::update_status::tests::{TestExecution, TestFunction, TestTransaction};
+use crate::metrics::fold::fold_nodes;
+use crate::metrics::names::Names;
 use td_common::execution_status::WorkerCallbackStatus;
 use td_database::access::Attempt;
 use td_database::access::{AcrossProjects, DbPool, Grant};
@@ -14,17 +17,19 @@ use td_database::domain::DomainPools;
 use td_database::pool::TdPool;
 use td_database::pool::scoped::ScopedExt as _;
 use td_error::TdError;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalTableDataVersionDB};
 use td_objects::dxo::metrics::{
     Dimension, EdgeRow, MetricsRequest, MetricsResponse, NodeKind, NodeRow, NodeStatusMeasures,
 };
+use td_objects::dxo::metrics_facts::MetricsTableRow;
 use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow};
 use td_objects::dxo::worker_input::function::{FunctionOutput, TableInfo, WrittenTable};
 use td_objects::types::basic::{
-    AccessTokenId, CollectionName, ColumnCount, EpochMs, ExecutionStatus, FunctionName,
-    IncludePrivate, IncludeReplaced, LogicalFunctionRunStatus, ProjectId, RowCount, SchemaHash,
-    TableName, TableNameDto, TransactionStatus, UserId,
+    AccessTokenId, CollectionName, ColumnCount, ConnectionKind, EpochMs, ExecutionStatus, FactSide,
+    FunctionName, GroupName, IncludePrivate, IncludeReplaced, LogicalFunctionRunStatus, ProjectId,
+    RowCount, SchemaHash, TableName, TableNameDto, TransactionStatus, UserId,
 };
 use td_queries::Queries;
 use td_queries::metrics_facts::runs_reattempted;
@@ -302,6 +307,64 @@ async fn a_replaced_attempt_is_filtered_not_deducted(db: TdPool) -> Result<(), T
     assert_eq!(
         *status_of(dim_nodes(&replayed)[0], LogicalFunctionRunStatus::Committed).fn_runs,
         1
+    );
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn a_collection_node_carries_its_connection_kind(db: TdPool) -> Result<(), TdError> {
+    let p = db.seed().test_project().await?;
+    create_collection(&db, p.project_id, "src", Some(GroupName::source())).await;
+    create_collection(&db, p.project_id, "dst", Some(GroupName::destination())).await;
+    create_collection(&db, p.project_id, "fac", None).await;
+    let collections: Vec<CollectionDB> = db.scoped(p.project_id).scd2().fetch_all(()).await?;
+    let rows: Vec<MetricsTableRow> = collections
+        .iter()
+        .map(|c| MetricsTableRow {
+            side: FactSide::Attempt,
+            edge_kind: None,
+            from_collection_id: None,
+            from_group_id: None,
+            collection_id: c.collection_id,
+            group_id: c.group_id,
+            project_id: p.project_id,
+            run_status: LogicalFunctionRunStatus::Committed,
+            table_id: None,
+            fn_runs: 1,
+            versions: 0,
+            versions_with_data: 0,
+            versions_unconsumed: 0,
+            row_count: 0,
+            data_bytes: 0,
+        })
+        .collect();
+
+    let pools =
+        DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
+    let mut conn = DbPool::in_project(&pools, &p.project_id).read().await?;
+    let names = Names::of(conn.get(Grant::asserted("metrics behavior test")), &rows).await?;
+    let nodes = fold_nodes(Dimension::Collection, &rows, &names)?;
+
+    let connection_of = |name: &str| {
+        nodes
+            .iter()
+            .find(|n| n.collection_name.as_ref().map(|c| c.to_string()).as_deref() == Some(name))
+            .unwrap_or_else(|| panic!("no node for {name}: {nodes:?}"))
+            .connection
+            .clone()
+    };
+    assert_eq!(
+        connection_of("src"),
+        Some(ConnectionKind::try_from("mysqlSrcConn")?)
+    );
+    assert_eq!(
+        connection_of("dst"),
+        Some(ConnectionKind::try_from("mysqlDestConn")?)
+    );
+    assert_eq!(
+        connection_of("fac"),
+        None,
+        "a data factory has no connection"
     );
     Ok(())
 }
