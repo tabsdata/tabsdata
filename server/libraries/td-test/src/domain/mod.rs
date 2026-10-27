@@ -72,7 +72,11 @@
 //! (default) when the backend cannot be reached — not in the tdd store, tdd not
 //! installed, or no `_TDD_CRYPTO_KEY` to open the store with;
 //! `TD_TEST_SKIP_SYSTEMS` / `TD_TEST_SKIP_DOMAINS` = comma-separated backend
-//! `name`s to skip even when present. A backend that is reachable but unusable
+//! `name`s to skip even when present; `TD_TEST_SYSTEMS_MANIFEST` /
+//! `TD_TEST_DOMAINS_MANIFEST` = the manifest the run provisioned from, which
+//! `cargo make` exports: a backend it does not list is not offered on this
+//! platform and its tests skip, while one it lists but the store lacks follows
+//! the on-missing policy. A backend that is reachable but unusable
 //! (wrong type, a descriptor missing a key the struct needs, or one tdd cannot
 //! read) always fails, whatever the policy says.
 
@@ -108,14 +112,6 @@ fn on_missing_env(role: Role) -> &'static str {
     match role {
         Role::System => "TD_TEST_ON_MISSING_SYSTEM",
         Role::Domain => "TD_TEST_ON_MISSING_DOMAIN",
-    }
-}
-
-/// Comma-separated backend `name`s of `role` to skip even when present.
-fn skip_env(role: Role) -> &'static str {
-    match role {
-        Role::System => "TD_TEST_SKIP_SYSTEMS",
-        Role::Domain => "TD_TEST_SKIP_DOMAINS",
     }
 }
 
@@ -307,7 +303,8 @@ static CACHE: LazyLock<BackendCache> = LazyLock::new(|| Mutex::new(HashMap::new(
 #[derive(Debug)]
 enum Unavailable {
     /// The backend is out of reach: not in the store, no tdd or no crypto key to
-    /// read it with, or the name is listed in `TD_TEST_SKIP_*`.
+    /// read it with, the name is listed in `TD_TEST_SKIP_*`, or the run's
+    /// `TD_TEST_*_MANIFEST` does not offer it.
     Skip(String),
     /// Anything the operator has to fix: wrong role, wrong system type, a
     /// descriptor tdd cannot read, a missing required key.
@@ -344,24 +341,32 @@ fn unreachable(role: Role, reason: &str, remedy: &str) -> Unavailable {
     }
 }
 
-fn is_skipped_by_name(role: Role, name: &str) -> bool {
-    std::env::var(skip_env(role))
-        .unwrap_or_default()
-        .split(',')
-        .any(|listed| listed.trim() == name && !name.is_empty())
-}
-
 fn resolve<B: Backend>(name: &str) -> Result<B, Unavailable> {
     let role = B::ROLE;
     let kind = role.as_str();
 
     // A backend the developer asked to skip is skipped whether or not it is
     // reachable at all.
-    if is_skipped_by_name(role, name) {
+    if role.is_skipped(name) {
         return Err(Unavailable::Skip(format!(
             "requested {kind} '{name}' is listed in ${}, so this test is skipped",
-            skip_env(role)
+            role.skip_env()
         )));
+    }
+
+    // A backend the run's manifest does not list is not offered on this
+    // platform. One it lists but the store lacks is broken provisioning, and
+    // goes on to the on-missing policy below.
+    match role.is_offered(name) {
+        Ok(true) => {}
+        Ok(false) => {
+            return Err(Unavailable::Skip(format!(
+                "requested {kind} '{name}' is not in ${}, so this run does not offer it \
+                 and this test is skipped",
+                role.manifest_env()
+            )));
+        }
+        Err(msg) => return Err(Unavailable::Fail(msg)),
     }
 
     let key = (
@@ -675,8 +680,6 @@ mod tests {
         assert_eq!(Role::Domain.as_str(), "domain");
         assert_eq!(on_missing_env(Role::System), "TD_TEST_ON_MISSING_SYSTEM");
         assert_eq!(on_missing_env(Role::Domain), "TD_TEST_ON_MISSING_DOMAIN");
-        assert_eq!(skip_env(Role::System), "TD_TEST_SKIP_SYSTEMS");
-        assert_eq!(skip_env(Role::Domain), "TD_TEST_SKIP_DOMAINS");
     }
 
     #[test]
@@ -770,6 +773,8 @@ mod tests {
                 (Role::Domain.store_env(), Some(path_str(&store.1))),
                 (tdd::ENV_CRYPTO_KEY, Some(FAKE_KEY)),
                 (on_missing_env(Role::Domain), None),
+                (Role::System.manifest_env(), None),
+                (Role::Domain.manifest_env(), None),
             ],
             f,
         )
@@ -835,6 +840,33 @@ mod tests {
         });
     }
 
+    /// What the run's manifest does not list skips before tdd is asked; what it
+    /// lists but the store lacks is broken provisioning, and fails.
+    #[test]
+    fn test_the_run_manifest_decides_what_is_offered() {
+        let store = scratch_store("offered");
+        let manifest = store.1.with_extension("yaml");
+        std::fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+        std::fs::write(&manifest, "- name: listed\n  sys: s3\n").unwrap();
+        with_store(&store, || {
+            temp_env::with_var(
+                Role::Domain.manifest_env(),
+                Some(path_str(&manifest)),
+                || {
+                    let Err(Unavailable::Skip(msg)) = resolve::<S3Domain>("unlisted") else {
+                        panic!("expected a skip");
+                    };
+                    assert!(msg.contains(Role::Domain.manifest_env()), "got: {msg}");
+                    let Err(Unavailable::Fail(msg)) = resolve::<S3Domain>("listed") else {
+                        panic!("expected a failure");
+                    };
+                    assert!(msg.contains("not in the tdd store"), "got: {msg}");
+                },
+            )
+        });
+        std::fs::remove_file(manifest).unwrap();
+    }
+
     /// No key is unavailable, not broken, and tdd is not even asked.
     #[test]
     fn test_missing_crypto_key_follows_the_policy() {
@@ -842,6 +874,7 @@ mod tests {
             [
                 (tdd::ENV_CRYPTO_KEY, None),
                 (on_missing_env(Role::Domain), Some("skip")),
+                (Role::Domain.manifest_env(), None),
             ],
             || {
                 let Err(Unavailable::Skip(msg)) = resolve::<S3Domain>("zz_probe_nokey") else {
@@ -850,12 +883,19 @@ mod tests {
                 assert!(msg.contains(tdd::ENV_CRYPTO_KEY), "got: {msg}");
             },
         );
-        temp_env::with_vars_unset([tdd::ENV_CRYPTO_KEY, on_missing_env(Role::Domain)], || {
-            assert!(matches!(
-                resolve::<S3Domain>("zz_probe_nokey"),
-                Err(Unavailable::Fail(_))
-            ));
-        });
+        temp_env::with_vars_unset(
+            [
+                tdd::ENV_CRYPTO_KEY,
+                on_missing_env(Role::Domain),
+                Role::Domain.manifest_env(),
+            ],
+            || {
+                assert!(matches!(
+                    resolve::<S3Domain>("zz_probe_nokey"),
+                    Err(Unavailable::Fail(_))
+                ));
+            },
+        );
     }
 
     /// An incomplete prefix must not be half-applied: resolution falls through
@@ -873,22 +913,6 @@ mod tests {
                 };
                 assert!(msg.contains("not in the tdd store"), "got: {msg}");
             })
-        });
-    }
-
-    #[test]
-    fn test_skip_by_name() {
-        let env = skip_env(Role::Domain);
-        temp_env::with_var_unset(env, || {
-            assert!(!is_skipped_by_name(Role::Domain, "landing"));
-        });
-        temp_env::with_var(env, Some("other, landing ,more"), || {
-            assert!(is_skipped_by_name(Role::Domain, "landing"));
-            assert!(!is_skipped_by_name(Role::Domain, "land"));
-        });
-        // An empty list must not swallow every backend.
-        temp_env::with_var(env, Some(""), || {
-            assert!(!is_skipped_by_name(Role::Domain, "landing"));
         });
     }
 }
@@ -918,6 +942,8 @@ mod attribute_tests {
                 ),
                 (super::on_missing_env(super::Role::Domain), Some("skip")),
                 (super::on_missing_env(super::Role::System), Some("skip")),
+                (super::Role::Domain.manifest_env(), None),
+                (super::Role::System.manifest_env(), None),
             ],
             f,
         )

@@ -66,7 +66,10 @@ Env, split per family so systems and domains are governed independently:
 ``TD_TEST_ON_MISSING_SYSTEM`` / ``TD_TEST_ON_MISSING_DOMAIN`` = ``skip`` |
 ``fail`` (default) when the store has no such backend; ``TD_TEST_SKIP_SYSTEMS`` /
 ``TD_TEST_SKIP_DOMAINS`` = comma-separated backend ``name``s to skip even when
-present.
+present; ``TD_TEST_SYSTEMS_MANIFEST`` / ``TD_TEST_DOMAINS_MANIFEST`` = the
+manifest the run provisioned from, which ``cargo make`` exports: a backend it
+does not list is not offered on this platform and its tests skip, while one it
+lists but the store lacks follows the on-missing policy.
 """
 
 from __future__ import annotations
@@ -78,6 +81,7 @@ import sys
 from typing import Annotated, ClassVar
 
 import pytest
+import yaml
 from pydantic import BeforeValidator, ValidationError
 
 from . import _tdd, operations
@@ -92,6 +96,11 @@ ON_MISSING_ENV = {
 SKIP_ENV = {
     SYSTEM: "TD_TEST_SKIP_SYSTEMS",
     DOMAIN: "TD_TEST_SKIP_DOMAINS",
+}
+# the manifest the run provisioned from (`cargo make` exports it), per family.
+MANIFEST_ENV = {
+    SYSTEM: "TD_TEST_SYSTEMS_MANIFEST",
+    DOMAIN: "TD_TEST_DOMAINS_MANIFEST",
 }
 
 MARKER = "tabsdata_backend"
@@ -186,6 +195,21 @@ def _skip_names(family: str) -> set[str]:
     return {t.strip() for t in os.environ.get(env, "").split(",") if t.strip()}
 
 
+def _offered_names(family: str) -> set[str] | None:
+    """The names the run's manifest lists, or None when the run declares none. A
+    declared manifest that cannot be read fails, never "offers all"."""
+    env = MANIFEST_ENV[family]
+    path = (os.environ.get(env) or "").strip()
+    if not path:
+        return None
+    try:
+        with open(path, encoding="utf-8") as manifest:
+            entries = yaml.safe_load(manifest) or []
+        return {entry["name"] for entry in entries}
+    except (OSError, yaml.YAMLError, TypeError, KeyError) as exc:
+        pytest.fail(f"${env} = {path!r} is not a readable {family} manifest: {exc}")
+
+
 # (family, store, name, cls) -> built
 _CACHE: dict[tuple[str, str | None, str, type], object] = {}
 
@@ -203,6 +227,17 @@ def load(name: str, cls: type):
         pytest.skip(
             f"Requested {backend_type} {name!r} is listed in "
             f"${SKIP_ENV[backend_type]}, so this test is skipped."
+        )
+
+    # A backend the run's manifest does not list is not offered on this
+    # platform. One it lists but the store lacks is broken provisioning, and
+    # goes on to the on-missing policy below.
+    offered = _offered_names(backend_type)
+    if offered is not None and name not in offered:
+        pytest.skip(
+            f"Requested {backend_type} {name!r} is not in "
+            f"${MANIFEST_ENV[backend_type]}, so this run does not offer it and "
+            f"this test is skipped."
         )
 
     key = (backend_type, os.environ.get(_tdd.ENV_STORE_DIR[backend_type]), name, cls)

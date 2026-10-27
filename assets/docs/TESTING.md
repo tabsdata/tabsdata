@@ -227,12 +227,19 @@ Independently per family, so systems and domains are governed separately:
   fail with tdd's message, and the rest of the run is untouched.
 * `TD_TEST_SKIP_SYSTEMS` / `TD_TEST_SKIP_DOMAINS` = comma-separated backend names to skip
   even when they are present.
+* `TD_TEST_SYSTEMS_MANIFEST` / `TD_TEST_DOMAINS_MANIFEST` = the manifest the run provisioned
+  from. `cargo make` exports them right after it provisions a suite's domains, so the tests
+  know what the run **offers** on its platform: a backend the manifest does not list is
+  skipped as not offered, while one it lists but the store lacks is broken provisioning and
+  follows `TD_TEST_ON_MISSING_*`. Unset — a bare `cargo test` or `pytest` — everything is
+  offered.
 
 A backend that *is* reachable but unusable — wrong type, a descriptor missing a key the
 fixture needs, or one tdd cannot read (a legacy `TDX2` store) — always fails, whatever the
 policy says. Those are defects to fix, not absences to skip.
 
-CI provisions the backends and leaves these unset, so a missing one is a failure. Developers
+CI sets none of the `TD_TEST_ON_MISSING_*` / `TD_TEST_SKIP_*` knobs: what a platform offers is
+its per-platform manifest (see below), and anything offered but missing is a failure. Developers
 without a tdd setup can set `TD_TEST_ON_MISSING_SYSTEM=skip` and
 `TD_TEST_ON_MISSING_DOMAIN=skip` locally to run the rest of the suite.
 

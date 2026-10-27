@@ -42,6 +42,58 @@ impl Role {
             Role::Domain => "TDD_DOMAIN_DIR",
         }
     }
+
+    /// Comma-separated `name`s of this family that tests skip even when present.
+    pub fn skip_env(self) -> &'static str {
+        match self {
+            Role::System => "TD_TEST_SKIP_SYSTEMS",
+            Role::Domain => "TD_TEST_SKIP_DOMAINS",
+        }
+    }
+
+    /// Whether `name` is listed in [`Role::skip_env`].
+    pub fn is_skipped(self, name: &str) -> bool {
+        std::env::var(self.skip_env())
+            .unwrap_or_default()
+            .split(',')
+            .any(|listed| listed.trim() == name && !name.is_empty())
+    }
+
+    /// The manifest this run provisioned this family from, as `cargo make`
+    /// exports it: what the run offers on its platform.
+    pub fn manifest_env(self) -> &'static str {
+        match self {
+            Role::System => "TD_TEST_SYSTEMS_MANIFEST",
+            Role::Domain => "TD_TEST_DOMAINS_MANIFEST",
+        }
+    }
+
+    /// Whether the run offers `name`: always, when no manifest is declared in
+    /// [`Role::manifest_env`]; otherwise only when the manifest lists it. A
+    /// declared manifest that cannot be read is an error, never "offers all".
+    pub fn is_offered(self, name: &str) -> Result<bool, String> {
+        let Some(path) = std::env::var(self.manifest_env())
+            .ok()
+            .map(|path| path.trim().to_string())
+            .filter(|path| !path.is_empty())
+        else {
+            return Ok(true);
+        };
+        #[derive(Deserialize)]
+        struct Entry {
+            name: String,
+        }
+        let content = std::fs::read_to_string(&path)
+            .map_err(|e| format!("${} = '{path}' cannot be read: {e}", self.manifest_env()))?;
+        let entries: Vec<Entry> = serde_yaml::from_str(&content).map_err(|e| {
+            format!(
+                "${} = '{path}' is not a {} manifest: {e}",
+                self.manifest_env(),
+                self.as_str()
+            )
+        })?;
+        Ok(entries.iter().any(|entry| entry.name == name))
+    }
 }
 
 pub const ENV_TDD_DIR: &str = "TDD_DIR";
@@ -212,6 +264,63 @@ mod tests {
         assert_eq!(Role::Domain.as_str(), "domain");
         assert_eq!(Role::System.store_env(), "TDD_SYSTEM_DIR");
         assert_eq!(Role::Domain.store_env(), "TDD_DOMAIN_DIR");
+        assert_eq!(Role::System.skip_env(), "TD_TEST_SKIP_SYSTEMS");
+        assert_eq!(Role::Domain.skip_env(), "TD_TEST_SKIP_DOMAINS");
+        assert_eq!(Role::System.manifest_env(), "TD_TEST_SYSTEMS_MANIFEST");
+        assert_eq!(Role::Domain.manifest_env(), "TD_TEST_DOMAINS_MANIFEST");
+    }
+
+    #[test]
+    fn test_skip_by_name() {
+        let env = Role::Domain.skip_env();
+        temp_env::with_var_unset(env, || {
+            assert!(!Role::Domain.is_skipped("landing"));
+        });
+        temp_env::with_var(env, Some("other, landing ,more"), || {
+            assert!(Role::Domain.is_skipped("landing"));
+            assert!(!Role::Domain.is_skipped("land"));
+            assert!(!Role::System.is_skipped("landing"));
+        });
+        // An empty list must not swallow every backend.
+        temp_env::with_var(env, Some(""), || {
+            assert!(!Role::Domain.is_skipped("landing"));
+        });
+    }
+
+    #[test]
+    fn test_offered_by_the_manifest() {
+        let manifest = std::env::temp_dir().join(format!(
+            "td-tdd-offered-{}-{}.yaml",
+            std::process::id(),
+            td_common::id::id()
+        ));
+        std::fs::write(
+            &manifest,
+            "#\n# A comment\n#\n\n- name: landing\n  sys: s3\n- name: other\n  sys: gcs\n  model: world\n",
+        )
+        .unwrap();
+        let env = Role::Domain.manifest_env();
+        temp_env::with_var_unset(env, || {
+            assert!(Role::Domain.is_offered("anything").unwrap());
+        });
+        let declared = [
+            (env, Some(manifest.to_str().unwrap())),
+            (Role::System.manifest_env(), None),
+        ];
+        temp_env::with_vars(declared, || {
+            assert!(Role::Domain.is_offered("landing").unwrap());
+            assert!(Role::Domain.is_offered("other").unwrap());
+            assert!(!Role::Domain.is_offered("land").unwrap());
+            assert!(Role::System.is_offered("land").unwrap());
+        });
+        temp_env::with_var(env, Some(" "), || {
+            assert!(Role::Domain.is_offered("anything").unwrap());
+        });
+        temp_env::with_var(env, Some("/no/such/manifest.yaml"), || {
+            let error = Role::Domain.is_offered("landing").unwrap_err();
+            assert!(error.contains("TD_TEST_DOMAINS_MANIFEST"), "got: {error}");
+        });
+        std::fs::remove_file(manifest).unwrap();
     }
 
     #[test]

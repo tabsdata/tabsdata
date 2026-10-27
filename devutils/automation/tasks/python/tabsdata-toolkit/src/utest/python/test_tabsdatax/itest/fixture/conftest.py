@@ -109,7 +109,11 @@ def provision(tmp_path, monkeypatch):
     monkeypatch.setenv(_tdd.ENV_STORE_DIR[_tdd.SYSTEM], str(tmp_path / "system"))
     monkeypatch.setenv(_tdd.ENV_STORE_DIR[_tdd.DOMAIN], str(tmp_path / "domain"))
     monkeypatch.setenv("_TDD_CRYPTO_KEY", "fixture-test-key-abcdef")
-    for var in (*backend.ON_MISSING_ENV.values(), *backend.SKIP_ENV.values()):
+    for var in (
+        *backend.ON_MISSING_ENV.values(),
+        *backend.SKIP_ENV.values(),
+        *backend.MANIFEST_ENV.values(),
+    ):
         monkeypatch.delenv(var, raising=False)
     for key, value in _FAKE_ENV.items():
         monkeypatch.setenv(key, value)

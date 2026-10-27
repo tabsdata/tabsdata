@@ -120,6 +120,15 @@ fn resolve_systems_manifest
     return ${manifest}
 end
 
+fn export_test_manifests
+    language = set ${1}
+    domains = default_domains_manifest ${language}
+    systems = default_systems_manifest
+    set_env TD_TEST_DOMAINS_MANIFEST ${domains}
+    set_env TD_TEST_SYSTEMS_MANIFEST ${systems}
+    debug "📄 Tests take what is offered from: ${domains} / ${systems}"
+end
+
 fn absolute_manifest_path
     candidate = set ${1}
     absolute = starts_with ${candidate} "/"

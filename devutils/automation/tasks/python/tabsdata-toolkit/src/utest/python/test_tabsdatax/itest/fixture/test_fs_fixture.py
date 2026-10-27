@@ -98,6 +98,33 @@ def test_skip_backends_by_name(provision, monkeypatch):
         common.load("my_fs", FsSystem)
 
 
+def test_the_run_manifest_decides_what_is_offered(provision, monkeypatch, tmp_path):
+    provision.system("fs", "my_fs")
+    provision.domain("my_fs", "inbox")
+    manifest = tmp_path / "domains.yaml"
+    manifest.write_text(
+        "#\n# A comment\n#\n\n"
+        "- name: inbox\n  sys: my_fs\n"
+        "- name: listed\n  sys: my_fs\n"
+    )
+    monkeypatch.setenv(common.MANIFEST_ENV[common.DOMAIN], str(manifest))
+    assert common.load("inbox", FsDomain).name == "inbox"
+    with pytest.raises(pytest.skip.Exception, match="does not offer"):
+        common.load("unlisted", FsDomain)
+    with pytest.raises(pytest.fail.Exception, match="not in the tdd store"):
+        common.load("listed", FsDomain)
+    # The domain manifest says nothing about systems.
+    assert common.load("my_fs", FsSystem).name == "my_fs"
+
+
+def test_an_unreadable_run_manifest_fails(provision, monkeypatch, tmp_path):
+    monkeypatch.setenv(
+        common.MANIFEST_ENV[common.DOMAIN], str(tmp_path / "absent.yaml")
+    )
+    with pytest.raises(pytest.fail.Exception, match="TD_TEST_DOMAINS_MANIFEST"):
+        common.load("inbox", FsDomain)
+
+
 # ---- injection via the per-type decorators + the named fixtures -----------
 
 

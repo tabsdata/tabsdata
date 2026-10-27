@@ -388,6 +388,7 @@ script = [
     tdd = tdd_exe
     debug "🚀 ${tdd} domain create --manifest ${manifest} --force --brief"
     exec --fail-on-error ${tdd} domain create --manifest ${manifest} --force --brief
+    export_test_manifests py
 
     cm_run_task __os__reset_venv_env
     ''']
@@ -419,6 +420,7 @@ script = [
     tdd = tdd_exe
     debug "🚀 ${tdd} domain create --manifest ${manifest} --force --brief"
     exec --fail-on-error ${tdd} domain create --manifest ${manifest} --force --brief
+    export_test_manifests rs
 
     cm_run_task __os__reset_venv_env
 
