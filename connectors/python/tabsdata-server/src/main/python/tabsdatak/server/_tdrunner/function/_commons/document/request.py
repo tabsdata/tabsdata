@@ -19,7 +19,7 @@ from tabsdatak.common._storage.mounts import (
 )
 from tabsdatak.error import ErrorCode
 
-RAW_SUFFIX = ".t"
+LANDING_SUFFIX = ".t"
 MILLISECONDS_PER_SECOND = 1000
 
 TABLE = "Table"
@@ -138,7 +138,7 @@ class Info(DocumentModel):
     physical_function_run_id: str | int
     triggered_on: int
     function_data: Location
-    function_raw: Location | None = None
+    function_landing: Location | None = None
     scheduled_on: int
 
     @property

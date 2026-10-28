@@ -21,7 +21,7 @@ from test_tabsdatak.server.test_tdrunner.test_function.conftest import (
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
-RAW_URI = "s3://bucket/c/1/w/4/r"
+LANDING_URI = "s3://bucket/c/1/w/4/r"
 
 
 def _journal(folder: Path) -> Path:
@@ -66,10 +66,10 @@ def _set_argv(
     )
 
 
-def _write_request(path: Path, *, raw_uri: str | None = RAW_URI) -> Path:
+def _write_request(path: Path, *, landing_uri: str | None = LANDING_URI) -> Path:
     info = _info()
-    if raw_uri is not None:
-        info["function_raw"] = {"uri": raw_uri, "env_prefix": "ROOT"}
+    if landing_uri is not None:
+        info["function_landing"] = {"uri": landing_uri, "env_prefix": "ROOT"}
     path.write_text(yaml.safe_dump({"Function": {"info": info}}))
     return path
 
@@ -131,7 +131,7 @@ def test_main_pairs_each_stamped_parquet_with_its_index(
     body = yaml.safe_dump(written)
     # One target per input index, named by the index the manifest recorded.
     for index in (0, 1, 2):
-        assert f"{RAW_URI}/{index}.t" in body, f"index {index} missing: {body}"
+        assert f"{LANDING_URI}/{index}.t" in body, f"index {index} missing: {body}"
 
 
 def test_main_writes_an_empty_request_when_nothing_was_ingested(
@@ -152,10 +152,12 @@ def test_main_writes_an_empty_request_when_nothing_was_ingested(
     assert out.exists(), "an empty request must still be written for run-transporter"
 
 
-def test_main_skips_a_function_with_no_raw_location(monkeypatch, tmp_path, http_ok_url):
+def test_main_skips_a_function_with_no_landing_location(
+    monkeypatch, tmp_path, http_ok_url
+):
     # Transformers and subscribers ingest nothing, so the apiserver mints them
-    # no raw location; the step must be a no-op rather than a failure.
-    request_yaml = _write_request(tmp_path / "request.yaml", raw_uri=None)
+    # no landing location; the step must be a no-op rather than a failure.
+    request_yaml = _write_request(tmp_path / "request.yaml", landing_uri=None)
     manifest = _write_manifest(
         tmp_path / "enriched.yaml",
         [_slot("a", [{"file": "/shared/rich/slot0/a.parquet", "input_idx": 0}])],
@@ -170,7 +172,7 @@ def test_main_skips_a_function_with_no_raw_location(monkeypatch, tmp_path, http_
         responder_url=http_ok_url,
     )
     assert rc == 0
-    assert RAW_URI not in out.read_text()
+    assert LANDING_URI not in out.read_text()
 
 
 def test_main_ignores_a_record_with_no_file(monkeypatch, tmp_path, http_ok_url):
@@ -200,8 +202,8 @@ def test_main_ignores_a_record_with_no_file(monkeypatch, tmp_path, http_ok_url):
     )
     assert rc == 0
     body = out.read_text()
-    assert f"{RAW_URI}/1.t" in body
-    assert f"{RAW_URI}/0.t" not in body
+    assert f"{LANDING_URI}/1.t" in body
+    assert f"{LANDING_URI}/0.t" not in body
 
 
 # --- failures -------------------------------------------------------------

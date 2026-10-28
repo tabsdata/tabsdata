@@ -28,7 +28,7 @@ pub struct FunctionInput {
 impl Locations for FunctionInput {
     fn locations(&self) -> Vec<&Location> {
         let mut locations = vec![&self.info.function_data, &self.info.function_bundle];
-        locations.extend(self.info.function_raw.iter());
+        locations.extend(self.info.function_landing.iter());
         locations.extend(self.system_input.locations());
         locations.extend(self.input.locations());
         locations.extend(self.system_output.locations());
@@ -66,7 +66,7 @@ pub struct FunctionInfo {
     pub function_data: Location,
     /// Where a publisher run's ingested data is kept, one file per input
     /// index. Absent for functions that ingest nothing.
-    pub function_raw: Option<Location>,
+    pub function_landing: Option<Location>,
     pub scheduled_on: AtTime, // when the request yaml was created
 }
 
@@ -318,7 +318,7 @@ mod tests {
                     uri: Url::try_from("file:///foo").unwrap(),
                     env_prefix: None,
                 },
-                function_raw: Some(Location {
+                function_landing: Some(Location {
                     uri: Url::try_from("file:///foo/r").unwrap(),
                     env_prefix: None,
                 }),
@@ -430,7 +430,7 @@ info:
   function_data:
     uri: file:///foo
     env_prefix: null
-  function_raw:
+  function_landing:
     uri: file:///foo/r
     env_prefix: null
   scheduled_on: {scheduled_on}
@@ -879,7 +879,7 @@ output:
             physical_function_run_id: PhysicalFunctionRunId::new(),
             triggered_on: AtTime::from(Timestamp::default()),
             function_data: locations[0].clone(),
-            function_raw: None,
+            function_landing: None,
             scheduled_on: AtTime::default(),
         };
         let function_input = FunctionInput {

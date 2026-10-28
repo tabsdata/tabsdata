@@ -6,10 +6,10 @@
 
 Generates the transporter copy request that persists a publisher's
 ingested data — the parquets `stamp-inputs` stamped with the framework's
-system columns — from local disk to the run's raw-data location.
+system columns — from local disk to the run's landing-data location.
 
 Reads:
-  * `--request`:           the publisher request.yaml. `info.function_raw`
+  * `--request`:           the publisher request.yaml. `info.function_landing`
                            is the destination base; when it is absent the
                            function ingests nothing and the request comes
                            out empty.
@@ -49,7 +49,7 @@ MAN = (
     "--out <PATH> --storage-config <PATH> --liveness <PATH>\n\n"
     "Reads the enriched inputs manifest written by stamp-inputs and "
     "builds the transporter copy request that uploads each stamped "
-    "parquet to the run's raw-data location, named by its input index. "
+    "parquet to the run's landing-data location, named by its input index. "
     "Functions that ingest nothing produce an empty request."
 )
 

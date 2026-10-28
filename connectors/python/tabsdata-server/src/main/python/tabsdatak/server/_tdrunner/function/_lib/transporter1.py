@@ -15,7 +15,7 @@ from tabsdatak.common._transporter.handler.handler1 import (
     local_endpoint,
 )
 from tabsdatak.server._tdrunner.function._commons.document.request import (
-    RAW_SUFFIX,
+    LANDING_SUFFIX,
     AnyRequest,
     Location,
     Request,
@@ -38,16 +38,16 @@ def build_bundle_fetch_request(
     ])
 
 
-def build_upload_raw_request(
-    request: Request, raw_files: list[tuple[int, Path]]
+def build_upload_landing_request(
+    request: Request, landing_files: list[tuple[int, Path]]
 ) -> TransporterCopyRequest:
-    raw = request.info.function_raw
+    landing = request.info.function_landing
     pairs: list[tuple[Endpoint, Endpoint]] = []
-    if raw is not None:
-        base = raw.uri.rstrip("/")
-        for idx, source in raw_files:
+    if landing is not None:
+        base = landing.uri.rstrip("/")
+        for idx, source in landing_files:
             target = Location(
-                uri=f"{base}/{idx}{RAW_SUFFIX}", env_prefix=raw.env_prefix
+                uri=f"{base}/{idx}{LANDING_SUFFIX}", env_prefix=landing.env_prefix
             )
             pairs.append((local_endpoint(source), endpoint_for(target)))
     return HANDLER.make_request(pairs)

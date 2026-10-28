@@ -10,9 +10,9 @@ use td_objects::types::basic::{
     TableVersionId, TransactionId,
 };
 
-/// Extension of a stamped raw-data file. Mirrored by `RAW_SUFFIX` in
+/// Extension of a stamped landing-data file. Mirrored by `LANDING_SUFFIX` in
 /// tabsdatak's runner, which writes the files this addresses.
-const RAW_FILE_SUFFIX: &str = ".t";
+const LANDING_FILE_SUFFIX: &str = ".t";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub enum StorageLocation {
@@ -38,7 +38,7 @@ pub enum StorageLocation {
     /// * `/LOCATION`
     /// * `/LOCATION/c/COLLECTION`
     /// * `/LOCATION/c/COLLECTION/x/TRANSACTION/f/FUNCTION_VERSION` (physical_function_run contents)
-    /// * `/LOCATION/c/COLLECTION/w/FUNCTION_RUN/r/INPUT_IDX.t` (a publisher run's raw data)
+    /// * `/LOCATION/c/COLLECTION/w/FUNCTION_RUN/r/INPUT_IDX.t` (a publisher run's landing data)
     /// * `/LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION.t`
     /// * `/LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION/p/PARTITION.p`
     /// * `/LOCATION/bundles/c/COLLECTION/f/BUNDLE.tar.zst`
@@ -85,8 +85,8 @@ struct LocationBuilderInfo {
     transaction: Option<String>,
     function_version: Option<String>,
     function_run: Option<String>,
-    raw: bool,
-    raw_input: Option<String>,
+    is_landing: bool,
+    landing_input: Option<String>,
     table: Option<String>,
     table_version: Option<String>,
     partition: Option<String>,
@@ -465,18 +465,18 @@ impl FunctionRunBuilder {
         self
     }
 
-    /// Address the run's raw-data directory: what a publisher's source plugin
+    /// Address the run's landing-data directory: what a publisher's source plugin
     /// ingested, stamped with system columns, before the user function saw it.
-    pub fn raw(&mut self) -> &mut Self {
-        self.info.raw = true;
+    pub fn landing(&mut self) -> &mut Self {
+        self.info.is_landing = true;
         self
     }
 
-    /// Address one raw-data file, named by the input index the runner stamped
+    /// Address one landing-data file, named by the input index the runner stamped
     /// it with — a counter over every ingested file, not a parameter position.
-    pub fn raw_input(&mut self, input_idx: &InputIdx) -> &mut Self {
-        self.info.raw = true;
-        self.info.raw_input = Some(input_idx.to_string());
+    pub fn landing_input(&mut self, input_idx: &InputIdx) -> &mut Self {
+        self.info.is_landing = true;
+        self.info.landing_input = Some(input_idx.to_string());
         self
     }
 
@@ -623,10 +623,10 @@ impl VersionLocationBuilder for V1LocationBuilder {
                 }
             } else if let Some(function_run) = &info.function_run {
                 path = path.child("w")?.child(function_run)?;
-                if info.raw {
+                if info.is_landing {
                     path = path.child("r")?;
-                    if let Some(input_idx) = &info.raw_input {
-                        path = path.child(&format!("{input_idx}{RAW_FILE_SUFFIX}"))?;
+                    if let Some(input_idx) = &info.landing_input {
+                        path = path.child(&format!("{input_idx}{LANDING_FILE_SUFFIX}"))?;
                     }
                 }
             } else if let Some(transaction) = &info.transaction {
@@ -936,7 +936,7 @@ mod tests {
     }
 
     #[test]
-    fn test_function_run_raw_builder_v1() -> Result<(), TdError> {
+    fn test_function_run_landing_builder_v1() -> Result<(), TdError> {
         let data_location = BasePath::try_from("/L")?;
         let collection = CollectionId::default();
         let function_run = PhysicalFunctionRunId::new();
@@ -954,18 +954,18 @@ mod tests {
                 .builder(&data_location)
                 .collection(&collection)
                 .function_run(&function_run)
-                .raw()
+                .landing()
                 .build()?
                 .0,
             SPath::parse(format!("/L/c/{collection}/w/{function_run}/r"))?,
-            "raw data hangs off the run that ingested it, not the function version"
+            "landing data hangs off the run that ingested it, not the function version"
         );
         assert_eq!(
             StorageLocation::V1
                 .builder(&data_location)
                 .collection(&collection)
                 .function_run(&function_run)
-                .raw_input(&InputIdx::try_from(3)?)
+                .landing_input(&InputIdx::try_from(3)?)
                 .build()?
                 .0,
             SPath::parse(format!("/L/c/{collection}/w/{function_run}/r/3.t"))?

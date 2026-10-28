@@ -26,7 +26,7 @@ class BadManifestError(_BadManifestError):
 
 
 class BadEndpointSchemeError(_BadEndpointSchemeError):
-    """The raw-data destination uses a URI scheme this command doesn't
+    """The landing-data destination uses a URI scheme this command doesn't
     know how to upload to."""
 
     exit_code = 12
@@ -54,9 +54,9 @@ class PrepUploadRawErrorCode(ErrorCode):
 
     PUR_3 = ErrorDef(
         BadEndpointSchemeError,
-        "unsupported scheme in the raw-data location: {detail}",
+        "unsupported scheme in the landing-data location: {detail}",
     )
-    # ``build_upload_raw_request`` ``UnsupportedSchemeError``.
+    # ``build_upload_landing_request`` ``UnsupportedSchemeError``.
 
     PUR_4 = ErrorDef(
         WriteFailedError,

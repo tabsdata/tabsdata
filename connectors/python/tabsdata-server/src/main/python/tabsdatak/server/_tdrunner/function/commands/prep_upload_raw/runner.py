@@ -24,7 +24,7 @@ from tabsdatak.server._tdrunner.function._commons.manifests.manifest import (
     ManifestError,
 )
 from tabsdatak.server._tdrunner.function._lib.transporter import (
-    build_upload_raw_request,
+    build_upload_landing_request,
     write_transporter_request,
 )
 from tabsdatak.server._tdrunner.function.commands.prep_upload_raw.error import (
@@ -34,7 +34,7 @@ from tabsdatak.server._tdrunner.function.commands.prep_upload_raw.error import (
 logger = logging.getLogger(__name__)
 
 
-def _raw_files(manifest: InputManifest) -> list[tuple[int, Path]]:
+def _landing_files(manifest: InputManifest) -> list[tuple[int, Path]]:
     return [
         (record.input_idx, Path(record.file))
         for entry in manifest.inputs
@@ -51,10 +51,10 @@ def run(args: argparse.Namespace) -> int:
 
     logger.info("Preparing upload-raw transporter request")
     request = Request.load(request_path, PrepUploadRawErrorCode.PUR_1)
-    if request.info.function_raw is None:
+    if request.info.function_landing is None:
         logger.debug(
-            "The request carries no raw-data location; this function ingests "
-            "nothing, so there is no raw data to upload"
+            "The request carries no landing-data location; this function ingests "
+            "nothing, so there is no landing data to upload"
         )
     try:
         manifest = InputManifest.load(inputs_manifest_path)
@@ -62,15 +62,15 @@ def run(args: argparse.Namespace) -> int:
         raise PrepUploadRawErrorCode.PUR_2.exception(
             cause=error, path=inputs_manifest_path, detail=str(error)
         )
-    raw_files = _raw_files(manifest)
+    landing_files = _landing_files(manifest)
     logger.debug(
         "Enriched manifest has %d slot(s) holding %d stamped parquet(s): %s",
         len(manifest.inputs),
-        len(raw_files),
-        raw_files,
+        len(landing_files),
+        landing_files,
     )
 
-    copy_req = build_upload_raw_request(request, raw_files, storage_config)
+    copy_req = build_upload_landing_request(request, landing_files, storage_config)
     if not copy_req.pairs:
         logger.debug("Upload-raw request has no pairs; nothing to persist")
     else:

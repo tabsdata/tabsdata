@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::function_run::raw_data::{raw_data_file, read_raw_data};
+use crate::function_run::landing::{landing_file, read_landing_data};
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -21,7 +21,7 @@ use td_queries::Queries;
 use td_storage::Storage;
 
 #[service_factory]
-async fn function_run_raw_data(
+async fn function_run_landing_data(
     authz: Ctx<AuthzContext>,
     storage: Ctx<Storage>,
     gated_conn: &mut GatedConnection<RO, InProject>,
@@ -49,29 +49,29 @@ async fn function_run_raw_data(
             collection
         ));
     }
-    // Only a publisher ingests, so only a publisher run has raw data at all.
+    // Only a publisher ingests, so only a publisher run has landing data at all.
     let function: FunctionDB = conn.timeline().fetch_one(&run.function_version_id).await?;
     if function.decorator != Decorator::Publisher {
         return Err(api_error!(
             ApiError::NotFound,
-            "function run {} is a {:?}, which ingests no raw data",
+            "function run {} is a {:?}, which ingests no landing data",
             run_id,
             function.decorator
         ));
     }
 
-    let path = raw_data_file(&run, &input_idx.input_idx)?;
+    let path = landing_file(&run, &input_idx.input_idx)?;
     // The index set lives in the runner, not the database: the only honest
     // existence check is against storage.
     if !storage.exists(&path).await? {
         return Err(api_error!(
             ApiError::NotFound,
-            "function run {} has no raw data at input index {}",
+            "function run {} has no landing data at input index {}",
             run_id,
             input_idx.input_idx
         ));
     }
-    read_raw_data(&storage, &path).await
+    read_landing_data(&storage, &path).await
 }
 
 #[cfg(test)]
@@ -95,7 +95,7 @@ mod tests {
     use td_queries::test_utils::SeedEntry;
     use td_storage::location::StorageLocation;
 
-    const RAW: &[u8] = b"stamped-parquet-bytes";
+    const LANDING: &[u8] = b"stamped-parquet-bytes";
 
     async fn seed_run(
         db: &TdPool,
@@ -156,9 +156,9 @@ mod tests {
         Ok((collection, run))
     }
 
-    /// Writes `RAW` where the runner would have uploaded it: the run's stamped
+    /// Writes `LANDING` where the runner would have uploaded it: the run's stamped
     /// prefix, under the physical run that ingested it, named by the index.
-    async fn write_raw(
+    async fn write_landing(
         context: &Services,
         collection: &CollectionDB,
         run: &PhysicalFunctionRunDB,
@@ -168,13 +168,13 @@ mod tests {
             .builder(&run.base_path)
             .collection(&collection.collection_id)
             .function_run(&run.id)
-            .raw_input(input_idx)
+            .landing_input(input_idx)
             .build()?;
-        context.storage.write(&path, RAW.to_vec()).await?;
+        context.storage.write(&path, LANDING.to_vec()).await?;
         Ok(())
     }
 
-    async fn get_raw_data(
+    async fn get_landing_data(
         context: &Services,
         p: &ProjectDB,
         collection: &str,
@@ -194,7 +194,11 @@ mod tests {
                 },
             ))
             .in_project(p.project_id);
-        let response = context.clone().function_run_raw_data(request).await?.data;
+        let response = context
+            .clone()
+            .function_run_landing_data(request)
+            .await?
+            .data;
         let mut stream = response.into_inner();
         match stream.next().await {
             Some(bytes) => Ok(bytes?),
@@ -203,12 +207,12 @@ mod tests {
     }
 
     #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
-    async fn test_raw_data(db: TdPool) -> Result<(), TdError> {
+    async fn test_landing_data(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let context = Services::with_defaults(db.clone());
         let (collection, run) = seed_run(&db, &p, "c0", Decorator::Publisher).await?;
         let idx = InputIdx::try_from(2)?;
-        write_raw(&context, &collection, &run, &idx).await?;
+        write_landing(&context, &collection, &run, &idx).await?;
 
         // Addressable by collection name and by id, like every other
         // collection-scoped endpoint.
@@ -216,37 +220,37 @@ mod tests {
             collection.name.to_string(),
             format!("~{}", collection.collection_id),
         ] {
-            let bytes = get_raw_data(&context, &p, &collection_ref, &run, &idx).await?;
-            assert_eq!(bytes, Bytes::from_static(RAW));
+            let bytes = get_landing_data(&context, &p, &collection_ref, &run, &idx).await?;
+            assert_eq!(bytes, Bytes::from_static(LANDING));
         }
         Ok(())
     }
 
     #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
-    async fn test_raw_data_unwritten_index_not_found(db: TdPool) -> Result<(), TdError> {
+    async fn test_landing_data_unwritten_index_not_found(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let context = Services::with_defaults(db.clone());
         let (collection, run) = seed_run(&db, &p, "c0", Decorator::Publisher).await?;
-        write_raw(&context, &collection, &run, &InputIdx::try_from(0)?).await?;
+        write_landing(&context, &collection, &run, &InputIdx::try_from(0)?).await?;
 
-        let err = get_raw_data(&context, &p, "c0", &run, &InputIdx::try_from(1)?)
+        let err = get_landing_data(&context, &p, "c0", &run, &InputIdx::try_from(1)?)
             .await
             .expect_err("index 1 was never uploaded");
         assert_eq!(err.api_error(), ApiError::NotFound);
         Ok(())
     }
 
-    /// Only publishers ingest, so a transformer run has no raw data to read
+    /// Only publishers ingest, so a transformer run has no landing data to read
     /// even at an index that happens to exist in storage.
     #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
-    async fn test_raw_data_non_publisher_not_found(db: TdPool) -> Result<(), TdError> {
+    async fn test_landing_data_non_publisher_not_found(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let context = Services::with_defaults(db.clone());
         let (collection, run) = seed_run(&db, &p, "c0", Decorator::Transformer).await?;
         let idx = InputIdx::try_from(0)?;
-        write_raw(&context, &collection, &run, &idx).await?;
+        write_landing(&context, &collection, &run, &idx).await?;
 
-        let err = get_raw_data(&context, &p, "c0", &run, &idx)
+        let err = get_landing_data(&context, &p, "c0", &run, &idx)
             .await
             .expect_err("a transformer run ingests nothing");
         assert_eq!(err.api_error(), ApiError::NotFound);
@@ -259,15 +263,15 @@ mod tests {
     /// The run id is globally unique, so the collection segment must be checked
     /// against it — otherwise any collection in the project addresses any run.
     #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
-    async fn test_raw_data_foreign_collection_not_found(db: TdPool) -> Result<(), TdError> {
+    async fn test_landing_data_foreign_collection_not_found(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let context = Services::with_defaults(db.clone());
         let (collection, run) = seed_run(&db, &p, "c0", Decorator::Publisher).await?;
         let (_, other_run) = seed_run(&db, &p, "c1", Decorator::Publisher).await?;
         let idx = InputIdx::try_from(0)?;
-        write_raw(&context, &collection, &run, &idx).await?;
+        write_landing(&context, &collection, &run, &idx).await?;
 
-        let err = get_raw_data(&context, &p, "c0", &other_run, &idx)
+        let err = get_landing_data(&context, &p, "c0", &other_run, &idx)
             .await
             .expect_err("the run belongs to c1");
         assert_eq!(err.api_error(), ApiError::NotFound);

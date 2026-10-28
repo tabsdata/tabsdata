@@ -77,12 +77,12 @@ pub async fn read_run(
     scope(project),
     auth(session, service_token),
     method(get),
-    path = "/projects/{project}/collections/{collection}/function-runs/{function_run}/inputs/{input_idx}/raw-data",
+    path = "/projects/{project}/collections/{collection}/function-runs/{function_run}/inputs/{input_idx}/landing-data",
     tag(FUNCTION_RUNS_TAG),
     content_type = "application/vnd.apache.parquet",
-    doc = "Download one stamped raw-data file a publisher run ingested"
+    doc = "Download one stamped landing-data file a publisher run ingested"
 )]
-pub async fn raw_data(
+pub async fn landing_data(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
     Project(project_id): Project,
@@ -93,6 +93,6 @@ pub async fn raw_data(
     let request = context
         .read((collection, function_run, input_idx))
         .in_project(project_id);
-    let stream = state.function_run_raw_data(request).await?.data;
+    let stream = state.function_run_landing_data(request).await?.data;
     Ok(DownloadResponse::parquet(stream))
 }

@@ -3,7 +3,7 @@
 //
 
 use super::build_external_location;
-use crate::function_run::raw_data::raw_data_dir;
+use crate::function_run::landing::landing_dir;
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunToExecute;
 use td_objects::dxo::worker_input::function::FunctionInfo;
@@ -55,12 +55,12 @@ pub(crate) fn build_function_info(
         .build()?;
     let (function_run_location, _) = build_external_location(storage, &path)?;
 
-    // Raw-data location — only publishers ingest, so only they get one. Keyed by
+    // Landing-data location — only publishers ingest, so only they get one. Keyed by
     // the physical run so each attempt keeps its own copy and any data version
     // resolves back to the ingested data through its physical_function_run_id.
-    let function_raw = match f.decorator {
+    let function_landing = match f.decorator {
         Decorator::Publisher => {
-            let (location, _) = build_external_location(storage, &raw_data_dir(f)?)?;
+            let (location, _) = build_external_location(storage, &landing_dir(f)?)?;
             Some(location)
         }
         Decorator::Transformer | Decorator::Subscriber => None,
@@ -98,7 +98,7 @@ pub(crate) fn build_function_info(
         physical_function_run_id: f.id.clone(),
         triggered_on: AtTime::from(f.interval.valid_from),
         function_data: function_run_location,
-        function_raw,
+        function_landing,
         scheduled_on: AtTime::default(),
     };
     Ok(info)
@@ -122,7 +122,7 @@ mod tests {
 
     /// Proves each stamped base_path on `PhysicalFunctionRunToExecute` is routed
     /// to the CORRECT storage location (no cross-wiring): bundle → `bundle_base_path`,
-    /// staging → `stage_base_path`, function-run content and raw data → the
+    /// staging → `stage_base_path`, function-run content and landing data → the
     /// prefix stamped on the run itself. With distinct prefixes `/b`, `/s`, `/r`
     /// we assert each produced URI carries its own prefix and not another's.
     #[test]
@@ -192,24 +192,24 @@ mod tests {
             "function-run content path should carry the run's stamped prefix '/r': {data}"
         );
 
-        // Only publishers ingest, so only they are given a raw-data location.
+        // Only publishers ingest, so only they are given a landing-data location.
         assert!(
-            info.function_raw.is_none(),
-            "a transformer must not be given a raw-data location"
+            info.function_landing.is_none(),
+            "a transformer must not be given a landing-data location"
         );
         let publisher = PhysicalFunctionRunToExecute {
             decorator: Decorator::Publisher,
             ..f.clone()
         };
-        let raw = build_function_info(&storage, &publisher)
+        let landing = build_function_info(&storage, &publisher)
             .unwrap()
-            .function_raw
-            .expect("a publisher is given a raw-data location");
-        let raw = raw.uri.path();
+            .function_landing
+            .expect("a publisher is given a landing-data location");
+        let landing = landing.uri.path();
         assert!(
-            raw.contains(&format!("/r/c/{}/w/{}/r", f.collection_id, f.id)),
-            "raw data must hang off the physical run that ingested it, under the \
-             prefix stamped on that run: {raw}"
+            landing.contains(&format!("/r/c/{}/w/{}/r", f.collection_id, f.id)),
+            "landing data must hang off the physical run that ingested it, under the \
+             prefix stamped on that run: {landing}"
         );
 
         // No cross-wiring: the bundle/stage prefixes must not leak into other paths.

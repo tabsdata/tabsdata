@@ -358,6 +358,7 @@ mod tests {
             (PROJECT, "get_snapshot"),
             (PROJECT, "graph"),
             (PROJECT, "history"),
+            (PROJECT, "landing_data"),
             (PROJECT, "list_data_versions"),
             (PROJECT, "list_functions"),
             (PROJECT, "list_functions_by_collection"),
@@ -366,7 +367,6 @@ mod tests {
             (PROJECT, "list_tables"),
             (PROJECT, "list_tables_by_collection"),
             (PROJECT, "patch"),
-            (PROJECT, "raw_data"),
             (PROJECT, "read_function"),
             (PROJECT, "read_group"),
             (PROJECT, "read_run"),
@@ -447,7 +447,7 @@ mod tests {
             ),
             (
                 "GET",
-                "/projects/{project}/collections/{collection}/function-runs/{function_run}/inputs/{input_idx}/raw-data",
+                "/projects/{project}/collections/{collection}/function-runs/{function_run}/inputs/{input_idx}/landing-data",
             ),
             (
                 "GET",
@@ -682,7 +682,7 @@ mod tests {
             "/projects/{project}/collections/{collection}",
             "/projects/{project}/collections/{collection}/connection",
             "/projects/{project}/collections/{collection}/function-bundle-upload",
-            "/projects/{project}/collections/{collection}/function-runs/{function_run}/inputs/{input_idx}/raw-data",
+            "/projects/{project}/collections/{collection}/function-runs/{function_run}/inputs/{input_idx}/landing-data",
             "/projects/{project}/collections/{collection}/functions",
             "/projects/{project}/collections/{collection}/functions/{function}",
             "/projects/{project}/collections/{collection}/functions/{function}/enable",

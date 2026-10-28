@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-pub mod raw_data;
+pub mod landing;
 pub mod services;
 
 use td_database::access::{AccessMode, SeesProjectRows};

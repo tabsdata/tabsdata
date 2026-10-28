@@ -8,7 +8,7 @@
 
 use super::fetch_run;
 use crate::Services;
-use crate::function_run::raw_data::raw_data_file;
+use crate::function_run::landing::landing_file;
 use crate::tests::fixtures::{register, seed_dispatched_run, set_collection_base_path};
 use bytes::Bytes;
 use futures::StreamExt;
@@ -40,7 +40,7 @@ async fn collect(stream: BoxedSyncStream) -> Result<Bytes, TdError> {
     }
 }
 
-async fn get_raw_data(
+async fn get_landing_data(
     services: &Services,
     p: &ProjectDB,
     collection: &CollectionDB,
@@ -60,7 +60,11 @@ async fn get_raw_data(
             },
         ))
         .in_project(p.project_id);
-    let stream = services.clone().function_run_raw_data(request).await?.data;
+    let stream = services
+        .clone()
+        .function_run_landing_data(request)
+        .await?
+        .data;
     collect(stream).await
 }
 
@@ -90,10 +94,10 @@ async fn get_table_download(
     }
 }
 
-/// Raw data written under the prefix stamped on the run keeps downloading
+/// Landing data written under the prefix stamped on the run keeps downloading
 /// after the collection moves; the moved prefix provably holds nothing.
 #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
-async fn test_raw_data_survives_collection_move(db: TdPool) -> Result<(), TdError> {
+async fn test_landing_data_survives_collection_move(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let services = Services::with_defaults(db.clone());
     let coll = db
@@ -108,7 +112,7 @@ async fn test_raw_data_survives_collection_move(db: TdPool) -> Result<(), TdErro
     assert_eq!(pfr.base_path, old);
     let idx = InputIdx::try_from(0)?;
     let run = fetch_run(&db, &pfr.id).await?;
-    let stamped_path = raw_data_file(&run, &idx)?;
+    let stamped_path = landing_file(&run, &idx)?;
     services
         .storage
         .write(&stamped_path, BYTES.to_vec())
@@ -118,14 +122,14 @@ async fn test_raw_data_survives_collection_move(db: TdPool) -> Result<(), TdErro
         set_collection_base_path(&db, p.project_id, &coll, Some(&BasePath::try_from("/new")?))
             .await?;
 
-    let bytes = get_raw_data(&services, &p, &coll, &pfr.id, &idx).await?;
+    let bytes = get_landing_data(&services, &p, &coll, &pfr.id, &idx).await?;
     assert_eq!(bytes, Bytes::from_static(BYTES));
 
     // Control: a live-resolved path would look under the moved prefix, where
     // nothing exists — proving the read really came off the stamped one.
     let mut live_run = run;
     live_run.base_path = coll.base_path.clone().unwrap();
-    let live_path = raw_data_file(&live_run, &idx)?;
+    let live_path = landing_file(&live_run, &idx)?;
     assert_ne!(live_path, stamped_path);
     assert!(!services.storage.exists(&live_path).await?);
     Ok(())

@@ -269,10 +269,10 @@ class Driver:
             "prep-upload-raw",
             request=self.request,
             inputs_manifest=self.path("fn/in/enriched-inputs-manifest.yaml"),
-            out=self.path("shuttle/raw-request.yaml"),
+            out=self.path("shuttle/landing-request.yaml"),
             storage_config=self.storage,
         )
-        self.transport("shuttle/raw-request.yaml", "shuttle/raw-report.yaml")
+        self.transport("shuttle/landing-request.yaml", "shuttle/landing-report.yaml")
         self.run_function("fn/in/enriched-inputs-manifest.yaml")
 
     def transformer(self) -> None:
@@ -308,8 +308,8 @@ class Driver:
         }
         if function.kind == PUBLISHER:
             body["info"] = {
-                "function_raw": {
-                    "uri": (self.root / "raw").as_uri(),
+                "function_landing": {
+                    "uri": (self.root / "landing").as_uri(),
                     "env_prefix": STORAGE_MOUNT,
                 }
             }

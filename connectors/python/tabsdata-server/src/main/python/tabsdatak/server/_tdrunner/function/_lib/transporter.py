@@ -34,18 +34,18 @@ def build_bundle_fetch_request(
             raise CommandErrorCode.CMD_5.exception(mode=TRANSPORTER_MODE)
 
 
-def build_upload_raw_request(
+def build_upload_landing_request(
     request: Request,
-    raw_files: list[tuple[int, Path]],
+    landing_files: list[tuple[int, Path]],
     storage_config_file: Path,
 ) -> Any:
     match TRANSPORTER_MODE:
         case 1:
-            return transporter1.build_upload_raw_request(request, raw_files)
+            return transporter1.build_upload_landing_request(request, landing_files)
         case 2:
             option_keys = load_mount_option_keys(storage_config_file)
-            return transporter2.build_upload_raw_request(
-                request, raw_files, option_keys
+            return transporter2.build_upload_landing_request(
+                request, landing_files, option_keys
             )
         case _:
             raise CommandErrorCode.CMD_5.exception(mode=TRANSPORTER_MODE)
