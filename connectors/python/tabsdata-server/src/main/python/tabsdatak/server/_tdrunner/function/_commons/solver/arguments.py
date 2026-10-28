@@ -9,7 +9,6 @@ import os
 from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
 
 ENVIRONMENT_PREFIX = "env:"
-# Escapes a literal value that would otherwise read as an env: reference.
 VALUE_PREFIX = "val:"
 
 
