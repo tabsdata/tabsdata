@@ -3,5 +3,5 @@
 #
 
 mysql-connector-python==26.10.0
-oracledb==26.0.1
+oracledb==26.1.0
 psycopg2-binary==2.9.13

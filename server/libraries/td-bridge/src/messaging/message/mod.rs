@@ -15,6 +15,7 @@ use serde_yaml::Value;
 use std::path::PathBuf;
 use td_common::worker::{ExceptionMessagePayload, RequestMessagePayload, ResponseMessagePayload};
 
+#[allow(clippy::redundant_field_names)]
 #[derive(Debug, Clone, Eq, PartialEq, new, Serialize, Deserialize)]
 pub struct OrchestratorMessage<T = Value>
 where

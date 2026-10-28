@@ -1194,7 +1194,7 @@ mod tests {
         ) -> Result<OrchestratorMessage<serde_yaml::Value>, QueueError> {
             let fail_burst = self
                 .fail_first
-                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
+                .try_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
                 .is_ok();
             if fail_burst || self.fail_ids.contains(&id) {
                 return Err(QueueError::BackendError {

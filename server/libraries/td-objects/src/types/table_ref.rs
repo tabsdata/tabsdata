@@ -139,6 +139,7 @@ impl From<&Versions> for Versions {
 
 /// A table named from a function: an optional collection, the table and
 /// its versions. The collection is a name on a request, a label on a read.
+#[allow(clippy::redundant_field_names)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, new)]
 pub struct VersionedTableRef<T, C = CollectionName> {
     pub collection: Option<C>,
@@ -188,6 +189,7 @@ where
     }
 }
 
+#[allow(clippy::redundant_field_names)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, new)]
 pub struct TableRef<T, C = CollectionName> {
     pub collection: Option<C>,

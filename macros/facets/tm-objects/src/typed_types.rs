@@ -2,6 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+#![allow(clippy::redundant_field_names)]
+
 use darling::FromMeta;
 use darling::util::parse_expr::preserve_str_literal;
 use proc_macro::TokenStream;

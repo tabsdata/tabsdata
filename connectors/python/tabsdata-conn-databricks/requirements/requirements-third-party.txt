@@ -5,8 +5,8 @@
 # Driver libraries the adapter lazy-imports. Matches the legacy
 # tabsdata-databricks dep set: the SDK for workspace + statement
 # execution + Files API, and the SQL connector for COPY INTO / DDL.
-databricks-sdk==0.156.0
-databricks-sql-connector==4.7.0
+databricks-sdk==0.157.0
+databricks-sql-connector==4.8.0
 
 # Pulled in by ``_adapter._download_chunk`` for streaming the
 # external-link Arrow IPC payloads.

@@ -2,6 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+#![allow(clippy::redundant_field_names)]
+
 use crate::dao_marks::option_inner_type;
 use crate::dto_tuples::reject_tuples;
 use crate::dxo_fields::dlo_dto_flat_machinery;
