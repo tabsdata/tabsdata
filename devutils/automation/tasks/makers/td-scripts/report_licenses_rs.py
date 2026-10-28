@@ -111,8 +111,8 @@ normalized_licenses = {
     "Apache-2.0 OR Apache-2.0 WITH LLVM-exception OR CC0-1.0": "Apache License Version 2.0 or Apache License Version 2.0 with LLVM Exception or Creative Commons Zero Version 1.0 Universal",  # noqa: E231,E241,E501
     "Apache-2.0 OR Apache-2.0 WITH LLVM-exception OR MIT": "Apache License Version 2.0 or Apache License Version 2.0 with LLVM Exception or MIT License",                                      # noqa: E231,E241,E501
     "Apache-2.0 OR BSD-2-Clause OR MIT": "Apache License Version 2.0 or BSD Simplified License (BSD-2-Clause) or MIT License",                                                                 # noqa: E231,E241,E501
-    "Apache-2.0 OR BSD-2-Clause": "Apache License Version 2.0 or BSD Simplified License (BSD-2-Clause)",                                                                                      # noqa: E231,E241,E501
-    "Apache-2.0 OR BSD-3-Clause": "Apache License Version 2.0 or BSD Revised License (BSD-3-Clause)",                                                                                         # noqa: E231,E241,E501
+    "Apache-2.0 OR BSD-2-Clause": "Apache License Version 2.0 or BSD Simplified License (BSD-2-Clause)",                                                                                       # noqa: E231,E241,E501
+    "Apache-2.0 OR BSD-3-Clause": "Apache License Version 2.0 or BSD Revised License (BSD-3-Clause)",                                                                                          # noqa: E231,E241,E501
     "Apache-2.0 OR BSL-1.0 OR MIT": "Apache License Version 2.0 or Boost Software License Version 1.0 or MIT License",                                                                         # noqa: E231,E241,E501
     "Apache-2.0 OR BSL-1.0": "Apache License Version 2.0 or Boost Software License Version 1.0",                                                                                               # noqa: E231,E241,E501
     "Apache-2.0 OR CC0-1.0 OR MIT-0": "Apache License Version 2.0 or Creative Commons Zero Version 1.0 Universal or MIT No Attribution License",                                               # noqa: E231,E241,E501
@@ -125,6 +125,11 @@ normalized_licenses = {
     "Apache-2.0;; Apache-2.0 WITH LLVM-exception;; BSD-2-Clause;; BSD-3-Clause;; BSL-1.0;; MIT": "Apache License Version 2.0 or Apache License Version 2.0 with LLVM Exception or "            # noqa: E231,E241,E501
         "BSD Simplified License (BSD-2-Clause) or BSD Revised License (BSD-3-Clause) or "                                                                                                      # noqa: E231,E241,E501
         "Boost Software License Version 1.0 or MIT License",                                                                                                                                   # noqa: E231,E241,E501
+    "Apache-2.0;; Apache-2.0 WITH LLVM-exception;; BSD-2-Clause;; BSD-3-Clause;; BSL-1.0;; ISC;; MIT;; Zlib":                                                                                  # noqa: E231,E241,E501
+        "Apache License Version 2.0 or Apache License Version 2.0 with LLVM Exception or "                                                                                                     # noqa: E231,E241,E501
+        "BSD Simplified License (BSD-2-Clause) or BSD Revised License (BSD-3-Clause) or "                                                                                                      # noqa: E231,E241,E501
+        "Boost Software License Version 1.0 or Internet Systems Consortium License or MIT License or "                                                                                         # noqa: E231,E241,E501
+        "Zlib License",                                                                                                                                                                        # noqa: E231,E241,E501
     "APACHE-2.0;; BSD 3-CLAUSE": "Apache License Version 2.0 or BSD Revised License (BSD-3-Clause)",                                                                                           # noqa: E231,E241,E501
     "APACHE-2.0;; BSD-2-CLAUSE": "Apache License Version 2.0 or BSD Simplified License (BSD-2-Clause)",                                                                                        # noqa: E231,E241,E501
     "APACHE-2.0;; BSD-3-CLAUSE": "Apache License Version 2.0 or BSD Revised License (BSD-3-Clause)",                                                                                           # noqa: E231,E241,E501
@@ -150,6 +155,7 @@ normalized_licenses = {
     "BSD": "BSD Revised License (BSD-3-Clause)",                                                                                                                                               # noqa: E231,E241,E501
     "BSL-1.0": "Boost Software License Version 1.0",                                                                                                                                           # noqa: E231,E241,E501
     "bzip2-1.0.6": "bzip2 and libbzip2 License, Version 1.0.6",                                                                                                                                # noqa: E231,E241,E501
+    "CC-BY-3.0": "Creative Commons Attribution Version 3.0 Unported License",                                                                                                                  # noqa: E231,E241,E501
     "CC-BY-4.0": "Creative Commons Attribution Version 4.0 International License",                                                                                                             # noqa: E231,E241,E501
     "CC0-1.0": "Creative Commons Zero Version 1.0 Universal",                                                                                                                                  # noqa: E231,E241,E501
     "CDLA-Permissive-2.0": "Community Data License Agreement Permissive Version 2.0",                                                                                                          # noqa: E231,E241,E501
@@ -186,6 +192,7 @@ normalized_licenses = {
     "MOZILLA PUBLIC LICENSE 2.0 (MPL 2.0)": "Mozilla Public License Version 2.0",                                                                                                              # noqa: E231,E241,E501
     "MPL-2.0": "Mozilla Public License Version 2.0",                                                                                                                                           # noqa: E231,E241,E501
     "NVIDIA PROPRIETARY SOFTWARE": "NVIDIA Proprietary License",                                                                                                                               # noqa: E231,E241,E501
+    "OpenSSL": "OpenSSL License",                                                                                                                                                              # noqa: E231,E241,E501
     "OTHER_PROPRIETARY LICENSE": "Apache License Version 2.0 or MIT License or NVIDIA Proprietary License",                                                                                    # noqa: E231,E241,E501
     "PSF-2.0": "Python Software Foundation License Version 2.0",                                                                                                                               # noqa: E231,E241,E501
     "PYTHON SOFTWARE FOUNDATION LICENSE": "Python Software Foundation License Version 2.0",                                                                                                    # noqa: E231,E241,E501
