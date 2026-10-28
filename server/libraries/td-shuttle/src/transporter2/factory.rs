@@ -288,9 +288,10 @@ mod test {
         // The policy lives in `codec::check_source`; this is the call site,
         // which is what a request actually reaches. It fails before any IO --
         // neither path below exists.
+        let nonexistent = std::env::temp_dir().join("nonexistent");
         let err = execute_pair(
-            &local(std::path::Path::new("/nonexistent/q2.xlsx")),
-            &local(std::path::Path::new("/nonexistent/q2.parquet")),
+            &local(&nonexistent.join("q2.xlsx")),
+            &local(&nonexistent.join("q2.parquet")),
             Some(&FormatSpec::of(Format::Excel)),
             Some(&FormatSpec::of(Format::Parquet)),
             Some(CompressionAlgorithmSpec::Zip),
