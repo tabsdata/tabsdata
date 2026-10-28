@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 from testi_tabsdatak.conn.common.monkey.held import held_transactions
 
-UPSTREAM = {"tfr04": "pub15", "tfr06": "pub15", "sub01": "tfr06"}
+UPSTREAM = {"tfr04": "pub15", "tfr06": "pub15", "sub01": "tfr06", "sub02": "tfr06"}
 
 
 def tx(id: str, status: str):
@@ -41,6 +41,32 @@ def test_a_transaction_with_an_unfinished_run_is_not_held():
     runs = {
         "t1": [run("tfr06", "Done")],
         "t2": [run("tfr06", "Done"), run("sub01", "Running")],
+    }
+    assert held(transactions, runs) == set()
+
+
+def test_a_transaction_queued_behind_a_failed_run_holds_its_readers():
+    transactions = [
+        tx("t1", "Stalled"),
+        tx("t2", "Running"),
+        tx("t3", "Running"),
+        tx("t4", "Running"),
+    ]
+    runs = {
+        "t1": [run("tfr04", "Failed")],
+        "t2": [run("tfr04", "Scheduled"), run("tfr06", "Done")],
+        "t3": [run("sub01", "Done"), run("sub02", "Done")],
+        "t4": [run("sub02", "Done")],
+    }
+    assert held(transactions, runs) == {"t2", "t3", "t4"}
+
+
+def test_a_transaction_scheduled_behind_nothing_stalled_is_not_held():
+    transactions = [tx("t1", "Stalled"), tx("t2", "Running"), tx("t3", "Running")]
+    runs = {
+        "t1": [run("tfr04", "Failed")],
+        "t2": [run("tfr06", "Scheduled")],
+        "t3": [run("sub01", "Done")],
     }
     assert held(transactions, runs) == set()
 

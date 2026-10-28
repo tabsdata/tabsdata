@@ -975,9 +975,10 @@ class MonkeyRun:
 
     def _held_executions(self, execution_ids: set[str]) -> set[str]:
         """Executions whose unfinished transactions all wait to commit behind a
-        stalled one."""
+        stalled one, which may be in an execution already finished."""
+        tracked = {execution.id for _, execution in self._tracked()}
         try:
-            transactions, runs = self._parts(self.connect(), execution_ids)
+            transactions, runs = self._parts(self.connect(), tracked)
         except Exception:
             return set()
         held = self._held(transactions, runs)
@@ -987,7 +988,8 @@ class MonkeyRun:
         return {
             execution_id
             for execution_id, parts in by_execution.items()
-            if any(transaction.id in held for transaction in parts)
+            if execution_id in execution_ids
+            and any(transaction.id in held for transaction in parts)
             and all(
                 transaction.id in held
                 or transaction.status in TRANSACTION_FINAL_STATUSES
