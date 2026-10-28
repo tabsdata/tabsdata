@@ -191,6 +191,7 @@ fn extract_kprofile(repository: &Path, tag: &str, target: &Path) -> CommandResul
     let output = Command::new("git")
         .arg("-C")
         .arg(repository)
+        .args(["-c", "core.autocrlf=false"])
         .args(["archive", "--format=tar", tag, KPROFILE_SUBPATH])
         .output()
         .map_err(|error| failed(error.to_string()))?;
@@ -232,6 +233,7 @@ fn apply_patch(patch: &Path, tag: &str, kprofile: &Path) -> CommandResult {
         cause,
     };
     let output = Command::new("git")
+        .args(["-c", "core.autocrlf=false"])
         .arg("apply")
         .arg("--unsafe-paths")
         .arg("-p1")
