@@ -33,6 +33,11 @@ on:
         type: choice
         options: ['true', 'false']
         default: 'false'
+      anchor_tag:
+        description: "Tag to check out every repository at, instead of its backbone anchor"
+        required: false
+        type: string
+        default: ''
       runner_action:
         description: "Action"
         required: true
@@ -205,6 +210,7 @@ jobs:
     with:
       job_timeout: ${{ fromJson(needs.cap-job.outputs.job_timeout) }}
       dump_server: ${{ inputs.dump_server }}
+      anchor_tag: ${{ inputs.anchor_tag }}
       td_product: "open source"
       runner_mode: "release"
       runner_action: ${{ inputs.runner_action || 'build' }}
