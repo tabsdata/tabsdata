@@ -5,9 +5,8 @@
 """report-completion command.
 
 Step 8 (final) of the publisher init-container chain. Builds the
-response.yaml from the outputs manifest produced by `run-function`
-(for `request.output`) and the `--state-dir` parquets (for
-`request.system_output`), writes a copy to `--out`, stamps the run's
+response.yaml from the outputs manifest produced by `run-function`,
+writes a copy to `--out`, stamps the run's
 end time into the journal, and posts a `Done` callback to the responder
 carrying the response as the function `output`.
 
@@ -18,8 +17,8 @@ footer (column_count / row_count / schema_hash / data_bytes), or a
 stats (the user function returned `None` for that slot).
 
 For each declared `request.system_output` table the response includes
-a `Data` entry if `<state_dir>/<name>.parquet` exists, or `NoData`
-otherwise.
+a `Data` entry with the stats of the state run-function wrote (the
+manifest's `state` entry), or `NoData` when it wrote none.
 
 A `request.output` table that has no entry in the outputs manifest is
 treated as a config mismatch (the function definition declared fewer
@@ -48,12 +47,12 @@ GENERATION = 1
 INFO = "report-completion — report the function-run response to the API server"
 MAN = (
     "report-completion --request <PATH> --outputs-manifest <PATH> "
-    "--state-dir <PATH> --out <PATH> --liveness <PATH> "
+    "--out <PATH> --liveness <PATH> "
     "--journal-file <PATH> --responder-url <URL> "
     "--responder-method <METHOD> --responder-authorization <AUTH>\n\n"
-    "Builds response.yaml from the outputs manifest (for request.output) "
-    "and the --state-dir parquets (for request.system_output), writes a "
-    "copy to --out, and posts a Done callback to the responder."
+    "Builds response.yaml from the outputs manifest (for request.output "
+    "and request.system_output), writes a copy to --out, and posts a Done "
+    "callback to the responder."
 )
 
 
@@ -71,12 +70,6 @@ def _build_parser():
         required=True,
         dest="outputs_manifest",
         help="Path to the outputs manifest YAML produced by run-function",
-    )
-    parser.add_argument(
-        "--state-dir",
-        required=True,
-        dest="state_dir",
-        help="Dir of produced state tables (parquet)",
     )
     parser.add_argument("--out", required=True, help="Path to write response.yaml")
     return parser

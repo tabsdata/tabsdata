@@ -68,6 +68,14 @@ from tabsdatak.common._archive.bundle import build_bundle
 #     locations, so the `out_dir/slot*` parquets and the tables-upload request
 #     no longer exist; report-completion takes the output stats from the
 #     outputs manifest.
+#   * state is no longer transported: prep-localize-state takes only
+#     `--request` and `--inputs-manifest` (no `--state-dir`, `--out`,
+#     `--state-manifest`, `--storage-config`); run-source-plugin and
+#     run-function read the previous state where it is stored and hand this
+#     run's state over in `<state-dir>/state.parquet`; run-function writes it
+#     to `system_output[0]` and records it as the outputs manifest's `state`
+#     entry; prep-upload-state, its transporter step and report-completion's
+#     `--state-dir` are gone.
 pytestmark = [
     pytest.mark.unit,
     pytest.mark.tabsdatak,

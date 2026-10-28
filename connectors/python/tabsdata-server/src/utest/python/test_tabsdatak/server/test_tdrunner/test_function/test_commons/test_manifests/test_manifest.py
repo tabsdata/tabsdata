@@ -23,10 +23,6 @@ from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputManifest,
     TableStats,
 )
-from tabsdatak.server._tdrunner.function._commons.manifests.state import (
-    StateEntry,
-    StateManifest,
-)
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -80,15 +76,6 @@ SAMPLES = {
         ),
         entry_without_required_field={"uri": "s3://b/a.t"},
     ),
-    "state": Sample(
-        manifest=StateManifest(
-            state=(
-                StateEntry(name="a", files=("/a.parquet",)),
-                StateEntry(name="b"),
-            )
-        ),
-        entry_without_required_field={"files": []},
-    ),
 }
 
 
@@ -131,7 +118,7 @@ def test_write_keeps_the_entry_order(tmp_path, sample):
 def test_write_puts_the_entries_under_the_manifest_key(tmp_path, sample):
     path = tmp_path / "manifest.yaml"
     sample.manifest.write(path)
-    assert list(yaml.safe_load(path.read_text())) == [sample.key]
+    assert list(yaml.safe_load(path.read_text()))[0] == sample.key
 
 
 def test_write_creates_the_parent_folder(tmp_path, sample):

@@ -61,13 +61,13 @@ class ManifestWriteFailedError(_ManifestWriteFailedError):
 
 
 class BadStateInError(_BadStateInError):
-    """``hydrate_ctx_from_state_or_raise`` failure -- read side."""
+    """``State.hydrate`` failure -- read side."""
 
     exit_code = 17
 
 
 class BadStateOutError(_BadStateOutError):
-    """``drain_ctx_to_state_or_raise`` failure -- write side."""
+    """``State.drain`` failure -- write side."""
 
     exit_code = 17
 
@@ -138,14 +138,14 @@ class RunSourcePluginErrorCode(ErrorCode):
         BadStateInError,
         "unreadable state-in {state_file}: {detail}",
     )
-    # ``hydrate_ctx_from_state_or_raise`` -- previous run's state
-    # parquet exists but couldn't be decoded.
+    # ``State.hydrate`` -- previous run's state parquet couldn't be
+    # read or decoded.
 
     RSP_10 = ErrorDef(
         BadStateOutError,
         "unwritable state-out {state_file}: {detail}",
     )
-    # ``drain_ctx_to_state_or_raise`` -- ctx scratch couldn't be
+    # ``State.drain`` -- ctx scratch couldn't be
     # persisted (typically a bad value injected past the
     # ``set_attr`` validator).
 

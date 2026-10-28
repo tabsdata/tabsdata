@@ -27,3 +27,4 @@ class OutputEntry:
 @dataclass(frozen=True)
 class OutputManifest(Manifest):
     outputs: tuple[OutputEntry, ...]
+    state: OutputEntry | None = None

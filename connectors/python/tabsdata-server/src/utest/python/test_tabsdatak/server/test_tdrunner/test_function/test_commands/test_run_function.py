@@ -36,12 +36,14 @@ from tabsdatak.server._tdrunner.function._commons.document.request import (
     Request,
 )
 from tabsdatak.server._tdrunner.function._commons.solver.secrets import ProjectSecret
+from tabsdatak.server._tdrunner.function._handlers.state import (
+    STATE_FILE,
+    StateOutput,
+    read_state,
+    write_state,
+)
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
-from tabsdatak.server._tdrunner.function._lib.initial_values import (
-    read_initial_values,
-    write_initial_values,
-)
 from tabsdatak.server._tdrunner.function._commons.manifests.input import (
     InputEntry,
     InputManifest,
@@ -49,6 +51,7 @@ from tabsdatak.server._tdrunner.function._commons.manifests.input import (
 )
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputEntry,
+    OutputManifest,
 )
 from tabsdatak.server._tdrunner.function.commands.run_function import (
     _FunctionContext,
@@ -894,6 +897,76 @@ def test_sink_outputs_writes_every_output_in_one_pass(tmp_path, monkeypatch):
     assert collected == [2]
 
 
+def _state_output(tmp_path: Path, values: dict) -> StateOutput:
+    source = tmp_path / "state" / STATE_FILE
+    source.parent.mkdir(parents=True, exist_ok=True)
+    write_state(values, source)
+    return StateOutput(
+        name=STATE_TABLE,
+        source=TableFile.local(source),
+        target=TableFile.local(_stored(tmp_path, STATE_TABLE)),
+    )
+
+
+def test_sink_outputs_writes_the_state_in_the_same_pass(tmp_path, monkeypatch):
+    collected = []
+    collect_all = pl.collect_all
+
+    def counting(plans, **options):
+        collected.append(len(plans))
+        return collect_all(plans, **options)
+
+    monkeypatch.setattr(pl, "collect_all", counting)
+    state = _state_output(tmp_path, {"cursor": 250})
+    manifest = _sink_outputs(
+        (_fake_table_frame(),),
+        ["t1"],
+        _targets(tmp_path, "t1"),
+        public=False,
+        state=state,
+    )
+    assert collected == [2]
+    assert [entry.name for entry in manifest.outputs] == ["t1"]
+    assert manifest.state == OutputEntry(
+        name=STATE_TABLE, uri=state.target.uri, stats=state.target.stats()
+    )
+    assert _stored_state(tmp_path) == {"cursor": 250}
+
+
+def test_sink_outputs_writes_the_state_without_outputs(tmp_path):
+    state = _state_output(tmp_path, {})
+    manifest = _sink_outputs(
+        (None,), ["t1"], _targets(tmp_path, "t1"), public=False, state=state
+    )
+    assert manifest.outputs == (OutputEntry(name="t1"),)
+    assert manifest.state.stats.column_count == 0
+    assert _stored_state(tmp_path) == {}
+
+
+def test_sink_outputs_without_state_records_none(tmp_path):
+    manifest = _sink_outputs(
+        (_fake_table_frame(),), ["t1"], _targets(tmp_path, "t1"), public=False
+    )
+    assert manifest.state is None
+
+
+def test_sink_outputs_state_write_failure_maps_to_output_write_failed(
+    tmp_path, monkeypatch
+):
+    def broken_copy(self, target):
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(TableFile, "copy", broken_copy)
+    with pytest.raises(OutputWriteFailedError, match=STATE_TABLE):
+        _sink_outputs(
+            (None,),
+            ["t1"],
+            _targets(tmp_path, "t1"),
+            public=False,
+            state=_state_output(tmp_path, {}),
+        )
+
+
 def test_sink_outputs_native_keeps_system_columns(tmp_path):
     from tabsdatak.tableframe._engine.constant.column.prefixes import (
         TD_SYSTEM_COLUMN_PREFIX,
@@ -1008,9 +1081,11 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
     assert df["id"].to_list() == [1, 2, 3]
     assert df["name"].to_list() == ["a", "b", "c"]
 
-    # Outputs manifest shape: my_table → uri and stats, untouched → null.
+    # Outputs manifest shape: my_table → uri and stats, untouched → null,
+    # and no state (the request declares no system output).
     data = yaml.safe_load(outputs_manifest.read_text())
-    assert list(data.keys()) == ["outputs"]
+    assert list(data.keys()) == ["outputs", "state"]
+    assert data["state"] is None
     assert len(data["outputs"]) == 2
     e1, e2 = data["outputs"]
     assert e1["name"] == "my_table"
@@ -1370,17 +1445,28 @@ def _write_inputs_manifest_for(input_files: list[str], path: Path) -> None:
     InputManifest(inputs=(_slot_entry("in_1", 0, input_files),)).write(path)
 
 
+STATE_TABLE = "td.fn_state__F-1"
+
+
+def _previous_state(root: Path) -> Path:
+    return root / "storage" / "previous-state.t"
+
+
 def _request_with_state_slots(
     path: Path,
     *,
     outputs: tuple[str, ...] = ("my_table",),
-    state_in_name: str = "iv-in",
-    state_out_name: str = "iv-out",
+    previous: dict | None = None,
 ) -> Path:
     info = _info()
     info["execution_id"] = 2
     info["transaction_id"] = 3
     info["physical_function_run_id"] = 4
+    state_in = None
+    if previous is not None:
+        _previous_state(path.parent).parent.mkdir(parents=True, exist_ok=True)
+        write_state(previous, _previous_state(path.parent))
+        state_in = {"uri": _previous_state(path.parent).as_uri(), "env_prefix": "ROOT"}
     path.write_text(
         yaml.safe_dump({
             "Function": {
@@ -1390,172 +1476,130 @@ def _request_with_state_slots(
                     for index, table in enumerate(outputs)
                 ],
                 "system_input": [
-                    _input_table(
-                        {
-                            "table": state_in_name,
-                            "location": {"uri": "file:///irrelevant"},
-                        },
-                        0,
-                    )
+                    _input_table({"table": STATE_TABLE, "location": state_in}, 0)
                 ],
-                "system_output": [
-                    _output_table(
-                        {
-                            "table": state_out_name,
-                            "location": {"uri": "file:///irrelevant"},
-                        },
-                        0,
-                    )
-                ],
+                "system_output": [_stored_output(path.parent, STATE_TABLE, 0)],
             }
         })
     )
     return path
 
 
-def test_main_ctx_aware_function_hydrates_from_state_in_first_run(
-    tmp_path, ctx_aware_built_bundle, monkeypatch, http_ok_url
-):
-    """First run for the flow: no state-out parquet exists yet. The
-    ctx hydrates from state-in. The user function sees ``None`` for
-    ``get_attr`` because we don't seed state-in either."""
-    req = _request_with_state_slots(tmp_path / "request.yaml")
+def _stored_state(root: Path) -> dict:
+    return read_state(TableFile.local(_stored(root, STATE_TABLE)))
+
+
+def _run_with_state(
+    tmp_path, bundle, monkeypatch, http_ok_url, request_path, *, local=None
+) -> OutputManifest:
     inputs_manifest = tmp_path / "inputs.yaml"
     _write_inputs_manifest_for([str(_seed_input_parquet(tmp_path))], inputs_manifest)
-    out_dir = tmp_path / "out"
     outputs_manifest = tmp_path / "outputs.yaml"
-    state_dir = tmp_path / "state"
-    state_dir.mkdir()
-
+    state_folder = tmp_path / "state"
+    state_folder.mkdir()
+    if local is not None:
+        write_state(local, state_folder / STATE_FILE)
     _set_argv(
         monkeypatch,
-        req,
-        ctx_aware_built_bundle,
+        request_path,
+        bundle,
         inputs_manifest,
-        out_dir,
+        tmp_path / "out",
         outputs_manifest,
         tmp_path / "live",
-        state_dir=state_dir,
+        state_dir=state_folder,
         responder_url=http_ok_url,
     )
     rc = main()
     assert rc == 0, rc
-
-    # User function called set_attr("my-key", "from-user-fn") because
-    # get_attr returned None on the first run; drain wrote it out.
-    out_state = state_dir / "iv-out.parquet"
-    assert out_state.is_file()
-    assert read_initial_values(out_state) == {"my-key": "from-user-fn"}
+    return OutputManifest.load(outputs_manifest)
 
 
-def test_main_ctx_aware_function_hydrates_from_state_out_when_present(
+def test_main_ctx_aware_function_first_run_writes_its_state(
     tmp_path, ctx_aware_built_bundle, monkeypatch, http_ok_url
 ):
-    """``prefer_output=True`` — when state-out already exists (as
-    would be the case mid-chain after run-source-plugin drained), the
-    user function reads from there, not from state-in."""
+    """First run for the flow: no previous state. The user function
+    sees ``None`` for ``get_attr``, sets a value, and run-function writes
+    the drained state to system_output[0] with its stats."""
     req = _request_with_state_slots(tmp_path / "request.yaml")
-    inputs_manifest = tmp_path / "inputs.yaml"
-    _write_inputs_manifest_for([str(_seed_input_parquet(tmp_path))], inputs_manifest)
-    out_dir = tmp_path / "out"
-    outputs_manifest = tmp_path / "outputs.yaml"
-    state_dir = tmp_path / "state"
-    state_dir.mkdir()
-
-    # Pre-populate state-out (simulates run-source-plugin's drain).
-    write_initial_values({"my-key": "preset"}, state_dir / "iv-out.parquet")
-    # Also seed state-in to a different value to prove it's NOT picked.
-    write_initial_values({"my-key": "from-state-in"}, state_dir / "iv-in.parquet")
-
-    _set_argv(
-        monkeypatch,
-        req,
-        ctx_aware_built_bundle,
-        inputs_manifest,
-        out_dir,
-        outputs_manifest,
-        tmp_path / "live",
-        state_dir=state_dir,
-        responder_url=http_ok_url,
+    manifest = _run_with_state(
+        tmp_path, ctx_aware_built_bundle, monkeypatch, http_ok_url, req
     )
-    rc = main()
-    assert rc == 0, rc
-
-    # User function got "preset" from state-out, then appended.
-    assert read_initial_values(state_dir / "iv-out.parquet") == {
-        "my-key": "again-after-preset"
+    assert _stored_state(tmp_path) == {"my-key": "from-user-fn"}
+    assert read_state(TableFile.local(tmp_path / "state" / STATE_FILE)) == {
+        "my-key": "from-user-fn"
     }
+    assert manifest.state == OutputEntry(
+        name=STATE_TABLE,
+        uri=_stored(tmp_path, STATE_TABLE).as_uri(),
+        stats=TableFile.local(_stored(tmp_path, STATE_TABLE)).stats(),
+    )
+    assert manifest.state.stats.row_count == 1
 
 
-def test_main_ctx_aware_function_falls_back_to_state_in(
+def test_main_ctx_aware_function_prefers_this_run_state(
     tmp_path, ctx_aware_built_bundle, monkeypatch, http_ok_url
 ):
-    """``prefer_output=True`` — when state-out doesn't exist (e.g.
-    transformer / subscriber chain), the user function hydrates from
-    state-in instead."""
-    req = _request_with_state_slots(tmp_path / "request.yaml")
-    inputs_manifest = tmp_path / "inputs.yaml"
-    _write_inputs_manifest_for([str(_seed_input_parquet(tmp_path))], inputs_manifest)
-    out_dir = tmp_path / "out"
-    outputs_manifest = tmp_path / "outputs.yaml"
-    state_dir = tmp_path / "state"
-    state_dir.mkdir()
-
-    # Only state-in is populated; state-out does NOT exist.
-    write_initial_values({"my-key": "from-state-in"}, state_dir / "iv-in.parquet")
-
-    _set_argv(
-        monkeypatch,
-        req,
-        ctx_aware_built_bundle,
-        inputs_manifest,
-        out_dir,
-        outputs_manifest,
-        tmp_path / "live",
-        state_dir=state_dir,
-        responder_url=http_ok_url,
+    """When run-source-plugin already drained this run's state, the user
+    function reads it, not the previous run's."""
+    req = _request_with_state_slots(
+        tmp_path / "request.yaml", previous={"my-key": "from-state-in"}
     )
-    rc = main()
-    assert rc == 0, rc
+    _run_with_state(
+        tmp_path,
+        ctx_aware_built_bundle,
+        monkeypatch,
+        http_ok_url,
+        req,
+        local={"my-key": "preset"},
+    )
+    assert _stored_state(tmp_path) == {"my-key": "again-after-preset"}
 
-    assert read_initial_values(state_dir / "iv-out.parquet") == {
-        "my-key": "again-after-from-state-in"
-    }
+
+def test_main_ctx_aware_function_reads_the_previous_state_where_stored(
+    tmp_path, ctx_aware_built_bundle, monkeypatch, http_ok_url
+):
+    """Without this run's state (transformer / subscriber chains), the
+    user function hydrates from the previous run's stored state."""
+    req = _request_with_state_slots(
+        tmp_path / "request.yaml", previous={"my-key": "from-state-in"}
+    )
+    _run_with_state(tmp_path, ctx_aware_built_bundle, monkeypatch, http_ok_url, req)
+    assert _stored_state(tmp_path) == {"my-key": "again-after-from-state-in"}
 
 
-def test_main_function_without_ctx_does_not_touch_state(
+def test_main_function_without_ctx_writes_no_state(
     tmp_path, built_bundle, monkeypatch, http_ok_url
 ):
-    """The original publisher (no ctx param) must not produce a
-    state-out file -- a function with no ctx is signaling that it
-    doesn't care about state."""
+    """A function with no ctx drains nothing; without a state drained by
+    run-source-plugin there is no state to write."""
     req = _request_with_state_slots(
         tmp_path / "request.yaml", outputs=("my_table", "untouched")
     )
-    inputs_manifest = tmp_path / "inputs.yaml"
-    _write_inputs_manifest_for([str(_seed_input_parquet(tmp_path))], inputs_manifest)
-    out_dir = tmp_path / "out"
-    outputs_manifest = tmp_path / "outputs.yaml"
-    state_dir = tmp_path / "state"
-    state_dir.mkdir()
+    manifest = _run_with_state(tmp_path, built_bundle, monkeypatch, http_ok_url, req)
+    assert not (tmp_path / "state" / STATE_FILE).exists()
+    assert not _stored(tmp_path, STATE_TABLE).exists()
+    assert manifest.state is None
 
-    _set_argv(
-        monkeypatch,
-        req,
-        built_bundle,
-        inputs_manifest,
-        out_dir,
-        outputs_manifest,
-        tmp_path / "live",
-        state_dir=state_dir,
-        responder_url=http_ok_url,
+
+def test_main_function_without_ctx_writes_the_source_plugin_state(
+    tmp_path, built_bundle, monkeypatch, http_ok_url
+):
+    """The state run-source-plugin drained is written even when the user
+    function has no ctx."""
+    req = _request_with_state_slots(
+        tmp_path / "request.yaml", outputs=("my_table", "untouched")
     )
-    rc = main()
-    assert rc == 0, rc
-
-    # The fixture publisher has no ctx -- run-function did not touch
-    # state-out and did not overwrite anything in state-dir.
-    assert not (state_dir / "iv-out.parquet").exists()
+    manifest = _run_with_state(
+        tmp_path,
+        built_bundle,
+        monkeypatch,
+        http_ok_url,
+        req,
+        local={"cursor": 250},
+    )
+    assert _stored_state(tmp_path) == {"cursor": 250}
+    assert manifest.state.name == STATE_TABLE
 
 
 def _seed_input_parquet(tmp_path: Path) -> Path:
@@ -1648,7 +1692,7 @@ def test_main_ctx_aware_transformer_hydrates_and_drains(
     tmp_path, monkeypatch, request, http_ok_url
 ):
     """A @transformer that declares a trailing ``ctx: TransactionCtx`` gets the
-    same hydrate-from-state-out / drain-to-state-out treatment as a
+    same hydrate / drain / write treatment as a
     publisher. Verifies the runtime is kind-agnostic."""
     extracted = _build_extracted_bundle(
         tmp_path,
@@ -1660,35 +1704,15 @@ def test_main_ctx_aware_transformer_hydrates_and_drains(
         decorated_name="my_transformer",
     )
 
-    req = _request_with_state_slots(tmp_path / "request.yaml", outputs=("t_out",))
-    inputs_manifest = tmp_path / "inputs.yaml"
-    _write_inputs_manifest_for([str(_seed_input_parquet(tmp_path))], inputs_manifest)
-    out_dir = tmp_path / "out"
-    outputs_manifest = tmp_path / "outputs.yaml"
-    state_dir = tmp_path / "state"
-    state_dir.mkdir()
-    # Seed only state-in: transformers run in chains without
-    # run-source-plugin, so the fallback path is the one exercised.
-    write_initial_values(
-        {"smoke.last-seen": "from-state-in"}, state_dir / "iv-in.parquet"
+    # Only the previous state: transformers run in chains without
+    # run-source-plugin, so the stored-state path is the one exercised.
+    req = _request_with_state_slots(
+        tmp_path / "request.yaml",
+        outputs=("t_out",),
+        previous={"smoke.last-seen": "from-state-in"},
     )
-
-    _set_argv(
-        monkeypatch,
-        req,
-        extracted,
-        inputs_manifest,
-        out_dir,
-        outputs_manifest,
-        tmp_path / "live",
-        state_dir=state_dir,
-        responder_url=http_ok_url,
-    )
-    rc = main()
-    assert rc == 0, rc
-    assert read_initial_values(state_dir / "iv-out.parquet") == {
-        "smoke.last-seen": "tx-after-from-state-in"
-    }
+    _run_with_state(tmp_path, extracted, monkeypatch, http_ok_url, req)
+    assert _stored_state(tmp_path) == {"smoke.last-seen": "tx-after-from-state-in"}
 
 
 def test_main_ctx_aware_subscriber_hydrates_and_drains(
@@ -1709,30 +1733,8 @@ def test_main_ctx_aware_subscriber_hydrates_and_drains(
         decorated_name="my_subscriber",
     )
 
-    req = _request_with_state_slots(tmp_path / "request.yaml")
-    inputs_manifest = tmp_path / "inputs.yaml"
-    _write_inputs_manifest_for([str(_seed_input_parquet(tmp_path))], inputs_manifest)
-    out_dir = tmp_path / "out"
-    outputs_manifest = tmp_path / "outputs.yaml"
-    state_dir = tmp_path / "state"
-    state_dir.mkdir()
-    write_initial_values(
-        {"smoke.last-seen": "from-state-in"}, state_dir / "iv-in.parquet"
+    req = _request_with_state_slots(
+        tmp_path / "request.yaml", previous={"smoke.last-seen": "from-state-in"}
     )
-
-    _set_argv(
-        monkeypatch,
-        req,
-        extracted,
-        inputs_manifest,
-        out_dir,
-        outputs_manifest,
-        tmp_path / "live",
-        state_dir=state_dir,
-        responder_url=http_ok_url,
-    )
-    rc = main()
-    assert rc == 0, rc
-    assert read_initial_values(state_dir / "iv-out.parquet") == {
-        "smoke.last-seen": "sub-after-from-state-in"
-    }
+    _run_with_state(tmp_path, extracted, monkeypatch, http_ok_url, req)
+    assert _stored_state(tmp_path) == {"smoke.last-seen": "sub-after-from-state-in"}

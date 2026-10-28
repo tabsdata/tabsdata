@@ -30,40 +30,12 @@ def endpoint_for(location: Location) -> Endpoint:
     return endpoint_from_location(location.uri, location.env_prefix)
 
 
-def build_localize_state_request(
-    request: Request, state_dir: Path
-) -> TransporterCopyRequest:
-    pairs: list[tuple[Endpoint, Endpoint]] = []
-    for table in request.system_input:
-        if table.location is None:
-            continue
-        pairs.append((
-            endpoint_for(table.location),
-            local_endpoint(state_dir / f"{table.table}.parquet"),
-        ))
-    return HANDLER.make_request(pairs)
-
-
 def build_bundle_fetch_request(
     request: Request | AnyRequest, target_path: Path
 ) -> TransporterCopyRequest:
     return HANDLER.make_request([
         (endpoint_for(request.info.function_bundle), local_endpoint(target_path))
     ])
-
-
-def build_upload_state_request(
-    request: Request, state_dir: Path
-) -> TransporterCopyRequest:
-    pairs: list[tuple[Endpoint, Endpoint]] = []
-    for table in request.system_output:
-        if table.location is None:
-            continue
-        source_path = state_dir / f"{table.table}.parquet"
-        if not source_path.exists():
-            continue
-        pairs.append((local_endpoint(source_path), endpoint_for(table.location)))
-    return HANDLER.make_request(pairs)
 
 
 def build_upload_raw_request(

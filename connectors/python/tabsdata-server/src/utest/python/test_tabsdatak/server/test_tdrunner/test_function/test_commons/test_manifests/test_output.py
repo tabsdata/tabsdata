@@ -39,8 +39,25 @@ def test_write_produces_the_outputs_document(tmp_path):
         "outputs": [
             {"name": "a", "uri": "s3://b/a.t", "stats": STATS_DOCUMENT},
             {"name": "b", "uri": None, "stats": None},
-        ]
+        ],
+        "state": None,
     }
+
+
+def test_round_trip_keeps_the_state(tmp_path):
+    path = tmp_path / "outputs.yaml"
+    manifest = OutputManifest(
+        outputs=(),
+        state=OutputEntry(name="td.fn_state__f", uri="s3://b/s.t", stats=STATS),
+    )
+    manifest.write(path)
+    assert OutputManifest.load(path) == manifest
+
+
+def test_load_without_state_has_none(tmp_path):
+    path = tmp_path / "outputs.yaml"
+    path.write_text("outputs: []\n")
+    assert OutputManifest.load(path).state is None
 
 
 def test_load_keeps_an_entry_without_data_as_not_modified(tmp_path):

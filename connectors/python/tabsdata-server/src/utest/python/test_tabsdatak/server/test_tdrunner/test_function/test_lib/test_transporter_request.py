@@ -26,15 +26,12 @@ from tabsdatak.common._transporter.handler.handler1 import (
 )
 from tabsdatak.server._tdrunner.function._commons.document.request import (
     Info,
-    InputTable,
     Location,
-    OutputTable,
     Request,
 )
 from tabsdatak.server._tdrunner.function._lib.transporter1 import (
     build_bundle_fetch_request,
-    build_localize_state_request,
-    build_upload_state_request,
+    endpoint_for,
     write_transporter_request,
 )
 
@@ -71,155 +68,16 @@ def _info(**overrides: Any) -> Info:
     return Info(**fields)
 
 
-def _input_table(
-    name: str,
-    *,
-    location: Location | None = None,
-    table_pos: int = 0,
-    version_pos: int = 0,
-    input_idx: int = 0,
-) -> InputTable:
-    return InputTable(
-        collection_id=1,
-        collection="c",
-        table_id=f"T-{name}",
-        table=name,
-        table_version_id=f"TV-{name}",
-        location=location,
-        input_idx=input_idx,
-        table_pos=table_pos,
-        version_pos=version_pos,
-    )
-
-
-def _output_table(
-    name: str,
-    *,
-    location: Location,
-    table_pos: int = 0,
-) -> OutputTable:
-    return OutputTable(
-        collection_id=1,
-        collection="c",
-        table_id=f"T-{name}",
-        table=name,
-        table_version_id=f"TV-{name}",
-        logical_table_data_version_id=f"LDV-{name}",
-        physical_table_data_version_id=f"PDV-{name}",
-        location=location,
-        table_pos=table_pos,
-    )
-
-
-def _request(
-    *,
-    inputs: tuple[InputTable, ...] = (),
-    outputs: tuple[OutputTable, ...] = (),
-    system_input: tuple[InputTable, ...] = (),
-    system_output: tuple[OutputTable, ...] = (),
-    info: Info | None = None,
-) -> Request:
-    return Request(
-        info=info or _info(),
-        input=inputs,
-        output=outputs,
-        system_input=system_input,
-        system_output=system_output,
-    )
-
-
-# --- builders: shape ---
-
-
-def test_localize_empty_request_yields_no_pairs(tmp_path):
-    r = _request()
-    out = build_localize_state_request(r, tmp_path / "state")
-    assert out.pairs == ()
-
-
-def test_upload_empty_request_yields_no_pairs(tmp_path):
-    r = _request()
-    out = build_upload_state_request(r, tmp_path / "state")
-    assert out.pairs == ()
-
-
-def test_localize_skips_system_input_table_without_location(tmp_path):
-    r = _request(
-        system_input=(
-            _input_table("t1", location=Location(uri="s3://b/t1.parquet")),
-            _input_table("t2", location=None),
-        )
-    )
-    out = build_localize_state_request(r, tmp_path / "state")
-    assert len(out.pairs) == 1
-    assert isinstance(out.pairs[0].source, S3Endpoint)
-
-
-def test_localize_leaves_input_tables_where_they_are_stored(tmp_path):
-    r = _request(
-        inputs=(
-            _input_table("i1", location=None),
-            _input_table("i2", location=Location(uri="s3://b/i2.parquet")),
-        )
-    )
-    out = build_localize_state_request(r, tmp_path / "state")
-    assert out.pairs == ()
-
-
-def test_upload_outputs_all_system_outputs(tmp_path):
-    """Every system_output whose state parquet exists on disk gets a pair."""
-    state_dir = tmp_path / "state"
-    state_dir.mkdir()
-    (state_dir / "t1.parquet").touch()
-    (state_dir / "t2.parquet").touch()
-    r = _request(
-        system_output=(
-            _output_table("t1", location=Location(uri="s3://b/t1.parquet")),
-            _output_table("t2", location=Location(uri="s3://b/t2.parquet")),
-        )
-    )
-    out = build_upload_state_request(r, state_dir)
-    assert len(out.pairs) == 2
-
-
-def test_upload_skips_system_output_whose_state_file_is_absent(tmp_path):
-    """A declared system_output slot whose state parquet is absent from
-    ``state_dir`` is silently skipped — mirrors ``report_completion``'s
-    ``!NoData`` convention for the same case. Covers transformers and
-    subscribers whose user function signature omits ``ctx: TransactionCtx`` and
-    therefore never drains state for the declared slot."""
-    state_dir = tmp_path / "state"
-    state_dir.mkdir()
-    (state_dir / "present.parquet").touch()  # missing.parquet intentionally not created
-    r = _request(
-        system_output=(
-            _output_table("present", location=Location(uri="s3://b/present.parquet")),
-            _output_table("missing", location=Location(uri="s3://b/missing.parquet")),
-        )
-    )
-    out = build_upload_state_request(r, state_dir)
-    assert len(out.pairs) == 1
-    assert "present.parquet" in out.pairs[0].source.url
-
-
-def test_localize_copies_only_the_system_input(tmp_path):
-    r = _request(
-        inputs=(_input_table("i1", location=Location(uri="s3://b/i1.parquet")),),
-        system_input=(_input_table("s1", location=Location(uri="s3://b/s1.parquet")),),
-    )
-    out = build_localize_state_request(r, tmp_path / "state")
-    assert len(out.pairs) == 1
-    assert "state/s1.parquet" in out.pairs[0].target.url
+def _request(*, info: Info | None = None) -> Request:
+    return Request(info=info or _info())
 
 
 # --- endpoint mapping by scheme ---
 
 
 @pytest.mark.parametrize("uri", ["s3://b/x.parquet"])
-def test_s3_endpoint(uri, tmp_path):
-    r = _request(system_input=(_input_table("t", location=Location(uri=uri)),))
-    out = build_localize_state_request(r, tmp_path / "state")
-    src = out.pairs[0].source
+def test_s3_endpoint(uri):
+    src = endpoint_for(Location(uri=uri))
     assert isinstance(src, S3Endpoint)
     assert src.url == uri
     assert src.configs.access_key == EnvRef(name="AWS_ACCESS_KEY_ID")
@@ -231,76 +89,41 @@ def test_s3_endpoint(uri, tmp_path):
     "uri",
     ["az://acct/cont/x.parquet", "abfs://c/x", "abfss://c/x"],
 )
-def test_azure_endpoint(uri, tmp_path):
-    r = _request(system_input=(_input_table("t", location=Location(uri=uri)),))
-    out = build_localize_state_request(r, tmp_path / "state")
-    src = out.pairs[0].source
+def test_azure_endpoint(uri):
+    src = endpoint_for(Location(uri=uri))
     assert isinstance(src, AzureEndpoint)
     assert src.url == uri
     assert src.configs.account_name == EnvRef(name="AZURE_ACCOUNT_NAME")
     assert src.configs.account_key == EnvRef(name="AZURE_ACCOUNT_KEY")
 
 
-def test_gcs_endpoint(tmp_path):
-    r = _request(
-        system_input=(
-            _input_table("t", location=Location(uri="gs://bucket/x.parquet")),
-        )
-    )
-    out = build_localize_state_request(r, tmp_path / "state")
-    src = out.pairs[0].source
+def test_gcs_endpoint():
+    src = endpoint_for(Location(uri="gs://bucket/x.parquet"))
     assert isinstance(src, GCSEndpoint)
     assert src.configs.service_account_key == EnvRef(name="GCP_SERVICE_ACCOUNT_KEY")
 
 
-def test_local_file_endpoint(tmp_path):
-    r = _request(
-        system_input=(
-            _input_table("t", location=Location(uri="file:///foo/x.parquet")),
-        )
-    )
-    out = build_localize_state_request(r, tmp_path / "state")
-    src = out.pairs[0].source
+def test_local_file_endpoint():
+    src = endpoint_for(Location(uri="file:///foo/x.parquet"))
     assert isinstance(src, LocalFileEndpoint)
     assert src.url == "file:///foo/x.parquet"
 
 
-def test_unsupported_scheme_raises(tmp_path):
-    r = _request(
-        system_input=(_input_table("t", location=Location(uri="ftp://x/y.parquet")),)
-    )
+def test_unsupported_scheme_raises():
     with pytest.raises(UnsupportedSchemeError, match="ftp"):
-        build_localize_state_request(r, tmp_path / "state")
+        endpoint_for(Location(uri="ftp://x/y.parquet"))
 
 
 # --- env_prefix handling ---
 
 
-def test_env_prefix_canonical_when_none(tmp_path):
-    r = _request(
-        system_input=(
-            _input_table(
-                "t",
-                location=Location(uri="s3://b/x.parquet", env_prefix=None),
-            ),
-        )
-    )
-    out = build_localize_state_request(r, tmp_path / "state")
-    src = out.pairs[0].source
+def test_env_prefix_canonical_when_none():
+    src = endpoint_for(Location(uri="s3://b/x.parquet", env_prefix=None))
     assert src.configs.access_key == EnvRef(name="AWS_ACCESS_KEY_ID")
 
 
-def test_env_prefix_prepended(tmp_path):
-    r = _request(
-        system_input=(
-            _input_table(
-                "t",
-                location=Location(uri="s3://b/x.parquet", env_prefix="STAGE"),
-            ),
-        )
-    )
-    out = build_localize_state_request(r, tmp_path / "state")
-    src = out.pairs[0].source
+def test_env_prefix_prepended():
+    src = endpoint_for(Location(uri="s3://b/x.parquet", env_prefix="STAGE"))
     assert src.configs.access_key == EnvRef(name="STAGE_AWS_ACCESS_KEY_ID")
     assert src.configs.secret_key == EnvRef(name="STAGE_AWS_SECRET_ACCESS_KEY")
     assert src.configs.region == EnvRef(name="STAGE_AWS_REGION")
@@ -335,37 +158,12 @@ def test_build_bundle_fetch_request_s3(tmp_path):
     assert src.configs.access_key == EnvRef(name="STAGE_AWS_ACCESS_KEY_ID")
 
 
-# --- upload semantics ---
-
-
-def test_upload_uses_system_output(tmp_path):
-    state_dir = tmp_path / "state"
-    state_dir.mkdir()
-    (state_dir / "td-initial-values.parquet").touch()
-    r = _request(
-        system_output=(
-            _output_table(
-                "td-initial-values",
-                location=Location(uri="s3://b/state/out.parquet"),
-            ),
-        )
-    )
-    out = build_upload_state_request(r, state_dir)
-    pair = out.pairs[0]
-    assert isinstance(pair.source, LocalFileEndpoint)
-    assert "state/td-initial-values.parquet" in pair.source.url
-    assert isinstance(pair.target, S3Endpoint)
-    assert pair.target.url == "s3://b/state/out.parquet"
-
-
 # --- YAML output (golden checks) ---
 
 
 def test_yaml_emits_copy_v1_tag(tmp_path):
-    r = _request(
-        system_input=(_input_table("t", location=Location(uri="s3://b/t.parquet")),)
-    )
-    req = build_localize_state_request(r, tmp_path / "state")
+    r = _request(info=_info(function_bundle=Location(uri="s3://b/bundle.tar.zst")))
+    req = build_bundle_fetch_request(r, tmp_path / "bundle.tar.zst")
     text = dump_transporter_request(req)
     assert text.startswith("!CopyV1")
     assert "!S3" in text

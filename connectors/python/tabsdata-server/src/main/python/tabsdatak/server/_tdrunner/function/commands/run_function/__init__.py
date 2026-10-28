@@ -15,6 +15,11 @@ for the destination plugin. Emits an outputs manifest at
 table (neither, if the function returned `None` for that table — "not
 modified this run").
 
+The run's state (`<state-dir>/state.parquet`, drained by
+run-source-plugin and by the function's ctx) is written to
+`request.system_output[0]` in the same streaming pass, and the manifest's
+`state` entry carries its URI and stats.
+
 Kind-agnostic: handles `publisherDef`, `transformerDef`, and
 `subscriberDef`. The input slot mode (SINGLE vs ARRAY) is inferred
 per-parameter from the user function's type annotations.
@@ -130,17 +135,15 @@ def _build_parser():
     parser.add_argument(
         "--state-dir",
         required=True,
-        dest="state_dir",
+        dest="state_folder",
         help=(
-            "Local directory mirroring the one used by "
-            "prep-localize-state / run-source-plugin / "
-            "prep-upload-state. When the user function declares a "
+            "Local folder holding this run's state, "
+            "<state-dir>/state.parquet. When the user function declares a "
             "trailing ``ctx: TransactionCtx`` parameter, the runtime hydrates "
-            "the ctx scratch from <state-dir>/<system_output[0].table>."
-            "parquet (falling back to <system_input[0].table>.parquet) "
-            "before invoking the function, and drains it back to "
-            "<state-dir>/<system_output[0].table>.parquet afterwards. "
-            "Ignored when the user function has no ``ctx`` parameter."
+            "the ctx scratch from that file (falling back to "
+            "system_input[0]'s storage location) before invoking the "
+            "function, and drains it back afterwards. The file, when "
+            "present, is written to system_output[0]'s storage location."
         ),
     )
     return parser

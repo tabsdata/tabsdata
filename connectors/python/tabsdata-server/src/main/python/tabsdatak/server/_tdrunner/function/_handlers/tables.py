@@ -65,11 +65,23 @@ class TableFile:
         frame.collect_schema()
         return frame
 
+    def read(self) -> pl.DataFrame:
+        return self.scan().collect()
+
     def sink(self, frame: TableFrame, *, public: bool) -> pl.LazyFrame:
         target = frames.target(self.uri, self.declaration)
         if public:
             return frame._sink_public_plan(target.uri, target.storage_options)
         return frame._sink_native_plan(target.uri, target.storage_options)
+
+    def copy(self, target: TableFile) -> pl.LazyFrame:
+        destination = frames.target(target.uri, target.declaration)
+        return self.scan().sink_parquet(
+            destination.uri,
+            storage_options=destination.storage_options,
+            engine="streaming",
+            lazy=True,
+        )
 
     def stats(self) -> TableStats:
         location = StorageLocation(

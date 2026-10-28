@@ -99,6 +99,37 @@ def test_scan_rejects_a_mount_without_its_options(monkeypatch):
         table.scan()
 
 
+def test_read_a_stored_table(tmp_path):
+    path = written(tmp_path)
+    table = TableFile.stored(Location(uri=path.as_uri(), env_prefix="ROOT"))
+    assert table.read().equals(FRAME)
+
+
+def test_read_a_missing_file_fails(tmp_path):
+    with pytest.raises(Exception):
+        TableFile.local(tmp_path / "missing.parquet").read()
+
+
+def test_copy_is_lazy_until_collected(tmp_path):
+    target = tmp_path / "data" / "v1" / "0.t"
+    plan = TableFile.local(written(tmp_path)).copy(
+        TableFile.stored(Location(uri=target.as_uri(), env_prefix="ROOT"))
+    )
+    assert not target.exists()
+    pl.collect_all([plan], engine="streaming")
+    assert pl.read_parquet(target).equals(FRAME)
+
+
+def test_copy_keeps_a_file_without_columns(tmp_path):
+    source = tmp_path / "empty.parquet"
+    pl.DataFrame().write_parquet(source)
+    target = tmp_path / "copy.parquet"
+    pl.collect_all(
+        [TableFile.local(source).copy(TableFile.local(target))], engine="streaming"
+    )
+    assert pl.read_parquet(target).shape == (0, 0)
+
+
 def test_sink_is_lazy_until_collected(tmp_path):
     path = tmp_path / "nested" / "t.parquet"
     plan = TableFile.local(path).sink(TableFrame.from_polars(FRAME), public=False)

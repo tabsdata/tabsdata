@@ -21,7 +21,6 @@ from tabsdatak.server._tdrunner.function.commands import (
     get_bundle,
     prep_localize_state,
     prep_upload_raw,
-    prep_upload_state,
     report_completion,
     run_destination_plugin,
     run_function,
@@ -222,13 +221,8 @@ class Driver:
             prep_localize_state,
             "prep-localize-state",
             request=self.request,
-            state_dir=self.path("state"),
-            out=self.path("shuttle/localize-request.yaml"),
             inputs_manifest=self.path("fn/in/inputs-manifest.yaml"),
-            state_manifest=self.path("fn/in/state-manifest.yaml"),
-            storage_config=self.storage,
         )
-        self.transport("shuttle/localize-request.yaml", "shuttle/localize-report.yaml")
 
     def run_function(self, inputs_manifest: str) -> None:
         self.step(
@@ -242,24 +236,12 @@ class Driver:
             state_dir=self.path("state"),
         )
 
-    def upload_state(self) -> None:
-        self.step(
-            prep_upload_state,
-            "prep-upload-state",
-            request=self.request,
-            state_dir=self.path("state"),
-            out=self.path("shuttle/state-request.yaml"),
-            storage_config=self.storage,
-        )
-        self.transport("shuttle/state-request.yaml", "shuttle/state-report.yaml")
-
     def complete(self) -> None:
         self.step(
             report_completion,
             "report-completion",
             request=self.request,
             outputs_manifest=self.path("fn/out/outputs-manifest.yaml"),
-            state_dir=self.path("state"),
             out=self.path("response/response.yaml"),
         )
 
@@ -292,11 +274,9 @@ class Driver:
         )
         self.transport("shuttle/raw-request.yaml", "shuttle/raw-report.yaml")
         self.run_function("fn/in/enriched-inputs-manifest.yaml")
-        self.upload_state()
 
     def transformer(self) -> None:
         self.run_function("fn/in/inputs-manifest.yaml")
-        self.upload_state()
 
     def subscriber(self, connection: Path) -> None:
         self.run_function("fn/in/inputs-manifest.yaml")
@@ -308,7 +288,6 @@ class Driver:
             outputs_manifest=self.path("fn/out/outputs-manifest.yaml"),
             connection_file=connection,
         )
-        self.upload_state()
 
     def run(
         self,

@@ -4,23 +4,12 @@
 
 """prep-localize-state command.
 
-Step 4a of the function-runner chain. Reads request.yaml, builds the
-transporter copy request that pulls the state-in tables from storage to
-local disk, and writes it to ``--out``. Step 4b (`run-transporter`)
-consumes it. Input tables are not copied: `run-function` scans them
-where they are stored.
-
-Also writes two manifests:
-
-  * ``--inputs-manifest``: one entry per ``request.input`` table, each
-    record carrying the table's storage ``location``. The transformer
-    and subscriber paths of `run-function` consume this; the publisher
-    path overwrites it with the source-plugin-produced manifest.
-  * ``--state-manifest``: one entry per ``request.system_input``
-    table, with ``files`` pointing at ``<state_dir>/<name>.parquet``.
-    No consumer reads this in the current chain — it exists so future
-    steps (manifest-driven prep-upload-state, source-plugin context
-    loader, debugging) have a structured handle on framework state-in.
+Reads request.yaml and writes ``--inputs-manifest``: one entry per
+``request.input`` table, each record carrying the table's storage
+``location``. The transformer and subscriber paths of `run-function`
+consume it and scan the tables where they are stored; the publisher path
+overwrites it with the source-plugin-produced manifest. Nothing is copied
+locally: state is read where it is stored too (see the state handler).
 """
 
 from __future__ import annotations
@@ -33,57 +22,32 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
 )
 from tabsdatak.server._tdrunner.function._commons.run.version import version
 from tabsdatak.server._tdrunner.function.commands.prep_localize_state.runner import (
-    _build_inputs_manifest,
-    _build_state_manifest,
     run,
 )
 
-__all__ = [
-    "_build_inputs_manifest",
-    "_build_state_manifest",
-    "run",
-    "main",
-]
+__all__ = ["run", "main"]
 
 VERSION = version()
 GENERATION = 1
-INFO = (
-    "prep-localize-state — generate the transporter request that pulls "
-    "the state-in tables to local, plus the inputs and state manifests"
-)
+INFO = "prep-localize-state — write the inputs manifest of the function run"
 MAN = (
-    "prep-localize-state --request <PATH> "
-    "--state-dir <PATH> --out <PATH> --inputs-manifest <PATH> "
-    "--state-manifest <PATH> --liveness <PATH>\n\n"
-    "Reads request.yaml, generates the transporter copy YAML for "
-    "localising the system-input tables (writes to --out). "
-    "Writes an inputs manifest at --inputs-manifest with one entry per "
-    "request.input table (records carry each table's storage location), and a "
-    "state manifest at --state-manifest with one entry per "
-    "request.system_input table (files at <state_dir>/<name>.parquet)."
+    "prep-localize-state --request <PATH> --inputs-manifest <PATH> "
+    "--liveness <PATH>\n\n"
+    "Reads request.yaml and writes an inputs manifest at --inputs-manifest "
+    "with one entry per request.input table (records carry each table's "
+    "storage location)."
 )
 
 
-def _build_parser():
+def command_parser():
     parser = build_parser(
         program="prep-localize-state",
-        description="Generate the localize-state transporter request.",
+        description="Write the inputs manifest of the function run.",
         version=VERSION,
         info=INFO,
         manual=MAN,
     )
     parser.add_argument("--request", required=True, help="Path to request.yaml")
-    parser.add_argument(
-        "--state-dir",
-        required=True,
-        dest="state_dir",
-        help="Local destination dir for state-in tables",
-    )
-    parser.add_argument(
-        "--out",
-        required=True,
-        help="Path to write the transporter request YAML",
-    )
     parser.add_argument(
         "--inputs-manifest",
         required=True,
@@ -93,26 +57,10 @@ def _build_parser():
             "request.input table, pointing at its storage location)"
         ),
     )
-    parser.add_argument(
-        "--state-manifest",
-        required=True,
-        dest="state_manifest",
-        help=(
-            "Path to write the state manifest (one entry per "
-            "request.system_input table, pointing at the localized "
-            "state-in parquets)"
-        ),
-    )
-    parser.add_argument(
-        "--storage-config",
-        required=True,
-        dest="storage_config",
-        help="Path to the storage configuration file.",
-    )
     return parser
 
 
-@command(name="td_prep_localize_state", parser=_build_parser)
+@command(name="td_prep_localize_state", parser=command_parser)
 def main(args: argparse.Namespace) -> int:
     return run(args)
 

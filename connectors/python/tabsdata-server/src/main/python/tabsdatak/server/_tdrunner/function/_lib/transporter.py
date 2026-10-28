@@ -17,23 +17,6 @@ from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
 from tabsdatak.server._tdrunner.function._lib.mounts import load_mount_option_keys
 
 
-def build_localize_state_request(
-    request: Request,
-    state_dir: Path,
-    storage_config_file: Path,
-) -> Any:
-    match TRANSPORTER_MODE:
-        case 1:
-            return transporter1.build_localize_state_request(request, state_dir)
-        case 2:
-            option_keys = load_mount_option_keys(storage_config_file)
-            return transporter2.build_localize_state_request(
-                request, state_dir, option_keys
-            )
-        case _:
-            raise CommandErrorCode.CMD_5.exception(mode=TRANSPORTER_MODE)
-
-
 def build_bundle_fetch_request(
     request: Request | AnyRequest,
     target_path: Path,
@@ -46,23 +29,6 @@ def build_bundle_fetch_request(
             option_keys = load_mount_option_keys(storage_config_file)
             return transporter2.build_bundle_fetch_request(
                 request, target_path, option_keys
-            )
-        case _:
-            raise CommandErrorCode.CMD_5.exception(mode=TRANSPORTER_MODE)
-
-
-def build_upload_state_request(
-    request: Request,
-    state_dir: Path,
-    storage_config_file: Path,
-) -> Any:
-    match TRANSPORTER_MODE:
-        case 1:
-            return transporter1.build_upload_state_request(request, state_dir)
-        case 2:
-            option_keys = load_mount_option_keys(storage_config_file)
-            return transporter2.build_upload_state_request(
-                request, state_dir, option_keys
             )
         case _:
             raise CommandErrorCode.CMD_5.exception(mode=TRANSPORTER_MODE)

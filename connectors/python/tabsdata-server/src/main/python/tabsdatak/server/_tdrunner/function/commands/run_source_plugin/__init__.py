@@ -107,14 +107,12 @@ def _build_parser():
     parser.add_argument(
         "--state-dir",
         required=True,
-        dest="state_dir",
+        dest="state_folder",
         help=(
-            "Local directory where state-in tables are read from "
-            "(populated by prep-localize-state + run-transporter) and "
-            "state-out tables are written to (consumed by "
-            "prep-upload-state). The convention is "
-            "<state-dir>/<table.table>.parquet, mirroring the wire "
-            "format prep-localize-state / prep-upload-state already use."
+            "Local folder where the plugin ctx scratch is drained "
+            "to <state-dir>/state.parquet, for run-function to pick up. "
+            "The previous run's state is read from system_input[0]'s "
+            "storage location."
         ),
     )
     parser.add_argument(

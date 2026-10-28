@@ -15,8 +15,6 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-import pyarrow as pa
-import pyarrow.parquet as pq
 import pytest
 import yaml
 
@@ -53,7 +51,6 @@ def _set_argv(
     *,
     request,
     outputs_manifest,
-    state_dir,
     out,
     liveness,
     responder_url,
@@ -70,8 +67,6 @@ def _set_argv(
             str(request),
             "--outputs-manifest",
             str(outputs_manifest),
-            "--state-dir",
-            str(state_dir),
             "--out",
             str(out),
             "--liveness",
@@ -120,15 +115,9 @@ def _write_request(path, *, output=None, system_output=None):
     return path
 
 
-def _write_manifest(path: Path, entries: list) -> Path:
-    path.write_text(yaml.safe_dump({"outputs": entries}))
+def _write_manifest(path: Path, entries: list, state: dict | None = None) -> Path:
+    path.write_text(yaml.safe_dump({"outputs": entries, "state": state}))
     return path
-
-
-def _write_parquet(path: Path, **columns):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    table = pa.table(columns)
-    pq.write_table(table, path)
 
 
 STATS = {
@@ -136,6 +125,12 @@ STATS = {
     "row_count": 3,
     "schema_hash": "sha256:abc",
     "data_bytes": 640,
+}
+STATE_STATS = {
+    "column_count": 1,
+    "row_count": 1,
+    "schema_hash": "sha256:def",
+    "data_bytes": 320,
 }
 
 
@@ -197,11 +192,10 @@ def test_main_writes_response_and_posts_done(monkeypatch, tmp_path, responder):
         output=[{"table": "customers"}],
         system_output=[{"table": "td-initial-values"}],
     )
-    state_dir = tmp_path / "state"
-    _write_parquet(state_dir / "td-initial-values.parquet", offset=[42])
     manifest = _write_manifest(
         tmp_path / "outputs_manifest.yaml",
         [{"name": "customers", "uri": "s3://b/customers.t", "stats": STATS}],
+        state={"name": "td-initial-values", "uri": "s3://b/s.t", "stats": STATE_STATS},
     )
 
     out = tmp_path / "response.yaml"
@@ -210,7 +204,6 @@ def test_main_writes_response_and_posts_done(monkeypatch, tmp_path, responder):
         monkeypatch,
         request=request_yaml,
         outputs_manifest=manifest,
-        state_dir=state_dir,
         out=out,
         liveness=tmp_path / "live",
         responder_url=f"{base_url}/api/v1/done",
@@ -222,10 +215,7 @@ def test_main_writes_response_and_posts_done(monkeypatch, tmp_path, responder):
     yaml_artifact = yaml.safe_load(out.read_bytes())
     by_name = {e["table"]: e for e in yaml_artifact["output"]}
     assert by_name["customers"]["info"] == STATS
-    assert by_name["td-initial-values"]["info"]["schema_hash"].startswith("sha256:")
-    assert by_name["td-initial-values"]["info"]["row_count"] == 1
-    assert by_name["td-initial-values"]["info"]["column_count"] == 1
-    assert by_name["td-initial-values"]["info"]["data_bytes"] > 0
+    assert by_name["td-initial-values"]["info"] == STATE_STATS
 
     # The responder received exactly one Done POST carrying the response
     # as the function output (JSON, externally-tagged Data/NoData).
@@ -259,7 +249,6 @@ def test_main_stops_without_failed_when_done_is_stale(monkeypatch, tmp_path, res
         monkeypatch,
         request=request_yaml,
         outputs_manifest=manifest,
-        state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
         responder_url=f"{base_url}/api/v1/done",
@@ -287,7 +276,6 @@ def test_main_no_info_when_manifest_stats_are_null(monkeypatch, tmp_path, respon
         monkeypatch,
         request=request_yaml,
         outputs_manifest=manifest,
-        state_dir=tmp_path / "state",
         out=out,
         liveness=tmp_path / "live",
         responder_url=f"{base_url}/done",
@@ -302,9 +290,9 @@ def test_main_no_info_when_manifest_stats_are_null(monkeypatch, tmp_path, respon
     assert written[0] == {"NoData": {"table": "missing"}}
 
 
-def test_main_no_info_when_state_parquet_missing(monkeypatch, tmp_path, responder):
-    """A request.system_output table whose parquet doesn't exist in
-    state_dir yields a NoData entry."""
+def test_main_no_info_when_no_state_was_written(monkeypatch, tmp_path, responder):
+    """A request.system_output table without a state entry in the
+    manifest yields a NoData entry."""
     base_url, _, _ = responder
     request_yaml = _write_request(
         tmp_path / "request.yaml",
@@ -317,7 +305,6 @@ def test_main_no_info_when_state_parquet_missing(monkeypatch, tmp_path, responde
         monkeypatch,
         request=request_yaml,
         outputs_manifest=manifest,
-        state_dir=tmp_path / "state",
         out=out,
         liveness=tmp_path / "live",
         responder_url=f"{base_url}/done",
@@ -339,7 +326,6 @@ def test_main_resolves_responder_env_refs(monkeypatch, tmp_path, responder):
         monkeypatch,
         request=request_yaml,
         outputs_manifest=manifest,
-        state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
         responder_url="env:TD_TEST_RC_URL",
@@ -361,7 +347,6 @@ def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path, respond
         monkeypatch,
         request=tmp_path / "no-request.yaml",
         outputs_manifest=manifest,
-        state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
         responder_url=f"{base_url}/done",
@@ -378,7 +363,6 @@ def test_main_missing_manifest_returns_bad_manifest(monkeypatch, tmp_path, respo
         monkeypatch,
         request=request_yaml,
         outputs_manifest=tmp_path / "no-manifest.yaml",
-        state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
         responder_url=f"{base_url}/done",
@@ -397,7 +381,6 @@ def test_main_malformed_manifest_returns_bad_manifest(monkeypatch, tmp_path, res
         monkeypatch,
         request=request_yaml,
         outputs_manifest=bad,
-        state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
         responder_url=f"{base_url}/done",
@@ -419,7 +402,6 @@ def test_main_output_table_missing_from_manifest_returns_mismatch(
         monkeypatch,
         request=request_yaml,
         outputs_manifest=manifest,
-        state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
         responder_url=f"{base_url}/done",
@@ -442,7 +424,6 @@ def test_main_write_error_returns_write_failed(monkeypatch, tmp_path, responder)
         monkeypatch,
         request=request_yaml,
         outputs_manifest=manifest,
-        state_dir=tmp_path / "state",
         out=blocker / "nested" / "response.yaml",
         liveness=tmp_path / "live",
         responder_url=f"{base_url}/done",
@@ -466,7 +447,6 @@ def test_main_responder_http_error_returns_unexpected_but_writes_out(
         monkeypatch,
         request=request_yaml,
         outputs_manifest=manifest,
-        state_dir=tmp_path / "state",
         out=out,
         liveness=tmp_path / "live",
         responder_url=f"{base_url}/done",
@@ -488,7 +468,6 @@ def test_main_responder_url_error_returns_unexpected(
         monkeypatch,
         request=request_yaml,
         outputs_manifest=manifest,
-        state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
         # Port 1 is unbound, so the POST raises URLError immediately.

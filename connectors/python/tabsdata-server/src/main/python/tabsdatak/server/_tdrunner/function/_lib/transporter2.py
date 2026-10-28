@@ -42,23 +42,6 @@ class ServerTransporterHandler2(TransporterHandler2):
         return transporter2.Location(uri=location.uri, configs=configs)
 
 
-def build_localize_state_request(
-    request: Request,
-    state_dir: Path,
-    option_keys: dict[str, list[str]],
-) -> transporter2.CopyRequest:
-    handler = ServerTransporterHandler2(option_keys)
-    pairs: list[tuple[transporter2.Location, transporter2.Location]] = []
-    for table in request.system_input:
-        if table.location is None:
-            continue
-        pairs.append((
-            handler.location_for(table.location),
-            local_location(state_dir / f"{table.table}.parquet"),
-        ))
-    return handler.make_request(pairs)
-
-
 def build_bundle_fetch_request(
     request: Request | AnyRequest,
     target_path: Path,
@@ -71,26 +54,6 @@ def build_bundle_fetch_request(
             local_location(target_path),
         )
     ])
-
-
-def build_upload_state_request(
-    request: Request,
-    state_dir: Path,
-    option_keys: dict[str, list[str]],
-) -> transporter2.CopyRequest:
-    handler = ServerTransporterHandler2(option_keys)
-    pairs: list[tuple[transporter2.Location, transporter2.Location]] = []
-    for table in request.system_output:
-        if table.location is None:
-            continue
-        source_path = state_dir / f"{table.table}.parquet"
-        if not source_path.exists():
-            continue
-        pairs.append((
-            local_location(source_path),
-            handler.location_for(table.location),
-        ))
-    return handler.make_request(pairs)
 
 
 def build_upload_raw_request(

@@ -37,14 +37,11 @@ from tabsdatak.server._tdrunner.function._commons.manifests.input import (
     InputManifest,
     InputRecord,
 )
+from tabsdatak.server._tdrunner.function._handlers.state import State
 from tabsdatak.server._tdrunner.function._lib.connection import load_connection
 from tabsdatak.server._tdrunner.function._lib.endpoint import UnsupportedSchemeError
 from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,
-)
-from tabsdatak.server._tdrunner.function._lib.initial_values import (
-    drain_ctx_to_state_or_raise,
-    hydrate_ctx_from_state_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
 from tabsdatak.server._tdrunner.function._lib.stage_backend import (
@@ -324,7 +321,7 @@ def run(args: argparse.Namespace) -> int:
     bundle_dir = Path(args.bundle_dir)
     out_dir = Path(args.out_dir)
     inputs_manifest = Path(args.inputs_manifest)
-    state_dir = Path(args.state_dir)
+    state_folder = Path(args.state_folder)
     connection_file = Path(args.connection_file)
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -343,19 +340,16 @@ def run(args: argparse.Namespace) -> int:
         cardinality,
     )
     ctx = _SrcContext.from_info(out_dir, request.info)
-    hydrate_ctx_from_state_or_raise(
-        ctx, request, state_dir, error_code=RunSourcePluginErrorCode.RSP_9
-    )
-    logger.debug("Hydrated SrcPluginCtx from %s; work_dir=%s", state_dir, out_dir)
+    state = State(request, state_folder)
+    state.hydrate(ctx, error_code=RunSourcePluginErrorCode.RSP_9)
+    logger.debug("Hydrated SrcPluginCtx; work_dir=%s", out_dir)
 
     logger.info("Invoking source plugin's read_in")
     produced = _invoke_read_in(plugin, ctx, conn, src)
     logger.info("Source plugin produced %d slot(s)", len(produced))
 
-    drain_ctx_to_state_or_raise(
-        ctx, request, state_dir, error_code=RunSourcePluginErrorCode.RSP_10
-    )
-    logger.debug("Drained ctx scratch to %s", state_dir)
+    state.drain(ctx, error_code=RunSourcePluginErrorCode.RSP_10)
+    logger.debug("Drained ctx scratch to %s", state.file)
 
     _write_inputs_manifest(info, produced, inputs_manifest, cardinality=cardinality)
     logger.info("Wrote raw inputs manifest to %s", inputs_manifest)

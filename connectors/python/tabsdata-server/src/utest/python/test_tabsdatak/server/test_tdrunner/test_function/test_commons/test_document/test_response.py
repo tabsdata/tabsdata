@@ -105,11 +105,10 @@ def test_function_output_tags_each_written_table():
 def test_build_takes_the_stats_of_outputs_and_state():
     request = Request.load(MINIMAL, ResponseErrorCode.READ)
     manifest = OutputManifest(
-        outputs=(OutputEntry(name="customers", uri="s3://b/c.t", stats=INFO),)
+        outputs=(OutputEntry(name="customers", uri="s3://b/c.t", stats=INFO),),
+        state=OutputEntry(name="td-initial-values", uri="s3://b/s.t", stats=INFO),
     )
-    response = Response.build(
-        request, manifest, {"td-initial-values": INFO}, ResponseErrorCode.MISMATCH
-    )
+    response = Response.build(request, manifest, ResponseErrorCode.MISMATCH)
     assert response.output == (
         TableEntry(table="customers", info=INFO),
         TableEntry(table="td-initial-values", info=INFO),
@@ -119,22 +118,27 @@ def test_build_takes_the_stats_of_outputs_and_state():
 def test_build_reports_no_data_without_stats():
     request = Request.load(MINIMAL, ResponseErrorCode.READ)
     manifest = OutputManifest(outputs=(OutputEntry(name="customers"),))
-    response = Response.build(request, manifest, {}, ResponseErrorCode.MISMATCH)
+    response = Response.build(request, manifest, ResponseErrorCode.MISMATCH)
     assert response.output == (
         TableEntry(table="customers"),
         TableEntry(table="td-initial-values"),
     )
 
 
+def test_build_ignores_a_state_of_another_table():
+    request = Request.load(MINIMAL, ResponseErrorCode.READ)
+    manifest = OutputManifest(
+        outputs=(OutputEntry(name="customers"),),
+        state=OutputEntry(name="other", uri="s3://b/s.t", stats=INFO),
+    )
+    response = Response.build(request, manifest, ResponseErrorCode.MISMATCH)
+    assert response.output[1] == TableEntry(table="td-initial-values")
+
+
 def test_build_rejects_an_output_missing_from_the_manifest(tmp_path: Path):
     request = Request.load(MINIMAL, ResponseErrorCode.READ)
     with pytest.raises(MismatchFailure, match="customers"):
-        Response.build(
-            request,
-            OutputManifest(outputs=()),
-            {},
-            ResponseErrorCode.MISMATCH,
-        )
+        Response.build(request, OutputManifest(outputs=()), ResponseErrorCode.MISMATCH)
 
 
 @pytest.mark.parametrize(

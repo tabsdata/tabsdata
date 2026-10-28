@@ -8,10 +8,8 @@ from __future__ import annotations
 
 from tabsdatak.error import ErrorCode, ErrorDef
 from tabsdatak.server._tdrunner.function._lib.errors import (
-    BadEndpointSchemeError as _BadEndpointSchemeError,
     BadRequestError as _BadRequestError,
     ManifestWriteFailedError as _ManifestWriteFailedError,
-    WriteFailedError as _WriteFailedError,
 )
 
 
@@ -19,29 +17,10 @@ class BadRequestError(_BadRequestError):
     exit_code = 10
 
 
-class BadEndpointSchemeError(_BadEndpointSchemeError):
-    """A state-in location uses a URI scheme this command
-    doesn't know how to fetch from."""
-
-    exit_code = 11
-
-
-class WriteFailedError(_WriteFailedError):
-    """``--out`` (the transporter request YAML) could not be written."""
-
-    exit_code = 12
-
-
 class InputsManifestWriteFailedError(_ManifestWriteFailedError):
     """``--inputs-manifest`` could not be written."""
 
     exit_code = 13
-
-
-class StateManifestWriteFailedError(_ManifestWriteFailedError):
-    """``--state-manifest`` could not be written."""
-
-    exit_code = 14
 
 
 class PrepLocalizeStateErrorCode(ErrorCode):
@@ -51,26 +30,8 @@ class PrepLocalizeStateErrorCode(ErrorCode):
     )
     # ``Request.load``.
 
-    PLS_2 = ErrorDef(
-        BadEndpointSchemeError,
-        "unsupported scheme in a state location: {detail}",
-    )
-    # ``build_localize_state_request`` ``UnsupportedSchemeError``.
-
-    PLS_3 = ErrorDef(
-        WriteFailedError,
-        "failed to write {path}: {detail}",
-    )
-    # ``write_transporter_request`` ``OSError`` on ``--out``.
-
     PLS_4 = ErrorDef(
         InputsManifestWriteFailedError,
         "failed to write {path}: {detail}",
     )
     # ``InputManifest.write`` ``OSError``.
-
-    PLS_5 = ErrorDef(
-        StateManifestWriteFailedError,
-        "failed to write {path}: {detail}",
-    )
-    # ``StateManifest.write`` ``OSError``.

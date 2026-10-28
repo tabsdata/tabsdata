@@ -36,19 +36,15 @@ from tabsdatak.api import TableFrameSpec, TableFramesSpec  # noqa: F401
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
 from tabsdatak.server._tdrunner.function._commons.document.request import (
-    Info,
-    InputTable,
     Location,
-    OutputTable,
-    Request,
 )
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
-from tabsdatak.server._tdrunner.function._lib.initial_values import (
-    drain_ctx_to_state_or_raise,
-    hydrate_ctx_from_state_or_raise,
-    read_initial_values,
-    write_initial_values,
+from tabsdatak.server._tdrunner.function._handlers.state import (
+    STATE_FILE,
+    read_state,
+    write_state,
 )
+from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.server._tdrunner.function.commands.run_source_plugin import (
     _build_manifest_stage_conn,
     _invoke_read_in,
@@ -62,13 +58,10 @@ from tabsdatak.server._tdrunner.function.commands.run_source_plugin import (
 from tabsdatak.server._tdrunner.function.commands.run_source_plugin.error import (
     BadBundleError,
     BadRequestError,
-    BadStateInError,
-    BadStateOutError,
     BadUserCodeError,
     ManifestWriteFailedError,
     NoPluginError,
     PluginFailedError,
-    RunSourcePluginErrorCode,
     UnsupportedStageSchemeError,
 )
 from tabsdatak.spi import TableFileInput
@@ -904,262 +897,23 @@ def test_main_carries_tabsdata_command_metadata():
     assert getattr(main, "tabsdata_command_name", None) == "td_run_source_plugin"
 
 
-# --- unit: initial_values lifecycle helpers -----------------------------
-
-
-def _bare_ctx() -> _SrcContext:
-    return _SrcContext(
-        work_dir=Path("/work"),
-        project_id="p-1",
-        project="p",
-        collection_id="cid",
-        collection="c",
-        function_id="fn",
-        function="publish_people",
-        function_version_id="fv-1",
-        execution_id="ep",
-        execution=None,
-        transaction_id="tx",
-        logical_function_run_id="lfr-1",
-        physical_function_run_id="pfr-1",
-        triggered_on=datetime.fromisoformat("2026-06-04T07:14:28.376000+00:00"),
-    )
-
-
-def _bare_info() -> Info:
-    return Info(
-        project_id="P-1",
-        project="p",
-        collection_id=1,
-        collection="c",
-        function_id="F-1",
-        function="fn",
-        function_version_id="FV-1",
-        function_defined_on=1780000000000,
-        function_bundle=Location(uri="file:///bundle.tar.zst"),
-        function_stage=Location(uri="file:///stage"),
-        execution_id=2,
-        execution=None,
-        transaction_id=3,
-        logical_function_run_id=4,
-        physical_function_run_id=4,
-        triggered_on=1780000000100,
-        function_data=Location(uri="file:///data"),
-        scheduled_on=1780000000200,
-    )
-
-
-def _input_table(name: str, *, location: Location | None) -> InputTable:
-    return InputTable(
-        collection_id=1,
-        collection="c",
-        table_id=f"T-{name}",
-        table=name,
-        table_version_id=f"TV-{name}",
-        location=location,
-        input_idx=0,
-        table_pos=-1,
-        version_pos=-1,
-    )
-
-
-def _output_table(name: str, *, location: Location) -> OutputTable:
-    return OutputTable(
-        collection_id=1,
-        collection="c",
-        table_id=f"T-{name}",
-        table=name,
-        table_version_id=f"TV-{name}",
-        logical_table_data_version_id=f"LDV-{name}",
-        physical_table_data_version_id=f"PDV-{name}",
-        location=location,
-        table_pos=-1,
-    )
-
-
-def _bare_request(
-    *,
-    system_input=(),
-    system_output=(),
-) -> Request:
-    return Request(
-        info=_bare_info(),
-        system_input=system_input,
-        system_output=system_output,
-    )
-
-
-def test_hydrate_noop_when_system_input_empty(tmp_path):
-    ctx = _bare_ctx()
-    hydrate_ctx_from_state_or_raise(
-        ctx, _bare_request(), tmp_path, error_code=RunSourcePluginErrorCode.RSP_9
-    )
-    assert ctx.drain() == {}
-
-
-def test_hydrate_noop_when_slot_has_no_location(tmp_path):
-    ctx = _bare_ctx()
-    req = _bare_request(system_input=(_input_table("iv", location=None),))
-    hydrate_ctx_from_state_or_raise(
-        ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9
-    )
-    assert ctx.drain() == {}
-
-
-def test_hydrate_noop_when_state_file_missing(tmp_path):
-    """First run for a flow: the slot has a location (the URI in the
-    request), but the transporter never materialised it locally —
-    e.g. first time the flow runs. Start with empty scratch."""
-    ctx = _bare_ctx()
-    req = _bare_request(
-        system_input=(_input_table("iv", location=Location(uri="file:///x")),),
-    )
-    hydrate_ctx_from_state_or_raise(
-        ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9
-    )
-    assert ctx.drain() == {}
-
-
-def test_hydrate_loads_values_when_state_file_present(tmp_path):
-    state_file = tmp_path / "iv.parquet"
-    write_initial_values({"last-modified": "2026-05-27T00:00:00Z"}, state_file)
-    ctx = _bare_ctx()
-    req = _bare_request(
-        system_input=(_input_table("iv", location=Location(uri="file:///x")),),
-    )
-    hydrate_ctx_from_state_or_raise(
-        ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9
-    )
-    assert ctx.drain() == {"last-modified": "2026-05-27T00:00:00Z"}
-
-
-def test_hydrate_malformed_state_file_raises_bad_initial_values(tmp_path):
-    state_file = tmp_path / "iv.parquet"
-    state_file.write_bytes(b"not parquet")
-    ctx = _bare_ctx()
-    req = _bare_request(
-        system_input=(_input_table("iv", location=Location(uri="file:///x")),),
-    )
-    with pytest.raises(BadStateInError):
-        hydrate_ctx_from_state_or_raise(
-            ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9
-        )
-
-
-def test_drain_noop_when_system_output_empty(tmp_path):
-    ctx = _bare_ctx()
-    ctx.set_attr("foo", "bar")  # has state but nowhere to send it.
-    drain_ctx_to_state_or_raise(
-        ctx, _bare_request(), tmp_path, error_code=RunSourcePluginErrorCode.RSP_10
-    )
-    assert list(tmp_path.iterdir()) == []
-
-
-def test_drain_noop_when_slot_has_no_location(tmp_path):
-    ctx = _bare_ctx()
-    ctx.set_attr("foo", "bar")
-    # OutputTable.location is required by pydantic; bypass validation
-    # with model_construct to exercise the drain function's defensive
-    # ``if slot.location is None: return`` branch.
-    slot = OutputTable.model_construct(
-        collection_id=1,
-        collection="c",
-        table_id="T-iv",
-        table="iv",
-        table_version_id="TV-iv",
-        logical_table_data_version_id="LDV-iv",
-        physical_table_data_version_id="PDV-iv",
-        location=None,
-        table_pos=-1,
-    )
-    req = _bare_request(system_output=(slot,))
-    drain_ctx_to_state_or_raise(
-        ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_10
-    )
-    assert list(tmp_path.iterdir()) == []
-
-
-def test_drain_writes_state_file_when_slot_present(tmp_path):
-    ctx = _bare_ctx()
-    ctx.set_attr("last-modified", "2026-05-28T00:00:00Z")
-    req = _bare_request(
-        system_output=(_output_table("iv", location=Location(uri="file:///x")),),
-    )
-    drain_ctx_to_state_or_raise(
-        ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_10
-    )
-    written = tmp_path / "iv.parquet"
-    assert written.is_file()
-    assert read_initial_values(written) == {"last-modified": "2026-05-28T00:00:00Z"}
-
-
-def test_drain_writes_empty_file_when_ctx_empty(tmp_path):
-    """An empty scratch store still drains to an empty Parquet — the
-    plugin explicitly didn't want to persist anything this run."""
-    ctx = _bare_ctx()
-    req = _bare_request(
-        system_output=(_output_table("iv", location=Location(uri="file:///x")),),
-    )
-    drain_ctx_to_state_or_raise(
-        ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_10
-    )
-    written = tmp_path / "iv.parquet"
-    assert written.is_file()
-    assert read_initial_values(written) == {}
-
-
-def test_drain_creates_state_dir_if_missing(tmp_path):
-    state_dir = tmp_path / "fresh"
-    assert not state_dir.exists()
-    ctx = _bare_ctx()
-    ctx.set_attr("k", "v")
-    req = _bare_request(
-        system_output=(_output_table("iv", location=Location(uri="file:///x")),),
-    )
-    drain_ctx_to_state_or_raise(
-        ctx, req, state_dir, error_code=RunSourcePluginErrorCode.RSP_10
-    )
-    assert (state_dir / "iv.parquet").is_file()
-
-
-def test_drain_bad_value_raises_bad_initial_values(tmp_path, monkeypatch):
-    """If something poisons the ctx with a non-BasicTypeSpec value,
-    the codec rejects it and the command surfaces BadStateOutError."""
-    ctx = _bare_ctx()
-    # Bypass set_attr's type-friendly surface to inject a bad value
-    # directly into the underlying scratch dict.
-    ctx._scratch["k"] = object()  # type: ignore[assignment]
-    req = _bare_request(
-        system_output=(_output_table("iv", location=Location(uri="file:///x")),),
-    )
-    with pytest.raises(BadStateOutError):
-        drain_ctx_to_state_or_raise(
-            ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_10
-        )
-
-
 # --- main: end-to-end with initial_values round-trip --------------------
 
 
 def test_main_hydrates_and_drains_initial_values(
     tmp_path, built_bundle, monkeypatch, http_ok_url
 ):
-    """Wire a previous-run state file into system_input[0], let main()
-    run the plugin (which is unaware of state), and verify drain
-    produced an output state file. The publisher plugin doesn't itself
-    mutate ctx, so the drained dict equals the hydrated one."""
+    """Store a previous-run state at system_input[0]'s location, let
+    main() run the plugin (which is unaware of state), and verify drain
+    produced this run's local state file. The publisher plugin doesn't
+    itself mutate ctx, so the drained dict equals the hydrated one."""
     out_dir = tmp_path / "out"
     out_dir.mkdir()
     state_dir = tmp_path / "state"
-    state_dir.mkdir()
-    # Seed: previous run's state.
-    write_initial_values(
-        {"last-modified": "2026-05-27T00:00:00Z"},
-        state_dir / "iv-in.parquet",
-    )
+    previous = tmp_path / "storage" / "state-in.t"
+    previous.parent.mkdir()
+    write_state({"last-modified": "2026-05-27T00:00:00Z"}, previous)
 
-    # Request declares system_input[0] AND system_output[0] both named
-    # after the local state files.
     req_path = tmp_path / "request.yaml"
     req_path.write_text(
         yaml.safe_dump({
@@ -1172,12 +926,13 @@ def test_main_hydrates_and_drains_initial_values(
                 ],
                 "system_input": [
                     _input_table_payload(
-                        "iv-in", location={"uri": "file:///irrelevant"}
+                        "td.fn_state__F-1", location={"uri": previous.as_uri()}
                     )
                 ],
                 "system_output": [
                     _output_table_payload(
-                        "iv-out", location={"uri": "file:///irrelevant"}
+                        "td.fn_state__F-1",
+                        location={"uri": (tmp_path / "storage/state-out.t").as_uri()},
                     )
                 ],
             }
@@ -1204,9 +959,7 @@ def test_main_hydrates_and_drains_initial_values(
     rc = main()
     assert rc == 0, f"main() returned {rc}"
 
-    # iv-out.parquet now holds whatever the ctx had when drained.
-    # The publisher's plugin doesn't store anything, so the drained
-    # dict equals the hydrated dict.
-    out_state = state_dir / "iv-out.parquet"
-    assert out_state.is_file()
-    assert read_initial_values(out_state) == {"last-modified": "2026-05-27T00:00:00Z"}
+    assert read_state(TableFile.local(state_dir / STATE_FILE)) == {
+        "last-modified": "2026-05-27T00:00:00Z"
+    }
+    assert not (tmp_path / "storage" / "state-out.t").exists()

@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from tabsdatak.server._tdrunner.function._lib.initial_values import (
-    InvalidInitialValuesError,
+from tabsdatak.server._tdrunner.function._handlers.state import (
+    StateError,
 )
 from tabsdatak.server._tdrunner.function._lib.request_ctx import (
     FromRequestCtx,
@@ -189,7 +189,7 @@ def test_set_attr_rejects_non_str_key_at_call_site():
     silently landing in the scratch store and exploding later at
     drain time."""
     c = _ctx()
-    with pytest.raises(InvalidInitialValuesError, match="ContextKeySpec"):
+    with pytest.raises(StateError, match="ContextKeySpec"):
         c.set_attr(123, "v")  # type: ignore[arg-type]
     # Failure means the scratch store stayed clean.
     assert 123 not in c.drain()

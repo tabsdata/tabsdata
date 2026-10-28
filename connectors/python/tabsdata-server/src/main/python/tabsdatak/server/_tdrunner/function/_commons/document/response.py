@@ -36,7 +36,6 @@ class Response(DocumentModel):
         cls,
         request: Request,
         manifest: OutputManifest,
-        state: dict[str, TableStats],
         error: ErrorCode,
     ) -> Response:
         produced = {entry.name: entry for entry in manifest.outputs}
@@ -48,7 +47,13 @@ class Response(DocumentModel):
                 TableEntry(table=table.table, info=produced[table.table].stats)
             )
         for table in request.system_output:
-            entries.append(TableEntry(table=table.table, info=state.get(table.table)))
+            written = manifest.state is not None and manifest.state.name == table.table
+            entries.append(
+                TableEntry(
+                    table=table.table,
+                    info=manifest.state.stats if written else None,
+                )
+            )
         return cls(output=tuple(entries))
 
     @classmethod

@@ -56,13 +56,10 @@ from tabsdatak.server._tdrunner.function._commons.solver.secrets import (
     StorageSecrets,
     take_project_secret,
 )
+from tabsdatak.server._tdrunner.function._handlers.state import State, StateOutput
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,
-)
-from tabsdatak.server._tdrunner.function._lib.initial_values import (
-    drain_ctx_to_state_or_raise,
-    hydrate_ctx_from_state_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
 from tabsdatak.server._tdrunner.function.commands.run_function.error import (
@@ -377,10 +374,12 @@ def _sink_outputs(
     *,
     public: bool,
     checks: list[Check] | None = None,
+    state: StateOutput | None = None,
 ) -> OutputManifest:
-    """Sink each non-None output to its target, settle the data-quality
-    checks, and build the outputs-manifest entries with the stats read
-    from each written file's footer.
+    """Sink each non-None output to its target, copy the run's state to
+    its storage location, settle the data-quality checks, and build the
+    outputs-manifest entries with the stats read from each written
+    file's footer.
 
     Publisher / transformer outputs become stored tables, so they sink
     natively with the framework's persisted system columns. Subscriber
@@ -388,8 +387,8 @@ def _sink_outputs(
     publicly: stripped of every `$td.` system and `@td.` connector
     column, leaving only the user's own columns for the plugin to write.
 
-    Every output is written, and every check evaluated, in one streaming
-    pass, so the plan the outputs share runs once.
+    Every output and the state are written, and every check evaluated,
+    in one streaming pass, so the plan the outputs share runs once.
     """
     plans: list[pl.LazyFrame] = []
     written: list[tuple[str, TableFile]] = []
@@ -406,6 +405,17 @@ def _sink_outputs(
                 detail=str(error),
             )
         written.append((table_name, target))
+    if state is not None:
+        try:
+            plans.append(state.source.copy(state.target))
+        except Exception as error:
+            raise RunFunctionErrorCode.RF_16.exception(
+                cause=error,
+                table=state.name,
+                path=state.target.uri,
+                detail=str(error),
+            )
+        written.append((state.name, state.target))
     pending = checks or []
     if plans or pending:
         try:
@@ -435,7 +445,8 @@ def _sink_outputs(
         outputs=tuple(
             entries.get(table_name, OutputEntry(name=table_name))
             for table_name in output_tables
-        )
+        ),
+        state=None if state is None else entries[state.name],
     )
 
 
@@ -458,7 +469,7 @@ def run(args: argparse.Namespace) -> int:
     inputs_manifest_path = Path(args.inputs_manifest)
     out_dir = Path(args.out_dir)
     outputs_manifest_path = Path(args.outputs_manifest)
-    state_dir = Path(args.state_dir)
+    state_folder = Path(args.state_folder)
 
     logger.info("Running user function")
     request = Request.load(request_path, RunFunctionErrorCode.RF_1)
@@ -513,26 +524,19 @@ def run(args: argparse.Namespace) -> int:
     )
 
     # If the user function declares a trailing ``ctx: TransactionCtx``
-    # parameter, construct a FunctionCtx and hydrate it from the
-    # state-dir before invocation. Preferring the state-out file
-    # (written by run-source-plugin's drain on the same run) over
-    # the state-in file handles publisher chains; falling back to
-    # state-in handles transformer / subscriber chains where
-    # run-source-plugin does not run.
+    # parameter, construct a FunctionCtx and hydrate it before
+    # invocation. The state run-source-plugin drained on this run wins
+    # (publisher chains); otherwise the previous run's state is read
+    # where it is stored (transformer / subscriber chains).
+    state = State(request, state_folder)
     ctx: _FunctionContext | None = None
     if has_transaction_ctx_param(func):
         ctx = _FunctionContext.from_info(out_dir, request.info).with_project_secret(
             project_secret
         )
-        hydrate_ctx_from_state_or_raise(
-            ctx,
-            request,
-            state_dir,
-            error_code=RunFunctionErrorCode.RF_18,
-            prefer_output=True,
-        )
+        state.hydrate(ctx, error_code=RunFunctionErrorCode.RF_18, prefer_local=True)
         call_args.append(ctx)
-        logger.debug("Hydrated ctx from %s (work_dir=%s)", state_dir, out_dir)
+        logger.debug("Hydrated ctx (work_dir=%s)", out_dir)
 
     output_tables = _output_table_names(info)
     logger.info(
@@ -547,10 +551,8 @@ def run(args: argparse.Namespace) -> int:
     result = tuple(None if frame is None else frame._cached() for frame in result)
 
     if ctx is not None:
-        drain_ctx_to_state_or_raise(
-            ctx, request, state_dir, error_code=RunFunctionErrorCode.RF_19
-        )
-        logger.debug("Drained ctx scratch to %s", state_dir)
+        state.drain(ctx, error_code=RunFunctionErrorCode.RF_19)
+        logger.debug("Drained ctx scratch to %s", state.file)
 
     # Apply the function's data-quality actions over its output tables. In-place
     # actions rewrite an output frame; producing actions yield extra derived
@@ -583,6 +585,7 @@ def run(args: argparse.Namespace) -> int:
         _output_targets(request, info, output_tables, out_dir),
         public=isinstance(info, SubscriberInfo),
         checks=checks,
+        state=state.output(),
     )
     outputs = outputs_manifest.outputs
     written = sum(1 for entry in outputs if entry.stats is not None)

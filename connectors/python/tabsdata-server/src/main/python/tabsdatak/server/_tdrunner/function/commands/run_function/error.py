@@ -92,13 +92,13 @@ class OutputsManifestWriteFailedError(CommandRuntimeException):
 
 
 class BadStateInError(_BadStateInError):
-    """``hydrate_ctx_from_state_or_raise`` failure -- read side."""
+    """``State.hydrate`` failure -- read side."""
 
     exit_code = 21
 
 
 class BadStateOutError(_BadStateOutError):
-    """``drain_ctx_to_state_or_raise`` failure -- write side."""
+    """``State.drain`` failure -- write side."""
 
     exit_code = 21
 
@@ -211,7 +211,8 @@ class RunFunctionErrorCode(ErrorCode):
         OutputWriteFailedError,
         "failed to write output {table!r} to {path}: {detail}",
     )
-    # ``_sink_outputs`` ``TableFile.sink`` or ``collect_all`` failure.
+    # ``_sink_outputs`` ``TableFile.sink`` or ``collect_all`` failure
+    # (outputs and state).
 
     RF_17 = ErrorDef(
         OutputsManifestWriteFailedError,
@@ -223,15 +224,13 @@ class RunFunctionErrorCode(ErrorCode):
         BadStateInError,
         "unreadable state-in {state_file}: {detail}",
     )
-    # ``hydrate_ctx_from_state_or_raise`` -- state parquet exists but
-    # couldn't be decoded.
+    # ``State.hydrate`` -- state parquet couldn't be read or decoded.
 
     RF_19 = ErrorDef(
         BadStateOutError,
         "unwritable state-out {state_file}: {detail}",
     )
-    # ``drain_ctx_to_state_or_raise`` -- ctx scratch couldn't be
-    # persisted.
+    # ``State.drain`` -- ctx scratch couldn't be persisted.
 
     RF_20 = ErrorDef(
         BadRequestError,
@@ -243,4 +242,4 @@ class RunFunctionErrorCode(ErrorCode):
         OutputWriteFailedError,
         "failed to read the stats of output {table!r} at {path}: {detail}",
     )
-    # ``_read_stats`` ``TableFile.stats`` failure.
+    # ``_read_stats`` ``TableFile.stats`` failure (outputs and state).
