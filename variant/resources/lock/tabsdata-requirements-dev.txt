@@ -137,7 +137,7 @@ pip-requirements-parser==32.0.1
 pip-tools==7.6.2
 pip-upgrader==2.4.13
 pipdeptree==4.2.9
-pkginfo==1.13.3
+pkginfo==2.0
 platformdirs==4.13.6
 plotext==5.3.2
 pluggy==1.7.0
@@ -212,7 +212,7 @@ twine==7.0.0
 types-pyyaml==6.0.12.20260906
 typing-extensions==4.16.0
 typing-inspection==0.4.4
-tzdata==2026.5 ; sys_platform == 'win32'
+tzdata==2026.6 ; sys_platform == 'win32'
 tzlocal==5.4.5
 url-normalize==3.0.1
 urllib3==2.8.0
