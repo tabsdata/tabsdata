@@ -365,7 +365,7 @@ mod tests {
         assert_eq!(*run_count.lock().unwrap(), 1);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_task_with_heartbeat() {
         let task_run_count = Arc::new(Mutex::new(0));
         let task = TestTask {

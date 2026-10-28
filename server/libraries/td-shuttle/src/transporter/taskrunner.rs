@@ -247,7 +247,8 @@ mod tests {
     use std::num::NonZero;
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
-    use std::time::{Duration, SystemTime};
+    use std::time::Duration;
+    use tokio::time::Instant;
 
     #[tokio::test]
     async fn test_no_tasks() {
@@ -294,11 +295,11 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_concurrency() {
-        fn async_fn(sleep: u64) -> AsyncLambda<SystemTime, &'static str> {
+        fn async_fn(sleep: u64) -> AsyncLambda<Instant, &'static str> {
             Box::pin(async move {
-                let started = SystemTime::now();
+                let started = Instant::now();
                 tokio::time::sleep(Duration::from_millis(sleep)).await;
                 Ok(started)
             })
@@ -311,9 +312,8 @@ mod tests {
         .await
         {
             Ok(res) if res.len() == 3 => {
-                assert!(res[2].duration_since(res[0]).unwrap().as_millis() >= 100);
-                // it should be 100 in theory, allowing scheduling overhead
-                assert!(res[2].duration_since(res[1]).unwrap().as_millis() >= 50);
+                assert!(res[2] - res[0] >= Duration::from_millis(100));
+                assert!(res[2] - res[1] >= Duration::from_millis(100));
             }
             Ok(res) => panic!("Unexpected result length: {}", res.len()),
             Err(e) => panic!("Unexpected error: {e:?}"),

@@ -24,7 +24,6 @@ mod grants;
 mod group_rename;
 pub(crate) mod late_callbacks;
 mod lock_instants;
-mod login_hashing;
 mod lost_cascade;
 mod lost_updates;
 mod memberships;

@@ -76,7 +76,7 @@ async fn every_step_runs_when_nothing_fails() {
     assert_eq!(ledger.counts(), (1, 1, 0));
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn a_timeout_on_the_caller_does_not_cut_the_sequence() {
     let ledger = Arc::new(Ledger::default());
     let step = Duration::from_millis(100);

@@ -115,4 +115,5 @@ libflate = { workspace = true }
 [dev-dependencies]
 td-shuttle = { workspace = true, features = ["td-test"] }
 td-test = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
 

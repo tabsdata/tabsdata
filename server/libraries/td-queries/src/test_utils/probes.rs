@@ -45,21 +45,6 @@ where
     .map(|_| ())
 }
 
-pub async fn backend_pid(conn: &mut PgConnection) -> Result<i32, Error> {
-    sqlx::query_scalar("SELECT pg_backend_pid()")
-        .fetch_one(conn)
-        .await
-}
-
-pub async fn in_transaction(conn: &mut PgConnection, pid: i32) -> Result<bool, Error> {
-    sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE pid = $1 AND locktype = 'virtualxid')",
-    )
-    .bind(pid)
-    .fetch_one(conn)
-    .await
-}
-
 /// How many locks other backends hold on `relation`.
 pub async fn locks_held_by_others(conn: &mut PgConnection, relation: &str) -> Result<i64, Error> {
     sqlx::query_scalar(

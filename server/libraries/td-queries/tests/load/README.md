@@ -28,9 +28,10 @@ two sizes, time every query at both (min of 3), and assert two things per
 query: an absolute budget at both sizes (500 ms — a plan-level regression can
 be born slow at every size, which the exponent alone cannot see) and
 sub-quadratic growth (`k ≤ 1.6` in `t ∝ n^k`); `report_scaling_coverage`
-fails if any registered case is timed by no pass. They run on every `cargo make test` /
+fails if any registered case is timed by no pass. They run on every local `cargo make test` /
 `test_rs` (serial, after the main suite — timings need a quiet machine; skip
-with `--notest-scaling`), or directly:
+with `--notest-scaling`), never on GitHub Actions, whose runners' timings say
+nothing about the code, or directly:
 
 ```sh
 cargo nextest run -p td-queries --test load --run-ignored ignored-only --test-threads 1 report_scaling

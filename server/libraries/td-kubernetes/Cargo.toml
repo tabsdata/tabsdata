@@ -125,6 +125,7 @@ td-kubernetes = { workspace = true, features = ["td-test"] }
 http = { workspace = true }
 indoc = { workspace = true }
 serial_test = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
 
 
 [target.'cfg(target_os = "windows")'.dependencies]

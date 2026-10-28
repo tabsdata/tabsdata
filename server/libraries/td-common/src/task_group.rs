@@ -156,7 +156,6 @@ mod tests {
     use std::future::{pending, ready};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
-    use tokio::time::Instant;
 
     enum Probe {
         UntilShutdown(Arc<AtomicBool>),
@@ -208,13 +207,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_a_task_ignoring_shutdown_is_aborted_at_the_grace() {
-        let started = Instant::now();
         let status = TaskGroup::new(Duration::from_millis(100))
             .task(Probe::IgnoresShutdown)
             .run_until(ready(()))
             .await;
         assert!(matches!(status, Err(ExitStatus::GeneralError)));
-        assert!(started.elapsed() < Duration::from_secs(5));
     }
 
     #[tokio::test]

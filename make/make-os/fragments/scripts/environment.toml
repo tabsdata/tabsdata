@@ -346,6 +346,7 @@ env_scripts = [
     skip_test_scaling = set false
     if ${on_ga_true}
         skip_test_logging = set true
+        skip_test_scaling = set true
     end
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}

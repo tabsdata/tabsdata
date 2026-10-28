@@ -113,7 +113,8 @@ mod tests {
     use td_database::pool::TdPool;
     use td_error::assert_service_error;
     use td_objects::types::basic::Password;
-    use td_objects::types::basic::UserName;
+    use td_objects::types::basic::{UserEnabled, UserName};
+    use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
     async fn test_login_ok(db: TdPool) -> Result<(), td_error::TdError> {
@@ -174,6 +175,26 @@ mod tests {
             AuthError::AuthenticationFailed => {}
             other => panic!("Expected 'AuthenticationFailed', got {other:?}"),
         });
+        Ok(())
+    }
+
+    fn hash_cost(hash: &PasswordHash) -> &str {
+        let salt_at = hash.as_str().rmatch_indices('$').nth(1).unwrap().0;
+        &hash.as_str()[..salt_at]
+    }
+
+    #[td_test::test(db)]
+    async fn test_login_unknown_user_hash_costs_as_much_as_a_real_one(
+        db: TdPool,
+    ) -> Result<(), td_error::TdError> {
+        let services = Services::with_defaults(db.clone());
+        db.seed()
+            .user(&UserName::try_from("u_known")?, &UserEnabled::TRUE)
+            .await?;
+        let user: UserDB = db.fetch_one(&UserName::try_from("u_known")?).await?;
+
+        let stand_in = unknown_user_hash(&services.password_settings);
+        assert_eq!(hash_cost(&stand_in), hash_cost(&user.password_hash));
         Ok(())
     }
 }

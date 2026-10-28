@@ -22,17 +22,21 @@ use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
-const IN_FLIGHT: Duration = Duration::from_millis(500);
+#[derive(Default)]
+struct SlowRequest {
+    entered: Notify,
+    released: Notify,
+}
 
-/// `/slow` tells `entered` it started, then answers after [`IN_FLIGHT`].
-fn slow_router(entered: Arc<Notify>) -> Router {
+/// `/slow` tells `entered` it started, then answers once `released`.
+fn slow_router(slow: Arc<SlowRequest>) -> Router {
     Router::new().route(
         "/slow",
         get(move || {
-            let entered = entered.clone();
+            let slow = slow.clone();
             async move {
-                entered.notify_one();
-                tokio::time::sleep(IN_FLIGHT).await;
+                slow.entered.notify_one();
+                slow.released.notified().await;
                 "done"
             }
         }),
@@ -50,9 +54,10 @@ fn client() -> Client {
         .unwrap()
 }
 
-async fn drains_a_request_in_flight(server: Box<dyn Server>, entered: Arc<Notify>) {
+async fn drains_a_request_in_flight(server: Box<dyn Server>, slow: Arc<SlowRequest>) {
     let addr = server.listeners()[0].local_addr().unwrap();
-    let url = format!("{}://localhost:{}/slow", server.scheme(), addr.port());
+    let base = format!("{}://localhost:{}", server.scheme(), addr.port());
+    let url = format!("{base}/slow");
     let shutdown = CancellationToken::new();
     let served = tokio::spawn(serve(server, shutdown.clone()));
 
@@ -60,15 +65,21 @@ async fn drains_a_request_in_flight(server: Box<dyn Server>, entered: Arc<Notify
         let url = url.clone();
         async move { client().get(url).send().await }
     });
-    entered.notified().await;
+    slow.entered.notified().await;
     shutdown.cancel();
 
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    let refused = tokio::time::timeout(Duration::from_secs(5), async {
+        while client().get(format!("{base}/probe")).send().await.is_ok() {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await;
     assert!(
-        client().get(&url).send().await.is_err(),
-        "a new connection was accepted after the signal"
+        refused.is_ok(),
+        "new connections are still accepted after the signal"
     );
     assert!(!served.is_finished(), "the server returned before draining");
+    slow.released.notify_one();
 
     let response = in_flight.await.unwrap().expect("the request in flight");
     assert_eq!(response.status(), 200);
@@ -82,25 +93,25 @@ async fn drains_a_request_in_flight(server: Box<dyn Server>, entered: Arc<Notify
 
 #[tokio::test]
 async fn test_plain_drains_a_request_in_flight() {
-    let entered = Arc::new(Notify::new());
-    let server = ServerBuilder::new(localhost(), slow_router(entered.clone()))
+    let slow = Arc::new(SlowRequest::default());
+    let server = ServerBuilder::new(localhost(), slow_router(slow.clone()))
         .build()
         .await
         .unwrap();
     assert_eq!(server.scheme(), Scheme::HTTP);
-    drains_a_request_in_flight(server, entered).await;
+    drains_a_request_in_flight(server, slow).await;
 }
 
 #[tokio::test]
 async fn test_tls_drains_a_request_in_flight() {
-    let entered = Arc::new(Notify::new());
-    let server = ServerBuilder::new(localhost(), slow_router(entered.clone()))
+    let slow = Arc::new(SlowRequest::default());
+    let server = ServerBuilder::new(localhost(), slow_router(slow.clone()))
         .tls(tls_folder().await)
         .build()
         .await
         .unwrap();
     assert_eq!(server.scheme(), Scheme::HTTPS);
-    drains_a_request_in_flight(server, entered).await;
+    drains_a_request_in_flight(server, slow).await;
 }
 
 /// One listener that fails at once, one that runs until stopped.

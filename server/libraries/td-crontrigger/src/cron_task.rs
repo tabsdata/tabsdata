@@ -230,6 +230,7 @@ impl<T: Task + 'static> Display for CronTask<T> {
 mod tests {
     use super::*;
     use crate::task_runner::{Task, TaskRunner, TaskRunnerError};
+    use chrono::Utc;
     use std::any::type_name;
     use std::convert::Infallible;
     use std::error::Error;
@@ -237,8 +238,20 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
     use td_common::task_group::GroupTask;
-    use tokio::time::sleep;
+    use tokio::time::{sleep, timeout};
     use tokio_util::sync::CancellationToken;
+
+    const RUN_DEADLINE: Duration = Duration::from_secs(30);
+
+    async fn wait_for_runs(run_count: &Arc<Mutex<u32>>, runs: u32) {
+        timeout(RUN_DEADLINE, async {
+            while *run_count.lock().unwrap() < runs {
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("the task did not run often enough");
+    }
 
     struct TestTask {
         run_count: Arc<Mutex<u32>>,
@@ -314,14 +327,11 @@ mod tests {
             runner.run(runner_shutdown).await.unwrap();
         });
 
-        sleep(Duration::from_millis(2500)).await;
+        wait_for_runs(&run_count, 2).await;
 
         shutdown.cancel();
 
         scheduler_handle.await.unwrap();
-
-        // Assert that the task ran at least twice.
-        assert!(*run_count.lock().unwrap() > 1);
     }
 
     #[tokio::test]
@@ -361,15 +371,27 @@ mod tests {
 
         let runner_shutdown = shutdown.clone();
 
+        let started = Utc::now().timestamp();
         let scheduler_handle = tokio::spawn(async move {
             runner.run(runner_shutdown).await.unwrap();
         });
 
-        sleep(Duration::from_millis(500)).await;
-        assert_eq!(*run_count.lock().unwrap(), 0);
-
-        sleep(Duration::from_millis(2000)).await;
-        assert!(*run_count.lock().unwrap() >= 1);
+        timeout(RUN_DEADLINE, async {
+            loop {
+                let runs = i64::from(*run_count.lock().unwrap());
+                let ticks = Utc::now().timestamp() / 2 - started / 2;
+                assert!(
+                    runs <= ticks,
+                    "{runs} runs with only {ticks} scheduled ticks since the start"
+                );
+                if runs >= 1 {
+                    break;
+                }
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("the task never ran");
 
         shutdown.cancel();
 
