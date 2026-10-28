@@ -16,19 +16,19 @@ authlib==1.9.1
 avro==1.12.2
 azure-common==1.1.28
 azure-core==1.41.0
-azure-identity==1.26.0
+azure-identity==1.27.0
 azure-mgmt-authorization==4.0.0
-azure-mgmt-compute==38.4.0
+azure-mgmt-compute==39.0.0
 azure-mgmt-containerservice==41.8.0
 azure-mgmt-core==1.6.0
 azure-mgmt-rdbms==10.1.1
 azure-storage-blob==12.31.0
 backports-zstd==1.8.0 ; python_full_version < '3.14'
 base32hex==1.0.2
-boto3==1.43.118
-boto3-stubs==1.43.118
-botocore==1.43.119
-botocore-stubs==1.43.119
+boto3==1.43.120
+boto3-stubs==1.43.120
+botocore==1.43.120
+botocore-stubs==1.43.120
 build==1.6.1
 cachetools==7.2.6
 certifi==2026.10.23
@@ -43,8 +43,8 @@ connectorx==0.4.6
 cramjam==2.14.0
 croniter==6.2.4
 cryptography==50.0.2
-databricks-sdk==0.156.0
-databricks-sql-connector==4.7.0
+databricks-sdk==0.157.0
+databricks-sql-connector==4.8.0
 dnspython==2.9.0
 durationpy==0.11
 et-xmlfile==2.0.0
@@ -61,7 +61,7 @@ google-cloud-container==2.67.0
 google-cloud-core==2.8.0
 google-cloud-resource-manager==1.19.0
 google-cloud-storage==3.17.1
-google-cloud-storage-control==1.16.0
+google-cloud-storage-control==1.17.0
 google-crc32c==1.9.0
 google-resumable-media==2.11.0
 googleapis-common-protos==1.76.0
@@ -69,7 +69,7 @@ greenlet==3.5.6 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or 
 grpc-google-iam-v1==0.14.6
 grpcio==1.85.0
 grpcio-status==1.85.0
-grpcio-tools==1.84.1
+grpcio-tools==1.85.0
 h11==0.16.0 ; sys_platform != 'emscripten'
 httpcore2==2.16.0 ; sys_platform != 'emscripten'
 httpx2==2.16.0
@@ -80,7 +80,7 @@ ibm-db==3.3.0 ; (platform_machine != 'ARM64' and platform_machine != 'aarch64') 
 ibm-db-sa==0.4.4 ; (platform_machine != 'ARM64' and platform_machine != 'aarch64') or sys_platform == 'darwin'
 idna==3.20
 ijson==3.6.0
-importlib-metadata==9.0.1
+importlib-metadata==10.1.0
 isodate==0.7.2
 jmespath==1.1.0
 joserfc==1.7.7
@@ -103,7 +103,7 @@ mypy-boto3-glue==1.43.118
 mysql-replication==1.0.17
 numpy==2.5.4
 oauthlib==4.0.0
-obstore==0.12.0
+obstore==0.12.1
 openpyxl==3.1.5
 opentelemetry-api==1.45.1
 opentelemetry-sdk==1.45.1
@@ -111,13 +111,13 @@ opentelemetry-semantic-conventions==0.66b1
 orjson==3.13.0
 packaging==26.3
 pandas==3.1.0
-pg8000==1.31.5
-pillow==12.3.0
+pg8000==1.31.6
+pillow==13.0.0
 pip==26.2.2
 pip-tools==7.6.2
-platformdirs==4.13.5
-polars==2.0.0
-polars-runtime-32==2.0.0
+platformdirs==4.13.6
+polars==2.1.0
+polars-runtime-32==2.1.0
 prompt-toolkit==3.0.53
 propcache==0.5.4
 proto-plus==1.29.0
@@ -164,8 +164,8 @@ snowflake-connector-python==4.8.0
 sortedcontainers==2.4.0
 sqlalchemy==2.0.55
 sqlalchemy-bigquery==1.17.3
-sqlglot==30.24.0
-starlette==1.9.0
+sqlglot==30.25.0
+starlette==1.10.0
 strictyaml==1.7.3
 tenacity==9.2.1
 textual==8.2.8
@@ -181,7 +181,7 @@ tzlocal==5.4.5
 urllib3==2.8.0
 uuid-v7==1.0.0
 uuid6==2025.0.1
-uv==0.13.5
+uv==0.13.6
 wcwidth==0.9.4
 websocket-client==1.9.2
 wheel==0.48.0
