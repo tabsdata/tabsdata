@@ -1,5 +1,5 @@
 {
-  "polars_version": "2.0.0",
+  "polars_version": "2.1.0",
   "root_module": "tabsdatak.tableframe",
   "symbols": [
     {
@@ -337,7 +337,7 @@
       "polars_qualname": "polars.lazyframe.frame.LazyFrame.sink_parquet",
       "target_module": "tabsdatak.tableframe",
       "target_class": "TableFrame",
-      "signature": "(self, path: 'str | Path | IO[bytes] | PartitionBy', *, compression: 'ParquetCompression' = 'zstd', compression_level: 'int | None' = None, statistics: 'bool | str | dict[str, bool]' = True, row_group_size: 'int | None' = None, data_page_size: 'int | None' = None, maintain_order: 'bool' = True, storage_options: 'StorageOptionsDict | None' = None, credential_provider: \"CredentialProviderFunction | Literal['auto'] | None\" = 'auto', sync_on_close: 'SyncOnCloseMethod | None' = None, metadata: 'ParquetMetadata | None' = None, arrow_schema: 'ArrowSchemaExportable | None' = None, mkdir: 'bool' = False, lazy: 'bool' = False, engine: 'EngineType' = 'auto', optimizations: 'QueryOptFlags' = ..., sinked_paths_callback: 'SinkedPathsCallback | None' = None) -> 'LazyFrame | None'",
+      "signature": "(self, path: 'str | Path | IO[bytes] | PartitionBy', *, compression: 'ParquetCompression' = 'zstd', compression_level: 'int | None' = None, statistics: 'bool | str | dict[str, bool]' = True, row_group_size: 'int | None' = None, data_page_size: 'int | None' = None, maintain_order: 'bool' = True, storage_options: 'StorageOptionsDict | None' = None, credential_provider: \"CredentialProviderFunction | Literal['auto'] | None\" = 'auto', sync_on_close: 'SyncOnCloseMethod | None' = None, metadata: 'ParquetMetadata | None' = None, arrow_schema: 'ArrowSchemaExportable | None' = None, encryption: 'ParquetEncryptionProperties | None' = None, mkdir: 'bool' = False, lazy: 'bool' = False, engine: 'EngineType' = 'auto', optimizations: 'QueryOptFlags' = ..., sinked_paths_callback: 'SinkedPathsCallback | None' = None) -> 'LazyFrame | None'",
       "returns": "LazyFrame | None",
       "is_property": false,
       "whitelisted": true,
@@ -359,7 +359,7 @@
       "polars_qualname": "polars.lazyframe.frame.LazyFrame.sink_iceberg",
       "target_module": "tabsdatak.tableframe",
       "target_class": "TableFrame",
-      "signature": "(self, target: 'str | pyiceberg.table.Table', *, mode: \"Literal['append', 'overwrite']\", schema_mode: \"Literal['merge', 'overwrite'] | None\" = None, snapshot_properties: 'dict[str, str] | None' = None, catalog: 'pyiceberg.catalog.Catalog | polars.io.iceberg.IcebergCatalogConfig | None' = None, storage_options: 'StorageOptionsDict | None' = None, compression: 'ParquetCompression' = 'zstd', compression_level: 'int | None' = None, row_group_size: 'int | None' = None, maintain_order: 'bool' = True, engine: 'EngineType' = 'auto') -> 'pl.DataFrame'",
+      "signature": "(self, target: 'str | pyiceberg.table.Table', *, mode: \"Literal['append', 'overwrite']\", schema_mode: \"Literal['merge', 'overwrite'] | None\" = None, overwrite_filter: 'Expr | pyiceberg.expressions.BooleanExpression | str | None' = None, partition_overwrite: \"Literal['dynamic'] | None\" = None, create_if_not_exists: 'bool' = False, create_namespace_if_not_exists: 'bool' = False, snapshot_properties: 'dict[str, str] | None' = None, catalog: 'pyiceberg.catalog.Catalog | polars.io.iceberg.IcebergCatalogConfig | None' = None, storage_options: 'StorageOptionsDict | None' = None, compression: 'ParquetCompression' = 'zstd', compression_level: 'int | None' = None, row_group_size: 'int | None' = None, maintain_order: 'bool' = True, engine: 'EngineType' = 'auto') -> 'pl.DataFrame'",
       "returns": "pl.DataFrame",
       "is_property": false,
       "whitelisted": false,
@@ -3943,6 +3943,17 @@
     {
       "id": "Expr.floordiv",
       "polars_qualname": "polars.expr.expr.Expr.floordiv",
+      "target_module": "tabsdatak.tableframe.expr",
+      "target_class": "Expr",
+      "signature": "(self, other: 'Any') -> 'Expr'",
+      "returns": "Expr",
+      "is_property": false,
+      "whitelisted": true,
+      "hook_name": "-"
+    },
+    {
+      "id": "Expr.truncdiv",
+      "polars_qualname": "polars.expr.expr.Expr.truncdiv",
       "target_module": "tabsdatak.tableframe.expr",
       "target_class": "Expr",
       "signature": "(self, other: 'Any') -> 'Expr'",
@@ -8220,17 +8231,6 @@
       "hook_name": "-"
     },
     {
-      "id": "ChainedThen.when",
-      "polars_qualname": "polars.expr.whenthen.ChainedThen.when",
-      "target_module": "tabsdatak.tableframe.whenthen",
-      "target_class": "ChainedThen",
-      "signature": "(self, *predicates: 'IntoExpr | Iterable[IntoExpr]', **constraints: 'Any') -> 'ChainedWhen'",
-      "returns": "ChainedWhen",
-      "is_property": false,
-      "whitelisted": true,
-      "hook_name": "-"
-    },
-    {
       "id": "ChainedThen.bin",
       "polars_qualname": "polars.expr.whenthen.ChainedThen.bin",
       "target_module": "tabsdatak.tableframe.whenthen",
@@ -8238,6 +8238,17 @@
       "signature": "(self) -> 'ExprBinaryNameSpace'",
       "returns": "ExprBinaryNameSpace",
       "is_property": true,
+      "whitelisted": true,
+      "hook_name": "-"
+    },
+    {
+      "id": "ChainedThen.when",
+      "polars_qualname": "polars.expr.whenthen.ChainedThen.when",
+      "target_module": "tabsdatak.tableframe.whenthen",
+      "target_class": "ChainedThen",
+      "signature": "(self, *predicates: 'IntoExpr | Iterable[IntoExpr]', **constraints: 'Any') -> 'ChainedWhen'",
+      "returns": "ChainedWhen",
+      "is_property": false,
       "whitelisted": true,
       "hook_name": "-"
     },
@@ -10004,6 +10015,17 @@
     {
       "id": "ChainedThen.floordiv",
       "polars_qualname": "polars.expr.whenthen.ChainedThen.floordiv",
+      "target_module": "tabsdatak.tableframe.whenthen",
+      "target_class": "ChainedThen",
+      "signature": "(self, other: 'Any') -> 'Expr'",
+      "returns": "Expr",
+      "is_property": false,
+      "whitelisted": true,
+      "hook_name": "-"
+    },
+    {
+      "id": "ChainedThen.truncdiv",
+      "polars_qualname": "polars.expr.whenthen.ChainedThen.truncdiv",
       "target_module": "tabsdatak.tableframe.whenthen",
       "target_class": "ChainedThen",
       "signature": "(self, other: 'Any') -> 'Expr'",
@@ -12842,6 +12864,17 @@
     {
       "id": "Then.floordiv",
       "polars_qualname": "polars.expr.whenthen.Then.floordiv",
+      "target_module": "tabsdatak.tableframe.whenthen",
+      "target_class": "Then",
+      "signature": "(self, other: 'Any') -> 'Expr'",
+      "returns": "Expr",
+      "is_property": false,
+      "whitelisted": true,
+      "hook_name": "-"
+    },
+    {
+      "id": "Then.truncdiv",
+      "polars_qualname": "polars.expr.whenthen.Then.truncdiv",
       "target_module": "tabsdatak.tableframe.whenthen",
       "target_class": "Then",
       "signature": "(self, other: 'Any') -> 'Expr'",
