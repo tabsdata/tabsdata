@@ -43,13 +43,12 @@ def build_upload_landing_request(
 ) -> TransporterCopyRequest:
     landing = request.info.function_landing
     pairs: list[tuple[Endpoint, Endpoint]] = []
-    if landing is not None:
-        base = landing.uri.rstrip("/")
-        for idx, source in landing_files:
-            target = Location(
-                uri=f"{base}/{idx}{LANDING_SUFFIX}", env_prefix=landing.env_prefix
-            )
-            pairs.append((local_endpoint(source), endpoint_for(target)))
+    base = landing.uri.rstrip("/")
+    for idx, source in landing_files:
+        target = Location(
+            uri=f"{base}/{idx}{LANDING_SUFFIX}", env_prefix=landing.env_prefix
+        )
+        pairs.append((local_endpoint(source), endpoint_for(target)))
     return HANDLER.make_request(pairs)
 
 

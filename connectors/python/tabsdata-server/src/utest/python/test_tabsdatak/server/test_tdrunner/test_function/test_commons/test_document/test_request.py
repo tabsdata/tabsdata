@@ -61,6 +61,7 @@ def info(**overrides: Any) -> dict:
         "physical_function_run_id": 60,
         "triggered_on": 1780000000100,
         "function_data": {"uri": "file:///tmp/data", "env_prefix": "ROOT"},
+        "function_landing": {"uri": "file:///tmp/data/r", "env_prefix": "ROOT"},
         "function_scratch": {"uri": "file:///tmp/data/s", "env_prefix": "ROOT"},
         "scheduled_on": 1780000000200,
         **overrides,

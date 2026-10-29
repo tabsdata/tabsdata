@@ -10,9 +10,7 @@ system columns — from local disk to the run's landing-data location.
 
 Reads:
   * `--request`:           the publisher request.yaml. `info.function_landing`
-                           is the destination base; when it is absent the
-                           function ingests nothing and the request comes
-                           out empty.
+                           is the destination base.
   * `--inputs-manifest`:   the enriched manifest emitted by `stamp-inputs`,
                            supplying each stamped parquet and the input
                            index that names it in storage.

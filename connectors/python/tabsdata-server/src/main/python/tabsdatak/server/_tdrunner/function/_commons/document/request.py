@@ -138,7 +138,7 @@ class Info(DocumentModel):
     physical_function_run_id: str | int
     triggered_on: int
     function_data: Location
-    function_landing: Location | None = None
+    function_landing: Location
     function_scratch: Location
     scheduled_on: int
 

@@ -66,10 +66,9 @@ def _set_argv(
     )
 
 
-def _write_request(path: Path, *, landing_uri: str | None = LANDING_URI) -> Path:
+def _write_request(path: Path) -> Path:
     info = _info()
-    if landing_uri is not None:
-        info["function_landing"] = {"uri": landing_uri, "env_prefix": "ROOT"}
+    info["function_landing"] = {"uri": LANDING_URI, "env_prefix": "ROOT"}
     path.write_text(yaml.safe_dump({"Function": {"info": info}}))
     return path
 
@@ -150,29 +149,6 @@ def test_main_writes_an_empty_request_when_nothing_was_ingested(
     )
     assert rc == 0
     assert out.exists(), "an empty request must still be written for run-transporter"
-
-
-def test_main_skips_a_function_with_no_landing_location(
-    monkeypatch, tmp_path, http_ok_url
-):
-    # Transformers and subscribers ingest nothing, so the apiserver mints them
-    # no landing location; the step must be a no-op rather than a failure.
-    request_yaml = _write_request(tmp_path / "request.yaml", landing_uri=None)
-    manifest = _write_manifest(
-        tmp_path / "enriched.yaml",
-        [_slot("a", [{"file": "/shared/rich/slot0/a.parquet", "input_idx": 0}])],
-    )
-    out = tmp_path / "transporter.yaml"
-    rc = main_with_args(
-        monkeypatch,
-        request_yaml,
-        manifest,
-        out,
-        tmp_path / "liveness",
-        responder_url=http_ok_url,
-    )
-    assert rc == 0
-    assert LANDING_URI not in out.read_text()
 
 
 def test_main_ignores_a_record_with_no_file(monkeypatch, tmp_path, http_ok_url):

@@ -56,6 +56,7 @@ def info_payload(
         "physical_function_run_id": 4,
         "triggered_on": 1780000000100,
         "function_data": {"uri": "file:///data", "env_prefix": "ROOT"},
+        "function_landing": {"uri": "file:///data/r", "env_prefix": "ROOT"},
         "function_scratch": {"uri": "file:///data/s", "env_prefix": "ROOT"},
         "scheduled_on": 1780000000200,
     }

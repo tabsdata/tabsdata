@@ -51,11 +51,6 @@ def run(args: argparse.Namespace) -> int:
 
     logger.info("Preparing upload-raw transporter request")
     request = Request.load(request_path, PrepUploadRawErrorCode.PUR_1)
-    if request.info.function_landing is None:
-        logger.debug(
-            "The request carries no landing-data location; this function ingests "
-            "nothing, so there is no landing data to upload"
-        )
     try:
         manifest = InputManifest.load(inputs_manifest_path)
     except ManifestError as error:

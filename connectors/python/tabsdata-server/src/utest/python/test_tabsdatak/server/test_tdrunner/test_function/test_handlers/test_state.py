@@ -333,6 +333,7 @@ def _info() -> Info:
         physical_function_run_id=4,
         triggered_on=1780000000100,
         function_data=Location(uri="file:///data"),
+        function_landing=Location(uri="file:///data/r"),
         function_scratch=Location(uri="file:///data/s"),
         scheduled_on=1780000000200,
     )

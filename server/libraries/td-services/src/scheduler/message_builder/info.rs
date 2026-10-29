@@ -8,7 +8,7 @@ use crate::function_run::scratch::scratch_dir;
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunToExecute;
 use td_objects::dxo::worker_input::function::FunctionInfo;
-use td_objects::types::basic::{AtTime, Decorator};
+use td_objects::types::basic::AtTime;
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
 
@@ -57,16 +57,10 @@ pub(crate) fn build_function_info(
         .build()?;
     let (function_run_location, _) = build_external_location(storage, &path)?;
 
-    // Landing-data location — only publishers ingest, so only they get one. Keyed by
-    // the physical run so each attempt keeps its own copy and any data version
-    // resolves back to the ingested data through its physical_function_run_id.
-    let function_landing = match f.decorator {
-        Decorator::Publisher => {
-            let (location, _) = build_external_location(storage, &landing_dir(f)?)?;
-            Some(location)
-        }
-        Decorator::Transformer | Decorator::Subscriber => None,
-    };
+    // Landing-data location — keyed by the physical run so each attempt keeps its
+    // own copy and any data version resolves back to the landed data through its
+    // physical_function_run_id.
+    let (function_landing, _) = build_external_location(storage, &landing_dir(f)?)?;
 
     let (function_scratch, _) = build_external_location(storage, &scratch_dir(f)?)?;
 
@@ -203,24 +197,11 @@ mod tests {
             "every run keeps its scratch area under its own physical run: {scratch}"
         );
 
-        // Only publishers ingest, so only they are given a landing-data location.
-        assert!(
-            info.function_landing.is_none(),
-            "a transformer must not be given a landing-data location"
-        );
-        let publisher = PhysicalFunctionRunToExecute {
-            decorator: Decorator::Publisher,
-            ..f.clone()
-        };
-        let landing = build_function_info(&storage, &publisher)
-            .unwrap()
-            .function_landing
-            .expect("a publisher is given a landing-data location");
-        let landing = landing.uri.path();
+        let landing = info.function_landing.uri.path();
         assert!(
             landing.contains(&format!("/r/c/{}/w/{}/r", f.collection_id, f.id)),
-            "landing data must hang off the physical run that ingested it, under the \
-             prefix stamped on that run: {landing}"
+            "every run, not only a publisher, lands its data under its own physical \
+             run, under the prefix stamped on that run: {landing}"
         );
 
         // No cross-wiring: the bundle/stage prefixes must not leak into other paths.

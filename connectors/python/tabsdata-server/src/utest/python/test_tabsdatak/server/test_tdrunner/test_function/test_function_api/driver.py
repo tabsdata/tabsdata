@@ -301,18 +301,17 @@ class Driver:
         bundle = self.root / "bundle.tar.zst"
         build_bundle(function.load(), function.project, bundle)
         body: dict = {
-            "output": [
-                self.output_table(name, position)
-                for position, name in enumerate(outputs)
-            ]
-        }
-        if function.kind == PUBLISHER:
-            body["info"] = {
+            "info": {
                 "function_landing": {
                     "uri": (self.root / "landing").as_uri(),
                     "env_prefix": STORAGE_MOUNT,
                 }
-            }
+            },
+            "output": [
+                self.output_table(name, position)
+                for position, name in enumerate(outputs)
+            ],
+        }
         if inputs:
             body["input"] = self.inputs(inputs)
         self.write_request(bundle, body)

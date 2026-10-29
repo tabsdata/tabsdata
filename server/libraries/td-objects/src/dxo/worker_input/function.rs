@@ -30,9 +30,9 @@ impl Locations for FunctionInput {
         let mut locations = vec![
             &self.info.function_data,
             &self.info.function_bundle,
+            &self.info.function_landing,
             &self.info.function_scratch,
         ];
-        locations.extend(self.info.function_landing.iter());
         locations.extend(self.system_input.locations());
         locations.extend(self.input.locations());
         locations.extend(self.system_output.locations());
@@ -68,9 +68,9 @@ pub struct FunctionInfo {
     pub physical_function_run_id: PhysicalFunctionRunId,
     pub triggered_on: AtTime,
     pub function_data: Location,
-    /// Where a publisher run's ingested data is kept, one file per input
-    /// index. Absent for functions that ingest nothing.
-    pub function_landing: Option<Location>,
+    /// Where the run keeps the files it lands: a publisher's ingested inputs,
+    /// one per input index.
+    pub function_landing: Location,
     /// Where the run keeps temporary or work files instead of the pod's disk.
     pub function_scratch: Location,
     pub scheduled_on: AtTime, // when the request yaml was created
@@ -324,10 +324,10 @@ mod tests {
                     uri: Url::try_from("file:///foo").unwrap(),
                     env_prefix: None,
                 },
-                function_landing: Some(Location {
+                function_landing: Location {
                     uri: Url::try_from("file:///foo/r").unwrap(),
                     env_prefix: None,
-                }),
+                },
                 function_scratch: Location {
                     uri: Url::try_from("file:///foo/s").unwrap(),
                     env_prefix: None,
@@ -775,6 +775,10 @@ output:
                 uri: Url::parse("file:///foo7").unwrap(),
                 env_prefix: Some(EnvPrefix::try_from("PE_")?),
             },
+            Location {
+                uri: Url::parse("file:///foo8").unwrap(),
+                env_prefix: Some(EnvPrefix::try_from("PE_")?),
+            },
         ];
         let itv0 = InputTableVersion {
             collection_id: CollectionId::default(),
@@ -896,7 +900,7 @@ output:
             physical_function_run_id: PhysicalFunctionRunId::new(),
             triggered_on: AtTime::from(Timestamp::default()),
             function_data: locations[0].clone(),
-            function_landing: None,
+            function_landing: locations[10].clone(),
             function_scratch: locations[9].clone(),
             scheduled_on: AtTime::default(),
         };

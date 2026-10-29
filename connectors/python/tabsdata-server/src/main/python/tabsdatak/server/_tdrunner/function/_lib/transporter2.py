@@ -64,13 +64,12 @@ def build_upload_landing_request(
     handler = ServerTransporterHandler2(option_keys)
     landing = request.info.function_landing
     pairs: list[tuple[transporter2.Location, transporter2.Location]] = []
-    if landing is not None:
-        base = landing.uri.rstrip("/")
-        for idx, source in landing_files:
-            target = Location(
-                uri=f"{base}/{idx}{LANDING_SUFFIX}", env_prefix=landing.env_prefix
-            )
-            pairs.append((local_location(source), handler.location_for(target)))
+    base = landing.uri.rstrip("/")
+    for idx, source in landing_files:
+        target = Location(
+            uri=f"{base}/{idx}{LANDING_SUFFIX}", env_prefix=landing.env_prefix
+        )
+        pairs.append((local_location(source), handler.location_for(target)))
     return handler.make_request(pairs)
 
 
