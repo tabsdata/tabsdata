@@ -34,6 +34,9 @@ from typing import (
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
+
+import pandas as pd
+import polars as pl
 from tabsdatak.tableframe.datatypes import DataType
 from tabsdatak.tableframe.expr import Expr
 from tabsdatak.tableframe.group_by import LazyGroupBy
@@ -1022,7 +1025,7 @@ class TableFrame(EngineFrame):
                 TableFrame.empty()
         """
 
-    def _to_polars_lf(self, drop_system_columns=True):
+    def _to_polars_lf(self, drop_system_columns=True) -> pl.LazyFrame:
         """Return the underlying polars `LazyFrame`, unevaluated.
 
         :categories: conversion
@@ -1044,7 +1047,7 @@ class TableFrame(EngineFrame):
                 tf._to_polars_lf()
         """
 
-    def _to_polars_df(self, drop_system_columns=True):
+    def _to_polars_df(self, drop_system_columns=True) -> pl.DataFrame:
         """Evaluate this `TableFrame` into a polars `DataFrame`.
 
         :categories: conversion
@@ -1070,7 +1073,7 @@ class TableFrame(EngineFrame):
                 tf._to_polars_df(drop_system_columns=False)
         """
 
-    def _to_pandas(self, drop_system_columns=True):
+    def _to_pandas(self, drop_system_columns=True) -> pd.DataFrame:
         """Evaluate this `TableFrame` into a pandas `DataFrame`.
 
         :categories: conversion
@@ -1090,7 +1093,7 @@ class TableFrame(EngineFrame):
                 tf._to_pandas()
         """
 
-    def _to_dict(self, drop_system_columns=True):
+    def _to_dict(self, drop_system_columns=True) -> dict[str, list[Any]]:
         """Evaluate this `TableFrame` into a `{column: values}` dict.
 
         :categories: conversion

@@ -4,12 +4,16 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Any, Self
 
 from tabsdatak.tableframe._core.base import BaseFrame
 from tabsdatak.tableframe._engine.model.frame import TableFrameState
 
 if TYPE_CHECKING:
+    import pandas as pd
+    import polars as pl
+
+    from tabsdatak.tableframe._engine.taxonomy.frame import TableFrameOrigin
     from tabsdatak.tableframe.datatypes import DataType
     from tabsdatak.tableframe.expr import Expr
     from tabsdatak.tableframe.grok import ColumnDefinition
@@ -40,7 +44,7 @@ class EngineFrame(BaseFrame):
         validate_schema(self._lf)
 
     @staticmethod
-    def _lazy(frame):
+    def _lazy(frame) -> pl.LazyFrame:
         import polars as pl
 
         return frame.lazy() if isinstance(frame, pl.DataFrame) else frame
@@ -56,7 +60,7 @@ class EngineFrame(BaseFrame):
         state = self._state.clone() if self._state is not None else None
         return type(self)._wrap(lf, state)
 
-    def _identity(self):
+    def _identity(self) -> str | None:
         genesis = self._state.genesis if self._state is not None else None
         return genesis.id if genesis is not None else None
 
@@ -70,20 +74,20 @@ class EngineFrame(BaseFrame):
             return self._identity() != other._identity()
         return self._lf.__ne__(other)
 
-    def __gt__(self, other):
+    def __gt__(self, other) -> bool:
         return self._lf.__gt__(self._operand(other))
 
-    def __lt__(self, other):
+    def __lt__(self, other) -> bool:
         return self._lf.__lt__(self._operand(other))
 
-    def __ge__(self, other):
+    def __ge__(self, other) -> bool:
         return self._lf.__ge__(self._operand(other))
 
-    def __le__(self, other):
+    def __le__(self, other) -> bool:
         return self._lf.__le__(self._operand(other))
 
     @staticmethod
-    def _operand(other):
+    def _operand(other) -> object:
         return other._lf if isinstance(other, EngineFrame) else other
 
     @classmethod
@@ -97,7 +101,7 @@ class EngineFrame(BaseFrame):
         raise ValueError(f"Invalid idx: {idx}")
 
     @classmethod
-    def _resolve_origin(cls, origin, source):
+    def _resolve_origin(cls, origin, source) -> TableFrameOrigin:
         from tabsdatak.tableframe._engine.taxonomy.frame import TableFrameOrigin
 
         if isinstance(source, EngineFrame):
@@ -113,7 +117,7 @@ class EngineFrame(BaseFrame):
         raise ValueError(f"Invalid origin: {origin}")
 
     @classmethod
-    def _arrange(cls, lf):
+    def _arrange(cls, lf) -> pl.LazyFrame:
         from tabsdatak.extensions.tableframe._engine.column.registry import registry
         from tabsdatak.tableframe._engine.taxonomy.column import ColumnKind
 
@@ -176,14 +180,14 @@ class EngineFrame(BaseFrame):
     def _assemble(cls, lf, mode) -> Self:
         return cls._build(lf, mode)
 
-    def _strip(self, drop_system_columns, drop_internal_columns=False):
+    def _strip(self, drop_system_columns, drop_internal_columns=False) -> pl.LazyFrame:
         if not drop_system_columns and not drop_internal_columns:
             return self._lf
         return self._select(
             with_internal=False, with_connector=not drop_internal_columns
         )
 
-    def _select(self, *, with_internal: bool, with_connector: bool):
+    def _select(self, *, with_internal: bool, with_connector: bool) -> pl.LazyFrame:
         from tabsdatak.extensions.tableframe._engine.column.registry import registry
 
         names = self._lf.collect_schema().names()
@@ -192,7 +196,7 @@ class EngineFrame(BaseFrame):
         )
         return self._lf.select(keep)
 
-    def _user_columns(self):
+    def _user_columns(self) -> list[str]:
         from tabsdatak.extensions.tableframe._engine.column.registry import registry
         from tabsdatak.tableframe._engine.taxonomy.column import ColumnKind
 
@@ -203,7 +207,7 @@ class EngineFrame(BaseFrame):
             if reg.kind_of(name) is ColumnKind.USER
         ]
 
-    def _persisted(self):
+    def _persisted(self) -> pl.LazyFrame:
         from tabsdatak.tableframe._engine.constant.column.prefixes import (
             TD_NAMESPACED_VIRTUAL_SYSTEM_COLUMN_PREFIXES,
         )
@@ -239,21 +243,21 @@ class EngineFrame(BaseFrame):
     def _sink_public(self, path) -> None:
         self._sink_public_plan(path).collect(engine="streaming")
 
-    def _sink_native_plan(self, path, storage_options=None):
+    def _sink_native_plan(self, path, storage_options=None) -> pl.LazyFrame:
         return self._sink_plan(
             self._persisted(),
             path,
             storage_options,
         )
 
-    def _sink_user_plan(self, path, storage_options=None):
+    def _sink_user_plan(self, path, storage_options=None) -> pl.LazyFrame:
         return self._sink_plan(
             self._strip(drop_system_columns=True),
             path,
             storage_options,
         )
 
-    def _sink_public_plan(self, path, storage_options=None):
+    def _sink_public_plan(self, path, storage_options=None) -> pl.LazyFrame:
         return self._sink_plan(
             self._strip(
                 drop_system_columns=True,
@@ -263,7 +267,7 @@ class EngineFrame(BaseFrame):
             storage_options,
         )
 
-    def _sink_plan(self, lf, path, storage_options=None):
+    def _sink_plan(self, lf, path, storage_options=None) -> pl.LazyFrame:
         from tabsdatak.tableframe._core.hooks import get_sink_observer
 
         observer = get_sink_observer(type(self))
@@ -344,16 +348,16 @@ class EngineFrame(BaseFrame):
 
         return cls._assemble(pl.LazyFrame(schema=schema), CreationMode.TAB)
 
-    def _to_polars_lf(self, drop_system_columns=True):
+    def _to_polars_lf(self, drop_system_columns=True) -> pl.LazyFrame:
         return self._strip(drop_system_columns)
 
-    def _to_polars_df(self, drop_system_columns=True):
+    def _to_polars_df(self, drop_system_columns=True) -> pl.DataFrame:
         return self._strip(drop_system_columns).collect(engine="streaming")
 
-    def _to_pandas(self, drop_system_columns=True):
+    def _to_pandas(self, drop_system_columns=True) -> pd.DataFrame:
         return self._strip(drop_system_columns).collect(engine="streaming").to_pandas()
 
-    def _to_dict(self, drop_system_columns=True):
+    def _to_dict(self, drop_system_columns=True) -> dict[str, list[Any]]:
         return (
             self
             ._strip(drop_system_columns)
@@ -420,7 +424,7 @@ class EngineFrame(BaseFrame):
         return df.row(0, named=True)
 
     @staticmethod
-    def _on_empty(op: str, fail_if_empty: bool):
+    def _on_empty(op: str, fail_if_empty: bool) -> None:
         if not fail_if_empty:
             return None
         from tabsdatak.tableframe._engine.event.error import TableFrameErrorCode
@@ -504,7 +508,7 @@ class EngineFrame(BaseFrame):
         )
         from tabsdatak.tableframe._core.translate import unwrap
 
-        def group_by_dtype(dmap):
+        def group_by_dtype(dmap) -> dict[Any, list[str]]:
             groups = {}
             for name, dtype in dmap.items():
                 groups.setdefault(dtype, []).append(name)
