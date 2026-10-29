@@ -14,6 +14,7 @@ from tabsdatak.server._tdrunner.function._lib.errors import (
     BadUserCodeError as _BadUserCodeError,
     NoPluginError as _NoPluginError,
     PluginFailedError as _PluginFailedError,
+    WriteFailedError as _WriteFailedError,
     WrongKindError as _WrongKindError,
 )
 
@@ -59,6 +60,13 @@ class BadManifestError(_BadManifestError):
     exit_code = 16
 
 
+class OutputCopyFailedError(_WriteFailedError):
+    """A landed output could not be read from storage or copied to the
+    local file handed to the plugin."""
+
+    exit_code = 17
+
+
 class RunDestinationPluginErrorCode(ErrorCode):
     RDP_1 = ErrorDef(
         BadRequestError,
@@ -97,7 +105,7 @@ class RunDestinationPluginErrorCode(ErrorCode):
         PluginFailedError,
         "plugin write_out failed: {detail}",
     )
-    # ``_invoke_write_out`` catch-all for plugin exceptions.
+    # ``_write_tables`` catch-all for plugin exceptions.
 
     RDP_7 = ErrorDef(
         BadManifestError,
@@ -112,4 +120,11 @@ class RunDestinationPluginErrorCode(ErrorCode):
             "a concrete frame for every output slot"
         ),
     )
-    # ``_tables_from_manifest`` rejects an entry without a ``uri``.
+    # ``DestinationHandoff.seed`` ``MissingOutputError``: an entry without a ``uri``.
+
+    RDP_9 = ErrorDef(
+        OutputCopyFailedError,
+        "failed to copy landed output {slot} from {path}: {detail}",
+    )
+    # ``DestinationHandoff.seed`` ``OutputCopyError``: the landing file could not be
+    # read or copied.

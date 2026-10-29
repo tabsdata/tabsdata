@@ -56,6 +56,7 @@ from tabsdatak.server._tdrunner.function._commons.solver.secrets import (
     StorageSecrets,
     take_project_secret,
 )
+from tabsdatak.server._tdrunner.function._handlers.columns import ColumnPolicy, Zone
 from tabsdatak.server._tdrunner.function._handlers.state import State, StateOutput
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.server._tdrunner.function._lib.function_def import (
@@ -345,18 +346,18 @@ def _output_targets(
     request: Request,
     info: FunctionInfo,
     output_tables: list[str],
-    out_dir: Path,
 ) -> list[TableFile]:
     """Where each output table is written.
 
     Publisher / transformer outputs are stored tables, written straight
     to the location the request assigns them. Subscriber outputs feed a
-    destination plugin, so they stay in `<out_dir>/slot<i>/<table>.parquet`.
+    destination plugin, so they land in the run's landing area, one file
+    per output position, for the plugin step to read.
     """
     if isinstance(info, SubscriberInfo):
         return [
-            TableFile.local(out_dir / f"slot{i}" / f"{table_name}.parquet")
-            for i, table_name in enumerate(output_tables)
+            TableFile.stored(request.info.landing_file(position))
+            for position in range(len(output_tables))
         ]
     locations = {table.table: table.location for table in request.output}
     targets = []
@@ -371,8 +372,8 @@ def _sink_outputs(
     result: tuple,
     output_tables: list[str],
     targets: list[TableFile],
+    policy: ColumnPolicy,
     *,
-    public: bool,
     checks: list[Check] | None = None,
     state: StateOutput | None = None,
 ) -> OutputManifest:
@@ -381,11 +382,9 @@ def _sink_outputs(
     outputs-manifest entries with the stats read from each written
     file's footer.
 
-    Publisher / transformer outputs become stored tables, so they sink
-    natively with the framework's persisted system columns. Subscriber
-    outputs feed a destination plugin and leave the system, so they sink
-    publicly: stripped of every `$td.` system and `@td.` connector
-    column, leaving only the user's own columns for the plugin to write.
+    `policy` decides which framework columns the outputs keep: stored
+    tables for publishers / transformers, landing files for subscribers,
+    which the destination plugin step reshapes before its handoff.
 
     Every output and the state are written, and every check evaluated,
     in one streaming pass, so the plan the outputs share runs once.
@@ -396,7 +395,7 @@ def _sink_outputs(
         if value is None:
             continue
         try:
-            plans.append(target.sink(value, public=public))
+            plans.append(policy.sink(value, target))
         except Exception as error:
             raise RunFunctionErrorCode.RF_16.exception(
                 cause=error,
@@ -582,8 +581,8 @@ def run(args: argparse.Namespace) -> int:
     outputs_manifest = _sink_outputs(
         result,
         output_tables,
-        _output_targets(request, info, output_tables, out_dir),
-        public=isinstance(info, SubscriberInfo),
+        _output_targets(request, info, output_tables),
+        ColumnPolicy(Zone.LAND if isinstance(info, SubscriberInfo) else Zone.HOST),
         checks=checks,
         state=state.output(),
     )

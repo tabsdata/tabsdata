@@ -8,10 +8,11 @@ The subscriber chain's counterpart to ``run-source-plugin``. Reads the
 function definition from the extracted bundle (must be a
 ``SubscriberInfo``), reads the outputs manifest produced by
 ``run-function``, resolves the matching ``DestPlugin`` via the connector
-registry, and calls ``write_out()`` with the list of parquet paths the
-function produced.
+registry, and hands the outputs the function landed in the run's landing
+area to the plugin through its ``Handoff``: with a file handoff,
+``write_out()`` gets local parquet copies holding only the user's columns.
 
-The destination plugin consumes the parquets positionally — one entry
+The destination plugin consumes the outputs positionally — one entry
 per slot, in ``info.destination.cardinality(info.destination)`` order.
 Null entries (the user function returned ``None`` for that slot)
 surface as ``BadManifestError`` since the ``DestPlugin.write_out`` API
@@ -34,19 +35,19 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
 from tabsdatak.server._tdrunner.function._commons.run.version import version
 from tabsdatak.server._tdrunner.function.commands.run_destination_plugin.runner import (
     _DestContext,
-    _invoke_write_out,
     _load_function_def,
+    _read_tables,
     _resolve_plugin,
-    _tables_from_manifest,
+    _write_tables,
     run,
 )
 
 __all__ = [
     "_DestContext",
-    "_invoke_write_out",
     "_load_function_def",
+    "_read_tables",
     "_resolve_plugin",
-    "_tables_from_manifest",
+    "_write_tables",
     "run",
     "main",
 ]
@@ -54,7 +55,7 @@ __all__ = [
 VERSION = version()
 GENERATION = 1
 INFO = (
-    "run-destination-plugin — hand the function's output parquets to the "
+    "run-destination-plugin — hand the function's landed outputs to the "
     "subscriber's destination plugin"
 )
 MAN = (
@@ -63,8 +64,9 @@ MAN = (
     "Loads function_def.json from --bundle-dir (must be a "
     "subscriberDef), reads --outputs-manifest, resolves the destination "
     "plugin via the tabsdatak connectors registry, loads the connection "
-    "from --connection-file, and invokes write_out() with the list of "
-    "parquet paths the function produced."
+    "from --connection-file, and hands the outputs the function landed "
+    "to the plugin: with a file handoff, write_out() gets local parquet "
+    "copies holding only the user's columns."
 )
 
 

@@ -23,10 +23,6 @@ from tabsdatak.server._tdrunner.function._handlers.tables import (
     TableFile,
     TableFileError,
 )
-from tabsdatak.tableframe import TableFrame
-from tabsdatak.tableframe._engine.constant.column.prefixes import (
-    TD_SYSTEM_COLUMN_PREFIX,
-)
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -130,33 +126,10 @@ def test_copy_keeps_a_file_without_columns(tmp_path):
     assert pl.read_parquet(target).shape == (0, 0)
 
 
-def test_sink_is_lazy_until_collected(tmp_path):
-    path = tmp_path / "nested" / "t.parquet"
-    plan = TableFile.local(path).sink(TableFrame.from_polars(FRAME), public=False)
-    assert not path.exists()
-    pl.collect_all([plan], engine="streaming")
-    assert pl.read_parquet(path).select("id").equals(FRAME)
-
-
-def test_sink_to_a_stored_location_creates_its_folders(tmp_path):
-    path = tmp_path / "data" / "v1" / "0.t"
-    table = TableFile.stored(Location(uri=path.as_uri(), env_prefix="ROOT"))
-    pl.collect_all(
-        [table.sink(TableFrame.from_polars(FRAME), public=False)], engine="streaming"
-    )
-    assert pl.read_parquet(path).select("id").equals(FRAME)
-
-
-@pytest.mark.parametrize("public", [False, True])
-def test_sink_keeps_system_columns_only_when_native(tmp_path, public):
+def test_locator_is_the_table_uri(tmp_path):
     path = tmp_path / "t.parquet"
-    pl.collect_all(
-        [TableFile.local(path).sink(TableFrame.from_polars(FRAME), public=public)],
-        engine="streaming",
-    )
-    columns = pl.read_parquet_schema(path)
-    assert any(c.startswith(TD_SYSTEM_COLUMN_PREFIX) for c in columns) is not public
-    assert "id" in columns
+    table = TableFile.stored(Location(uri=path.as_uri(), env_prefix="ROOT"))
+    assert table.locator().uri == path.as_uri()
 
 
 def test_stats_match_the_whole_file(tmp_path):

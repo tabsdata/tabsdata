@@ -36,6 +36,7 @@ from tabsdatak.server._tdrunner.function._commons.document.request import (
     Request,
 )
 from tabsdatak.server._tdrunner.function._commons.solver.secrets import ProjectSecret
+from tabsdatak.server._tdrunner.function._handlers.columns import ColumnPolicy, Zone
 from tabsdatak.server._tdrunner.function._handlers.state import (
     STATE_FILE,
     StateOutput,
@@ -312,6 +313,10 @@ def _stored(root: Path, table: str) -> Path:
     return root / "storage" / f"{table}.t"
 
 
+def _landing(root: Path) -> Path:
+    return root / "landing"
+
+
 def _stored_output(root: Path, table: str, index: int) -> dict:
     location = {"uri": _stored(root, table).as_uri(), "env_prefix": "ROOT"}
     return _output_table({"table": table, "location": location}, index)
@@ -321,7 +326,12 @@ def _write_request(path: Path, *outputs: str) -> Path:
     path.write_text(
         yaml.safe_dump({
             "Function": {
-                "info": _info(),
+                "info": _info(
+                    function_landing={
+                        "uri": _landing(path.parent).as_uri(),
+                        "env_prefix": "ROOT",
+                    }
+                ),
                 "output": [
                     _stored_output(path.parent, table, index)
                     for index, table in enumerate(outputs)
@@ -781,7 +791,6 @@ def test_output_targets_of_a_publisher_are_their_stored_locations(
         _request(tmp_path, "untouched", "my_table"),
         fixture_publisher,
         ["my_table", "untouched"],
-        tmp_path / "out",
     )
     assert [target.uri for target in targets] == [
         _stored(tmp_path, "my_table").as_uri(),
@@ -795,20 +804,24 @@ def test_output_targets_reject_a_table_without_location(tmp_path, fixture_publis
             _request(tmp_path, "my_table"),
             fixture_publisher,
             ["my_table", "untouched"],
-            tmp_path / "out",
         )
 
 
-def test_output_targets_of_a_subscriber_are_local_slots(tmp_path, subscriber_bundle):
+def test_output_targets_of_a_subscriber_are_its_landing_files(
+    tmp_path, subscriber_bundle
+):
     info = _load_function_def(subscriber_bundle)
-    targets = _output_targets(_request(tmp_path), info, ["out_0", "out_1"], tmp_path)
+    targets = _output_targets(_request(tmp_path), info, ["out_0", "out_1"])
     assert [target.uri for target in targets] == [
-        (tmp_path / "slot0" / "out_0.parquet").as_uri(),
-        (tmp_path / "slot1" / "out_1.parquet").as_uri(),
+        f"{_landing(tmp_path).as_uri()}/0.t",
+        f"{_landing(tmp_path).as_uri()}/1.t",
     ]
 
 
 # --- unit: _sink_outputs ------------------------------------------------
+
+
+HOST = ColumnPolicy(Zone.HOST)
 
 
 def _targets(tmp_path: Path, *tables: str) -> list[TableFile]:
@@ -818,7 +831,7 @@ def _targets(tmp_path: Path, *tables: str) -> list[TableFile]:
 def test_sink_outputs_writes_each_table_frame(tmp_path):
     result = (_fake_table_frame(), _fake_table_frame())
     targets = _targets(tmp_path, "t1", "t2")
-    entries = _sink_outputs(result, ["t1", "t2"], targets, public=False).outputs
+    entries = _sink_outputs(result, ["t1", "t2"], targets, HOST).outputs
     assert [entry.name for entry in entries] == ["t1", "t2"]
     for entry, target in zip(entries, targets):
         assert entry.uri == target.uri
@@ -829,7 +842,7 @@ def test_sink_outputs_writes_each_table_frame(tmp_path):
 def test_sink_outputs_none_value_records_no_uri_nor_stats(tmp_path):
     result = (None, _fake_table_frame())
     entries = _sink_outputs(
-        result, ["t1", "t2"], _targets(tmp_path, "t1", "t2"), public=False
+        result, ["t1", "t2"], _targets(tmp_path, "t1", "t2"), HOST
     ).outputs
     assert entries[0] == OutputEntry(name="t1")
     assert entries[1].stats is not None
@@ -840,11 +853,9 @@ def test_sink_outputs_write_failure_maps_to_output_write_failed(tmp_path, monkey
     def broken_sink(self, *arguments):
         raise RuntimeError("disk full")
 
-    monkeypatch.setattr(TableFrame, "_sink_native_plan", broken_sink)
+    monkeypatch.setattr(TableFrame, "_observed", broken_sink)
     with pytest.raises(OutputWriteFailedError, match="t1.t"):
-        _sink_outputs(
-            (_fake_table_frame(),), ["t1"], _targets(tmp_path, "t1"), public=False
-        )
+        _sink_outputs((_fake_table_frame(),), ["t1"], _targets(tmp_path, "t1"), HOST)
 
 
 def test_sink_outputs_failure_while_writing_maps_to_output_write_failed(
@@ -856,13 +867,13 @@ def test_sink_outputs_failure_while_writing_maps_to_output_write_failed(
     def failing_sink(self, *arguments):
         return pl.LazyFrame({"x": [1]}).map_batches(fail)
 
-    monkeypatch.setattr(TableFrame, "_sink_native_plan", failing_sink)
+    monkeypatch.setattr(TableFrame, "_observed", failing_sink)
     with pytest.raises(OutputWriteFailedError, match="t1, t2"):
         _sink_outputs(
             (_fake_table_frame(), _fake_table_frame()),
             ["t1", "t2"],
             _targets(tmp_path, "t1", "t2"),
-            public=False,
+            HOST,
         )
 
 
@@ -874,9 +885,7 @@ def test_sink_outputs_unreadable_stats_map_to_output_write_failed(
 
     monkeypatch.setattr(TableFile, "stats", unreadable)
     with pytest.raises(OutputWriteFailedError, match="stats of output 't1'"):
-        _sink_outputs(
-            (_fake_table_frame(),), ["t1"], _targets(tmp_path, "t1"), public=False
-        )
+        _sink_outputs((_fake_table_frame(),), ["t1"], _targets(tmp_path, "t1"), HOST)
 
 
 def test_sink_outputs_writes_every_output_in_one_pass(tmp_path, monkeypatch):
@@ -892,7 +901,7 @@ def test_sink_outputs_writes_every_output_in_one_pass(tmp_path, monkeypatch):
         (_fake_table_frame(), _fake_table_frame(), None),
         ["t1", "t2", "t3"],
         _targets(tmp_path, "t1", "t2", "t3"),
-        public=False,
+        HOST,
     )
     assert collected == [2]
 
@@ -922,7 +931,7 @@ def test_sink_outputs_writes_the_state_in_the_same_pass(tmp_path, monkeypatch):
         (_fake_table_frame(),),
         ["t1"],
         _targets(tmp_path, "t1"),
-        public=False,
+        HOST,
         state=state,
     )
     assert collected == [2]
@@ -936,7 +945,7 @@ def test_sink_outputs_writes_the_state_in_the_same_pass(tmp_path, monkeypatch):
 def test_sink_outputs_writes_the_state_without_outputs(tmp_path):
     state = _state_output(tmp_path, {})
     manifest = _sink_outputs(
-        (None,), ["t1"], _targets(tmp_path, "t1"), public=False, state=state
+        (None,), ["t1"], _targets(tmp_path, "t1"), HOST, state=state
     )
     assert manifest.outputs == (OutputEntry(name="t1"),)
     assert manifest.state.stats.column_count == 0
@@ -945,7 +954,7 @@ def test_sink_outputs_writes_the_state_without_outputs(tmp_path):
 
 def test_sink_outputs_without_state_records_none(tmp_path):
     manifest = _sink_outputs(
-        (_fake_table_frame(),), ["t1"], _targets(tmp_path, "t1"), public=False
+        (_fake_table_frame(),), ["t1"], _targets(tmp_path, "t1"), HOST
     )
     assert manifest.state is None
 
@@ -962,36 +971,25 @@ def test_sink_outputs_state_write_failure_maps_to_output_write_failed(
             (None,),
             ["t1"],
             _targets(tmp_path, "t1"),
-            public=False,
+            HOST,
             state=_state_output(tmp_path, {}),
         )
 
 
-def test_sink_outputs_native_keeps_system_columns(tmp_path):
+@pytest.mark.parametrize("zone", [Zone.HOST, Zone.LAND])
+def test_sink_outputs_keeps_system_columns(tmp_path, zone):
     from tabsdatak.tableframe._engine.constant.column.prefixes import (
         TD_SYSTEM_COLUMN_PREFIX,
     )
 
     _sink_outputs(
-        (_fake_table_frame(),), ["t1"], _targets(tmp_path, "t1"), public=False
+        (_fake_table_frame(),),
+        ["t1"],
+        _targets(tmp_path, "t1"),
+        ColumnPolicy(zone),
     )
     columns = pl.read_parquet_schema(_stored(tmp_path, "t1"))
     assert any(c.startswith(TD_SYSTEM_COLUMN_PREFIX) for c in columns)
-
-
-def test_sink_outputs_public_drops_internal_columns(tmp_path):
-    from tabsdatak.tableframe._engine.constant.column.prefixes import (
-        TD_CONNECTOR_SYSTEM_COLUMN_PREFIX,
-        TD_SYSTEM_COLUMN_PREFIX,
-    )
-
-    _sink_outputs((_fake_table_frame(),), ["t1"], _targets(tmp_path, "t1"), public=True)
-    columns = pl.read_parquet_schema(_stored(tmp_path, "t1"))
-    assert not any(
-        c.startswith((TD_SYSTEM_COLUMN_PREFIX, TD_CONNECTOR_SYSTEM_COLUMN_PREFIX))
-        for c in columns
-    )
-    assert "x" in columns
 
 
 # --- main: error paths --------------------------------------------------
@@ -1462,6 +1460,10 @@ def _request_with_state_slots(
     info["execution_id"] = 2
     info["transaction_id"] = 3
     info["physical_function_run_id"] = 4
+    info["function_landing"] = {
+        "uri": _landing(path.parent).as_uri(),
+        "env_prefix": "ROOT",
+    }
     state_in = None
     if previous is not None:
         _previous_state(path.parent).parent.mkdir(parents=True, exist_ok=True)
@@ -1738,3 +1740,4 @@ def test_main_ctx_aware_subscriber_hydrates_and_drains(
     )
     _run_with_state(tmp_path, extracted, monkeypatch, http_ok_url, req)
     assert _stored_state(tmp_path) == {"smoke.last-seen": "sub-after-from-state-in"}
+    assert (_landing(tmp_path) / "0.t").is_file()

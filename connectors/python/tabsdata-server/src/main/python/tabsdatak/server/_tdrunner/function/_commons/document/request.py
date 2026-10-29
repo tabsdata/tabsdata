@@ -149,6 +149,13 @@ class Info(DocumentModel):
             tz=timezone.utc,
         )
 
+    def landing_file(self, index: int) -> Location:
+        base = self.function_landing.uri.rstrip("/")
+        return Location(
+            uri=f"{base}/{index}{LANDING_SUFFIX}",
+            env_prefix=self.function_landing.env_prefix,
+        )
+
 
 class Request(DocumentModel):
     info: Info

@@ -89,8 +89,8 @@ MAN = (
     "(single-mode slots → one LazyFrame; array-mode slots → list of "
     "LazyFrames), invokes the user function, and sinks each returned "
     "table: publisher and transformer outputs to the storage location "
-    "the request assigns them, subscriber outputs to "
-    "<out-dir>/slot<i>/<table_name>.parquet. Writes an outputs manifest "
+    "the request assigns them, subscriber outputs to the run's landing "
+    "area, <function_landing>/<position>.t. Writes an outputs manifest "
     "at --outputs-manifest with each written table's URI and stats "
     "(neither if the function returned None). Handles publisherDef, "
     "transformerDef, and subscriberDef bundles."
@@ -117,10 +117,7 @@ def _build_parser():
     parser.add_argument(
         "--out-dir",
         required=True,
-        help=(
-            "Working directory of the function, where subscriber output "
-            "parquets are written"
-        ),
+        help=("Working directory of the function context"),
     )
     parser.add_argument(
         "--outputs-manifest",

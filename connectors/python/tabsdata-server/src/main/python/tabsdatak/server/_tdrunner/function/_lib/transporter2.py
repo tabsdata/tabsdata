@@ -13,7 +13,6 @@ from tabsdatak.common._transporter.handler.handler2 import (
 )
 from tabsdatak.common._transporter.invoker import transporter2
 from tabsdatak.server._tdrunner.function._commons.document.request import (
-    LANDING_SUFFIX,
     AnyRequest,
     Location,
     Request,
@@ -62,14 +61,10 @@ def build_upload_landing_request(
     option_keys: dict[str, list[str]],
 ) -> transporter2.CopyRequest:
     handler = ServerTransporterHandler2(option_keys)
-    landing = request.info.function_landing
-    pairs: list[tuple[transporter2.Location, transporter2.Location]] = []
-    base = landing.uri.rstrip("/")
-    for idx, source in landing_files:
-        target = Location(
-            uri=f"{base}/{idx}{LANDING_SUFFIX}", env_prefix=landing.env_prefix
-        )
-        pairs.append((local_location(source), handler.location_for(target)))
+    pairs: list[tuple[transporter2.Location, transporter2.Location]] = [
+        (local_location(source), handler.location_for(request.info.landing_file(idx)))
+        for idx, source in landing_files
+    ]
     return handler.make_request(pairs)
 
 

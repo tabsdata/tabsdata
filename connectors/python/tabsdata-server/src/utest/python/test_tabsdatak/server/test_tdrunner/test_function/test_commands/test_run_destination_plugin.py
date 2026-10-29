@@ -6,8 +6,7 @@
 
 Covers:
   * Helper-function unit tests (`_load_function_def`,
-    `_resolve_plugin`, `_tables_from_manifest`, `_invoke_write_out`,
-    `_DestContext`).
+    `_resolve_plugin`, `_read_tables`, `_write_tables`, `_DestContext`).
   * `main()` error paths and end-to-end happy path against the real
     `tabsdata-conn-localfile` destination.
 """
@@ -21,24 +20,26 @@ from datetime import datetime
 from pathlib import Path
 
 import polars as pl
-import pyarrow as pa
-import pyarrow.parquet as pq
 import pytest
 import yaml
 
 from tabsdatak._info import SubscriberInfo
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
+from tabsdatak.server._tdrunner.function._commons.document.request import Request
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputEntry,
     OutputManifest,
 )
+from tabsdatak.server._tdrunner.function._handlers.columns import ColumnPolicy, Zone
+from tabsdatak.server._tdrunner.function._handlers.handoff import FileDestinationHandoff
+from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.server._tdrunner.function.commands.run_destination_plugin import (
+    _write_tables,
     _DestContext,
-    _invoke_write_out,
     _load_function_def,
+    _read_tables,
     _resolve_plugin,
-    _tables_from_manifest,
     main,
     runner as runner_module,
 )
@@ -48,9 +49,13 @@ from tabsdatak.server._tdrunner.function.commands.run_destination_plugin.error i
     BadRequestError,
     BadUserCodeError,
     NoPluginError,
+    OutputCopyFailedError,
     PluginFailedError,
+    RunDestinationPluginErrorCode,
     WrongKindError,
 )
+from tabsdatak.tableframe import TableFrame
+from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payload
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
@@ -128,11 +133,23 @@ def _write_request(path: Path, bundle_uri: str = "file:///bundle.tar.zst") -> Pa
                     transaction_id=99,
                     logical_function_run_id=7,
                     physical_function_run_id=7,
+                    function_landing={
+                        "uri": (path.parent / "landing").as_uri(),
+                        "env_prefix": "ROOT",
+                    },
                 ),
             }
         })
     )
     return path
+
+
+def _land(request_path: Path, frame: pl.DataFrame) -> OutputEntry:
+    request = Request.load(request_path, RunDestinationPluginErrorCode.RDP_1)
+    target = TableFile.stored(request.info.landing_file(0))
+    value = TableFrame._build(frame.lazy(), CreationMode.MUT)
+    ColumnPolicy(Zone.LAND).sink(value, target).collect()
+    return OutputEntry(name="out_0", uri=target.uri)
 
 
 def _write_connection_file(path: Path, base_path: Path) -> Path:
@@ -309,91 +326,54 @@ def test_resolve_plugin_unknown_dest_raises_no_plugin(fixture_subscriber, monkey
         _resolve_plugin(fixture_subscriber)
 
 
-# --- unit: _tables_from_manifest ---------------------------------------
+# --- unit: _read_tables -------------------------------------------------
 
 
-def test_tables_from_manifest_happy():
-    manifest = OutputManifest(
-        outputs=(
-            OutputEntry(name="out_0", uri="file:///a.parquet"),
-            OutputEntry(name="out_1", uri="file:///b.parquet"),
-        )
+def _handoff(tmp_path: Path) -> FileDestinationHandoff:
+    return FileDestinationHandoff(base_folder=tmp_path / "work")
+
+
+def test_read_tables_maps_an_output_without_data_to_bad_manifest(tmp_path):
+    request = Request.load(
+        _write_request(tmp_path / "request.yaml"), RunDestinationPluginErrorCode.RDP_1
     )
-    tables = _tables_from_manifest(manifest)
-    assert tables == [Path("/a.parquet"), Path("/b.parquet")]
-    assert all(isinstance(t, Path) for t in tables)
-
-
-def test_tables_from_manifest_empty_entries_yields_empty_list():
-    assert _tables_from_manifest(OutputManifest(outputs=())) == []
-
-
-def test_tables_from_manifest_null_entry_raises_bad_manifest():
-    """Subscribers must return concrete frames for every slot — a
-    entry without a `uri` is a contract violation here."""
-    manifest = OutputManifest(
-        outputs=(
-            OutputEntry(name="out_0", uri="file:///a.parquet"),
-            OutputEntry(name="out_1"),
-        )
-    )
+    manifest = OutputManifest(outputs=(OutputEntry(name="out_0"),))
     with pytest.raises(BadManifestError):
-        _tables_from_manifest(manifest)
+        _read_tables(_handoff(tmp_path), request, manifest)
 
 
-# --- unit: _invoke_write_out -------------------------------------------
+def test_read_tables_maps_an_unreadable_landing_file_to_copy_failed(tmp_path):
+    request = Request.load(
+        _write_request(tmp_path / "request.yaml"), RunDestinationPluginErrorCode.RDP_1
+    )
+    entry = OutputEntry(name="out_0", uri=request.info.landing_file(0).uri)
+    with pytest.raises(OutputCopyFailedError):
+        _read_tables(_handoff(tmp_path), request, OutputManifest(outputs=(entry,)))
 
 
-def test_invoke_write_out_returns_normally(tmp_path):
+# --- unit: _write_tables ------------------------------------------------
+
+
+def test_write_tables_returns_normally(tmp_path):
     calls = []
 
     class _Plugin:
         def write_out(self, ctx, conn, dest, tables):
             calls.append((ctx, conn, dest, tables))
 
-    ctx = _DestContext(
-        work_dir=tmp_path,
-        project_id="p-1",
-        project="p",
-        collection_id="c_id",
-        collection="c_name",
-        function_id="fn",
-        function="publish_people",
-        function_version_id="fv-1",
-        execution_id="e",
-        execution=None,
-        transaction_id="t",
-        logical_function_run_id="lfr-1",
-        physical_function_run_id="pfr-1",
-        triggered_on=datetime.fromisoformat("2026-06-04T07:14:28.376000+00:00"),
-    )
-    _invoke_write_out(_Plugin(), ctx, object(), object(), [Path("/x.parquet")])
+    ctx = _dest_ctx(work_dir=tmp_path)
+    _write_tables(_handoff(tmp_path), _Plugin(), ctx, object(), object(), [Path("/x")])
     assert len(calls) == 1
 
 
-def test_invoke_write_out_wraps_plugin_exception(tmp_path):
+def test_write_tables_wraps_plugin_exception(tmp_path):
     class _Plugin:
         def write_out(self, ctx, conn, dest, tables):
             raise RuntimeError("boom")
 
-    ctx = _DestContext(
-        work_dir=tmp_path,
-        project_id="p-1",
-        project="p",
-        collection_id="c_id",
-        collection="c_name",
-        function_id="fn",
-        function="publish_people",
-        function_version_id="fv-1",
-        execution_id="e",
-        execution=None,
-        transaction_id="t",
-        logical_function_run_id="lfr-1",
-        physical_function_run_id="pfr-1",
-        triggered_on=datetime.fromisoformat("2026-06-04T07:14:28.376000+00:00"),
-    )
+    ctx = _dest_ctx(work_dir=tmp_path)
     with pytest.raises(PluginFailedError):
-        _invoke_write_out(_Plugin(), ctx, object(), object(), [])
+        _write_tables(_handoff(tmp_path), _Plugin(), ctx, object(), object(), [])
 
 
 # --- main: error paths --------------------------------------------------
@@ -477,25 +457,15 @@ def test_main_all_null_manifest_skips_write_out(
 
 
 def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok_url):
-    """Real subscriber, real LocalFileDestPlugin. Write a parquet on
-    disk, point the outputs manifest at it, invoke main(); verify the
-    destination plugin actually copied the file into the dest dir.
+    """Real subscriber, real LocalFileDestPlugin. Land an output with every
+    framework column, point the outputs manifest at it, invoke main();
+    verify the destination plugin shipped only the user's columns.
     """
     request_path = _write_request(tmp_path / "request.yaml")
-
-    # The user function's "output" parquet, which the dest plugin
-    # should consume and ship to the destination's base_path.
-    raw_parquet = tmp_path / "raw" / "to_ship.parquet"
-    raw_parquet.parent.mkdir(parents=True, exist_ok=True)
-    pq.write_table(
-        pa.table({"id": [1, 2, 3], "name": ["a", "b", "c"]}),
-        raw_parquet,
-    )
+    landed = _land(request_path, pl.DataFrame({"id": [1, 2, 3], "name": list("abc")}))
 
     outputs_manifest = tmp_path / "outputs.yaml"
-    OutputManifest(
-        outputs=(OutputEntry(name="out_0", uri=raw_parquet.as_uri()),)
-    ).write(outputs_manifest)
+    OutputManifest(outputs=(landed,)).write(outputs_manifest)
 
     # The connection (with the dest base_path) now comes from the
     # connection file the runtime loads, not from the function descriptor.
@@ -522,6 +492,7 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
     shipped = tmp_path / "dest_out" / "sink.parquet"
     assert shipped.is_file()
     df = pl.read_parquet(shipped)
+    assert df.columns == ["id", "name"]
     assert df["id"].to_list() == [1, 2, 3]
     assert df["name"].to_list() == ["a", "b", "c"]
 
@@ -530,13 +501,9 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
 
 def _shipping_setup(tmp_path, built_bundle, monkeypatch, http_ok_url):
     request_path = _write_request(tmp_path / "request.yaml")
-    raw_parquet = tmp_path / "raw" / "to_ship.parquet"
-    raw_parquet.parent.mkdir(parents=True, exist_ok=True)
-    pq.write_table(pa.table({"id": [1], "name": ["a"]}), raw_parquet)
+    landed = _land(request_path, pl.DataFrame({"id": [1], "name": ["a"]}))
     outputs_manifest = tmp_path / "outputs.yaml"
-    OutputManifest(
-        outputs=(OutputEntry(name="out_0", uri=raw_parquet.as_uri()),)
-    ).write(outputs_manifest)
+    OutputManifest(outputs=(landed,)).write(outputs_manifest)
     conn_file = _write_connection_file(
         tmp_path / "connection.yaml", tmp_path / "dest_out"
     )

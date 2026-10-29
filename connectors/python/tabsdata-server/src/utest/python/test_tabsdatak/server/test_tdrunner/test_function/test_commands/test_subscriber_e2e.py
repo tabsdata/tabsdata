@@ -60,8 +60,10 @@ from tabsdatak.common._archive.bundle import build_bundle
 #   * the inputs manifest holds `tables` records (`file`, `location`, version
 #     fields), read and written through `InputManifest` / `InputRecord`; the
 #     outputs manifest through `OutputManifest` / `OutputEntry`, whose entries
-#     carry the written parquet's `uri` (a `file://` one under `out_dir/slot*`)
-#     and footer `stats` instead of a `file`.
+#     carry the written parquet's `uri` (a subscriber's is its landing file,
+#     `<function_landing>/<position>.t`) and footer `stats` instead of a `file`;
+#     run-destination-plugin copies those landing files to local public
+#     parquets for `write_out` (`Handoff`).
 #   * state is no longer transported: prep-localize-state takes only
 #     `--request` and `--inputs-manifest` (no `--state-dir`, `--out`,
 #     `--state-manifest`, `--storage-config`); run-source-plugin and

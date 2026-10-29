@@ -267,13 +267,16 @@ class EngineFrame(BaseFrame):
             storage_options,
         )
 
-    def _sink_plan(self, lf, path, storage_options=None) -> pl.LazyFrame:
+    def _observed(self, lf, path) -> pl.LazyFrame:
         from tabsdatak.tableframe._core.hooks import get_sink_observer
 
         observer = get_sink_observer(type(self))
-        if observer is not None:
-            lf = observer(lf, "sink_parquet", path)
-        return lf.sink_parquet(
+        if observer is None:
+            return lf
+        return observer(lf, "sink_parquet", path)
+
+    def _sink_plan(self, lf, path, storage_options=None) -> pl.LazyFrame:
+        return self._observed(lf, path).sink_parquet(
             path,
             storage_options=storage_options,
             engine="streaming",

@@ -6,13 +6,13 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 
 from tabsdatak.common._storage import frames, transfer
+from tabsdatak.common._storage.frames import FrameLocator
 from tabsdatak.common._storage.mounts import (
     AnonymousMountDeclaration,
     MountDeclaration,
@@ -21,9 +21,6 @@ from tabsdatak.common._storage.transfer import StorageLocation
 from tabsdatak.server._tdrunner.function._commons.document.request import Location
 from tabsdatak.server._tdrunner.function._commons.manifests.input import InputRecord
 from tabsdatak.server._tdrunner.function._commons.manifests.output import TableStats
-
-if TYPE_CHECKING:
-    from tabsdatak.tableframe import TableFrame
 
 PARQUET_MAGIC = b"PAR1"
 FOOTER_LENGTH_SIZE = 4
@@ -60,28 +57,28 @@ class TableFile:
             return cls.local(Path(record.file))
         return None
 
+    def locator(self) -> FrameLocator:
+        return frames.locator(self.uri, self.declaration)
+
     def scan(self) -> pl.LazyFrame:
-        frame = frames.scan_parquet(frames.locator(self.uri, self.declaration))
+        frame = frames.scan_parquet(self.locator())
         frame.collect_schema()
         return frame
 
     def read(self) -> pl.DataFrame:
         return self.scan().collect()
 
-    def sink(self, frame: TableFrame, *, public: bool) -> pl.LazyFrame:
-        target = frames.locator(self.uri, self.declaration)
-        if public:
-            return frame._sink_public_plan(target.uri, target.storage_options)
-        return frame._sink_native_plan(target.uri, target.storage_options)
-
-    def copy(self, target: TableFile) -> pl.LazyFrame:
-        destination = frames.locator(target.uri, target.declaration)
-        return self.scan().sink_parquet(
-            destination.uri,
-            storage_options=destination.storage_options,
+    def sink(self, frame: pl.LazyFrame) -> pl.LazyFrame:
+        locator = self.locator()
+        return frame.sink_parquet(
+            locator.uri,
+            storage_options=locator.storage_options,
             engine="streaming",
             lazy=True,
         )
+
+    def copy(self, target: TableFile) -> pl.LazyFrame:
+        return target.sink(self.scan())
 
     def stats(self) -> TableStats:
         location = StorageLocation(

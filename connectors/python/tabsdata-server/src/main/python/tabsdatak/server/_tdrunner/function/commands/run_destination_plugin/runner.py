@@ -14,11 +14,11 @@ from __future__ import annotations
 
 import argparse
 import logging
+import tempfile
 from pathlib import Path
 
 from tabsdatak._connectors import get_dest
 from tabsdatak._info import KIND_SUBSCRIBER_DEF, SubscriberInfo
-from tabsdatak.common._storage.transfer import local_path
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
 from tabsdatak.server._tdrunner.function._commons.manifests.manifest import (
     ManifestError,
@@ -28,6 +28,12 @@ from tabsdatak.server._tdrunner.function._commons.manifests.output import (
 )
 from tabsdatak.server._tdrunner.function._commons.run.command import (
     notify_step_destination_write,
+)
+from tabsdatak.server._tdrunner.function._handlers.handoff import (
+    DestinationHandoff,
+    Handoff,
+    MissingOutputError,
+    OutputCopyError,
 )
 from tabsdatak.server._tdrunner.function._lib.connection import load_connection
 from tabsdatak.server._tdrunner.function._lib.function_def import (
@@ -76,20 +82,26 @@ def _resolve_plugin(info: SubscriberInfo):
     return dest_def.plugin()
 
 
-def _tables_from_manifest(manifest: OutputManifest) -> list[Path]:
-    tables: list[Path] = []
-    for slot, entry in enumerate(manifest.outputs):
-        if entry.uri is None:
-            raise RunDestinationPluginErrorCode.RDP_8.exception(
-                slot=slot, name=entry.name
-            )
-        tables.append(local_path(entry.uri))
-    return tables
-
-
-def _invoke_write_out(plugin, ctx: DestContext, conn, dest, tables) -> None:
+def _read_tables(
+    handoff: DestinationHandoff, request: Request, manifest: OutputManifest
+) -> list[Path]:
     try:
-        plugin.write_out(ctx, conn, dest, tables)
+        return handoff.seed(request.info, manifest)
+    except MissingOutputError as error:
+        raise RunDestinationPluginErrorCode.RDP_8.exception(
+            cause=error, slot=error.slot, name=error.name
+        )
+    except OutputCopyError as error:
+        raise RunDestinationPluginErrorCode.RDP_9.exception(
+            cause=error, slot=error.slot, path=error.path, detail=error.detail
+        )
+
+
+def _write_tables(
+    handoff: DestinationHandoff, plugin, ctx: DestContext, conn, dest, tables
+) -> None:
+    try:
+        handoff.grow(plugin, ctx, conn, dest, tables)
     except Exception as exc:
         raise RunDestinationPluginErrorCode.RDP_6.exception(cause=exc, detail=str(exc))
 
@@ -129,25 +141,29 @@ def run(args: argparse.Namespace) -> int:
             type(plugin).__name__,
         )
         return 0
-    tables = _tables_from_manifest(manifest)
-    logger.debug(
-        "Outputs manifest has %d entries: %s; "
-        "passing %d table frame(s) to the plugin: %s",
-        len(entries),
-        entries,
-        len(tables),
-        tables,
-    )
+    handoff = Handoff.of(plugin, Path(args.work_dir or tempfile.gettempdir()))
+    try:
+        tables = _read_tables(handoff, request, manifest)
+        logger.debug(
+            "Outputs manifest has %d entries: %s; "
+            "passing %d table frame(s) to the plugin: %s",
+            len(entries),
+            entries,
+            len(tables),
+            tables,
+        )
 
-    ctx = _DestContext.from_info(bundle_dir, request.info)
-    notify_step_destination_write(args)
-    logger.info(
-        "Invoking %s.write_out: %d table frame(s) -> %s",
-        type(plugin).__name__,
-        len(tables),
-        type(conn).__name__,
-    )
-    _invoke_write_out(plugin, ctx, conn, info.destination, tables)
+        ctx = _DestContext.from_info(bundle_dir, request.info)
+        notify_step_destination_write(args)
+        logger.info(
+            "Invoking %s.write_out: %d table frame(s) -> %s",
+            type(plugin).__name__,
+            len(tables),
+            type(conn).__name__,
+        )
+        _write_tables(handoff, plugin, ctx, conn, info.destination, tables)
+    finally:
+        handoff.harvest()
     logger.info(
         "Destination plugin completed: %d table frame(s) written to %s",
         len(tables),

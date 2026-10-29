@@ -15,7 +15,6 @@ from tabsdatak.common._transporter.handler.handler1 import (
     local_endpoint,
 )
 from tabsdatak.server._tdrunner.function._commons.document.request import (
-    LANDING_SUFFIX,
     AnyRequest,
     Location,
     Request,
@@ -41,14 +40,10 @@ def build_bundle_fetch_request(
 def build_upload_landing_request(
     request: Request, landing_files: list[tuple[int, Path]]
 ) -> TransporterCopyRequest:
-    landing = request.info.function_landing
-    pairs: list[tuple[Endpoint, Endpoint]] = []
-    base = landing.uri.rstrip("/")
-    for idx, source in landing_files:
-        target = Location(
-            uri=f"{base}/{idx}{LANDING_SUFFIX}", env_prefix=landing.env_prefix
-        )
-        pairs.append((local_endpoint(source), endpoint_for(target)))
+    pairs: list[tuple[Endpoint, Endpoint]] = [
+        (local_endpoint(source), endpoint_for(request.info.landing_file(idx)))
+        for idx, source in landing_files
+    ]
     return HANDLER.make_request(pairs)
 
 
