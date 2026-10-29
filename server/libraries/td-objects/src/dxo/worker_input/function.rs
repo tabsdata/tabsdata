@@ -27,7 +27,11 @@ pub struct FunctionInput {
 
 impl Locations for FunctionInput {
     fn locations(&self) -> Vec<&Location> {
-        let mut locations = vec![&self.info.function_data, &self.info.function_bundle];
+        let mut locations = vec![
+            &self.info.function_data,
+            &self.info.function_bundle,
+            &self.info.function_scratch,
+        ];
         locations.extend(self.info.function_landing.iter());
         locations.extend(self.system_input.locations());
         locations.extend(self.input.locations());
@@ -67,6 +71,8 @@ pub struct FunctionInfo {
     /// Where a publisher run's ingested data is kept, one file per input
     /// index. Absent for functions that ingest nothing.
     pub function_landing: Option<Location>,
+    /// Where the run keeps temporary or work files instead of the pod's disk.
+    pub function_scratch: Location,
     pub scheduled_on: AtTime, // when the request yaml was created
 }
 
@@ -322,6 +328,10 @@ mod tests {
                     uri: Url::try_from("file:///foo/r").unwrap(),
                     env_prefix: None,
                 }),
+                function_scratch: Location {
+                    uri: Url::try_from("file:///foo/s").unwrap(),
+                    env_prefix: None,
+                },
                 scheduled_on,
             },
             system_input: vec![InputTable::Table(InputTableVersion {
@@ -432,6 +442,9 @@ info:
     env_prefix: null
   function_landing:
     uri: file:///foo/r
+    env_prefix: null
+  function_scratch:
+    uri: file:///foo/s
     env_prefix: null
   scheduled_on: {scheduled_on}
 system_input:
@@ -758,6 +771,10 @@ output:
                 uri: Url::parse("file:///foo6").unwrap(),
                 env_prefix: Some(EnvPrefix::try_from("PD_")?),
             },
+            Location {
+                uri: Url::parse("file:///foo7").unwrap(),
+                env_prefix: Some(EnvPrefix::try_from("PE_")?),
+            },
         ];
         let itv0 = InputTableVersion {
             collection_id: CollectionId::default(),
@@ -880,6 +897,7 @@ output:
             triggered_on: AtTime::from(Timestamp::default()),
             function_data: locations[0].clone(),
             function_landing: None,
+            function_scratch: locations[9].clone(),
             scheduled_on: AtTime::default(),
         };
         let function_input = FunctionInput {
@@ -917,7 +935,8 @@ output:
                 EnvPrefix::try_from("PA_")?,
                 EnvPrefix::try_from("PB_")?,
                 EnvPrefix::try_from("PC_")?,
-                EnvPrefix::try_from("PD_")?
+                EnvPrefix::try_from("PD_")?,
+                EnvPrefix::try_from("PE_")?
             ])
         );
         Ok(())

@@ -3,6 +3,7 @@
 //
 
 pub mod landing;
+pub mod scratch;
 pub mod services;
 
 use td_database::access::{AccessMode, SeesProjectRows};

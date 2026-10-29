@@ -39,6 +39,7 @@ pub enum StorageLocation {
     /// * `/LOCATION/c/COLLECTION`
     /// * `/LOCATION/c/COLLECTION/x/TRANSACTION/f/FUNCTION_VERSION` (physical_function_run contents)
     /// * `/LOCATION/c/COLLECTION/w/FUNCTION_RUN/r/INPUT_IDX.t` (a publisher run's landing data)
+    /// * `/LOCATION/c/COLLECTION/w/FUNCTION_RUN/s` (a run's scratch area)
     /// * `/LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION.t`
     /// * `/LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION/p/PARTITION.p`
     /// * `/LOCATION/bundles/c/COLLECTION/f/BUNDLE.tar.zst`
@@ -87,6 +88,7 @@ struct LocationBuilderInfo {
     function_run: Option<String>,
     is_landing: bool,
     landing_input: Option<String>,
+    is_scratch: bool,
     table: Option<String>,
     table_version: Option<String>,
     partition: Option<String>,
@@ -480,6 +482,13 @@ impl FunctionRunBuilder {
         self
     }
 
+    /// Address the run's scratch area: temporary or work files the run keeps
+    /// in storage instead of the pod's disk.
+    pub fn scratch(&mut self) -> &mut Self {
+        self.info.is_scratch = true;
+        self
+    }
+
     /// Build the function run location.
     pub fn build(&self) -> Result<(SPath, StorageLocation), StorageError> {
         self.version_builder.build(&self.info, None)
@@ -628,6 +637,8 @@ impl VersionLocationBuilder for V1LocationBuilder {
                     if let Some(input_idx) = &info.landing_input {
                         path = path.child(&format!("{input_idx}{LANDING_FILE_SUFFIX}"))?;
                     }
+                } else if info.is_scratch {
+                    path = path.child("s")?;
                 }
             } else if let Some(transaction) = &info.transaction {
                 path = path.child("x")?.child(transaction)?;
@@ -969,6 +980,24 @@ mod tests {
                 .build()?
                 .0,
             SPath::parse(format!("/L/c/{collection}/w/{function_run}/r/3.t"))?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_function_run_scratch_builder_v1() -> Result<(), TdError> {
+        let data_location = BasePath::try_from("/L")?;
+        let collection = CollectionId::default();
+        let function_run = PhysicalFunctionRunId::new();
+        assert_eq!(
+            StorageLocation::V1
+                .builder(&data_location)
+                .collection(&collection)
+                .function_run(&function_run)
+                .scratch()
+                .build()?
+                .0,
+            SPath::parse(format!("/L/c/{collection}/w/{function_run}/s"))?
         );
         Ok(())
     }

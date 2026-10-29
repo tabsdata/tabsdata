@@ -4,6 +4,7 @@
 
 use super::build_external_location;
 use crate::function_run::landing::landing_dir;
+use crate::function_run::scratch::scratch_dir;
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunToExecute;
 use td_objects::dxo::worker_input::function::FunctionInfo;
@@ -12,7 +13,8 @@ use td_storage::Storage;
 use td_storage::location::StorageLocation;
 
 /// Build the `FunctionInfo` block of a function-runner message: the
-/// bundle / stage / function-data storage locations plus identity columns.
+/// bundle / stage / function-data / landing / scratch storage locations plus
+/// identity columns.
 /// Uses the patched function-version id when one is resolved so reads and
 /// writes go under the patched identity.
 pub(crate) fn build_function_info(
@@ -66,6 +68,8 @@ pub(crate) fn build_function_info(
         Decorator::Transformer | Decorator::Subscriber => None,
     };
 
+    let (function_scratch, _) = build_external_location(storage, &scratch_dir(f)?)?;
+
     let project = f
         .base
         .project
@@ -99,6 +103,7 @@ pub(crate) fn build_function_info(
         triggered_on: AtTime::from(f.interval.valid_from),
         function_data: function_run_location,
         function_landing,
+        function_scratch,
         scheduled_on: AtTime::default(),
     };
     Ok(info)
@@ -177,6 +182,7 @@ mod tests {
         let bundle = info.function_bundle.uri.path();
         let stage = info.function_stage.uri.path();
         let data = info.function_data.uri.path();
+        let scratch = info.function_scratch.uri.path();
 
         // Each base_path lands under its own location and nowhere else.
         assert!(
@@ -190,6 +196,11 @@ mod tests {
         assert!(
             data.contains("/r/c/"),
             "function-run content path should carry the run's stamped prefix '/r': {data}"
+        );
+
+        assert!(
+            scratch.contains(&format!("/r/c/{}/w/{}/s", f.collection_id, f.id)),
+            "every run keeps its scratch area under its own physical run: {scratch}"
         );
 
         // Only publishers ingest, so only they are given a landing-data location.

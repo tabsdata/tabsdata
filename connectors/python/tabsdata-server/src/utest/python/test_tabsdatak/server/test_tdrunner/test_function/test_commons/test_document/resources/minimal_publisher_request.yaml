@@ -27,6 +27,9 @@ Function:
     function_data:
       uri: file:///tmp/data
       env_prefix: ROOT
+    function_scratch:
+      uri: file:///tmp/data/s
+      env_prefix: ROOT
     scheduled_on: 1780000000200
   system_input:
     - Table:
