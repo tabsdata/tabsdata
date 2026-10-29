@@ -637,6 +637,9 @@ spec:
           envFrom:
             - secretRef:
                 name: ${{system:tdk_connection_secret_name}}
+            - secretRef:
+                name: td-app-apiserver-secret-config-apiserver.storage.yaml
+              prefix: SECRETS__
           volumeMounts:
             - name: certs
               mountPath: /tabsdata/certs
