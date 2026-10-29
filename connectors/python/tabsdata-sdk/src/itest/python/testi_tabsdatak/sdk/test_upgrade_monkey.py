@@ -549,6 +549,7 @@ def test_a_monkey_run_holds_across_an_upgrade(
             progress=progress,
             deadline=time.monotonic() + TIMEOUT * PHASE_SHARE,
             adopt=True,
+            check_adopted_runs=False,
         ).execute()
         problems += report.problems
         problems += upgrade.graph_problems(upgrade.connect(port, project), project)

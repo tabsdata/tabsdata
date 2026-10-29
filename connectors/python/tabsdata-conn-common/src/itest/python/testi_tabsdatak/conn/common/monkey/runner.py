@@ -323,10 +323,14 @@ class MonkeyRun:
         deadline: float | None = None,
         adopt: bool = False,
         settle: bool = True,
+        check_adopted_runs: bool = True,
     ):
         """``adopt`` takes the project's functions and executions as the server
         lists them before the lanes start; ``settle`` False returns once the
-        lanes end, leaving the project as it is, unchecked."""
+        lanes end, leaving the project as it is, unchecked.
+        ``check_adopted_runs`` False leaves out of the overlap check every pair
+        of runs that were both listed at adoption, as an older release ran
+        them under its own rules."""
         self.plan = plan
         self.namespace = namespace
         self.connect = connect
@@ -340,6 +344,8 @@ class MonkeyRun:
         self.deadline = deadline
         self.adopt = adopt
         self.settle = settle
+        self.check_adopted_runs = check_adopted_runs
+        self._adopted_runs: set[str] = set()
         self._serving = threading.Event()
         self._serving.set()
         self._outages = 0
@@ -718,6 +724,7 @@ class MonkeyRun:
     def _adopt(self) -> None:
         server = self.connect()
         functions = self._functions(server)
+        self._adopted_runs = {run.id for run in server.list_function_runs()}
         self.model.adopt({
             name: bool(function.enabled) for name, function in functions.items()
         })
@@ -870,6 +877,10 @@ class MonkeyRun:
         for runs in by_function.values():
             runs.sort(key=lambda run: run.started_on)
             for before, after in zip(runs, runs[1:]):
+                if not self.check_adopted_runs and {before.id, after.id} <= (
+                    self._adopted_runs
+                ):
+                    continue
                 if before.ended_on is None or after.started_on < before.ended_on:
                     overlaps += 1
                     self._problem(

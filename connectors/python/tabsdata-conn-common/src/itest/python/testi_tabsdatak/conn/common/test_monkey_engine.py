@@ -630,7 +630,9 @@ def test_a_transaction_waiting_to_commit_behind_a_stalled_one_is_not_reported():
     assert run._held_executions({"ep1", "ep2"}) == {"ep2"}
 
 
-def run_overlaps(runs: list) -> list[str]:
+def run_overlaps(
+    runs: list, adopted: set[str] | None = None, check_adopted_runs: bool = True
+) -> list[str]:
     plan = quick_plan(53)
     server = FakeServer(plan)
     server.runs = runs
@@ -644,7 +646,9 @@ def run_overlaps(runs: list) -> list[str]:
         project=PROJECT,
         project_root=Path("."),
         module=module,
+        check_adopted_runs=check_adopted_runs,
     )
+    run._adopted_runs = adopted or set()
     run._check_run_overlaps(server)
     return run._problems
 
@@ -675,6 +679,18 @@ def test_runs_of_one_function_back_to_back_do_not_overlap():
         function_run("fr2", "f1", 200, 300),
         function_run("fr3", "f1", 400, None),
     ])
+
+
+def test_adopted_runs_that_overlap_are_reported_unless_left_unchecked():
+    runs = [
+        function_run("fr1", "f1", 100, 200),
+        function_run("fr2", "f1", 150, 300),
+        function_run("fr3", "f1", 250, 400),
+    ]
+    assert len(run_overlaps(runs, adopted={"fr1", "fr2"})) == 2
+    assert run_overlaps(runs, adopted={"fr1", "fr2"}, check_adopted_runs=False) == [
+        "Runs fr2 and fr3 of pub00 overlap: the second started before the first ended"
+    ]
 
 
 def test_an_execution_the_run_did_not_trigger_that_never_finishes_is_reported(
