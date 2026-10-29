@@ -27,10 +27,10 @@ backports-zstd==1.8.0 ; python_full_version < '3.14'
 base32hex==1.0.2
 boto3==1.43.120
 boto3-stubs==1.43.120
-botocore==1.43.120
-botocore-stubs==1.43.120
+botocore==1.43.121
+botocore-stubs==1.43.121
 build==1.6.1
-cachetools==7.2.6
+cachetools==7.2.7
 certifi==2026.10.23
 cffi==2.1.1 ; platform_python_implementation != 'PyPy'
 charset-normalizer==3.5.2
@@ -53,7 +53,7 @@ fastparquet==2026.9.0
 filelock==3.32.7
 frozenlist==1.8.0
 fsspec==2026.9.0
-google-api-core==2.43.0
+google-api-core==2.43.1
 google-auth==2.62.0
 google-cloud-bigquery==3.46.2
 google-cloud-compute==1.56.0

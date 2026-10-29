@@ -20,7 +20,7 @@ babel==2.18.0
 black==26.10.1
 boolean-py==5.0
 boto3==1.43.120
-botocore==1.43.120
+botocore==1.43.121
 build==1.6.1
 cachecontrol==0.14.4
 cattrs==26.2.1
@@ -58,7 +58,7 @@ ghp-import==2.1.0
 gita==0.16.8.2
 gitdb==4.0.12
 gitpython==3.2.1
-google-api-core==2.43.0
+google-api-core==2.43.1
 google-auth==2.62.0
 google-cloud-core==2.8.0
 google-cloud-storage==3.17.1
