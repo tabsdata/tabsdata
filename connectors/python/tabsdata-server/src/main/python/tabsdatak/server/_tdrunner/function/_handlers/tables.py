@@ -61,7 +61,7 @@ class TableFile:
         return None
 
     def scan(self) -> pl.LazyFrame:
-        frame = frames.scan_parquet(frames.target(self.uri, self.declaration))
+        frame = frames.scan_parquet(frames.locator(self.uri, self.declaration))
         frame.collect_schema()
         return frame
 
@@ -69,13 +69,13 @@ class TableFile:
         return self.scan().collect()
 
     def sink(self, frame: TableFrame, *, public: bool) -> pl.LazyFrame:
-        target = frames.target(self.uri, self.declaration)
+        target = frames.locator(self.uri, self.declaration)
         if public:
             return frame._sink_public_plan(target.uri, target.storage_options)
         return frame._sink_native_plan(target.uri, target.storage_options)
 
     def copy(self, target: TableFile) -> pl.LazyFrame:
-        destination = frames.target(target.uri, target.declaration)
+        destination = frames.locator(target.uri, target.declaration)
         return self.scan().sink_parquet(
             destination.uri,
             storage_options=destination.storage_options,

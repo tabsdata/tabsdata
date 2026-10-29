@@ -12,18 +12,18 @@ from tabsdatak.common._storage.mounts import MountDeclaration
 
 
 @dataclass(frozen=True)
-class FrameTarget:
+class FrameLocator:
     uri: str
-    storage_options: dict[str, str] = field(default_factory=dict)
+    storage_options: dict[str, str] = field(default_factory=dict, repr=False)
 
 
-def target(uri: str, declaration: MountDeclaration) -> FrameTarget:
-    return FrameTarget(uri=uri, storage_options=declaration.storage_options(uri))
+def locator(uri: str, declaration: MountDeclaration) -> FrameLocator:
+    return FrameLocator(uri=uri, storage_options=declaration.storage_options(uri))
 
 
-def scan_parquet(source: FrameTarget) -> pl.LazyFrame:
+def scan_parquet(source: FrameLocator) -> pl.LazyFrame:
     return pl.scan_parquet(source.uri, storage_options=source.storage_options)
 
 
-def sink_parquet(frame: pl.LazyFrame, destination: FrameTarget) -> None:
+def sink_parquet(frame: pl.LazyFrame, destination: FrameLocator) -> None:
     frame.sink_parquet(destination.uri, storage_options=destination.storage_options)

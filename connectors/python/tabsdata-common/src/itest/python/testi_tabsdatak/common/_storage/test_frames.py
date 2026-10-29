@@ -40,15 +40,15 @@ def round_trip(domain, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     declaration = mounted.declaration(domain, tmp_path, monkeypatch)
     root = declaration.resolved_uri().rstrip("/")
     uri = f"{root}/frames-{uuid.uuid4().hex}/table.parquet"
-    target = frames.target(uri, declaration)
+    locator = frames.locator(uri, declaration)
     try:
-        frames.sink_parquet(table(), target)
-        assert_frame_equal(frames.scan_parquet(target).collect(), table().collect())
-        tail = frames.scan_parquet(target).filter(pl.col("id") >= ROWS - TAIL)
+        frames.sink_parquet(table(), locator)
+        assert_frame_equal(frames.scan_parquet(locator).collect(), table().collect())
+        tail = frames.scan_parquet(locator).filter(pl.col("id") >= ROWS - TAIL)
         assert tail.collect().height == TAIL
     finally:
         store_root, name = transfer.split(uri)
-        obstore.delete(transfer.store(store_root, target.storage_options), name)
+        obstore.delete(transfer.store(store_root, locator.storage_options), name)
 
 
 @s3local_domain("s3local")
