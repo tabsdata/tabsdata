@@ -10,6 +10,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
@@ -24,11 +25,13 @@ from tabsdatak.api import TableFrameSpec, TableFramesSpec  # noqa: F401
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
 from tabsdatak.server._tdrunner.function._commons.document.request import (
+    Info,
     Location,
 )
 from tabsdatak.server._tdrunner.function._commons.manifests.input import (
     InputManifest,
 )
+from tabsdatak.server._tdrunner.function._handlers.handoff import Handoff
 from tabsdatak.server._tdrunner.function._handlers.landing import LandedFile, Origin
 from tabsdatak.server._tdrunner.function._handlers.state import (
     STATE_FILE,
@@ -54,12 +57,10 @@ from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.runner i
     build_manifest_stage_connection,
     input_names,
     load_function_definition,
-    read_in,
-    table_file_path,
-    write_inputs_manifest,
+    write_in,
     write_landed_manifest,
 )
-from tabsdatak.spi import TableFileInput
+from tabsdatak.spi import SrcPlugin, TableFileInput
 from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payload
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
@@ -215,11 +216,15 @@ def output_table_payload(name: str, *, location: dict) -> dict:
     }
 
 
-def write_request(path: Path, bundle_uri: str = "file:///bundle.tar.zst") -> Path:
+def write_request(
+    path: Path,
+    bundle_uri: str = "file:///bundle.tar.zst",
+) -> Path:
+    landing = {"uri": (path.parent / "landing").as_uri(), "env_prefix": "ROOT"}
     path.write_text(
         yaml.safe_dump({
             "Function": {
-                "info": info_payload(bundle_uri=bundle_uri),
+                "info": info_payload(bundle_uri=bundle_uri, function_landing=landing),
                 "output": [
                     output_table_payload(
                         "my_table",
@@ -293,51 +298,6 @@ def set_arguments(
             "/tmp/em.yaml",
         ],
     )
-
-
-# --- unit: table_file_path ------------------------------------------
-
-
-def test_normalise_triple_slash_uri():
-    assert table_file_path("file:///tmp/x.parquet") == "/tmp/x.parquet"
-
-
-def test_normalise_single_slash_uri():
-    # `Path("file:///x")` collapses to `"file:/x"` via `str()`; the
-    # function has to handle both shapes.
-    assert table_file_path("file:/tmp/x.parquet") == "/tmp/x.parquet"
-
-
-def test_normalise_path_object_wrapping_uri():
-    assert table_file_path(Path("file:///tmp/x.parquet")) == "/tmp/x.parquet"
-
-
-def test_normalise_uri_with_percent_encoding():
-    assert (
-        table_file_path("file:///tmp/with%20space.parquet") == "/tmp/with space.parquet"
-    )
-
-
-def test_normalise_uri_scheme_is_case_insensitive():
-    assert table_file_path("FILE:///tmp/x.parquet") == "/tmp/x.parquet"
-    assert table_file_path("File:/tmp/x.parquet") == "/tmp/x.parquet"
-
-
-def test_normalise_bare_absolute_path():
-    # An already-absolute path is returned posix-canonical and unchanged
-    # (on POSIX; on Windows `Path.absolute()` anchors it to the cwd drive,
-    # so compare against the same resolution the function performs).
-    assert (
-        table_file_path("/tmp/x.parquet")
-        == Path("/tmp/x.parquet").absolute().as_posix()
-    )
-
-
-def test_normalise_bare_relative_path(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    # Manifest paths are posix-canonical, so the resolved absolute path
-    # comes back with forward slashes on every OS.
-    assert table_file_path("x.parquet") == (tmp_path / "x.parquet").as_posix()
 
 
 # --- unit: SourceContext ----------------------------------------------------
@@ -640,53 +600,6 @@ def test_load_function_def_accepts_stream_publisher_kind(tmp_path):
     assert publisher.__kind__ == KIND_STREAM_PUBLISHER_DEF
 
 
-# --- unit: read_in ----------------------------------------------
-
-
-def test_invoke_read_in_returns_plugin_result():
-    class FakePlugin:
-        def read_in(
-            self,
-            context,
-            connection,
-            source,
-        ):
-            return [[TableFileInput(file=Path("/x.parquet"))]]
-
-    output = read_in(
-        SourceBinding(
-            FakePlugin(),
-            object(),
-            object(),
-            1,
-        ),
-        object(),
-    )
-    assert output == [[TableFileInput(file=Path("/x.parquet"))]]
-
-
-def test_invoke_read_in_wraps_exceptions_as_plugin_failed():
-    class BrokenPlugin:
-        def read_in(
-            self,
-            context,
-            connection,
-            source,
-        ):
-            raise RuntimeError("boom")
-
-    with pytest.raises(PluginFailedError):
-        read_in(
-            SourceBinding(
-                BrokenPlugin(),
-                object(),
-                object(),
-                1,
-            ),
-            object(),
-        )
-
-
 # --- unit: landed inputs ------------------------------------------------
 
 
@@ -726,181 +639,123 @@ def test_write_landed_manifest_records_each_landed_file(tmp_path):
     assert all(record.file is None for record in orders.tables)
 
 
-# --- unit: write_inputs_manifest ----------------------------------------
+# --- unit: write_in -------------------------------------------------------
 
 
-def test_write_inputs_manifest_happy(tmp_path, fixture_publisher):
-    output = tmp_path / "manifest.yaml"
-    metadata = {
-        "@td.file.path": "s3://bucket/in/a.csv",
-        "@td.file.rows": 2,
-        "@td.file.seconds": 1.5,
-        "@td.file.truncated": True,
-    }
-    a, b = tmp_path / "a.parquet", tmp_path / "b.parquet"
-    produced = [
+class LegacyFiles(SrcPlugin):
+    def __init__(self, produced) -> None:
+        self.produced = produced
+
+    def read_in(
+        self,
+        ctx,
+        conn,
+        src,
+    ):
+        if isinstance(self.produced, Exception):
+            raise self.produced
+        return self.produced
+
+
+def write_legacy(
+    tmp_path: Path,
+    produced,
+    names: list[str],
+    *,
+    variable: bool = False,
+):
+    plugin = LegacyFiles(produced)
+    handoff = Handoff.of(plugin, tmp_path)
+    info = Info.model_validate(
+        info_payload(
+            function_landing={
+                "uri": (tmp_path / "landing").as_uri(),
+                "env_prefix": "ROOT",
+            },
+        ),
+    )
+    bus = handoff.seed(
+        info,
+        names,
+        variable=variable,
+    )
+    return write_in(
+        handoff,
+        SourceBinding(
+            plugin,
+            object(),
+            object(),
+            len(names),
+        ),
+        object(),
+        bus,
+    )
+
+
+def parquet_of(path: Path, values: list[int]) -> Path:
+    pl.DataFrame({"id": values}).write_parquet(path)
+    return path
+
+
+def test_write_in_lands_the_files_a_legacy_plugin_returns(tmp_path):
+    metadata = {"@td.file.path": "s3://bucket/in/a.csv", "@td.file.rows": 2}
+    a = parquet_of(tmp_path / "a.parquet", [1, 2])
+    b = parquet_of(tmp_path / "b.parquet", [3])
+    [[first, second]] = write_legacy(
+        tmp_path,
         [
-            TableFileInput(file=a, metadata=metadata),
-            TableFileInput(file=b),
-        ]
-    ]
-    write_inputs_manifest(
-        fixture_publisher,
-        produced,
-        output,
-        cardinality=1,
-    )
-    data = yaml.safe_load(output.read_text())
-
-    def record(file, metadata=None):
-        return {
-            "file": file,
-            "location": None,
-            "schema": None,
-            "metadata": metadata,
-            "input_idx": None,
-            "version_pos": -1,
-            "execution_id": None,
-            "transaction_id": None,
-            "triggered_on": None,
-            "physical_table_data_version_id": None,
-        }
-
-    # Each metadata value type round-trips through the manifest YAML.
-    assert data == {
-        "inputs": [
-            {
-                "name": "in_1",
-                "table_pos": 0,
-                "is_empty": False,
-                "tables": [
-                    record(a.as_posix(), metadata),
-                    record(b.as_posix()),
-                ],
-            }
-        ],
-    }
-
-
-def test_write_inputs_manifest_normalises_file_uris(tmp_path, fixture_publisher):
-    """The plugin may return `Path("file:///...")` URI-shaped values
-    rather than bare paths; the manifest must always carry plain
-    absolute filesystem paths."""
-    output = tmp_path / "manifest.yaml"
-    produced = [[TableFileInput(file=Path("file:///tmp/uri-shaped.parquet"))]]
-    write_inputs_manifest(
-        fixture_publisher,
-        produced,
-        output,
-        cardinality=1,
-    )
-    data = yaml.safe_load(output.read_text())
-    assert [tables["file"] for tables in data["inputs"][0]["tables"]] == [
-        "/tmp/uri-shaped.parquet"
-    ]
-
-
-def test_write_inputs_manifest_cardinality_mismatch_raises(tmp_path, fixture_publisher):
-    """Source cardinality is 1 (`LocalFileSrc` with one path); a plugin
-    that returns two slots is a contract violation."""
-    output = tmp_path / "manifest.yaml"
-    produced = [
-        [TableFileInput(file=Path("/x.parquet"))],
-        [TableFileInput(file=Path("/y.parquet"))],
-    ]
-    with pytest.raises(PluginFailedError):
-        write_inputs_manifest(
-            fixture_publisher,
-            produced,
-            output,
-            cardinality=1,
-        )
-
-
-def test_write_inputs_manifest_negative_cardinality_pads_to_param_count(
-    tmp_path,
-    fixture_publisher,
-):
-    """``cardinality=-1`` (dynamic slot count -- e.g. a stream-stage
-    manifest source) pads the manifest up to the function-declared
-    input-slot count with empty entries when the plugin returned
-    fewer slots. This is what makes a ``tdk fn trigger`` against a
-    ``@stream_publisher`` work when no manifest has been staged: the
-    user function is invoked with ``t=[]`` (one empty slot per
-    declared parameter) instead of bailing on the input-count
-    mismatch in ``run-function``.
-
-    ``fixture_publisher`` has one input parameter (``in_1``), so 0
-    produced slots → 1 padded entry whose ``tables`` is empty."""
-    output = tmp_path / "manifest.yaml"
-    write_inputs_manifest(
-        fixture_publisher,
-        [],
-        output,
-        cardinality=-1,
-    )
-    data = yaml.safe_load(output.read_text())
-    assert len(data["inputs"]) == 1
-    assert data["inputs"][0]["name"] == "in_1"
-    assert data["inputs"][0]["tables"] == []
-
-
-def test_write_inputs_manifest_negative_cardinality_does_not_pad_when_matched(
-    tmp_path,
-    fixture_publisher,
-):
-    """When the dynamic source produced exactly the right number of
-    slots, the manifest writes them verbatim — no padding needed."""
-    output = tmp_path / "manifest.yaml"
-    a = tmp_path / "a.parquet"
-    write_inputs_manifest(
-        fixture_publisher,
-        [[TableFileInput(file=a)]],
-        output,
-        cardinality=-1,
-    )
-    data = yaml.safe_load(output.read_text())
-    assert len(data["inputs"]) == 1
-    assert data["inputs"][0]["name"] == "in_1"
-    assert [tables["file"] for tables in data["inputs"][0]["tables"]] == [a.as_posix()]
-
-
-def test_write_inputs_manifest_negative_cardinality_overproduction_raises(
-    tmp_path,
-    fixture_publisher,
-):
-    """Over-production (source returned more slots than the function
-    declares) is still a contract violation even under dynamic
-    cardinality — we can't index past ``parameters[i]``."""
-    output = tmp_path / "manifest.yaml"
-    with pytest.raises(PluginFailedError):
-        write_inputs_manifest(
-            fixture_publisher,
             [
-                [TableFileInput(file=Path("/x.parquet"))],
-                [TableFileInput(file=Path("/y.parquet"))],
+                TableFileInput(file=a, metadata=metadata),
+                TableFileInput(file=Path(b.as_uri())),
             ],
-            output,
-            cardinality=-1,
+        ],
+        ["in_1"],
+    )
+    assert (first.index, first.rows, first.metadata) == (0, 2, metadata)
+    assert (second.index, second.rows, second.metadata) == (1, 1, None)
+    assert first.data.uri.endswith("/landing/0.0.t")
+
+
+def test_write_in_refuses_another_number_of_input_slots(tmp_path):
+    a = parquet_of(tmp_path / "a.parquet", [1])
+    with pytest.raises(PluginFailedError, match="returned 2 input slot"):
+        write_legacy(
+            tmp_path,
+            [[TableFileInput(file=a)], [TableFileInput(file=a)]],
+            ["in_1"],
         )
 
 
-def test_write_inputs_manifest_oserror_raises_manifest_write_failed(
-    tmp_path,
-    fixture_publisher,
-):
-    """Writing to a path that's actually a directory triggers
-    `IsADirectoryError` (a subclass of `OSError`)."""
-    a_folder = tmp_path / "i-am-a-dir"
-    a_folder.mkdir()
-    produced = [[TableFileInput(file=Path("/x.parquet"))]]
+def test_write_in_pads_a_variable_source_to_the_function_inputs(tmp_path):
+    assert write_legacy(
+        tmp_path,
+        [],
+        ["in_1"],
+        variable=True,
+    ) == [[]]
+
+
+def test_write_in_refuses_too_many_slots_from_a_variable_source(tmp_path):
+    a = parquet_of(tmp_path / "a.parquet", [1])
+    with pytest.raises(PluginFailedError, match="returned 2 input slot"):
+        write_legacy(
+            tmp_path,
+            [[TableFileInput(file=a)], [TableFileInput(file=a)]],
+            ["in_1"],
+            variable=True,
+        )
+
+
+def test_write_in_reports_a_failing_plugin(tmp_path):
+    with pytest.raises(PluginFailedError, match="boom"):
+        write_legacy(tmp_path, RuntimeError("boom"), ["in_1"])
+
+
+def test_write_landed_manifest_reports_an_unwritable_path(tmp_path):
+    folder = tmp_path / "i-am-a-folder"
+    folder.mkdir()
     with pytest.raises(ManifestWriteFailedError):
-        write_inputs_manifest(
-            fixture_publisher,
-            produced,
-            a_folder,
-            cardinality=1,
-        )
+        write_landed_manifest(["in_1"], [[]], folder)
 
 
 # --- main: error paths via argparse ---------------------------------------
@@ -1006,17 +861,15 @@ def test_main_end_to_end_happy_path(
     assert table.to_pydict()["id"] == [1, 2, 3]
     assert table.to_pydict()["name"] == ["alice", "bob", "carol"]
 
-    # The inputs manifest was written with the expected schema.
-    assert manifest.is_file()
-    data = yaml.safe_load(manifest.read_text())
-    assert list(data.keys()) == ["inputs"]
-    assert len(data["inputs"]) == 1
-    entry = data["inputs"][0]
-    assert entry["name"] == "in_1"
-    assert len(entry["tables"]) == 1
-    # Resolve symlinks (e.g. macOS /tmp -> /private/tmp) on both sides
-    # before comparing — `samefile` handles that.
-    assert Path(entry["tables"][0]["file"]).samefile(parquets[0])
+    # The inputs manifest records the file landed from it, and its schema.
+    [entry] = InputManifest.load(manifest).inputs
+    assert entry.name == "in_1"
+    [record] = entry.tables
+    assert record.file is None
+    assert record.location.uri.endswith("/landing/0.0.t")
+    assert record.schema.uri.endswith("/landing/0.0.s")
+    landed = pq.read_table(tmp_path / "landing" / "0.0.t")
+    assert landed.to_pydict() == table.to_pydict()
 
     # Liveness file was created by the context manager.
     assert liveness.exists()
@@ -1093,10 +946,11 @@ def test_main_hydrates_and_drains_initial_values(
     write_state({"last-modified": "2026-05-27T00:00:00Z"}, previous)
 
     req_path = tmp_path / "request.yaml"
+    landing = {"uri": (tmp_path / "landing").as_uri(), "env_prefix": "ROOT"}
     req_path.write_text(
         yaml.safe_dump({
             "Function": {
-                "info": info_payload(),
+                "info": info_payload(function_landing=landing),
                 "output": [
                     output_table_payload(
                         "my_table",

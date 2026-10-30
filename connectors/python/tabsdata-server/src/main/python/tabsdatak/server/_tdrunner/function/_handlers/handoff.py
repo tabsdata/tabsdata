@@ -10,6 +10,8 @@ from abc import ABC
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import overload
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 import polars as pl
 import pyarrow as pa
@@ -52,6 +54,7 @@ from tabsdatak.spi import (
     SrcChannelOfLazyFrame,
     SrcPlugin,
     SrcPluginCtx,
+    TableFileInput,
 )
 from tabsdatak.tableframe import TableFrame
 
@@ -104,6 +107,20 @@ class ForeignBusError(HandoffError):
         self.returned = returned
 
 
+class InputCountError(HandoffError):
+    def __init__(
+        self,
+        returned: int,
+        expected: int,
+    ) -> None:
+        super().__init__(
+            f"The source plugin returned {returned} input slot(s); the source "
+            f"declares {expected}",
+        )
+        self.returned = returned
+        self.expected = expected
+
+
 class Handoff(ABC):
     @overload
     @staticmethod
@@ -125,10 +142,13 @@ class Handoff(ABC):
                 bus=DestBusOfFile if bus is None else bus,
                 legacy=bus is None,
             )
-        variant = src_handoff(type(plugin))
-        if variant is None:
-            raise UnsupportedPluginError(plugin)
-        return SourceHandoff(bus=variant)
+        if isinstance(plugin, SrcPlugin):
+            variant = src_handoff(type(plugin))
+            return SourceHandoff(
+                bus=SrcBusOfFile if variant is None else variant,
+                legacy=variant is None,
+            )
+        raise UnsupportedPluginError(plugin)
 
 
 class NamedChannel:
@@ -391,13 +411,18 @@ LANDING_CHANNELS: dict[type[SrcBus], type[LandingChannel]] = {
 @dataclass(kw_only=True)
 class SourceHandoff(Handoff):
     bus: type[SrcBus]
+    legacy: bool = False
     channels: list[LandingChannel] = field(default_factory=list, init=False)
+    variable: bool = field(default=False, init=False)
 
     def seed(
         self,
         info: Info,
         names: list[str],
+        *,
+        variable: bool = False,
     ) -> SrcBus:
+        self.variable = variable
         landing = Landing(info.function_landing)
         channel = LANDING_CHANNELS[self.bus]
         self.channels = [
@@ -418,6 +443,15 @@ class SourceHandoff(Handoff):
         source: Src,
         bus: SrcBus,
     ) -> None:
+        if self.legacy:
+            self.adopt(
+                plugin.read_in(
+                    context,
+                    connection,
+                    source,
+                ),
+            )
+            return
         with lend_bus(plugin, bus):
             returned = plugin.read_in(
                 context,
@@ -427,5 +461,26 @@ class SourceHandoff(Handoff):
         if returned is not bus:
             raise ForeignBusError(plugin, returned)
 
+    def adopt(self, produced: list[list[TableFileInput]]) -> None:
+        expected = len(self.channels)
+        if len(produced) > expected or (
+            not self.variable and len(produced) != expected
+        ):
+            raise InputCountError(len(produced), expected)
+        for channel, tables in zip(self.channels, produced):
+            for table in tables:
+                channel.land(
+                    pl.scan_parquet(local_file(table.file)),
+                    None,
+                    table.metadata,
+                )
+
     def reap(self) -> list[list[LandedFile]]:
         return [channel.landed for channel in self.channels]
+
+
+def local_file(file: Path) -> Path:
+    text = str(file)
+    if urlparse(text).scheme.lower() == "file":
+        return Path(url2pathname(urlparse(text).path))
+    return Path(text)

@@ -25,6 +25,7 @@ from tabsdatak.server._tdrunner.function._handlers.handoff import (
     OutputCopyError,
     SourceHandoff,
     UnsupportedPluginError,
+    local_file,
 )
 from tabsdatak.server._tdrunner.function._handlers.landing import Origin
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
@@ -149,9 +150,40 @@ def test_a_bus_destination_gets_the_bus_it_declares(tmp_path):
     assert (chosen.bus, chosen.legacy) == (DestBusOfLazyFrame, False)
 
 
-def test_a_legacy_source_plugin_has_no_handoff_yet(tmp_path):
-    with pytest.raises(UnsupportedPluginError, match="LegacySource"):
-        Handoff.of(LegacySource(), tmp_path)
+def test_a_legacy_source_gets_the_file_bus_and_returns_its_files(tmp_path):
+    chosen = Handoff.of(LegacySource(), tmp_path)
+    assert isinstance(chosen, SourceHandoff)
+    assert (chosen.bus, chosen.legacy) == (SrcBusOfFile, True)
+
+
+def test_an_unknown_plugin_has_no_handoff(tmp_path):
+    with pytest.raises(UnsupportedPluginError, match="object"):
+        Handoff.of(object(), tmp_path)
+
+
+@pytest.mark.parametrize(
+    "file",
+    [
+        "file:///tmp/x.parquet",
+        "file:/tmp/x.parquet",
+        Path("file:///tmp/x.parquet"),
+        "FILE:///tmp/x.parquet",
+        "File:/tmp/x.parquet",
+    ],
+)
+def test_a_returned_file_uri_is_read_as_a_local_path(file):
+    assert local_file(file) == Path("/tmp/x.parquet")
+
+
+def test_a_returned_file_uri_is_percent_decoded():
+    assert local_file("file:///tmp/with%20space.parquet") == Path(
+        "/tmp/with space.parquet",
+    )
+
+
+@pytest.mark.parametrize("file", ["/tmp/x.parquet", "x.parquet"])
+def test_a_returned_path_is_read_as_it_is(file):
+    assert local_file(file) == Path(file)
 
 
 @pytest.mark.parametrize(

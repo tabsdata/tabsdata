@@ -13,7 +13,7 @@ from urllib.request import url2pathname
 
 from tabsdatak._api import warn_legacy_src
 from tabsdatak._connectors import get_src, get_stream_src
-from tabsdatak._handoff import deprecated_src, src_handoff
+from tabsdatak._handoff import deprecated_src
 from tabsdatak._info import (
     KIND_PUBLISHER_DEF,
     KIND_STREAM_PUBLISHER_DEF,
@@ -40,6 +40,7 @@ from tabsdatak.server._tdrunner.function._commons.symbols.function import (
 )
 from tabsdatak.server._tdrunner.function._handlers.handoff import (
     Handoff,
+    InputCountError,
     SourceHandoff,
 )
 from tabsdatak.server._tdrunner.function._handlers.landing import LandedFile
@@ -56,12 +57,11 @@ from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.error im
 from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.options import (  # noqa: E501
     RunSourcePluginArguments,
 )
-from tabsdatak.spi import Conn, SrcBus, SrcPlugin, SrcPluginCtx, TableFileInput
+from tabsdatak.spi import Conn, SrcBus, SrcPlugin, SrcPluginCtx
 
 logger = logging.getLogger(__name__)
 
 FILE_SCHEME = "file"
-FILE_PREFIX = "file:"
 
 Publisher = PublisherInfo | StreamPublisherInfo
 
@@ -185,20 +185,6 @@ def bind_source(
     )
 
 
-def read_in(
-    binding: SourceBinding,
-    context: SrcPluginCtx,
-) -> list[list[TableFileInput]]:
-    try:
-        return binding.plugin.read_in(
-            context,
-            binding.connection,
-            binding.source,
-        )
-    except Exception as error:
-        raise RunSourcePluginErrorCode.RSP_6.exception(cause=error, detail=str(error))
-
-
 def write_in(
     handoff: SourceHandoff,
     binding: SourceBinding,
@@ -213,16 +199,15 @@ def write_in(
             binding.source,
             bus,
         )
+    except InputCountError as error:
+        raise RunSourcePluginErrorCode.RSP_7.exception(
+            cause=error,
+            returned=error.returned,
+            expected=error.expected,
+        )
     except Exception as error:
         raise RunSourcePluginErrorCode.RSP_6.exception(cause=error, detail=str(error))
     return handoff.reap()
-
-
-def table_file_path(file: Path) -> str:
-    text = str(file)
-    if text[: len(FILE_PREFIX)].lower() == FILE_PREFIX:
-        return Path(url2pathname(urlparse(text).path)).as_posix()
-    return Path(text).absolute().as_posix()
 
 
 def input_names(
@@ -273,69 +258,6 @@ def write_landed_manifest(
     )
 
 
-def write_inputs_manifest(
-    publisher: Publisher,
-    produced: list[list[TableFileInput]],
-    path: Path,
-    *,
-    cardinality: int,
-) -> None:
-    parameters = list(inspect.signature(_unwrap_info(publisher.func)).parameters)
-    if cardinality < 0:
-        expected = len(parameters)
-        if len(produced) > expected:
-            raise RunSourcePluginErrorCode.RSP_7.exception(
-                returned=len(produced),
-                expected=expected,
-            )
-        produced = [*produced, *([] for _ in range(expected - len(produced)))]
-        cardinality = expected
-    elif len(produced) != cardinality:
-        raise RunSourcePluginErrorCode.RSP_7.exception(
-            returned=len(produced),
-            expected=cardinality,
-        )
-    manifest = InputManifest(
-        inputs=tuple(
-            InputEntry(
-                name=parameters[position],
-                table_pos=position,
-                tables=tuple(
-                    InputRecord(
-                        file=table_file_path(table.file),
-                        metadata=table.metadata,
-                    )
-                    for table in produced[position]
-                ),
-            )
-            for position in range(cardinality)
-        )
-    )
-    save_inputs_manifest(manifest, path)
-
-
-def read_files(
-    publisher: Publisher,
-    binding: SourceBinding,
-    context: SrcPluginCtx,
-    state: State,
-    manifest: Path,
-) -> None:
-    if deprecated_src(type(binding.plugin)):
-        logger.warning(warn_legacy_src(type(binding.plugin)))
-    logger.info("Reading the inputs through the source plugin")
-    produced = read_in(binding, context)
-    logger.info(f"Source plugin produced {len(produced)} slot(s)")
-    state.drain(context, error_code=RunSourcePluginErrorCode.RSP_10)
-    logger.debug(f"State drained to {state.file}")
-    write_inputs_manifest(
-        publisher,
-        produced,
-        manifest,
-        cardinality=binding.cardinality,
-    )
-
-
 def land_inputs(
     publisher: Publisher,
     binding: SourceBinding,
@@ -345,8 +267,14 @@ def land_inputs(
     arguments: RunSourcePluginArguments,
 ) -> None:
     handoff = Handoff.of(binding.plugin, arguments.output_folder)
+    if handoff.legacy and deprecated_src(type(binding.plugin)):
+        logger.warning(warn_legacy_src(type(binding.plugin)))
     names = input_names(publisher, binding.cardinality)
-    bus = handoff.seed(request.info, names)
+    bus = handoff.seed(
+        request.info,
+        names,
+        variable=binding.cardinality < 0,
+    )
     logger.info(f"Landing {len(bus)} input(s) through {type(bus).__name__}")
     landed = write_in(
         handoff,
@@ -385,22 +313,13 @@ def run(arguments: RunSourcePluginArguments) -> int:
     state.hydrate(context, error_code=RunSourcePluginErrorCode.RSP_9)
     logger.debug(f"Source context ready on {arguments.output_folder}")
 
-    if src_handoff(type(binding.plugin)) is None:
-        read_files(
-            publisher,
-            binding,
-            context,
-            state,
-            arguments.inputs_manifest,
-        )
-    else:
-        land_inputs(
-            publisher,
-            binding,
-            context,
-            state,
-            request,
-            arguments,
-        )
+    land_inputs(
+        publisher,
+        binding,
+        context,
+        state,
+        request,
+        arguments,
+    )
     logger.info(f"Inputs manifest written to {arguments.inputs_manifest}")
     return 0
