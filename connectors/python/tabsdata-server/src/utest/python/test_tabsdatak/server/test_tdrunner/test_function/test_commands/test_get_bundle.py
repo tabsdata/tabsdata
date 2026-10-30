@@ -31,7 +31,7 @@ MOUNT = "ROOT"
 @dataclass
 class Paths:
     request: Path
-    bundle_dir: Path
+    bundle_folder: Path
     bundle_archive: Path
     store: Path
     liveness: Path
@@ -43,7 +43,7 @@ def paths(tmp_path: Path) -> Paths:
     store.mkdir()
     return Paths(
         request=tmp_path / "request.yaml",
-        bundle_dir=tmp_path / "bundle",
+        bundle_folder=tmp_path / "bundle",
         bundle_archive=tmp_path / "stage" / "bundle.tar.zst",
         store=store,
         liveness=tmp_path / "live",
@@ -58,8 +58,8 @@ def set_arguments(monkeypatch: pytest.MonkeyPatch, paths: Paths, responder_url: 
             "get-bundle",
             "--request",
             str(paths.request),
-            "--bundle-dir",
-            str(paths.bundle_dir),
+            "--bundle-folder",
+            str(paths.bundle_folder),
             "--bundle-archive",
             str(paths.bundle_archive),
             "--liveness",
@@ -101,7 +101,7 @@ def test_main_localizes_a_mounted_bundle(monkeypatch, paths, http_ok_url):
     write_request(paths.request, bundle)
     set_arguments(monkeypatch, paths, http_ok_url)
     assert main() == 0
-    assert (paths.bundle_dir / "a.py").read_bytes() == b"print('hi')"
+    assert (paths.bundle_folder / "a.py").read_bytes() == b"print('hi')"
     assert paths.bundle_archive.read_bytes() == bundle.read_bytes()
     assert paths.liveness.exists()
 
@@ -111,7 +111,7 @@ def test_main_localizes_a_bundle_without_mount(monkeypatch, paths, http_ok_url):
     write_request(paths.request, bundle, mount=None)
     set_arguments(monkeypatch, paths, http_ok_url)
     assert main() == 0
-    assert (paths.bundle_dir / "b.py").read_bytes() == b"pass"
+    assert (paths.bundle_folder / "b.py").read_bytes() == b"pass"
 
 
 def test_main_missing_request_returns_bad_request(monkeypatch, paths, http_ok_url):

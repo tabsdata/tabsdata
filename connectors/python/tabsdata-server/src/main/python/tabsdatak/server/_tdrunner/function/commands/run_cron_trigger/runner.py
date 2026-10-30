@@ -7,12 +7,11 @@
 The command's logic, callable without argparse or the responder. The
 package ``__init__`` wraps :func:`run` in the ``@command`` entrypoint
 for the console script; the compound imports :func:`run` directly and
-supplies a pre-built ``Namespace``.
+supplies pre-built ``RunCronTriggerArguments``.
 """
 
 from __future__ import annotations
 
-import argparse
 import json
 import logging
 import uuid
@@ -24,6 +23,9 @@ from tabsdatak.server._tdrunner.function._commons.http.request import (
 )
 from tabsdatak.server._tdrunner.function._commons.http.retry import call_with_retry
 from tabsdatak.server._tdrunner.function._commons.solver.arguments import resolve_value
+from tabsdatak.server._tdrunner.function.commands.run_cron_trigger.arguments import (
+    RunCronTriggerArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.run_cron_trigger.error import (
     RunCronTriggerErrorCode,
 )
@@ -86,10 +88,10 @@ def _fire(url: str, method: str, authorization: str) -> None:
     )
 
 
-def run(args: argparse.Namespace) -> int:
+def run(arguments: RunCronTriggerArguments) -> int:
     _fire(
-        resolve_value(args.trigger_url),
-        resolve_value(args.trigger_method),
-        resolve_value(args.trigger_authorization),
+        resolve_value(arguments.trigger_url),
+        resolve_value(arguments.trigger_method),
+        resolve_value(arguments.trigger_authorization),
     )
     return 0

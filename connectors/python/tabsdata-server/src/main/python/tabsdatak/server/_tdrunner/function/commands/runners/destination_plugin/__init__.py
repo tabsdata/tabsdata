@@ -26,13 +26,14 @@ entrypoint the console script resolves to. The compound imports
 
 from __future__ import annotations
 
-import argparse
-
-from tabsdatak.server._tdrunner.function._commons.run.command import (
-    build_parser,
-    command,
+from tabsdatak.server._tdrunner.function._commons.run.arguments import (
+    ArgumentsParser,
 )
+from tabsdatak.server._tdrunner.function._commons.run.command import command
 from tabsdatak.server._tdrunner.function._commons.run.version import version
+from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.arguments import (  # noqa: E501
+    RunDestinationPluginArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.runner import (  # noqa: E501
     _DestContext,
     _load_function_def,
@@ -54,14 +55,14 @@ __all__ = [
 
 VERSION = version()
 GENERATION = 1
-INFO = (
+INFORMATION = (
     "run-destination-plugin — hand the function's landed outputs to the "
     "subscriber's destination plugin"
 )
-MAN = (
-    "run-destination-plugin --request <PATH> --bundle-dir <PATH> "
+MANUAL = (
+    "run-destination-plugin --request <PATH> --bundle-folder <PATH> "
     "--outputs-manifest <PATH> --connection-file <PATH> --liveness <PATH>\n\n"
-    "Loads function_def.json from --bundle-dir (must be a "
+    "Loads function_def.json from --bundle-folder (must be a "
     "subscriberDef), reads --outputs-manifest, resolves the destination "
     "plugin via the tabsdatak connectors registry, loads the connection "
     "from --connection-file, and hands the outputs the function landed "
@@ -70,41 +71,19 @@ MAN = (
 )
 
 
-def _build_parser():
-    parser = build_parser(
+def build_command_parser() -> ArgumentsParser:
+    return RunDestinationPluginArguments.parser(
         program="run-destination-plugin",
         description="Invoke the subscriber's destination plugin.",
         version=VERSION,
-        info=INFO,
-        manual=MAN,
+        information=INFORMATION,
+        manual=MANUAL,
     )
-    parser.add_argument("--request", required=True, help="Path to request.yaml")
-    parser.add_argument(
-        "--bundle-dir", required=True, help="Extracted bundle directory"
-    )
-    parser.add_argument(
-        "--outputs-manifest",
-        required=True,
-        dest="outputs_manifest",
-        help=(
-            "Path to the YAML outputs manifest produced by run-function. "
-            "Entries are consumed positionally — one parquet per slot in "
-            "declaration order. Entries without a `uri` are rejected "
-            "(subscribers must return concrete frames for every slot)."
-        ),
-    )
-    parser.add_argument(
-        "--connection-file",
-        required=True,
-        dest="connection_file",
-        help="Path to the connection definition file.",
-    )
-    return parser
 
 
-@command(name="td_run_destination_plugin", parser=_build_parser)
-def main(args: argparse.Namespace) -> int:
-    return run(args)
+@command(name="td_run_destination_plugin", parser=build_command_parser)
+def main(arguments: RunDestinationPluginArguments) -> int:
+    return run(arguments)
 
 
 if __name__ == "__main__":  # pragma: no cover

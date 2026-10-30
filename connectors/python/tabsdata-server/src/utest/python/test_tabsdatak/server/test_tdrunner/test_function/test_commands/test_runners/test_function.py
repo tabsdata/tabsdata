@@ -366,17 +366,17 @@ def _set_argv(
             "run-function",
             "--request",
             str(request_path),
-            "--bundle-dir",
+            "--bundle-folder",
             str(bundle_dir),
             "--inputs-manifest",
             str(inputs_manifest),
-            "--out-dir",
+            "--output-folder",
             str(out_dir),
             "--outputs-manifest",
             str(outputs_manifest),
             "--liveness",
             str(liveness),
-            "--state-dir",
+            "--state-folder",
             str(state_dir),
             "--responder-url",
             responder_url,
@@ -1352,7 +1352,7 @@ def test_function_context_is_a_function_ctx_subclass():
     ``isinstance(ctx, FunctionCtx)`` holds at the call boundary, and
     must NOT also satisfy the SrcPluginCtx / DestContext role tags."""
     c = _FunctionContext(
-        work_dir=Path("/work"),
+        work_folder=Path("/work"),
         project_id="p-1",
         project="p",
         collection_id="cid",
@@ -1374,7 +1374,7 @@ def test_function_context_is_a_function_ctx_subclass():
 
 def test_function_context_serves_the_project_secret():
     c = _FunctionContext(
-        work_dir=Path("/work"),
+        work_folder=Path("/work"),
         project_id="p-1",
         project="p",
         collection_id="cid",

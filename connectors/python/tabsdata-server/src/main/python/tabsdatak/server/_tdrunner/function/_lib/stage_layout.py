@@ -42,24 +42,24 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 # --- Directory / file names -----------------------------------------------
 
-MANIFESTS_SUBDIR = "manifests"
-FILES_SUBDIR = "files"
+MANIFESTS_SUBFOLDER = "manifests"
+FILES_SUBFOLDER = "files"
 STREAM_STATE_FILENAME = "stream-state.json"
 
 
-def manifests_dir(stage_root: Path) -> Path:
+def manifests_folder(stage_root: Path) -> Path:
     """``<stage_root>/manifests/`` -- where the streamer writes manifests
     and the publisher's ``ManifestStageSrcPlugin`` globs."""
-    return stage_root / MANIFESTS_SUBDIR
+    return stage_root / MANIFESTS_SUBFOLDER
 
 
-def files_dir(stage_root: Path) -> Path:
+def files_folder(stage_root: Path) -> Path:
     """``<stage_root>/files/`` -- the root the streamer writes parquets
-    under; each batch gets its own :func:`manifest_files_dir` subdir."""
-    return stage_root / FILES_SUBDIR
+    under; each batch gets its own :func:`manifest_files_folder` subdir."""
+    return stage_root / FILES_SUBFOLDER
 
 
-def manifest_files_dir(stage_root: Path, external_id: str) -> Path:
+def manifest_files_folder(stage_root: Path, external_id: str) -> Path:
     """``<stage_root>/files/<external_id>/`` -- the per-batch subdir
     holding the parquets a single ``ctx.stage()`` call staged.
 
@@ -69,7 +69,7 @@ def manifest_files_dir(stage_root: Path, external_id: str) -> Path:
     ``files/<TS>/`` share a name. That pairing lets the manifest-trigger
     sidecar reclaim a whole batch with one directory removal and lets an
     operator eyeball which files belong to which manifest."""
-    return files_dir(stage_root) / external_id
+    return files_folder(stage_root) / external_id
 
 
 def stream_state_path(stage_root: Path) -> Path:

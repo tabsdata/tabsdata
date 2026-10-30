@@ -66,13 +66,14 @@ entrypoint the console script resolves to. The compound imports
 
 from __future__ import annotations
 
-import argparse
-
-from tabsdatak.server._tdrunner.function._commons.run.command import (
-    build_parser,
-    command,
+from tabsdatak.server._tdrunner.function._commons.run.arguments import (
+    ArgumentsParser,
 )
+from tabsdatak.server._tdrunner.function._commons.run.command import command
 from tabsdatak.server._tdrunner.function._commons.run.version import version
+from tabsdatak.server._tdrunner.function.commands.run_manifest_trigger.arguments import (  # noqa: E501
+    RunManifestTriggerArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.run_manifest_trigger.runner import (
     TriggerOutcome,
     _build_trigger_request,
@@ -98,17 +99,17 @@ __all__ = [
 
 VERSION = version()
 GENERATION = 1
-INFO = (
+INFORMATION = (
     "run-manifest-trigger — long-running sidecar; scans manifests/ and "
     "POSTs fn_trigger; cleans up between polls"
 )
-MAN = (
+MANUAL = (
     "run-manifest-trigger\n"
     "    --request <PATH>\n"
     "    --trigger-url <URL | env:VAR | val:LITERAL>\n"
     "    --trigger-method <METHOD | env:VAR | val:LITERAL>\n"
     "    --trigger-authorization <AUTH | env:VAR | val:LITERAL>\n"
-    "    --back-off-secs <INT>\n"
+    "    --back-off-seconds <INT>\n"
     "    ... + standard responder/liveness/log/journal args\n\n"
     "Reads request.yaml to discover the function_stage URI. Builds "
     "an HttpRequest from the --trigger-* triplet and replays it per "
@@ -120,54 +121,19 @@ MAN = (
 )
 
 
-def _build_parser():
-    parser = build_parser(
+def build_command_parser() -> ArgumentsParser:
+    return RunManifestTriggerArguments.parser(
         program="run-manifest-trigger",
         description="Long-running sidecar that drives fn_trigger from manifests.",
         version=VERSION,
-        info=INFO,
-        manual=MAN,
+        information=INFORMATION,
+        manual=MANUAL,
     )
-    parser.add_argument("--request", required=True, help="Path to request.yaml")
-    parser.add_argument(
-        "--trigger-url",
-        required=True,
-        help=(
-            "fn_trigger URL. Same env:/val: resolution as the responder "
-            "triplet -- the apiserver typically passes an env:SECRET__... "
-            "reference via the pod profile."
-        ),
-    )
-    parser.add_argument(
-        "--trigger-method",
-        required=True,
-        help="HTTP method for fn_trigger. Same env:/val: resolution.",
-    )
-    parser.add_argument(
-        "--trigger-authorization",
-        required=True,
-        help=(
-            "Authorization header for fn_trigger. Same env:/val: "
-            "resolution as the responder triplet."
-        ),
-    )
-    parser.add_argument(
-        "--back-off-secs",
-        dest="back_off_secs",
-        type=int,
-        default=30,
-        help=(
-            "Seconds to wait between full manifests/ scans. During the "
-            "wait, the sidecar drains queued deletions from prior "
-            "iterations. Default 30."
-        ),
-    )
-    return parser
 
 
-@command(name="td_run_manifest_trigger", parser=_build_parser)
-def main(args: argparse.Namespace) -> int:
-    return run(args)
+@command(name="td_run_manifest_trigger", parser=build_command_parser)
+def main(arguments: RunManifestTriggerArguments) -> int:
+    return run(arguments)
 
 
 if __name__ == "__main__":  # pragma: no cover

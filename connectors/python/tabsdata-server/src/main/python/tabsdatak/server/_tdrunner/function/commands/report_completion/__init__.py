@@ -6,7 +6,7 @@
 
 Step 8 (final) of the publisher init-container chain. Builds the
 response.yaml from the outputs manifest produced by `run-function`,
-writes a copy to `--out`, stamps the run's
+writes a copy to `--response`, stamps the run's
 end time into the journal, and posts a `Done` callback to the responder
 carrying the response as the function `output`.
 
@@ -31,53 +31,45 @@ entrypoint the console script resolves to. The compound imports
 
 from __future__ import annotations
 
-import argparse
-
-from tabsdatak.server._tdrunner.function._commons.run.command import (
-    build_parser,
-    command,
+from tabsdatak.server._tdrunner.function._commons.run.arguments import (
+    ArgumentsParser,
 )
+from tabsdatak.server._tdrunner.function._commons.run.command import command
 from tabsdatak.server._tdrunner.function._commons.run.version import version
+from tabsdatak.server._tdrunner.function.commands.report_completion.arguments import (
+    ReportCompletionArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.report_completion.runner import run
 
 __all__ = ["run", "main"]
 
 VERSION = version()
 GENERATION = 1
-INFO = "report-completion — report the function-run response to the API server"
-MAN = (
+INFORMATION = "report-completion — report the function-run response to the API server"
+MANUAL = (
     "report-completion --request <PATH> --outputs-manifest <PATH> "
-    "--out <PATH> --liveness <PATH> "
+    "--response <PATH> --liveness <PATH> "
     "--journal-file <PATH> --responder-url <URL> "
     "--responder-method <METHOD> --responder-authorization <AUTH>\n\n"
     "Builds response.yaml from the outputs manifest (for request.output "
-    "and request.system_output), writes a copy to --out, and posts a Done "
+    "and request.system_output), writes a copy to --response, and posts a Done "
     "callback to the responder."
 )
 
 
-def _build_parser():
-    parser = build_parser(
+def build_command_parser() -> ArgumentsParser:
+    return ReportCompletionArguments.parser(
         program="report-completion",
         description="Build and submit the function-run response.",
         version=VERSION,
-        info=INFO,
-        manual=MAN,
+        information=INFORMATION,
+        manual=MANUAL,
     )
-    parser.add_argument("--request", required=True, help="Path to request.yaml")
-    parser.add_argument(
-        "--outputs-manifest",
-        required=True,
-        dest="outputs_manifest",
-        help="Path to the outputs manifest YAML produced by run-function",
-    )
-    parser.add_argument("--out", required=True, help="Path to write response.yaml")
-    return parser
 
 
-@command(name="td_report_completion", parser=_build_parser)
-def main(args: argparse.Namespace) -> int:
-    return run(args)
+@command(name="td_report_completion", parser=build_command_parser)
+def main(arguments: ReportCompletionArguments) -> int:
+    return run(arguments)
 
 
 if __name__ == "__main__":  # pragma: no cover

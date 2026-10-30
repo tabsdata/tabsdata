@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 import time
 from http import HTTPStatus
+from pathlib import Path
 
 import pytest
 
@@ -16,6 +16,9 @@ from tabsdatak.server._tdrunner.function._commons.http.request import (
     HttpResponse,
 )
 from tabsdatak.server._tdrunner.function.commands.run_cron_trigger import runner
+from tabsdatak.server._tdrunner.function.commands.run_cron_trigger.arguments import (
+    RunCronTriggerArguments,
+)
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -47,7 +50,12 @@ def _fire(monkeypatch, apiserver: _Apiserver) -> int:
     monkeypatch.setattr(runner, "invoke", apiserver.invoke)
     monkeypatch.setattr(time, "sleep", lambda seconds: None)
     return runner.run(
-        argparse.Namespace(
+        RunCronTriggerArguments(
+            liveness=Path("/l"),
+            responder_url="val:http://r",
+            responder_method="val:POST",
+            responder_authorization="val:Bearer r",
+            journal_file=Path("/j"),
             trigger_url="val:http://api/execute",
             trigger_method="val:POST",
             trigger_authorization="val:Bearer t",

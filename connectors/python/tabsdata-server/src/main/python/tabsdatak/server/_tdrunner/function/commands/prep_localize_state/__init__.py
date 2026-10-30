@@ -14,13 +14,14 @@ locally: state is read where it is stored too (see the state handler).
 
 from __future__ import annotations
 
-import argparse
-
-from tabsdatak.server._tdrunner.function._commons.run.command import (
-    build_parser,
-    command,
+from tabsdatak.server._tdrunner.function._commons.run.arguments import (
+    ArgumentsParser,
 )
+from tabsdatak.server._tdrunner.function._commons.run.command import command
 from tabsdatak.server._tdrunner.function._commons.run.version import version
+from tabsdatak.server._tdrunner.function.commands.prep_localize_state.arguments import (
+    PrepLocalizeStateArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.prep_localize_state.runner import (
     run,
 )
@@ -29,8 +30,8 @@ __all__ = ["run", "main"]
 
 VERSION = version()
 GENERATION = 1
-INFO = "prep-localize-state — write the inputs manifest of the function run"
-MAN = (
+INFORMATION = "prep-localize-state — write the inputs manifest of the function run"
+MANUAL = (
     "prep-localize-state --request <PATH> --inputs-manifest <PATH> "
     "--liveness <PATH>\n\n"
     "Reads request.yaml and writes an inputs manifest at --inputs-manifest "
@@ -39,30 +40,19 @@ MAN = (
 )
 
 
-def command_parser():
-    parser = build_parser(
+def build_command_parser() -> ArgumentsParser:
+    return PrepLocalizeStateArguments.parser(
         program="prep-localize-state",
         description="Write the inputs manifest of the function run.",
         version=VERSION,
-        info=INFO,
-        manual=MAN,
+        information=INFORMATION,
+        manual=MANUAL,
     )
-    parser.add_argument("--request", required=True, help="Path to request.yaml")
-    parser.add_argument(
-        "--inputs-manifest",
-        required=True,
-        dest="inputs_manifest",
-        help=(
-            "Path to write the inputs manifest (one entry per "
-            "request.input table, pointing at its storage location)"
-        ),
-    )
-    return parser
 
 
-@command(name="td_prep_localize_state", parser=command_parser)
-def main(args: argparse.Namespace) -> int:
-    return run(args)
+@command(name="td_prep_localize_state", parser=build_command_parser)
+def main(arguments: PrepLocalizeStateArguments) -> int:
+    return run(arguments)
 
 
 if __name__ == "__main__":  # pragma: no cover

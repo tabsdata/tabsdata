@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import argparse
 import http.server
 import io
 import json
@@ -19,6 +18,9 @@ import pytest
 import yaml
 
 from tabsdatak.server._tdrunner.function._commons.run import command as command_lib
+from tabsdatak.server._tdrunner.function._commons.run.arguments import (
+    CommandArguments,
+)
 from tabsdatak.server._tdrunner.function._commons.run.command import UnexpectedError
 from tabsdatak.server._tdrunner.function._lib.errors import EXIT_STALE_REPORT
 from tabsdatak.server._tdrunner.function.commands.report_completion import main
@@ -67,7 +69,7 @@ def _set_argv(
             str(request),
             "--outputs-manifest",
             str(outputs_manifest),
-            "--out",
+            "--response",
             str(out),
             "--liveness",
             str(liveness),
@@ -415,7 +417,7 @@ def test_main_write_error_returns_write_failed(monkeypatch, tmp_path, responder)
     request_yaml = _write_request(tmp_path / "request.yaml")
     manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
     journal = _write_journal(tmp_path / "journal.yaml")
-    # Make the write fail by pointing `--out` *under* a regular file:
+    # Make the write fail by pointing `--response` *under* a regular file:
     # `write_response` mkdirs missing parents, but mkdir into a path that
     # already exists as a file raises OSError.
     blocker = tmp_path / "blocker"
@@ -435,7 +437,7 @@ def test_main_write_error_returns_write_failed(monkeypatch, tmp_path, responder)
 def test_main_responder_http_error_returns_unexpected_but_writes_out(
     monkeypatch, tmp_path, responder, no_http_retry
 ):
-    """When the Done POST gets an HTTP error, main fails — but the `--out`
+    """When the Done POST gets an HTTP error, main fails — but the `--response`
     artifact is written before the POST, so it survives the failure."""
     base_url, _, server = responder
     server.next_status = 500
@@ -453,7 +455,7 @@ def test_main_responder_http_error_returns_unexpected_but_writes_out(
         journal_file=journal,
     )
     assert main() == UnexpectedError.exit_code
-    # --out is written before the POST, so it survives the failure.
+    # --response is written before the POST, so it survives the failure.
     assert out.exists()
 
 
@@ -496,14 +498,15 @@ def test_responder_http_error_surfaces_response_body(
 
     monkeypatch.setattr(urllib.request, "urlopen", failing_urlopen)
     journal = _write_journal(tmp_path / "journal.yaml")
-    args = argparse.Namespace(
+    arguments = CommandArguments(
+        liveness=tmp_path / "liveness",
         responder_url="http://127.0.0.1:1/done",
         responder_method="POST",
         responder_authorization="Bearer tok",
-        journal_file=str(journal),
+        journal_file=journal,
     )
     with pytest.raises(urllib.error.HTTPError) as caught:
-        command_lib.notify_status_done(args, output=None)
+        command_lib.notify_status_done(arguments, output=None)
     rendered = str(caught.value)
     assert "Bad Request" in rendered
     assert apiserver_body.decode("utf-8") in rendered

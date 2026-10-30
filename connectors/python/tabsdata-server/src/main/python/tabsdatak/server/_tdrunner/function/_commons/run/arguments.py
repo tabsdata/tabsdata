@@ -64,17 +64,15 @@ def add_print_options(
 
 @dataclass(frozen=True)
 class Option:
-    flag: str | None
     short: str | None
     help: str
 
     def flags(self, name: str) -> list[str]:
-        long = self.flag or f"--{name.replace('_', '-')}"
+        long = f"--{name.replace('_', '-')}"
         return [long] if self.short is None else [long, self.short]
 
 
 def option(
-    flag: str | None = None,
     *,
     short: str | None = None,
     help: str,
@@ -82,7 +80,7 @@ def option(
 ) -> Any:
     return field(
         default=default,
-        metadata={OPTION: Option(flag=flag, short=short, help=help)},
+        metadata={OPTION: Option(short=short, help=help)},
     )
 
 
@@ -96,42 +94,7 @@ def value_type(annotation: Any) -> type:
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommandArguments:
-    shared_folder: Path | None = option(
-        "--shared-dir",
-        short="-s",
-        default=None,
-        help="Shared working folder, owned by the pod.",
-    )
-    work_folder: Path | None = option(
-        "--work-dir",
-        short="-w",
-        default=None,
-        help="Private working folder, owned by the container.",
-    )
-    logging_configuration: Path | None = option(
-        "--log-config",
-        short="-c",
-        default=None,
-        help="Path to a logging configuration YAML; the bundled one when omitted.",
-    )
-    liveness: Path = option(
-        short="-l",
-        help=(
-            "File the command must touch at least once a minute to signal liveness "
-            "to the framework."
-        ),
-    )
-    responder_url: str = option(help="Responder endpoint URL.")
-    responder_method: str = option(help="Responder HTTP method.")
-    responder_authorization: str = option(help="Responder Authorization header value.")
-    journal_file: Path = option(
-        help=(
-            "Path to the shared journal file every command in the chain reads and "
-            "writes on the shared volume."
-        ),
-    )
-
+class Arguments:
     @classmethod
     def parser(
         cls,
@@ -166,12 +129,47 @@ class CommandArguments:
         return parser
 
 
+@dataclass(frozen=True, kw_only=True)
+class CommandArguments(Arguments):
+    shared_folder: Path | None = option(
+        short="-s",
+        default=None,
+        help="Shared working folder, owned by the pod.",
+    )
+    work_folder: Path | None = option(
+        short="-w",
+        default=None,
+        help="Private working folder, owned by the container.",
+    )
+    logging_configuration: Path | None = option(
+        short="-c",
+        default=None,
+        help="Path to a logging configuration YAML; the bundled one when omitted.",
+    )
+    liveness: Path = option(
+        short="-l",
+        help=(
+            "File the command must touch at least once a minute to signal liveness "
+            "to the framework."
+        ),
+    )
+    responder_url: str = option(help="Responder endpoint URL.")
+    responder_method: str = option(help="Responder HTTP method.")
+    responder_authorization: str = option(help="Responder Authorization header value.")
+    journal_file: Path = option(
+        help=(
+            "Path to the shared journal file every command in the chain reads and "
+            "writes on the shared volume."
+        ),
+    )
+
+
 class ArgumentsParser(Parser):
-    def __init__(self, arguments: type[CommandArguments], **options: Any) -> None:
+    def __init__(self, arguments: type[Arguments], **options: Any) -> None:
         super().__init__(**options)
         self.arguments = arguments
 
-    def parse(self, values: list[str] | None = None) -> CommandArguments:
+    def parse(self, values: list[str] | None = None) -> Arguments:
         namespace = self.parse_args(values)
         return self.arguments(**{
             item.name: getattr(namespace, item.name) for item in fields(self.arguments)

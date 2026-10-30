@@ -7,15 +7,13 @@
 The command's logic, callable without argparse or the responder. The
 package ``__init__`` wraps :func:`run` in the ``@command`` entrypoint
 for the console script; the compound imports :func:`run` directly and
-supplies a pre-built ``Namespace``.
+supplies pre-built ``ReportCompletionArguments``.
 """
 
 from __future__ import annotations
 
-import argparse
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
 from tabsdatak.server._tdrunner.function._commons.document.response import Response
@@ -27,6 +25,9 @@ from tabsdatak.server._tdrunner.function._commons.manifests.output import (
 )
 from tabsdatak.server._tdrunner.function._commons.run.command import notify_status_done
 from tabsdatak.server._tdrunner.function._lib.journal import Journal
+from tabsdatak.server._tdrunner.function.commands.report_completion.arguments import (
+    ReportCompletionArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.report_completion.error import (
     ReportCompletionErrorCode,
 )
@@ -34,10 +35,10 @@ from tabsdatak.server._tdrunner.function.commands.report_completion.error import
 logger = logging.getLogger(__name__)
 
 
-def run(args: argparse.Namespace) -> int:
-    request_path = Path(args.request)
-    outputs_manifest_path = Path(args.outputs_manifest)
-    out_path = Path(args.out)
+def run(arguments: ReportCompletionArguments) -> int:
+    request_path = arguments.request
+    outputs_manifest_path = arguments.outputs_manifest
+    response_path = arguments.response
 
     logger.info("Building and submitting function-run response")
     request = Request.load(request_path, ReportCompletionErrorCode.RC_1)
@@ -68,18 +69,18 @@ def run(args: argparse.Namespace) -> int:
         nodata_count,
     )
 
-    # Write the response to --out FIRST so it's persisted even when a
+    # Write the response to --response FIRST so it's persisted even when a
     # later step fails.
     try:
-        response.write(out_path)
+        response.write(response_path)
     except OSError as exc:
         raise ReportCompletionErrorCode.RC_4.exception(
-            cause=exc, path=out_path, detail=str(exc)
+            cause=exc, path=response_path, detail=str(exc)
         )
-    logger.debug("Wrote response.yaml to %s", out_path)
+    logger.debug("Wrote response.yaml to %s", response_path)
 
     end = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
-    journal_path = Path(args.journal_file)
+    journal_path = arguments.journal_file
     journal = Journal.load(journal_path, strict=True)
     journal.end = end
     try:
@@ -92,6 +93,6 @@ def run(args: argparse.Namespace) -> int:
         )
 
     logger.info("report-completion: recorded end=%s", end)
-    notify_status_done(args, output=response.function_output().document())
+    notify_status_done(arguments, output=response.function_output().document())
     logger.info("Reported completion to apiserver successfully")
     return 0

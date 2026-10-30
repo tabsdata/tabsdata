@@ -33,8 +33,8 @@ class BadEndpointSchemeError(_BadEndpointSchemeError):
 
 
 class WriteFailedError(_WriteFailedError):
-    """``--out`` could not be written (missing parent dir, permission,
-    ...)."""
+    """``--transporter-request`` could not be written (missing parent folder,
+    permission, ...)."""
 
     exit_code = 13
 

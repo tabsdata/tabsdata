@@ -20,13 +20,13 @@ from tabsdatak.server._tdrunner.function._lib.mounts import load_mount_option_ke
 def build_bundle_fetch_request(
     request: Request | AnyRequest,
     target_path: Path,
-    storage_config_file: Path,
+    storage_configuration_file: Path,
 ) -> Any:
     match TRANSPORTER_MODE:
         case 1:
             return transporter1.build_bundle_fetch_request(request, target_path)
         case 2:
-            option_keys = load_mount_option_keys(storage_config_file)
+            option_keys = load_mount_option_keys(storage_configuration_file)
             return transporter2.build_bundle_fetch_request(
                 request, target_path, option_keys
             )
@@ -37,13 +37,13 @@ def build_bundle_fetch_request(
 def build_upload_landing_request(
     request: Request,
     landing_files: list[tuple[int, Path]],
-    storage_config_file: Path,
+    storage_configuration_file: Path,
 ) -> Any:
     match TRANSPORTER_MODE:
         case 1:
             return transporter1.build_upload_landing_request(request, landing_files)
         case 2:
-            option_keys = load_mount_option_keys(storage_config_file)
+            option_keys = load_mount_option_keys(storage_configuration_file)
             return transporter2.build_upload_landing_request(
                 request, landing_files, option_keys
             )

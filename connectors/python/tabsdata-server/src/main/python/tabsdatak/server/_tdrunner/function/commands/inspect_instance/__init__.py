@@ -4,12 +4,16 @@
 
 from __future__ import annotations
 
-import argparse
-
+from tabsdatak.server._tdrunner.function._commons.run.arguments import (
+    ArgumentsParser,
+)
 from tabsdatak.server._tdrunner.function._commons.run.command import (
     tabsdata_command,
 )
 from tabsdatak.server._tdrunner.function._commons.run.version import version
+from tabsdatak.server._tdrunner.function.commands.inspect_instance.arguments import (
+    InspectInstanceArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.inspect_instance.runner import run
 
 __all__ = ["main"]
@@ -18,13 +22,12 @@ VERSION = version()
 GENERATION = 1
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="inspect-instance",
+def build_command_parser() -> ArgumentsParser:
+    return InspectInstanceArguments.parser(
+        program="inspect-instance",
         description="Dump mounted instance config and pod folders for troubleshooting.",
+        version=VERSION,
     )
-    parser.add_argument("--version", "-v", action="version", version=VERSION)
-    return parser
 
 
 def command(*, name: str):
@@ -36,8 +39,8 @@ def command(*, name: str):
 
 @command(name="td_inspector")
 def main() -> int:
-    args = _build_parser().parse_args()
-    return run(args)
+    arguments: InspectInstanceArguments = build_command_parser().parse()
+    return run(arguments)
 
 
 if __name__ == "__main__":  # pragma: no cover

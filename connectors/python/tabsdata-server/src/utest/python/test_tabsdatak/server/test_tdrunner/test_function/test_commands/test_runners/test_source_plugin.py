@@ -263,9 +263,9 @@ def _set_argv(
             "run-source-plugin",
             "--request",
             str(request_path),
-            "--bundle-dir",
+            "--bundle-folder",
             str(bundle_dir),
-            "--out-dir",
+            "--output-folder",
             str(out_dir),
             "--inputs-manifest",
             str(inputs_manifest),
@@ -273,7 +273,7 @@ def _set_argv(
             str(connection_file),
             "--liveness",
             str(liveness),
-            "--state-dir",
+            "--state-folder",
             str(state_dir),
             "--responder-url",
             responder_url,
@@ -340,7 +340,7 @@ def _ctx(**kwargs) -> _SrcContext:
     """Default-fill the new SrcPluginCtx fields so each test only has
     to override what it's exercising."""
     defaults = dict(
-        work_dir=Path("/work"),
+        work_folder=Path("/work"),
         project_id="p-1",
         project="p",
         collection_id="c_id",

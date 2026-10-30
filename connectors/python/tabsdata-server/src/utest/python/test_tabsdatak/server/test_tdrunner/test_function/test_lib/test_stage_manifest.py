@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 import pytest
 
 from tabsdatak.server._tdrunner.function._lib.stage_layout import (
-    MANIFESTS_SUBDIR,
+    MANIFESTS_SUBFOLDER,
 )
 from tabsdatak.server._tdrunner.function._lib.stage_manifest import (
     MANIFEST_PREFIX,
@@ -46,7 +46,8 @@ def test_format_manifest_filename_naive_utc():
     """Canonical case: naive datetime, ms precision, hyphenated time."""
     ts = datetime(2026, 6, 16, 10, 30, 12, 345_000)
     assert (
-        format_manifest_filename(ts) == "stream-manifest-2026-06-16T10-30-12.345000.json"
+        format_manifest_filename(ts)
+        == "stream-manifest-2026-06-16T10-30-12.345000.json"
     )
 
 
@@ -63,7 +64,8 @@ def test_format_manifest_filename_tz_aware_normalised_to_utc():
     ts = datetime(2026, 6, 16, 12, 30, 12, 345_000, tzinfo=plus_two)
     # 12:30 +02:00 == 10:30 UTC
     assert (
-        format_manifest_filename(ts) == "stream-manifest-2026-06-16T10-30-12.345000.json"
+        format_manifest_filename(ts)
+        == "stream-manifest-2026-06-16T10-30-12.345000.json"
     )
 
 
@@ -186,8 +188,8 @@ def test_write_stage_manifest_creates_manifests_subdir(tmp_path):
     stage_root.mkdir()
     ts = datetime(2026, 6, 16, 10, 30, 12, 345_000)
     path = write_stage_manifest(stage_root, [["files/a.parquet"]], ts=ts)
-    assert (stage_root / MANIFESTS_SUBDIR).is_dir()
-    assert path == stage_root / MANIFESTS_SUBDIR / (
+    assert (stage_root / MANIFESTS_SUBFOLDER).is_dir()
+    assert path == stage_root / MANIFESTS_SUBFOLDER / (
         "stream-manifest-2026-06-16T10-30-12.345000.json"
     )
 
@@ -198,7 +200,7 @@ def test_write_stage_manifest_creates_stage_root_when_absent(tmp_path):
     stage_root = tmp_path / "fresh-stage"
     ts = datetime(2026, 6, 16, 10, 30, 12, 345_000)
     write_stage_manifest(stage_root, [["files/a.parquet"]], ts=ts)
-    assert (stage_root / MANIFESTS_SUBDIR).is_dir()
+    assert (stage_root / MANIFESTS_SUBFOLDER).is_dir()
 
 
 def test_write_then_load_stage_manifest_round_trip(tmp_path):
@@ -272,12 +274,14 @@ def test_enumerate_pending_filters_non_manifest_files(tmp_path):
     stage_root = tmp_path / "stage"
     ts = datetime(2026, 6, 16, 10, 30, 12, 345_000)
     write_stage_manifest(stage_root, [[]], ts=ts)
-    manifests = stage_root / MANIFESTS_SUBDIR
+    manifests = stage_root / MANIFESTS_SUBFOLDER
     (manifests / "README.txt").write_text("not a manifest")
     (manifests / "stream-manifest-bogus.json").write_text("[]")  # bad TS
     (manifests / "other-prefix-2026-06-16T10-30-12.345000.json").write_text("[]")
     results = enumerate_pending(stage_root)
-    assert [p.name for p in results] == ["stream-manifest-2026-06-16T10-30-12.345000.json"]
+    assert [p.name for p in results] == [
+        "stream-manifest-2026-06-16T10-30-12.345000.json"
+    ]
 
 
 def test_enumerate_pending_ignores_subdirectories(tmp_path):
@@ -287,7 +291,7 @@ def test_enumerate_pending_ignores_subdirectories(tmp_path):
     stage_root = tmp_path / "stage"
     ts = datetime(2026, 6, 16, 10, 30, 12, 345_000)
     write_stage_manifest(stage_root, [[]], ts=ts)
-    nested = stage_root / MANIFESTS_SUBDIR / "stream-manifest-bogus.json"
+    nested = stage_root / MANIFESTS_SUBFOLDER / "stream-manifest-bogus.json"
     nested.mkdir()  # a directory with a manifest-shaped name
     results = enumerate_pending(stage_root)
     assert len(results) == 1

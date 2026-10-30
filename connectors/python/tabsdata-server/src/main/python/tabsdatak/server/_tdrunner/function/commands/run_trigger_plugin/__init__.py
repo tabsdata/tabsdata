@@ -3,23 +3,28 @@
 #
 
 from tabsdatak._logging import setup_logging
+from tabsdatak.server._tdrunner.function._commons.run.arguments import (
+    ArgumentsParser,
+)
 from tabsdatak.server._tdrunner.function._commons.run.command import (
-    build_parser,
     run_command,
     tabsdata_command,
 )
+from tabsdatak.server._tdrunner.function.commands.run_trigger_plugin.arguments import (
+    RunTriggerPluginArguments,
+)
 
 
-def _build_parser():
-    return build_parser(
+def build_command_parser() -> ArgumentsParser:
+    return RunTriggerPluginArguments.parser(
         program="run-trigger-plugin",
         description="Run a trigger plugin (not yet implemented).",
     )
 
 
 def _run() -> int:
-    args = _build_parser().parse_args()
-    setup_logging(args.log_config)
+    arguments: RunTriggerPluginArguments = build_command_parser().parse()
+    setup_logging(arguments.logging_configuration)
     raise NotImplementedError
 
 

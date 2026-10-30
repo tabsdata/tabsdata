@@ -7,12 +7,11 @@
 The command's logic, callable without argparse or the responder. The
 package ``__init__`` wraps :func:`run` in the ``@command`` entrypoint
 for the console script; the compound imports :func:`run` directly and
-supplies a pre-built ``Namespace``.
+supplies pre-built ``RunStreamerArguments``.
 """
 
 from __future__ import annotations
 
-import argparse
 import logging
 import signal
 from datetime import datetime, timezone
@@ -41,6 +40,9 @@ from tabsdatak.server._tdrunner.function._lib.journal import Journal
 from tabsdatak.server._tdrunner.function._lib.stream_src_ctx import (
     StreamerPluginCtx,
 )
+from tabsdatak.server._tdrunner.function.commands.run_streamer.arguments import (
+    RunStreamerArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.run_streamer.error import (
     RunStreamerErrorCode,
 )
@@ -48,12 +50,12 @@ from tabsdatak.server._tdrunner.function.commands.run_streamer.error import (
 logger = logging.getLogger(__name__)
 
 
-def _load_function_def(bundle_dir: Path) -> StreamPublisherInfo:
+def _load_function_def(bundle_folder: Path) -> StreamPublisherInfo:
     """Streamer-pod-only loader: accepts only ``streamPublisherDef``.
     A regular ``@publisher`` would surface as RS_4 here -- the streamer
     pod is meaningful for stream publishers only."""
     return load_function_def_or_raise(
-        bundle_dir,
+        bundle_folder,
         allowed_kinds={KIND_STREAM_PUBLISHER_DEF: StreamPublisherInfo},
         bad_bundle_code=RunStreamerErrorCode.RS_2,
         bad_user_code_code=RunStreamerErrorCode.RS_3,
@@ -73,22 +75,22 @@ def _resolve_plugin(info: StreamPublisherInfo):
     return stream_src_def.plugin()
 
 
-def run(args: argparse.Namespace) -> int:
-    request_path = Path(args.request)
-    bundle_dir = Path(args.bundle_dir)
-    out_dir = Path(args.out_dir)
-    connection_file = Path(args.connection_file)
+def run(arguments: RunStreamerArguments) -> int:
+    request_path = arguments.request
+    bundle_folder = arguments.bundle_folder
+    output_folder = arguments.output_folder
+    connection_file = arguments.connection_file
     # The streamer plugin writes parquets directly into ctx.work_dir
-    # (== --out-dir) before staging them; the runner owns ensuring it
+    # (== --output-folder) before staging them; the runner owns ensuring it
     # exists. Same idempotent mkdir `run_function` does for its own
-    # out_dir (`run_function/__init__.py:488`); a missing dir would
+    # output folder (`run_function/__init__.py:488`); a missing folder would
     # surface to the user as a confusing `FileNotFoundError` from
     # polars during the plugin's `write_parquet` call.
-    out_dir.mkdir(parents=True, exist_ok=True)
+    output_folder.mkdir(parents=True, exist_ok=True)
 
     logger.info("Starting streamer pod")
     request = StreamerRequest.load(request_path, RunStreamerErrorCode.RS_1)
-    info = _load_function_def(bundle_dir)
+    info = _load_function_def(bundle_folder)
     plugin = _resolve_plugin(info)
     conn = load_connection(connection_file)
     # `info.func` is the @stream_publisher-decorated descriptor (the
@@ -108,7 +110,7 @@ def run(args: argparse.Namespace) -> int:
     function_stage = request.info.function_stage
     try:
         ctx = StreamerPluginCtx(
-            work_dir=out_dir,
+            work_folder=output_folder,
             project_id=str(request.info.project_id),
             project=request.info.project,
             collection_id=str(request.info.collection_id),
@@ -156,10 +158,10 @@ def run(args: argparse.Namespace) -> int:
             info.thresholds.batch.max_secs,
         )
     logger.info(
-        "Invoking %s.run() (function=%s, work_dir=%s, stage=%s, thresholds=%s)",
+        "Invoking %s.run() (function=%s, work_folder=%s, stage=%s, thresholds=%s)",
         type(plugin).__name__,
         getattr(user_func, "__name__", repr(user_func)),
-        out_dir,
+        output_folder,
         function_stage.uri,
         info.thresholds,
     )
@@ -170,7 +172,7 @@ def run(args: argparse.Namespace) -> int:
     logger.info("Streamer plugin returned cleanly")
 
     end = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
-    journal_path = Path(args.journal_file)
+    journal_path = arguments.journal_file
     journal = Journal.load(journal_path, strict=True)
     journal.end = end
     try:
@@ -181,13 +183,13 @@ def run(args: argparse.Namespace) -> int:
         )
     logger.info("run-streamer: recorded end=%s", end)
 
-    report_completion(args)
+    report_completion(arguments)
     return 0
 
 
-def report_completion(args: argparse.Namespace) -> None:
+def report_completion(arguments: RunStreamerArguments) -> None:
     try:
-        notify_status_done(args)
+        notify_status_done(arguments)
     except Exception as error:
         if not (is_shutdown_requested() and is_retriable(error)):
             raise

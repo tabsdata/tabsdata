@@ -39,7 +39,7 @@ relative to the stage root, so the publisher's ``ManifestStageSrcPlugin``
 resolves them against its conn's ``base_path`` (set to ``<stage_root>``);
 a typical entry looks like ``files/<TS>/people-<TS>.parquet``, where the
 ``<TS>`` subdir matches this manifest's filename timestamp (see
-``stage_layout.manifest_files_dir``).
+``stage_layout.manifest_files_folder``).
 
 The manifest-trigger sidecar calls :func:`external_uid_from_filename`
 to extract the timestamp portion of the filename and passes it as
@@ -55,7 +55,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from tabsdatak.server._tdrunner.function._lib.stage_layout import (
-    manifests_dir,
+    manifests_folder,
 )
 
 MANIFEST_PREFIX = "stream-manifest-"
@@ -198,9 +198,9 @@ def write_stage_manifest(
         OSError: the file cannot be written or the parent directory
             cannot be created.
     """
-    target_dir = manifests_dir(stage_root)
-    target_dir.mkdir(parents=True, exist_ok=True)
-    path = target_dir / format_manifest_filename(ts)
+    target_folder = manifests_folder(stage_root)
+    target_folder.mkdir(parents=True, exist_ok=True)
+    path = target_folder / format_manifest_filename(ts)
     path.write_text(json.dumps(tables_files), encoding="utf-8")
     return path
 
@@ -217,11 +217,11 @@ def enumerate_pending(stage_root: Path) -> list[Path]:
     Returns an empty list if ``<stage_root>/manifests/`` does not exist
     (the streamer hasn't run yet) or ``stage_root`` itself is missing.
     """
-    target_dir = manifests_dir(stage_root)
-    if not target_dir.is_dir():
+    target_folder = manifests_folder(stage_root)
+    if not target_folder.is_dir():
         return []
     out: list[Path] = []
-    for child in target_dir.iterdir():
+    for child in target_folder.iterdir():
         if not child.is_file():
             continue
         if not child.name.startswith(MANIFEST_PREFIX):

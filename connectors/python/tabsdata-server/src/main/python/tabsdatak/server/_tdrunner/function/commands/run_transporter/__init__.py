@@ -10,13 +10,14 @@ exec's `td_transporter --request <PATH>` while running a liveness ticker.
 
 from __future__ import annotations
 
-import argparse
-
-from tabsdatak.server._tdrunner.function._commons.run.command import (
-    build_parser,
-    command,
+from tabsdatak.server._tdrunner.function._commons.run.arguments import (
+    ArgumentsParser,
 )
+from tabsdatak.server._tdrunner.function._commons.run.command import command
 from tabsdatak.server._tdrunner.function._commons.run.version import version
+from tabsdatak.server._tdrunner.function.commands.run_transporter.arguments import (
+    RunTransporterArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.run_transporter.runner import (
     run,
 )
@@ -25,8 +26,8 @@ __all__ = ["run", "main"]
 
 VERSION = version()
 GENERATION = 1
-INFO = "run-transporter — exec td_transporter with the given request YAML"
-MAN = (
+INFORMATION = "run-transporter — exec td_transporter with the given request YAML"
+MANUAL = (
     "run-transporter --request <PATH> --report <PATH> --liveness <PATH>\n\n"
     "Exec's `td_transporter --request <PATH> --report <PATH>` with "
     "stdout/stderr inherited; returns whatever exit code the binary "
@@ -35,32 +36,19 @@ MAN = (
 )
 
 
-def _build_parser():
-    parser = build_parser(
+def build_command_parser() -> ArgumentsParser:
+    return RunTransporterArguments.parser(
         program="run-transporter",
         description="Exec td_transporter with a transporter request YAML.",
         version=VERSION,
-        info=INFO,
-        manual=MAN,
+        information=INFORMATION,
+        manual=MANUAL,
     )
-    parser.add_argument(
-        "--request",
-        required=True,
-        help="Path to the transporter request YAML",
-    )
-    parser.add_argument(
-        "--report",
-        required=True,
-        help=(
-            "Path to write the transporter execution report. Must not already exist."
-        ),
-    )
-    return parser
 
 
-@command(name="td_run_transporter", parser=_build_parser)
-def main(args: argparse.Namespace) -> int:
-    return run(args)
+@command(name="td_run_transporter", parser=build_command_parser)
+def main(arguments: RunTransporterArguments) -> int:
+    return run(arguments)
 
 
 if __name__ == "__main__":  # pragma: no cover

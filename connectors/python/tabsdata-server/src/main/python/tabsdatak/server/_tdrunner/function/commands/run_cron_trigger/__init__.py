@@ -34,13 +34,14 @@ apiserver response handling:
 
 from __future__ import annotations
 
-import argparse
-
-from tabsdatak.server._tdrunner.function._commons.run.command import (
-    build_parser,
-    command,
+from tabsdatak.server._tdrunner.function._commons.run.arguments import (
+    ArgumentsParser,
 )
+from tabsdatak.server._tdrunner.function._commons.run.command import command
 from tabsdatak.server._tdrunner.function._commons.run.version import version
+from tabsdatak.server._tdrunner.function.commands.run_cron_trigger.arguments import (
+    RunCronTriggerArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.run_cron_trigger.runner import (
     _execution_request_body,
     _fire,
@@ -51,11 +52,11 @@ __all__ = ["_execution_request_body", "_fire", "run", "main"]
 
 VERSION = version()
 GENERATION = 1
-INFO = (
+INFORMATION = (
     "run-cron-trigger — one-shot; POSTs the function execute endpoint once "
     "per CronJob fire and exits"
 )
-MAN = (
+MANUAL = (
     "run-cron-trigger\n"
     "    --trigger-url <URL | env:VAR | val:LITERAL>\n"
     "    --trigger-method <METHOD | env:VAR | val:LITERAL>\n"
@@ -70,42 +71,19 @@ MAN = (
 )
 
 
-def _build_parser():
-    parser = build_parser(
+def build_command_parser() -> ArgumentsParser:
+    return RunCronTriggerArguments.parser(
         program="run-cron-trigger",
         description="One-shot cron trigger: POST the function execute endpoint once.",
         version=VERSION,
-        info=INFO,
-        manual=MAN,
+        information=INFORMATION,
+        manual=MANUAL,
     )
-    parser.add_argument(
-        "--trigger-url",
-        required=True,
-        help=(
-            "Execute endpoint URL. Same env:/val: resolution as the responder "
-            "triplet -- the pod profile passes an env:SECRET__TD_TRIGGER_URL "
-            "reference injected from the worker's trigger secret."
-        ),
-    )
-    parser.add_argument(
-        "--trigger-method",
-        required=True,
-        help="HTTP method for the execute endpoint. Same env:/val: resolution.",
-    )
-    parser.add_argument(
-        "--trigger-authorization",
-        required=True,
-        help=(
-            "Authorization header for the execute endpoint. Same env:/val: "
-            "resolution as the responder triplet."
-        ),
-    )
-    return parser
 
 
-@command(name="td_run_cron_trigger", parser=_build_parser)
-def main(args: argparse.Namespace) -> int:
-    return run(args)
+@command(name="td_run_cron_trigger", parser=build_command_parser)
+def main(arguments: RunCronTriggerArguments) -> int:
+    return run(arguments)
 
 
 if __name__ == "__main__":  # pragma: no cover

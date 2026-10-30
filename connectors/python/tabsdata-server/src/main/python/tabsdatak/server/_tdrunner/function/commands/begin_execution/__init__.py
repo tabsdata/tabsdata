@@ -18,7 +18,7 @@ orchestration then reports to the responder as ``Failed``.
 
 Runs exactly once per pod, before ``fetch-request``. The shared volume
 is overlaid on the image-template-provided ``shared/journal/``
-dir, so the parent always exists; only the file itself needs to be
+folder, so the parent always exists; only the file itself needs to be
 written.
 
 The logic lives in :mod:`.runner`; this module is the thin ``@command``
@@ -28,25 +28,28 @@ entrypoint the console script resolves to. The compound imports
 
 from __future__ import annotations
 
-import argparse
-
-from tabsdatak.server._tdrunner.function._commons.run.command import (
-    build_parser,
-    command,
+from tabsdatak.server._tdrunner.function._commons.run.arguments import (
+    ArgumentsParser,
 )
+from tabsdatak.server._tdrunner.function._commons.run.command import command
 from tabsdatak.server._tdrunner.function._commons.run.version import version
+from tabsdatak.server._tdrunner.function.commands.begin_execution.arguments import (
+    BeginExecutionArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.begin_execution.runner import run
 
 __all__ = ["run", "main"]
 
 VERSION = version()
 GENERATION = 1
-INFO = "begin-execution — initialize the journal with the run's startup-phase data"
-MAN = (
+INFORMATION = (
+    "begin-execution — initialize the journal with the run's startup-phase data"
+)
+MANUAL = (
     "begin-execution\n"
-    "    --shared-dir <PATH>\n"
-    "    --work-dir <PATH>\n"
-    "    --log-config <PATH>\n"
+    "    --shared-folder <PATH>\n"
+    "    --work-folder <PATH>\n"
+    "    --logging-configuration <PATH>\n"
     "    --liveness <PATH>\n"
     "    --responder-url <URL>\n"
     "    --responder-method <METHOD>\n"
@@ -58,19 +61,19 @@ MAN = (
 )
 
 
-def _build_parser():
-    return build_parser(
+def build_command_parser() -> ArgumentsParser:
+    return BeginExecutionArguments.parser(
         program="begin-execution",
         description="Initialize the shared Journal YAML for the run.",
         version=VERSION,
-        info=INFO,
-        manual=MAN,
+        information=INFORMATION,
+        manual=MANUAL,
     )
 
 
-@command(name="td_begin_execution", parser=_build_parser)
-def main(args: argparse.Namespace) -> int:
-    return run(args)
+@command(name="td_begin_execution", parser=build_command_parser)
+def main(arguments: BeginExecutionArguments) -> int:
+    return run(arguments)
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -216,7 +216,7 @@ class Driver:
             get_bundle,
             "get-bundle",
             request=self.request,
-            bundle_dir=self.path("bundle"),
+            bundle_folder=self.path("bundle"),
             bundle_archive=self.path("shuttle/bundle.tar.zst"),
         )
         self.step(
@@ -231,11 +231,11 @@ class Driver:
             run_function,
             "run-function",
             request=self.request,
-            bundle_dir=self.path("bundle"),
+            bundle_folder=self.path("bundle"),
             inputs_manifest=self.path(inputs_manifest),
-            out_dir=self.path("out"),
+            output_folder=self.path("out"),
             outputs_manifest=self.path("fn/out/outputs-manifest.yaml"),
-            state_dir=self.path("state"),
+            state_folder=self.path("state"),
         )
 
     def complete(self) -> None:
@@ -244,7 +244,7 @@ class Driver:
             "report-completion",
             request=self.request,
             outputs_manifest=self.path("fn/out/outputs-manifest.yaml"),
-            out=self.path("response/response.yaml"),
+            response=self.path("response/response.yaml"),
         )
 
     def publisher(self, connection: Path) -> None:
@@ -252,10 +252,10 @@ class Driver:
             run_source_plugin,
             "run-source-plugin",
             request=self.request,
-            bundle_dir=self.path("bundle"),
-            out_dir=self.path("in"),
+            bundle_folder=self.path("bundle"),
+            output_folder=self.path("in"),
             inputs_manifest=self.path("fn/in/inputs-manifest.yaml"),
-            state_dir=self.path("state"),
+            state_folder=self.path("state"),
             connection_file=connection,
         )
         self.step(
@@ -263,7 +263,7 @@ class Driver:
             "stamp-inputs",
             request=self.request,
             inputs_manifest=self.path("fn/in/inputs-manifest.yaml"),
-            enriched_dir=self.path("rich"),
+            enriched_folder=self.path("rich"),
             enriched_inputs_manifest=self.path("fn/in/enriched-inputs-manifest.yaml"),
         )
         self.step(
@@ -271,8 +271,8 @@ class Driver:
             "prep-upload-raw",
             request=self.request,
             inputs_manifest=self.path("fn/in/enriched-inputs-manifest.yaml"),
-            out=self.path("shuttle/landing-request.yaml"),
-            storage_config=self.storage,
+            transporter_request=self.path("shuttle/landing-request.yaml"),
+            storage_configuration=self.storage,
         )
         self.transport("shuttle/landing-request.yaml", "shuttle/landing-report.yaml")
         self.run_function("fn/in/enriched-inputs-manifest.yaml")
@@ -286,7 +286,7 @@ class Driver:
             run_destination_plugin,
             "run-destination-plugin",
             request=self.request,
-            bundle_dir=self.path("bundle"),
+            bundle_folder=self.path("bundle"),
             outputs_manifest=self.path("fn/out/outputs-manifest.yaml"),
             connection_file=connection,
         )

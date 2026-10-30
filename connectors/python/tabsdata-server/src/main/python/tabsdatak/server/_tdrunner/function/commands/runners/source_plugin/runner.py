@@ -7,12 +7,11 @@
 The command's logic, callable without argparse or the responder. The
 package ``__init__`` wraps :func:`run` in the ``@command`` entrypoint
 for the console script; the compound imports :func:`run` directly and
-supplies a pre-built ``Namespace``.
+supplies pre-built ``RunSourcePluginArguments``.
 """
 
 from __future__ import annotations
 
-import argparse
 import inspect
 import logging
 from pathlib import Path
@@ -47,6 +46,9 @@ from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
 from tabsdatak.server._tdrunner.function._lib.stage_backend import (
     stage_backend_from_location,
 )
+from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.arguments import (  # noqa: E501
+    RunSourcePluginArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.error import (
     RunSourcePluginErrorCode,
 )
@@ -55,7 +57,7 @@ from tabsdatak.spi import SrcPluginCtx, TableFileInput
 logger = logging.getLogger(__name__)
 
 
-def _load_function_def(bundle_dir: Path) -> PublisherInfo | StreamPublisherInfo:
+def _load_function_def(bundle_folder: Path) -> PublisherInfo | StreamPublisherInfo:
     """Load the function definition from the bundle -- thin wrapper
     over :func:`load_function_def_or_raise` pinning the accepted
     kind set and the command's per-site error codes.
@@ -66,7 +68,7 @@ def _load_function_def(bundle_dir: Path) -> PublisherInfo | StreamPublisherInfo:
     module docstring).
     """
     return load_function_def_or_raise(
-        bundle_dir,
+        bundle_folder,
         allowed_kinds={
             KIND_PUBLISHER_DEF: PublisherInfo,
             KIND_STREAM_PUBLISHER_DEF: StreamPublisherInfo,
@@ -91,11 +93,11 @@ def _build_manifest_stage_conn(function_stage: Location) -> SimpleNamespace:
     ``ManifestStageSrcPlugin`` reads via ``backend_for_conn``.
 
     The streamer pod wrote its manifests + parquets into
-    ``function_stage`` (under ``manifests/`` and ``files/`` subdirs
+    ``function_stage`` (under ``manifests/`` and ``files/`` subfolders
     respectively; see :mod:`stage_layout`). The publisher pod needs a
     conn pointing at the *stage root* so the plugin can glob
     ``manifests/stream-manifest-*.json`` and resolve each manifest's
-    inner ``files/<TS>/<name>.parquet`` entries (one files subdir per
+    inner ``files/<TS>/<name>.parquet`` entries (one files subfolder per
     manifest).
 
     ``file://`` keeps the connector-conn form (a ``LocalFileSrcConn`` in
@@ -316,19 +318,19 @@ def _write_inputs_manifest(
         )
 
 
-def run(args: argparse.Namespace) -> int:
-    request_path = Path(args.request)
-    bundle_dir = Path(args.bundle_dir)
-    out_dir = Path(args.out_dir)
-    inputs_manifest = Path(args.inputs_manifest)
-    state_folder = Path(args.state_folder)
-    connection_file = Path(args.connection_file)
+def run(arguments: RunSourcePluginArguments) -> int:
+    request_path = arguments.request
+    bundle_folder = arguments.bundle_folder
+    output_folder = arguments.output_folder
+    inputs_manifest = arguments.inputs_manifest
+    state_folder = arguments.state_folder
+    connection_file = arguments.connection_file
 
-    out_dir.mkdir(parents=True, exist_ok=True)
+    output_folder.mkdir(parents=True, exist_ok=True)
 
     logger.info("Running source plugin")
     request = Request.load(request_path, RunSourcePluginErrorCode.RSP_1)
-    info = _load_function_def(bundle_dir)
+    info = _load_function_def(bundle_folder)
     plugin, conn, src, cardinality = _resolve_plugin_and_io(
         info, request.info.function_stage, connection_file
     )
@@ -339,10 +341,10 @@ def run(args: argparse.Namespace) -> int:
         type(info).__name__,
         cardinality,
     )
-    ctx = _SrcContext.from_info(out_dir, request.info)
+    ctx = _SrcContext.from_info(output_folder, request.info)
     state = State(request, state_folder)
     state.hydrate(ctx, error_code=RunSourcePluginErrorCode.RSP_9)
-    logger.debug("Hydrated SrcPluginCtx; work_dir=%s", out_dir)
+    logger.debug("Hydrated SrcPluginCtx; work_folder=%s", output_folder)
 
     logger.info("Invoking source plugin's read_in")
     produced = _invoke_read_in(plugin, ctx, conn, src)

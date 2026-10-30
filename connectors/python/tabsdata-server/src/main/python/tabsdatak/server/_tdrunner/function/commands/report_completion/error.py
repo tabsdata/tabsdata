@@ -35,7 +35,7 @@ class ManifestMismatchError(_ManifestMismatchError):
 
 
 class WriteFailedError(_WriteFailedError):
-    """``--out`` (the response YAML) or the journal could not be written."""
+    """``--response`` (the response YAML) or the journal could not be written."""
 
     exit_code = 13
 

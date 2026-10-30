@@ -7,14 +7,12 @@
 The command's logic, callable without argparse or the responder. The
 package ``__init__`` wraps :func:`run` in the ``@command`` entrypoint
 for the console script; the compound imports :func:`run` directly and
-supplies a pre-built ``Namespace``.
+supplies pre-built ``PrepLocalizeStateArguments``.
 """
 
 from __future__ import annotations
 
-import argparse
 import logging
-from pathlib import Path
 
 from tabsdatak.server._tdrunner.function._commons.document.request import (
     InputTableVersions,
@@ -24,6 +22,9 @@ from tabsdatak.server._tdrunner.function._commons.manifests.input import (
     InputEntry,
     InputManifest,
     InputRecord,
+)
+from tabsdatak.server._tdrunner.function.commands.prep_localize_state.arguments import (
+    PrepLocalizeStateArguments,
 )
 from tabsdatak.server._tdrunner.function.commands.prep_localize_state.error import (
     PrepLocalizeStateErrorCode,
@@ -67,9 +68,9 @@ def as_text(value: str | int | None) -> str | None:
     return None if value is None else str(value)
 
 
-def run(args: argparse.Namespace) -> int:
-    request_path = Path(args.request)
-    inputs_manifest_path = Path(args.inputs_manifest)
+def run(arguments: PrepLocalizeStateArguments) -> int:
+    request_path = arguments.request
+    inputs_manifest_path = arguments.inputs_manifest
 
     logger.info("Preparing the inputs manifest")
     request = Request.load(request_path, PrepLocalizeStateErrorCode.PLS_1)

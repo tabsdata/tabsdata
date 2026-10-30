@@ -7,12 +7,11 @@
 The command's logic, callable without argparse or the responder. The
 package ``__init__`` wraps :func:`run` in the ``@command`` entrypoint
 for the console script; the compound imports :func:`run` directly and
-supplies a pre-built ``Namespace``.
+supplies pre-built ``RunDestinationPluginArguments``.
 """
 
 from __future__ import annotations
 
-import argparse
 import logging
 import tempfile
 from pathlib import Path
@@ -40,6 +39,9 @@ from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
+from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.arguments import (  # noqa: E501
+    RunDestinationPluginArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.error import (  # noqa: E501
     RunDestinationPluginErrorCode,
 )
@@ -48,12 +50,12 @@ from tabsdatak.spi import DestContext
 logger = logging.getLogger(__name__)
 
 
-def _load_function_def(bundle_dir: Path) -> SubscriberInfo:
+def _load_function_def(bundle_folder: Path) -> SubscriberInfo:
     """Load the subscriber's ``function_def.json`` -- thin wrapper over
     :func:`load_function_def_or_raise` pinning the accepted kind set
     and the command's per-site error codes."""
     return load_function_def_or_raise(
-        bundle_dir,
+        bundle_folder,
         allowed_kinds={KIND_SUBSCRIBER_DEF: SubscriberInfo},
         bad_bundle_code=RunDestinationPluginErrorCode.RDP_2,
         bad_user_code_code=RunDestinationPluginErrorCode.RDP_3,
@@ -106,15 +108,15 @@ def _write_tables(
         raise RunDestinationPluginErrorCode.RDP_6.exception(cause=exc, detail=str(exc))
 
 
-def run(args: argparse.Namespace) -> int:
-    request_path = Path(args.request)
-    bundle_dir = Path(args.bundle_dir)
-    outputs_manifest_path = Path(args.outputs_manifest)
-    connection_file = Path(args.connection_file)
+def run(arguments: RunDestinationPluginArguments) -> int:
+    request_path = arguments.request
+    bundle_folder = arguments.bundle_folder
+    outputs_manifest_path = arguments.outputs_manifest
+    connection_file = arguments.connection_file
 
     logger.info("Running destination plugin")
     request = Request.load(request_path, RunDestinationPluginErrorCode.RDP_1)
-    info = _load_function_def(bundle_dir)
+    info = _load_function_def(bundle_folder)
     plugin = _resolve_plugin(info)
     conn = load_connection(connection_file)
     logger.debug(
@@ -141,7 +143,7 @@ def run(args: argparse.Namespace) -> int:
             type(plugin).__name__,
         )
         return 0
-    handoff = Handoff.of(plugin, Path(args.work_dir or tempfile.gettempdir()))
+    handoff = Handoff.of(plugin, Path(arguments.work_folder or tempfile.gettempdir()))
     try:
         tables = _read_tables(handoff, request, manifest)
         logger.debug(
@@ -153,8 +155,8 @@ def run(args: argparse.Namespace) -> int:
             tables,
         )
 
-        ctx = _DestContext.from_info(bundle_dir, request.info)
-        notify_step_destination_write(args)
+        ctx = _DestContext.from_info(bundle_folder, request.info)
+        notify_step_destination_write(arguments)
         logger.info(
             "Invoking %s.write_out: %d table frame(s) -> %s",
             type(plugin).__name__,

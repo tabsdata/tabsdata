@@ -15,7 +15,7 @@ Reads:
                            supplying each stamped parquet and the input
                            index that names it in storage.
 
-Writes a single `--out` YAML that `run-transporter` consumes.
+Writes a single `--transporter-request` YAML that `run-transporter` consumes.
 
 The logic lives in :mod:`.runner`; this module is the thin ``@command``
 entrypoint the console script resolves to.
@@ -23,13 +23,14 @@ entrypoint the console script resolves to.
 
 from __future__ import annotations
 
-import argparse
-
-from tabsdatak.server._tdrunner.function._commons.run.command import (
-    build_parser,
-    command,
+from tabsdatak.server._tdrunner.function._commons.run.arguments import (
+    ArgumentsParser,
 )
+from tabsdatak.server._tdrunner.function._commons.run.command import command
 from tabsdatak.server._tdrunner.function._commons.run.version import version
+from tabsdatak.server._tdrunner.function.commands.prep_upload_raw.arguments import (
+    PrepUploadRawArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.prep_upload_raw.runner import run
 
 __all__ = ["run", "main"]
@@ -38,13 +39,14 @@ __all__ = ["run", "main"]
 #  source of truth file.
 VERSION = version()
 GENERATION = 1
-INFO = (
+INFORMATION = (
     "prep-upload-raw — generate the transporter request that persists a "
     "publisher's ingested data"
 )
-MAN = (
+MANUAL = (
     "prep-upload-raw --request <PATH> --inputs-manifest <PATH> "
-    "--out <PATH> --storage-config <PATH> --liveness <PATH>\n\n"
+    "--transporter-request <PATH> --storage-configuration <PATH> "
+    "--liveness <PATH>\n\n"
     "Reads the enriched inputs manifest written by stamp-inputs and "
     "builds the transporter copy request that uploads each stamped "
     "parquet to the run's landing-data location, named by its input index. "
@@ -52,36 +54,19 @@ MAN = (
 )
 
 
-def _build_parser():
-    parser = build_parser(
+def build_command_parser() -> ArgumentsParser:
+    return PrepUploadRawArguments.parser(
         program="prep-upload-raw",
         description=("Generate the transporter request that persists ingested data."),
         version=VERSION,
-        info=INFO,
-        manual=MAN,
+        information=INFORMATION,
+        manual=MANUAL,
     )
-    parser.add_argument("--request", required=True, help="Path to request.yaml")
-    parser.add_argument(
-        "--inputs-manifest",
-        required=True,
-        help="Path to the enriched inputs manifest written by stamp-inputs",
-    )
-    parser.add_argument(
-        "--out",
-        required=True,
-        help="Path where the transporter copy request is written",
-    )
-    parser.add_argument(
-        "--storage-config",
-        required=True,
-        help="Path to the apiserver storage config (mount option keys)",
-    )
-    return parser
 
 
-@command(name="td_prep_upload_raw", parser=_build_parser)
-def main(args: argparse.Namespace) -> int:
-    return run(args)
+@command(name="td_prep_upload_raw", parser=build_command_parser)
+def main(arguments: PrepUploadRawArguments) -> int:
+    return run(arguments)
 
 
 if __name__ == "__main__":  # pragma: no cover

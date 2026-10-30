@@ -4,11 +4,13 @@
 
 from __future__ import annotations
 
-import argparse
 import logging
 import os
 
 from tabsdatak.server._tdrunner.function._lib.system_info import report_system
+from tabsdatak.server._tdrunner.function.commands.inspect_instance.arguments import (
+    InspectInstanceArguments,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +20,7 @@ MOUNTED_FOLDERS = [
 ]
 
 
-def run(args: argparse.Namespace) -> int:
+def run(arguments: InspectInstanceArguments) -> int:
     for folder in MOUNTED_FOLDERS:
         print(f"Reading mounted '{folder}' folder", flush=True)
         try:

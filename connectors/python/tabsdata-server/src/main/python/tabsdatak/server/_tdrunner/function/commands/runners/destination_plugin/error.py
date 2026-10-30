@@ -76,14 +76,14 @@ class RunDestinationPluginErrorCode(ErrorCode):
 
     RDP_2 = ErrorDef(
         BadBundleError,
-        "could not load function_def.json from {bundle_dir}: {detail}",
+        "could not load function_def.json from {bundle_folder}: {detail}",
     )
     # ``load_function_def_or_raise`` bundle-shape failure (manifest
     # missing, unreadable, malformed JSON, unexpected error).
 
     RDP_3 = ErrorDef(
         BadUserCodeError,
-        "could not resolve user function from {bundle_dir}: {detail}",
+        "could not resolve user function from {bundle_folder}: {detail}",
     )
     # ``load_function_def_or_raise`` user-code failure (pydantic
     # ``ValidationError``).

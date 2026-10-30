@@ -18,12 +18,12 @@ VERSION = version()
 GENERATION = 2
 INFORMATION = "get-bundle — download the function bundle and extract it"
 MANUAL = (
-    "get-bundle --request <PATH> --bundle-dir <PATH> --bundle-archive <PATH> "
+    "get-bundle --request <PATH> --bundle-folder <PATH> --bundle-archive <PATH> "
     "--liveness <PATH>\n\n"
     "Reads the bundle location from --request, downloads the bundle to "
     "--bundle-archive with the options of its storage mount, read from the "
     "SECRETS__STORAGE__MOUNTS__<MOUNT>__OPTIONS__* environment variables, and "
-    "extracts the archive into --bundle-dir. The caller owns the lifecycle of "
+    "extracts the archive into --bundle-folder. The caller owns the lifecycle of "
     "every path."
 )
 

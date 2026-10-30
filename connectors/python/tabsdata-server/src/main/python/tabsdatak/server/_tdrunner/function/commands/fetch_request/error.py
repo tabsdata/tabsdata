@@ -20,7 +20,8 @@ class HttpFetchError(CommandRuntimeException):
 
 
 class WriteFailedError(_WriteFailedError):
-    """``--out`` could not be written (missing parent dir, permission, ...)."""
+    """``--request-file`` could not be written (missing parent folder,
+    permission, ...)."""
 
     exit_code = 11
 

@@ -184,7 +184,7 @@ def _set_argv(
             "run-destination-plugin",
             "--request",
             str(request_path),
-            "--bundle-dir",
+            "--bundle-folder",
             str(bundle_dir),
             "--outputs-manifest",
             str(outputs_manifest),
@@ -211,7 +211,7 @@ def _dest_ctx(**kwargs) -> _DestContext:
     """Default-fill the new DestContext fields so each test only has to
     override what it's exercising."""
     defaults = dict(
-        work_dir=Path("/work"),
+        work_folder=Path("/work"),
         project_id="p-1",
         project="p",
         collection_id="c_id",
@@ -361,7 +361,7 @@ def test_write_tables_returns_normally(tmp_path):
         def write_out(self, ctx, conn, dest, tables):
             calls.append((ctx, conn, dest, tables))
 
-    ctx = _dest_ctx(work_dir=tmp_path)
+    ctx = _dest_ctx(work_folder=tmp_path)
     _write_tables(_handoff(tmp_path), _Plugin(), ctx, object(), object(), [Path("/x")])
     assert len(calls) == 1
 
@@ -371,7 +371,7 @@ def test_write_tables_wraps_plugin_exception(tmp_path):
         def write_out(self, ctx, conn, dest, tables):
             raise RuntimeError("boom")
 
-    ctx = _dest_ctx(work_dir=tmp_path)
+    ctx = _dest_ctx(work_folder=tmp_path)
     with pytest.raises(PluginFailedError):
         _write_tables(_handoff(tmp_path), _Plugin(), ctx, object(), object(), [])
 

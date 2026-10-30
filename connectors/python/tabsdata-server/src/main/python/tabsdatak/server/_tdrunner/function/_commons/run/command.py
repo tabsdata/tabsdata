@@ -4,14 +4,12 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 import logging
 import sys
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Callable
 
 from tabsdatak._logging import setup_logging
@@ -24,8 +22,6 @@ from tabsdatak.server._tdrunner.function._commons.http.retry import call_with_re
 from tabsdatak.server._tdrunner.function._commons.run.arguments import (
     ArgumentsParser,
     CommandArguments,
-    Parser,
-    add_print_options,
 )
 from tabsdatak.server._tdrunner.function._commons.run.dataflow import Dataflow
 from tabsdatak.server._tdrunner.function._commons.solver.arguments import (
@@ -56,76 +52,6 @@ STALE_OUTCOME = "Stale"
 DESTINATION_WRITE_REPORT = "destination write"
 
 
-def build_parser(
-    program: str,
-    description: str,
-    *,
-    version: str = "",
-    info: str = "",
-    manual: str = "",
-) -> argparse.ArgumentParser:
-    parser = Parser(prog=program, description=description)
-    add_print_options(parser, version=version, information=info, manual=manual)
-    parser.add_argument(
-        "--shared-dir",
-        "-s",
-        default=None,
-        metavar="PATH",
-        help="Shared working dir (owned by the pod).",
-    )
-    parser.add_argument(
-        "--work-dir",
-        "-w",
-        default=None,
-        metavar="PATH",
-        help="Private working dir (owned by the container).",
-    )
-    parser.add_argument(
-        "--log-config",
-        "-c",
-        default=None,
-        metavar="PATH",
-        help=(
-            "Path to a logging config YAML. When omitted, the bundled default is used."
-        ),
-    )
-    parser.add_argument(
-        "--liveness",
-        "-l",
-        required=True,
-        metavar="PATH",
-        help=(
-            "File the command must touch at least once a minute to signal liveness to "
-            "the framework."
-        ),
-    )
-    parser.add_argument(
-        "--responder-url",
-        required=True,
-        help="Responder endpoint URL.",
-    )
-    parser.add_argument(
-        "--responder-method",
-        required=True,
-        help="Responder HTTP method.",
-    )
-    parser.add_argument(
-        "--responder-authorization",
-        required=True,
-        help="Responder Authorization header value.",
-    )
-    parser.add_argument(
-        "--journal-file",
-        required=True,
-        metavar="PATH",
-        help=(
-            "Path to the shared journal file every command in the chain reads/writes "
-            "on the shared volume."
-        ),
-    )
-    return parser
-
-
 # Test entry point; production commands run through ``command``.
 def run_command(main: Callable[[], int | None]) -> int:
     try:
@@ -139,7 +65,7 @@ def run_command(main: Callable[[], int | None]) -> int:
 
 
 def notify(
-    arguments: CommandArguments | argparse.Namespace,
+    arguments: CommandArguments,
     body: dict[str, Any],
     what: str,
 ) -> None:
@@ -182,7 +108,7 @@ def outcome(answer: bytes) -> str | None:
 
 
 def notify_status(
-    arguments: CommandArguments | argparse.Namespace,
+    arguments: CommandArguments,
     payload: CallbackRequest,
 ) -> None:
     status = payload.status
@@ -190,9 +116,9 @@ def notify_status(
     notify(arguments, payload.to_body(), str(status))
 
 
-def notify_status_running(arguments: CommandArguments | argparse.Namespace) -> None:
+def notify_status_running(arguments: CommandArguments) -> None:
     journal = Journal.load(
-        Path(arguments.journal_file),
+        arguments.journal_file,
         strict=True,
     )
     notify_status(
@@ -205,13 +131,13 @@ def notify_status_running(arguments: CommandArguments | argparse.Namespace) -> N
 
 
 def notify_status_done(
-    arguments: CommandArguments | argparse.Namespace,
+    arguments: CommandArguments,
     *,
     output: dict[str, Any] | None = None,
     exit_code: int = EXIT_STATUS_SUCCESS,
 ) -> None:
     journal = Journal.load(
-        Path(arguments.journal_file),
+        arguments.journal_file,
         strict=True,
     )
     logger.debug(f"notify_status_done output: {output}")
@@ -228,7 +154,7 @@ def notify_status_done(
 
 
 def notify_status_failed(
-    arguments: CommandArguments | argparse.Namespace | None,
+    arguments: CommandArguments | None,
     exit_code: int,
     error: BaseException,
 ) -> None:
@@ -239,7 +165,7 @@ def notify_status_failed(
         return
     # noinspection PyBroadException
     try:
-        journal = Journal.load(Path(arguments.journal_file), strict=False)
+        journal = Journal.load(arguments.journal_file, strict=False)
         end = (
             journal.end
             if journal.end is not None
@@ -263,7 +189,7 @@ def notify_status_failed(
 
 
 def notify_step_destination_write(
-    arguments: CommandArguments | argparse.Namespace,
+    arguments: CommandArguments,
 ) -> None:
     notify(
         arguments,
@@ -290,20 +216,10 @@ def tabsdata_command(*, name: str) -> Callable[[Callable], Callable]:
     return wrap
 
 
-def parse(
-    parser: argparse.ArgumentParser,
-) -> tuple[CommandArguments | argparse.Namespace, Path | str | None]:
-    if isinstance(parser, ArgumentsParser):
-        arguments = parser.parse()
-        return arguments, arguments.logging_configuration
-    namespace = parser.parse_args()
-    return namespace, namespace.log_config
-
-
 def command(
     *,
     name: str,
-    parser: Callable[[], argparse.ArgumentParser],
+    parser: Callable[[], ArgumentsParser],
 ) -> Callable[[Callable[[Any], int | None]], Callable[[], int]]:
     def wrap(
         body: Callable[[Any], int | None],
@@ -311,14 +227,13 @@ def command(
         @tabsdata_command(name=name)
         def main() -> int:
             extend_path()
-            arguments: CommandArguments | argparse.Namespace | None = None
+            arguments: CommandArguments | None = None
             try:
-                parsed, logging_configuration = parse(parser())
-                arguments = parsed
-                setup_logging(logging_configuration)
+                arguments = parser().parse()
+                setup_logging(arguments.logging_configuration)
                 show_dataflow_settings()
-                install_liveness_handler(Path(parsed.liveness))
-                result = body(parsed)
+                install_liveness_handler(arguments.liveness)
+                result = body(arguments)
                 exit_code = 0 if result is None else int(result)
                 return exit_code
             except StaleReportError as error:

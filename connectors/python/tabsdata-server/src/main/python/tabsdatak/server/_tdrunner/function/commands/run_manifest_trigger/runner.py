@@ -7,12 +7,11 @@
 The command's logic, callable without argparse or the responder. The
 package ``__init__`` wraps :func:`run` in the ``@command`` entrypoint
 for the console script; the compound imports :func:`run` directly and
-supplies a pre-built ``Namespace``.
+supplies pre-built ``RunManifestTriggerArguments``.
 """
 
 from __future__ import annotations
 
-import argparse
 import json
 import logging
 import signal
@@ -44,8 +43,8 @@ from tabsdatak.server._tdrunner.function._lib.stage_backend import (
     stage_backend_from_location,
 )
 from tabsdatak.server._tdrunner.function._lib.stage_layout import (
-    FILES_SUBDIR,
-    MANIFESTS_SUBDIR,
+    FILES_SUBFOLDER,
+    MANIFESTS_SUBFOLDER,
 )
 from tabsdatak.server._tdrunner.function._lib.stage_manifest import (
     MANIFEST_PREFIX,
@@ -54,13 +53,16 @@ from tabsdatak.server._tdrunner.function._lib.stage_manifest import (
     external_uid_from_filename,
     load_stage_manifest,
 )
+from tabsdatak.server._tdrunner.function.commands.run_manifest_trigger.arguments import (  # noqa: E501
+    RunManifestTriggerArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.run_manifest_trigger.error import (
     RunManifestTriggerErrorCode,
 )
 
 # Glob (relative to the stage root) for the streamer's manifests. The cursor-
 # based scan fetches the oldest match after the cursor each step.
-_MANIFEST_GLOB = f"{MANIFESTS_SUBDIR}/{MANIFEST_PREFIX}*{MANIFEST_SUFFIX}"
+_MANIFEST_GLOB = f"{MANIFESTS_SUBFOLDER}/{MANIFEST_PREFIX}*{MANIFEST_SUFFIX}"
 
 logger = logging.getLogger(__name__)
 
@@ -73,12 +75,12 @@ _IDLE_SLEEP_SECS = 0.5
 # --- helpers --------------------------------------------------------------
 
 
-def _build_trigger_request(args: argparse.Namespace) -> HttpRequest:
+def _build_trigger_request(arguments: RunManifestTriggerArguments) -> HttpRequest:
     """Resolve the env:/val: trigger triplet and bake it into a
     reusable :class:`HttpRequest`."""
-    url = resolve_value(args.trigger_url)
-    method = resolve_value(args.trigger_method)
-    auth = resolve_value(args.trigger_authorization)
+    url = resolve_value(arguments.trigger_url)
+    method = resolve_value(arguments.trigger_method)
+    auth = resolve_value(arguments.trigger_authorization)
     return HttpRequest(
         url=url,
         method=method,
@@ -94,20 +96,20 @@ def _enqueue_for_deletion(
 ) -> None:
     """Queue the stage-relative paths to delete for a consumed batch: every
     file the manifest references, the manifest itself, and -- on a local
-    filesystem only -- the now-empty ``files/<TS>/`` subdir.
+    filesystem only -- the now-empty ``files/<TS>/`` subfolder.
 
     The queue holds stage-relative rels (not absolute paths); the drain
     routes each through ``backend.delete`` (local unlink/rmdir, cloud object
-    delete). Files first, manifest, then the per-batch subdir last so the
+    delete). Files first, manifest, then the per-batch subfolder last so the
     ``rmdir`` only fires once its files have drained. A missing/malformed
     manifest is logged and the manifest rel queued anyway (the publisher
     already consumed it; we just can't enumerate its inner files).
 
-    The ``files/<TS>/`` subdir is enqueued only when the backend is *not* an
-    object store: object stores have no directories (the prefix vanishes
+    The ``files/<TS>/`` subfolder is enqueued only when the backend is *not* an
+    object store: object stores have no folders (the prefix vanishes
     with its last key), so there is nothing to rmdir.
     """
-    manifest_rel = f"{MANIFESTS_SUBDIR}/{manifest_path.name}"
+    manifest_rel = f"{MANIFESTS_SUBFOLDER}/{manifest_path.name}"
     try:
         slots = load_stage_manifest(manifest_path)
     except (FileNotFoundError, InvalidStageManifestError) as exc:
@@ -124,7 +126,7 @@ def _enqueue_for_deletion(
             queue.append(rel)
     queue.append(manifest_rel)
     if not backend.is_object_store:
-        queue.append(f"{FILES_SUBDIR}/{external_id}")
+        queue.append(f"{FILES_SUBFOLDER}/{external_id}")
 
 
 class _ManifestOutcome(Enum):
@@ -333,9 +335,9 @@ def _trigger_pending(
     answers ``Consumed`` again and is re-deleted -- idempotent, crash-safe.
     """
     with tempfile.TemporaryDirectory() as scratch:
-        scratch_dir = Path(scratch)
+        scratch_folder = Path(scratch)
         while is_active():
-            found = backend.next_after(_MANIFEST_GLOB, cursor, scratch_dir)
+            found = backend.next_after(_MANIFEST_GLOB, cursor, scratch_folder)
             if found is None:
                 return cursor  # nothing newer than the cursor
             manifest_path, next_cursor = found
@@ -366,9 +368,9 @@ def _drain_until(
     ``backend.delete`` until the deadline or shutdown signal arrives.
 
     Each pop deletes one rel: a file, or (local only) the per-batch
-    ``files/<TS>/`` directory via ``rmdir`` once its files have drained
+    ``files/<TS>/`` folder via ``rmdir`` once its files have drained
     ahead of it. Failures are logged + swallowed -- the path may already be
-    gone, a directory may still hold files when a prior drain was cut short,
+    gone, a folder may still hold files when a prior drain was cut short,
     or the backend's delete may be unavailable (cloud, pending the
     transporter delete op); the next iteration re-enqueues anything still
     consumed. When the queue is empty we sleep ``_IDLE_SLEEP_SECS`` so the
@@ -392,11 +394,13 @@ def _drain_until(
             )
 
 
-def run(args: argparse.Namespace) -> int:
-    request_path = Path(args.request)
-    back_off_secs = int(args.back_off_secs)
+def run(arguments: RunManifestTriggerArguments) -> int:
+    request_path = arguments.request
+    back_off_seconds = arguments.back_off_seconds
 
-    logger.info("Starting manifest-trigger sidecar (back_off_secs=%d)", back_off_secs)
+    logger.info(
+        "Starting manifest-trigger sidecar (back_off_seconds=%d)", back_off_seconds
+    )
     request = AnyRequest.load(request_path, RunManifestTriggerErrorCode.MT_1)
     function_stage = request.info.function_stage
     try:
@@ -405,7 +409,7 @@ def run(args: argparse.Namespace) -> int:
         raise RunManifestTriggerErrorCode.MT_2.exception(
             uri=function_stage.uri, scheme=urlparse(function_stage.uri).scheme
         ) from exc
-    trigger_request = _build_trigger_request(args)
+    trigger_request = _build_trigger_request(arguments)
     logger.info(
         "run-manifest-trigger: scanning %s; trigger=%s %s",
         function_stage.uri,
@@ -444,7 +448,7 @@ def run(args: argparse.Namespace) -> int:
         )
         if not is_active():
             break
-        deadline = time.monotonic() + back_off_secs
+        deadline = time.monotonic() + back_off_seconds
         _drain_until(deadline, backend, deletion_queue, is_active)
 
     logger.info(

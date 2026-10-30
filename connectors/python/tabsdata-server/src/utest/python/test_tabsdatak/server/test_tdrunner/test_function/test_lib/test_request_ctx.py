@@ -21,7 +21,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 def _ctx() -> FromRequestCtx:
     return FromRequestCtx(
-        work_dir=Path("/tmp/work"),
+        work_folder=Path("/tmp/work"),
         project_id="p-1",
         project="p",
         collection_id="c-1",

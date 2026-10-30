@@ -106,11 +106,11 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_fn_root}}/bin/td_inspect_function"]
           args:
-            - --shared-dir
+            - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
-            - --work-dir
+            - --work-folder
             - $(CONTAINER_ROOT)/tabsdata/work
-            - --log-config
+            - --logging-configuration
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
             - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
@@ -220,11 +220,11 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_fn_root}}/bin/td_begin_execution"]
           args:
-            - --shared-dir
+            - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
-            - --work-dir
+            - --work-folder
             - $(CONTAINER_ROOT)/tabsdata/work
-            - --log-config
+            - --logging-configuration
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
             - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
@@ -284,11 +284,11 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_fn_root}}/bin/td_fetch_request"]
           args:
-            - --shared-dir
+            - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
-            - --work-dir
+            - --work-folder
             - $(CONTAINER_ROOT)/tabsdata/work
-            - --log-config
+            - --logging-configuration
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
             - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
@@ -356,11 +356,11 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_fn_root}}/bin/td_get_bundle"]
           args:
-            - --shared-dir
+            - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
-            - --work-dir
+            - --work-folder
             - $(CONTAINER_ROOT)/tabsdata/work
-            - --log-config
+            - --logging-configuration
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
             - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
@@ -374,7 +374,7 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
-            - --bundle-dir
+            - --bundle-folder
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
             - --bundle-archive
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/archive/bundle.tar.zst
@@ -432,11 +432,11 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_fn_root}}/bin/td_prep_localize_state"]
           args:
-            - --shared-dir
+            - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
-            - --work-dir
+            - --work-folder
             - $(CONTAINER_ROOT)/tabsdata/work
-            - --log-config
+            - --logging-configuration
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
             - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
@@ -502,13 +502,13 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_fn_root}}/bin/td_run_source_plugin"]
           args:
-            - --shared-dir
+            - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
-            - --work-dir
+            - --work-folder
             - $(CONTAINER_ROOT)/tabsdata/work
             - --connection-file
             - $(CONTAINER_ROOT)/tabsdata/connection/connection.yaml
-            - --log-config
+            - --logging-configuration
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
             - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
@@ -522,13 +522,13 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
-            - --bundle-dir
+            - --bundle-folder
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
-            - --out-dir
+            - --output-folder
             - $(CONTAINER_ROOT)/tabsdata/shared/in
             - --inputs-manifest
             - $(CONTAINER_ROOT)/tabsdata/shared/fn/in/inputs-manifest.yaml
-            - --state-dir
+            - --state-folder
             - $(CONTAINER_ROOT)/tabsdata/shared/state
           securityContext:
             allowPrivilegeEscalation: false
@@ -589,11 +589,11 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_fn_root}}/bin/td_stamp_inputs"]
           args:
-            - --shared-dir
+            - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
-            - --work-dir
+            - --work-folder
             - $(CONTAINER_ROOT)/tabsdata/work
-            - --log-config
+            - --logging-configuration
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
             - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
@@ -609,7 +609,7 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
             - --inputs-manifest
             - $(CONTAINER_ROOT)/tabsdata/shared/fn/in/inputs-manifest.yaml
-            - --enriched-dir
+            - --enriched-folder
             - $(CONTAINER_ROOT)/tabsdata/shared/rich
             - --enriched-inputs-manifest
             - $(CONTAINER_ROOT)/tabsdata/shared/fn/in/enriched-inputs-manifest.yaml
@@ -661,11 +661,11 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_fn_root}}/bin/td_prep_upload_raw"]
           args:
-            - --shared-dir
+            - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
-            - --work-dir
+            - --work-folder
             - $(CONTAINER_ROOT)/tabsdata/work
-            - --log-config
+            - --logging-configuration
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
             - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
@@ -681,9 +681,9 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
             - --inputs-manifest
             - $(CONTAINER_ROOT)/tabsdata/shared/fn/in/enriched-inputs-manifest.yaml
-            - --out
+            - --transporter-request
             - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/raw-upload.yaml
-            - --storage-config
+            - --storage-configuration
             - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
           securityContext:
             allowPrivilegeEscalation: false
@@ -734,11 +734,11 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_fn_root}}/bin/td_run_transporter"]
           args:
-            - --shared-dir
+            - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
-            - --work-dir
+            - --work-folder
             - $(CONTAINER_ROOT)/tabsdata/work
-            - --log-config
+            - --logging-configuration
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
             - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
@@ -807,11 +807,11 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_fn_root}}/bin/td_run_function"]
           args:
-            - --shared-dir
+            - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
-            - --work-dir
+            - --work-folder
             - $(CONTAINER_ROOT)/tabsdata/work
-            - --log-config
+            - --logging-configuration
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
             - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
@@ -825,15 +825,15 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
-            - --bundle-dir
+            - --bundle-folder
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
             - --inputs-manifest
             - $(CONTAINER_ROOT)/tabsdata/shared/fn/in/enriched-inputs-manifest.yaml
-            - --out-dir
+            - --output-folder
             - $(CONTAINER_ROOT)/tabsdata/shared/out
             - --outputs-manifest
             - $(CONTAINER_ROOT)/tabsdata/shared/fn/out/outputs-manifest.yaml
-            - --state-dir
+            - --state-folder
             - $(CONTAINER_ROOT)/tabsdata/shared/state
           securityContext:
             allowPrivilegeEscalation: false
@@ -891,11 +891,11 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_fn_root}}/bin/td_report_completion"]
           args:
-            - --shared-dir
+            - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
-            - --work-dir
+            - --work-folder
             - $(CONTAINER_ROOT)/tabsdata/work
-            - --log-config
+            - --logging-configuration
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
             - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
@@ -911,7 +911,7 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
             - --outputs-manifest
             - $(CONTAINER_ROOT)/tabsdata/shared/fn/out/outputs-manifest.yaml
-            - --out
+            - --response
             - $(CONTAINER_ROOT)/tabsdata/shared/response/response.yaml
           securityContext:
             allowPrivilegeEscalation: false

@@ -39,8 +39,8 @@ from tabsdatak.server._tdrunner.function._commons.http.request import (
     HttpRequest,
 )
 from tabsdatak.server._tdrunner.function._lib.stage_layout import (
-    files_dir,
-    manifests_dir,
+    files_folder,
+    manifests_folder,
 )
 from tabsdatak.server._tdrunner.function._lib.stage_manifest import (
     external_uid_from_filename,
@@ -54,6 +54,9 @@ from tabsdatak.server._tdrunner.function.commands.run_manifest_trigger import (
     _ManifestOutcome,
     _trigger_one,
     _trigger_pending,
+)
+from tabsdatak.server._tdrunner.function.commands.run_manifest_trigger.arguments import (  # noqa: E501
+    RunManifestTriggerArguments,
 )
 from tabsdatak.server._tdrunner.function.commands.run_manifest_trigger.error import (
     MalformedTriggerAnswerError,
@@ -180,7 +183,7 @@ def _write_a_manifest(
     """Write a manifest under `<stage_root>/manifests/` and create the
     referenced files at their manifest-relative paths (e.g.
     `files/<TS>/<name>`) so tests have something realistic to delete."""
-    files_dir(stage_root).mkdir(parents=True, exist_ok=True)
+    files_folder(stage_root).mkdir(parents=True, exist_ok=True)
     for slot in files:
         for rel in slot:
             dst = stage_root / rel
@@ -231,20 +234,25 @@ def test_mt_1_resolves_to_bad_request():
 # --- _build_trigger_request -----------------------------------------------
 
 
-class _Args:
-    """Stub argparse.Namespace for _build_trigger_request."""
-
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
+def _trigger_arguments(**trigger: str) -> RunManifestTriggerArguments:
+    return RunManifestTriggerArguments(
+        liveness=Path("/l"),
+        responder_url="val:http://r",
+        responder_method="val:POST",
+        responder_authorization="val:Bearer r",
+        journal_file=Path("/j"),
+        request=Path("/r.yaml"),
+        **trigger,
+    )
 
 
 def test_build_trigger_request_resolves_literals():
-    args = _Args(
+    arguments = _trigger_arguments(
         trigger_url="http://apiserver/fn_trigger",
         trigger_method="POST",
         trigger_authorization="Bearer abc",
     )
-    req = _build_trigger_request(args)
+    req = _build_trigger_request(arguments)
     assert req.url == "http://apiserver/fn_trigger"
     assert req.method == "POST"
     assert req.headers == {"Authorization": "Bearer abc"}
@@ -254,12 +262,12 @@ def test_build_trigger_request_resolves_env_refs(monkeypatch):
     monkeypatch.setenv("FAKE_URL", "http://from-env/fn_trigger")
     monkeypatch.setenv("FAKE_METHOD", "POST")
     monkeypatch.setenv("FAKE_AUTH", "Bearer from-env")
-    args = _Args(
+    arguments = _trigger_arguments(
         trigger_url="env:FAKE_URL",
         trigger_method="env:FAKE_METHOD",
         trigger_authorization="env:FAKE_AUTH",
     )
-    req = _build_trigger_request(args)
+    req = _build_trigger_request(arguments)
     assert req.url == "http://from-env/fn_trigger"
     assert req.headers["Authorization"] == "Bearer from-env"
 
@@ -287,7 +295,7 @@ def test_enqueue_for_deletion_queues_files_then_manifest_then_dir(tmp_path):
 
 def test_enqueue_for_deletion_missing_manifest_queues_manifest_only(tmp_path):
     missing = (
-        manifests_dir(tmp_path) / "stream-manifest-2026-06-16T10-30-12.000001.json"
+        manifests_folder(tmp_path) / "stream-manifest-2026-06-16T10-30-12.000001.json"
     )
     queue: deque[str] = deque()
     _enqueue_for_deletion(missing, "eid", _local_backend(tmp_path), queue)
@@ -295,8 +303,8 @@ def test_enqueue_for_deletion_missing_manifest_queues_manifest_only(tmp_path):
 
 
 def test_enqueue_for_deletion_malformed_manifest_queues_manifest_only(tmp_path):
-    manifests_dir(tmp_path).mkdir(parents=True, exist_ok=True)
-    bad = manifests_dir(tmp_path) / "stream-manifest-2026-06-16T10-30-12.000001.json"
+    manifests_folder(tmp_path).mkdir(parents=True, exist_ok=True)
+    bad = manifests_folder(tmp_path) / "stream-manifest-2026-06-16T10-30-12.000001.json"
     bad.write_text("not json")
     queue: deque[str] = deque()
     _enqueue_for_deletion(bad, "eid", _local_backend(tmp_path), queue)
@@ -453,7 +461,7 @@ def test_trigger_one_sends_execution_request_internal_body(tmp_path):
 
 
 def test_trigger_one_malformed_filename_skipped_no_invoke(monkeypatch, tmp_path):
-    bogus = manifests_dir(tmp_path) / "junk-file.json"
+    bogus = manifests_folder(tmp_path) / "junk-file.json"
     bogus.parent.mkdir(parents=True)
     bogus.write_text("[]")
     queue: deque[str] = deque()

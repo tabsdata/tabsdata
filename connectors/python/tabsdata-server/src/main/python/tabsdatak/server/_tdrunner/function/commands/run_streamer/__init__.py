@@ -35,13 +35,14 @@ entrypoint the console script resolves to. The compound imports
 
 from __future__ import annotations
 
-import argparse
-
-from tabsdatak.server._tdrunner.function._commons.run.command import (
-    build_parser,
-    command,
+from tabsdatak.server._tdrunner.function._commons.run.arguments import (
+    ArgumentsParser,
 )
+from tabsdatak.server._tdrunner.function._commons.run.command import command
 from tabsdatak.server._tdrunner.function._commons.run.version import version
+from tabsdatak.server._tdrunner.function.commands.run_streamer.arguments import (
+    RunStreamerArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.run_streamer.runner import (
     _load_function_def,
     _resolve_plugin,
@@ -52,25 +53,25 @@ __all__ = ["_load_function_def", "_resolve_plugin", "run", "main"]
 
 VERSION = version()
 GENERATION = 1
-INFO = (
+INFORMATION = (
     "run-streamer — long-running streamer pod entrypoint; runs the "
     "@stream_publisher's StreamSrcPlugin until SIGTERM"
 )
-MAN = (
+MANUAL = (
     "run-streamer\n"
     "    --request <PATH>\n"
-    "    --bundle-dir <PATH>\n"
-    "    --out-dir <PATH>\n"
+    "    --bundle-folder <PATH>\n"
+    "    --output-folder <PATH>\n"
     "    --connection-file <PATH>\n"
-    "    --shared-dir <PATH>\n"
-    "    --work-dir <PATH>\n"
-    "    --log-config <PATH>\n"
+    "    --shared-folder <PATH>\n"
+    "    --work-folder <PATH>\n"
+    "    --logging-configuration <PATH>\n"
     "    --liveness <PATH>\n"
     "    --responder-url <URL>\n"
     "    --responder-method <METHOD>\n"
     "    --responder-authorization <AUTH>\n"
     "    --journal-file <PATH>\n\n"
-    "Loads the StreamPublisherInfo from --bundle-dir, loads the connection "
+    "Loads the StreamPublisherInfo from --bundle-folder, loads the connection "
     "from --connection-file, builds the StreamerPluginCtx from "
     "request.info, installs SIGTERM/SIGINT handlers that flip ctx.active "
     "to False, then invokes plugin.run(ctx, conn, stream_src) and blocks "
@@ -78,40 +79,19 @@ MAN = (
 )
 
 
-def _build_parser():
-    parser = build_parser(
+def build_command_parser() -> ArgumentsParser:
+    return RunStreamerArguments.parser(
         program="run-streamer",
         description="Long-running streamer pod entrypoint.",
         version=VERSION,
-        info=INFO,
-        manual=MAN,
+        information=INFORMATION,
+        manual=MANUAL,
     )
-    parser.add_argument("--request", required=True, help="Path to request.yaml")
-    parser.add_argument(
-        "--bundle-dir",
-        required=True,
-        help="Extracted bundle directory (function_def.json + user code)",
-    )
-    parser.add_argument(
-        "--out-dir",
-        required=True,
-        help=(
-            "Local scratch directory the StreamSrcPlugin writes parquets "
-            "into; ctx.stage() then moves them to <stage>/files/."
-        ),
-    )
-    parser.add_argument(
-        "--connection-file",
-        required=True,
-        dest="connection_file",
-        help="Path to the connection definition file.",
-    )
-    return parser
 
 
-@command(name="td_run_streamer", parser=_build_parser)
-def main(args: argparse.Namespace) -> int:
-    return run(args)
+@command(name="td_run_streamer", parser=build_command_parser)
+def main(arguments: RunStreamerArguments) -> int:
+    return run(arguments)
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -43,12 +43,12 @@ from tabsdatak.server._tdrunner.function._lib.errors import (
     CommandErrorCode,
 )
 from tabsdatak.server._tdrunner.function._lib.stage_layout import (
-    FILES_SUBDIR,
-    MANIFESTS_SUBDIR,
+    FILES_SUBFOLDER,
+    MANIFESTS_SUBFOLDER,
     STREAM_STATE_API_VERSION,
     STREAM_STATE_FILENAME,
     STREAM_STATE_KIND,
-    manifest_files_dir,
+    manifest_files_folder,
 )
 from tabsdatak.server._tdrunner.function._lib.stream_src_ctx import (
     StreamerPluginCtx,
@@ -87,7 +87,7 @@ def _make_ctx(
     stage = tmp_path / "stage"
     stage.mkdir(parents=True, exist_ok=True)
     return StreamerPluginCtx(
-        work_dir=work_dir,
+        work_folder=work_dir,
         project_id="p-1",
         project="p",
         collection_id="C-1",
@@ -207,7 +207,7 @@ def _construct_ctx_for(stage_uri: str, tmp_path: Path) -> StreamerPluginCtx:
     work_dir = tmp_path / "work"
     work_dir.mkdir(exist_ok=True)
     return StreamerPluginCtx(
-        work_dir=work_dir,
+        work_folder=work_dir,
         project_id="p-1",
         project="p",
         collection_id="C-1",
@@ -286,7 +286,7 @@ def test_ctx_construction_loads_existing_state(tmp_path):
     work_dir = tmp_path / "work"
     work_dir.mkdir()
     ctx = StreamerPluginCtx(
-        work_dir=work_dir,
+        work_folder=work_dir,
         project_id="p-1",
         project="p",
         collection_id="C-1",
@@ -315,14 +315,14 @@ def test_stage_dict_state_moves_files_to_per_manifest_files_subdir(tmp_path):
     f2 = _write_parquet_stub(work_dir / "people-2.parquet")
     ctx.stage([[f1, f2]], {"offset": 1})
     manifest_path = next(
-        (tmp_path / "stage" / MANIFESTS_SUBDIR).glob("stream-manifest-*.json")
+        (tmp_path / "stage" / MANIFESTS_SUBFOLDER).glob("stream-manifest-*.json")
     )
     external_id = manifest_path.stem[len("stream-manifest-") :]
-    batch_dir = manifest_files_dir(tmp_path / "stage", external_id)
+    batch_dir = manifest_files_folder(tmp_path / "stage", external_id)
     assert (batch_dir / "people-1.parquet").is_file()
     assert (batch_dir / "people-2.parquet").is_file()
     # nothing landed flat under files/
-    assert not (tmp_path / "stage" / FILES_SUBDIR / "people-1.parquet").exists()
+    assert not (tmp_path / "stage" / FILES_SUBFOLDER / "people-1.parquet").exists()
     # work_dir entries gone
     assert not f1.exists()
     assert not f2.exists()
@@ -333,8 +333,8 @@ def test_stage_dict_state_writes_manifest_under_manifests_subdir(tmp_path):
     work_dir = tmp_path / "work"
     f1 = _write_parquet_stub(work_dir / "data.parquet")
     ctx.stage([[f1]], {})
-    manifests_dir = tmp_path / "stage" / MANIFESTS_SUBDIR
-    manifests = list(manifests_dir.glob("stream-manifest-*.json"))
+    manifests_folder = tmp_path / "stage" / MANIFESTS_SUBFOLDER
+    manifests = list(manifests_folder.glob("stream-manifest-*.json"))
     assert len(manifests) == 1
     # Manifest content holds the path *relative to stage_root* --
     # NU5's publisher conn points at stage_root and resolves these.
@@ -360,7 +360,7 @@ def test_stage_dict_state_persists_state_envelope(tmp_path):
     assert envelope["state"] == {"offset": 42, "topic": "people"}
     # externalId matches the manifest filename's TS portion
     manifest_path = next(
-        (tmp_path / "stage" / MANIFESTS_SUBDIR).glob("stream-manifest-*.json")
+        (tmp_path / "stage" / MANIFESTS_SUBFOLDER).glob("stream-manifest-*.json")
     )
     expected_id = manifest_path.stem[len("stream-manifest-") :]
     assert envelope["externalId"] == expected_id
@@ -470,7 +470,7 @@ def test_stage_multiple_batches_produce_distinct_manifests(tmp_path):
     f2 = _write_parquet_stub(work_dir / "batch-2.parquet")
     ctx.stage([[f2]], {"n": 2})
     manifests = sorted(
-        (tmp_path / "stage" / MANIFESTS_SUBDIR).glob("stream-manifest-*.json")
+        (tmp_path / "stage" / MANIFESTS_SUBFOLDER).glob("stream-manifest-*.json")
     )
     assert len(manifests) == 2
     assert manifests[0].name < manifests[1].name
@@ -487,11 +487,11 @@ def test_stage_multiple_batches_use_distinct_files_subdirs(tmp_path):
     f2 = _write_parquet_stub(work_dir / "batch-2.parquet")
     ctx.stage([[f2]], {"n": 2})
     manifests = sorted(
-        (tmp_path / "stage" / MANIFESTS_SUBDIR).glob("stream-manifest-*.json")
+        (tmp_path / "stage" / MANIFESTS_SUBFOLDER).glob("stream-manifest-*.json")
     )
     ids = [m.stem[len("stream-manifest-") :] for m in manifests]
-    dir1 = manifest_files_dir(tmp_path / "stage", ids[0])
-    dir2 = manifest_files_dir(tmp_path / "stage", ids[1])
+    dir1 = manifest_files_folder(tmp_path / "stage", ids[0])
+    dir2 = manifest_files_folder(tmp_path / "stage", ids[1])
     assert dir1 != dir2
     assert (dir1 / "batch-1.parquet").is_file()
     assert (dir2 / "batch-2.parquet").is_file()
@@ -505,7 +505,7 @@ def test_stage_handles_empty_slots(tmp_path):
     work_dir = tmp_path / "work"
     f1 = _write_parquet_stub(work_dir / "data.parquet")
     ctx.stage([[f1], []], {})
-    manifests = list((tmp_path / "stage" / MANIFESTS_SUBDIR).glob("*.json"))
+    manifests = list((tmp_path / "stage" / MANIFESTS_SUBFOLDER).glob("*.json"))
     assert len(manifests) == 1
     content = json.loads(manifests[0].read_text())
     external_id = manifests[0].stem[len("stream-manifest-") :]
@@ -528,8 +528,8 @@ def test_a_checkpoint_persists_the_state_alone(tmp_path):
     envelope = json.loads((stage / STREAM_STATE_FILENAME).read_text())
     assert envelope["state"] == {"o": 2}
     assert envelope["externalId"] == staged_id
-    assert len(list((stage / MANIFESTS_SUBDIR).iterdir())) == 1
-    assert len(list((stage / FILES_SUBDIR).iterdir())) == 1
+    assert len(list((stage / MANIFESTS_SUBFOLDER).iterdir())) == 1
+    assert len(list((stage / FILES_SUBFOLDER).iterdir())) == 1
     assert ctx.stream_state == {"o": 2}
     assert ctx.first_stage is False
 

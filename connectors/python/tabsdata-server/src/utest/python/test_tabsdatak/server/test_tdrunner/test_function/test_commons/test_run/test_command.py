@@ -4,15 +4,18 @@
 
 from __future__ import annotations
 
-import argparse
 import logging
+from pathlib import Path
 
 import pytest
 
 from tabsdatak.common._enums import WorkerCallbackStatus
 from tabsdatak.server._tdrunner.function._commons.run import command as command_module
+from tabsdatak.server._tdrunner.function._commons.run.arguments import (
+    ArgumentsParser,
+    CommandArguments,
+)
 from tabsdatak.server._tdrunner.function._commons.run.command import (
-    build_parser,
     notify_status,
     notify_step_destination_write,
     run_command,
@@ -32,17 +35,17 @@ from tabsdatak.server._tdrunner.function._lib.message import CallbackRequest
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
-# --- build_parser ---
+# --- CommandArguments.parser ---
 
 
-def test_build_parser_returns_argparse_parser():
-    parser = build_parser("cmd", "desc")
-    assert isinstance(parser, argparse.ArgumentParser)
+def test_parser_returns_arguments_parser():
+    parser = CommandArguments.parser("cmd", "desc")
+    assert isinstance(parser, ArgumentsParser)
 
 
-def test_build_parser_required_liveness_long():
-    parser = build_parser("cmd", "desc")
-    args = parser.parse_args([
+def test_parser_required_liveness_long():
+    parser = CommandArguments.parser("cmd", "desc")
+    arguments = parser.parse([
         "--liveness",
         "/tmp/x",
         "--responder-url",
@@ -54,12 +57,12 @@ def test_build_parser_required_liveness_long():
         "--journal-file",
         "/tmp/em.yaml",
     ])
-    assert args.liveness == "/tmp/x"
+    assert arguments.liveness == Path("/tmp/x")
 
 
-def test_build_parser_required_liveness_short():
-    parser = build_parser("cmd", "desc")
-    args = parser.parse_args([
+def test_parser_required_liveness_short():
+    parser = CommandArguments.parser("cmd", "desc")
+    arguments = parser.parse([
         "-l",
         "/tmp/x",
         "--responder-url",
@@ -71,88 +74,88 @@ def test_build_parser_required_liveness_short():
         "--journal-file",
         "/tmp/em.yaml",
     ])
-    assert args.liveness == "/tmp/x"
+    assert arguments.liveness == Path("/tmp/x")
 
 
-def test_build_parser_missing_liveness_raises():
-    parser = build_parser("cmd", "desc")
+def test_parser_missing_liveness_raises():
+    parser = CommandArguments.parser("cmd", "desc")
     with pytest.raises(InvalidOptionsError):
-        parser.parse_args([])
+        parser.parse([])
 
 
-def test_build_parser_unknown_flag_raises():
-    parser = build_parser("cmd", "desc")
+def test_parser_unknown_flag_raises():
+    parser = CommandArguments.parser("cmd", "desc")
     with pytest.raises(InvalidOptionsError):
-        parser.parse_args(["--no-such-flag"])
+        parser.parse(["--no-such-flag"])
 
 
-def test_build_parser_help_short_circuits(capsys):
-    parser = build_parser("cmd", "the description here")
+def test_parser_help_short_circuits(capsys):
+    parser = CommandArguments.parser("cmd", "the description here")
     with pytest.raises(SystemExit) as exc_info:
-        parser.parse_args(["--help"])
+        parser.parse(["--help"])
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
     assert "the description here" in captured.out
 
 
-def test_build_parser_help_short_form(capsys):
-    parser = build_parser("cmd", "the description here")
+def test_parser_help_short_form(capsys):
+    parser = CommandArguments.parser("cmd", "the description here")
     with pytest.raises(SystemExit) as exc_info:
-        parser.parse_args(["-h"])
+        parser.parse(["-h"])
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
     assert "the description here" in captured.out
 
 
-def test_build_parser_man_short_circuits(capsys):
-    parser = build_parser("cmd", "desc", manual="man text here")
+def test_parser_man_short_circuits(capsys):
+    parser = CommandArguments.parser("cmd", "desc", manual="man text here")
     with pytest.raises(SystemExit) as exc_info:
-        parser.parse_args(["--man"])
+        parser.parse(["--man"])
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
     assert "man text here" in captured.out
 
 
-def test_build_parser_man_short_form(capsys):
-    parser = build_parser("cmd", "desc", manual="MAN")
+def test_parser_man_short_form(capsys):
+    parser = CommandArguments.parser("cmd", "desc", manual="MAN")
     with pytest.raises(SystemExit) as exc_info:
-        parser.parse_args(["-m"])
+        parser.parse(["-m"])
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
     assert "MAN" in captured.out
 
 
-def test_build_parser_version_short_circuits(capsys):
-    parser = build_parser("cmd", "desc", version="1.2.3")
+def test_parser_version_short_circuits(capsys):
+    parser = CommandArguments.parser("cmd", "desc", version="1.2.3")
     with pytest.raises(SystemExit) as exc_info:
-        parser.parse_args(["--version"])
+        parser.parse(["--version"])
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
     assert "1.2.3" in captured.out
 
 
-def test_build_parser_version_short_form(capsys):
-    parser = build_parser("cmd", "desc", version="1.2.3")
+def test_parser_version_short_form(capsys):
+    parser = CommandArguments.parser("cmd", "desc", version="1.2.3")
     with pytest.raises(SystemExit) as exc_info:
-        parser.parse_args(["-v"])
+        parser.parse(["-v"])
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
     assert "1.2.3" in captured.out
 
 
-def test_build_parser_info_short_circuits(capsys):
-    parser = build_parser("cmd", "desc", info="build XYZ")
+def test_parser_info_short_circuits(capsys):
+    parser = CommandArguments.parser("cmd", "desc", information="build XYZ")
     with pytest.raises(SystemExit) as exc_info:
-        parser.parse_args(["--info"])
+        parser.parse(["--info"])
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
     assert "build XYZ" in captured.out
 
 
-def test_build_parser_info_short_form(capsys):
-    parser = build_parser("cmd", "desc", info="INFO")
+def test_parser_info_short_form(capsys):
+    parser = CommandArguments.parser("cmd", "desc", information="INFO")
     with pytest.raises(SystemExit) as exc_info:
-        parser.parse_args(["-i"])
+        parser.parse(["-i"])
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
     assert "INFO" in captured.out
@@ -194,6 +197,16 @@ def test_run_command_undefined_env(capsys):
 # --- callback bodies ---
 
 
+def _arguments() -> CommandArguments:
+    return CommandArguments(
+        liveness=Path("/l"),
+        responder_url="http://localhost/responder",
+        responder_method="POST",
+        responder_authorization="Bearer tok",
+        journal_file=Path("/j"),
+    )
+
+
 def _posted(monkeypatch) -> list[dict]:
     bodies: list[dict] = []
     monkeypatch.setattr(
@@ -207,7 +220,7 @@ def _posted(monkeypatch) -> list[dict]:
 def test_a_status_report_names_no_operation(monkeypatch):
     bodies = _posted(monkeypatch)
     notify_status(
-        argparse.Namespace(),
+        _arguments(),
         CallbackRequest(status=WorkerCallbackStatus.RUNNING),
     )
     assert "op" not in bodies[0]
@@ -215,7 +228,7 @@ def test_a_status_report_names_no_operation(monkeypatch):
 
 def test_a_destination_write_names_its_operation_only(monkeypatch):
     bodies = _posted(monkeypatch)
-    notify_step_destination_write(argparse.Namespace())
+    notify_step_destination_write(_arguments())
     assert bodies == [{"op": "destination_write"}]
 
 

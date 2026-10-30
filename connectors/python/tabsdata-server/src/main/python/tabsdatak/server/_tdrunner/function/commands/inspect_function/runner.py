@@ -10,16 +10,18 @@ wraps :func:`run` in the ``@command`` entrypoint for the console script.
 
 from __future__ import annotations
 
-import argparse
 import logging
 import os
 
 from tabsdatak.server._tdrunner.function._lib.system_info import report_system
+from tabsdatak.server._tdrunner.function.commands.inspect_function.arguments import (
+    InspectFunctionArguments,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def run(args: argparse.Namespace) -> int:
+def run(arguments: InspectFunctionArguments) -> int:
     worker = os.environ.get("TD_WORKER", "<unset>")
     decorator = os.environ.get("TD_DECORATOR", "<unset>")
     runid = os.environ.get("TD_RUNID", "<unset>")

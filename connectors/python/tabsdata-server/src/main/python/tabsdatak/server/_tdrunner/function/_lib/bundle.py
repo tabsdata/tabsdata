@@ -20,11 +20,11 @@ from pathlib import Path
 import zstandard
 
 
-def extract_bundle(archive: Path, dest_dir: Path) -> None:
-    """Extract a `.tar.zst` bundle into `dest_dir`.
+def extract_bundle(archive: Path, destination_folder: Path) -> None:
+    """Extract a `.tar.zst` bundle into `destination_folder`.
 
-    Creates `dest_dir` (and any missing parents) if it does not exist.
-    Existing contents of `dest_dir` are preserved; bundle members are
+    Creates `destination_folder` (and any missing parents) if it does not exist.
+    Existing contents of `destination_folder` are preserved; bundle members are
     written alongside them.
 
     The archive is decompressed through ``zstandard.ZstdDecompressor.
@@ -42,8 +42,8 @@ def extract_bundle(archive: Path, dest_dir: Path) -> None:
             checks (e.g. absolute path, parent-dir escape, link pointing
             outside the destination).
     """
-    dest_dir.mkdir(parents=True, exist_ok=True)
+    destination_folder.mkdir(parents=True, exist_ok=True)
     with open(archive, "rb") as raw:
         with zstandard.ZstdDecompressor().stream_reader(raw) as stream:
             with tarfile.open(fileobj=stream, mode="r|") as tar:
-                tar.extractall(dest_dir, filter="data")
+                tar.extractall(destination_folder, filter="data")

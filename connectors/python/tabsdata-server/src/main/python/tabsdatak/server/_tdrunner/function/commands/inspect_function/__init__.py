@@ -12,25 +12,28 @@ development and diagnosis only; production pods should not include it.
 
 from __future__ import annotations
 
-import argparse
-
-from tabsdatak.server._tdrunner.function._commons.run.command import (
-    build_parser,
-    command,
+from tabsdatak.server._tdrunner.function._commons.run.arguments import (
+    ArgumentsParser,
 )
+from tabsdatak.server._tdrunner.function._commons.run.command import command
 from tabsdatak.server._tdrunner.function._commons.run.version import version
+from tabsdatak.server._tdrunner.function.commands.inspect_function.arguments import (
+    InspectFunctionArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.inspect_function.runner import run
 
 __all__ = ["run", "main"]
 
 VERSION = version()
 GENERATION = 1
-INFO = "inspect-function — dump function-run execution information for troubleshooting"
-MAN = (
+INFORMATION = (
+    "inspect-function — dump function-run execution information for troubleshooting"
+)
+MANUAL = (
     "inspect-function\n"
-    "    --shared-dir <PATH>\n"
-    "    --work-dir <PATH>\n"
-    "    --log-config <PATH>\n"
+    "    --shared-folder <PATH>\n"
+    "    --work-folder <PATH>\n"
+    "    --logging-configuration <PATH>\n"
     "    --liveness <PATH>\n"
     "    --responder-url <URL>\n"
     "    --responder-method <METHOD>\n"
@@ -41,19 +44,19 @@ MAN = (
 )
 
 
-def _build_parser():
-    return build_parser(
+def build_command_parser() -> ArgumentsParser:
+    return InspectFunctionArguments.parser(
         program="inspect-function",
         description="Dump function-run execution information for troubleshooting.",
         version=VERSION,
-        info=INFO,
-        manual=MAN,
+        information=INFORMATION,
+        manual=MANUAL,
     )
 
 
-@command(name="td_inspect_function", parser=_build_parser)
-def main(args: argparse.Namespace) -> int:
-    return run(args)
+@command(name="td_inspect_function", parser=build_command_parser)
+def main(arguments: InspectFunctionArguments) -> int:
+    return run(arguments)
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -7,12 +7,11 @@
 The command's logic, callable without argparse or the responder. The
 package ``__init__`` wraps :func:`run` in the ``@command`` entrypoint
 for the console script; the compound imports :func:`run` directly and
-supplies a pre-built ``Namespace``.
+supplies pre-built ``StampInputsArguments``.
 """
 
 from __future__ import annotations
 
-import argparse
 import logging
 from dataclasses import replace
 from pathlib import Path
@@ -27,6 +26,9 @@ from tabsdatak.server._tdrunner.function._commons.manifests.input import (
 )
 from tabsdatak.server._tdrunner.function._commons.manifests.manifest import (
     ManifestError,
+)
+from tabsdatak.server._tdrunner.function.commands.stamp_inputs.arguments import (
+    StampInputsArguments,
 )
 from tabsdatak.server._tdrunner.function.commands.stamp_inputs.error import (
     StampInputsErrorCode,
@@ -77,11 +79,11 @@ def _stamp_file(
         )
 
 
-def run(args: argparse.Namespace) -> int:
-    request_path = Path(args.request)
-    inputs_manifest = Path(args.inputs_manifest)
-    enriched_dir = Path(args.enriched_dir)
-    enriched_manifest = Path(args.enriched_inputs_manifest)
+def run(arguments: StampInputsArguments) -> int:
+    request_path = arguments.request
+    inputs_manifest = arguments.inputs_manifest
+    enriched_folder = arguments.enriched_folder
+    enriched_manifest = arguments.enriched_inputs_manifest
 
     logger.info("Stamping framework system columns onto inputs")
     request = Request.load(request_path, StampInputsErrorCode.SI_1)
@@ -130,14 +132,14 @@ def run(args: argparse.Namespace) -> int:
             entry.tables,
         )
 
-        slot_dir = enriched_dir / f"slot{slot_idx}"
+        slot_folder = enriched_folder / f"slot{slot_idx}"
         enriched_records: list[InputRecord] = []
         for record in entry.tables:
             if record.file is None:
                 enriched_records.append(record)
                 continue
             src_path = Path(record.file)
-            dest_path = slot_dir / src_path.name
+            dest_path = slot_folder / src_path.name
             assigned = idx()
             _stamp_file(
                 src_path,

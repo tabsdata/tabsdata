@@ -15,17 +15,17 @@ from pathlib import Path
 import pytest
 
 from tabsdatak.server._tdrunner.function._lib.stage_layout import (
-    FILES_SUBDIR,
-    MANIFESTS_SUBDIR,
+    FILES_SUBFOLDER,
+    MANIFESTS_SUBFOLDER,
     STREAM_STATE_API_VERSION,
     STREAM_STATE_FILENAME,
     STREAM_STATE_KIND,
     InvalidStateEnvelopeError,
     StreamStateView,
-    files_dir,
+    files_folder,
     format_state_envelope,
-    manifest_files_dir,
-    manifests_dir,
+    manifest_files_folder,
+    manifests_folder,
     parse_state_envelope,
     stream_state_path,
 )
@@ -42,8 +42,8 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
 def test_directory_subdir_names_are_pinned():
-    assert MANIFESTS_SUBDIR == "manifests"
-    assert FILES_SUBDIR == "files"
+    assert MANIFESTS_SUBFOLDER == "manifests"
+    assert FILES_SUBFOLDER == "files"
     assert STREAM_STATE_FILENAME == "stream-state.json"
 
 
@@ -55,18 +55,18 @@ def test_state_envelope_kind_and_apiversion_are_pinned():
 # --- Path helpers ---------------------------------------------------------
 
 
-def test_manifests_dir_joins_under_stage_root():
-    assert manifests_dir(Path("/stage")) == Path("/stage/manifests")
+def test_manifests_folder_joins_under_stage_root():
+    assert manifests_folder(Path("/stage")) == Path("/stage/manifests")
 
 
-def test_files_dir_joins_under_stage_root():
-    assert files_dir(Path("/stage")) == Path("/stage/files")
+def test_files_folder_joins_under_stage_root():
+    assert files_folder(Path("/stage")) == Path("/stage/files")
 
 
-def test_manifest_files_dir_nests_external_id_under_files():
+def test_manifest_files_folder_nests_external_id_under_files():
     """A batch's parquets live in files/<external_id>/, named for the
     timestamp portion of that batch's manifest filename."""
-    assert manifest_files_dir(Path("/stage"), "2026-06-16T10-30-12.345678") == Path(
+    assert manifest_files_folder(Path("/stage"), "2026-06-16T10-30-12.345678") == Path(
         "/stage/files/2026-06-16T10-30-12.345678"
     )
 
@@ -79,8 +79,8 @@ def test_path_helpers_work_with_relative_roots():
     """The helpers are pure path joins — no filesystem assumptions, so
     relative roots are valid too."""
     root = Path("relative/stage")
-    assert manifests_dir(root) == Path("relative/stage/manifests")
-    assert files_dir(root) == Path("relative/stage/files")
+    assert manifests_folder(root) == Path("relative/stage/manifests")
+    assert files_folder(root) == Path("relative/stage/files")
     assert stream_state_path(root) == Path("relative/stage/stream-state.json")
 
 

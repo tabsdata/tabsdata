@@ -52,11 +52,11 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_begin_execution${{system:tdk_exe_suffix}}"]
           args:
-            - --shared-dir
+            - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
-            - --work-dir
+            - --work-folder
             - $(CONTAINER_ROOT)/tabsdata/work
-            - --log-config
+            - --logging-configuration
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
             - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
@@ -107,11 +107,11 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_fetch_request${{system:tdk_exe_suffix}}"]
           args:
-            - --shared-dir
+            - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
-            - --work-dir
+            - --work-folder
             - $(CONTAINER_ROOT)/tabsdata/work
-            - --log-config
+            - --logging-configuration
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
             - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
@@ -170,11 +170,11 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_get_bundle${{system:tdk_exe_suffix}}"]
           args:
-            - --shared-dir
+            - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
-            - --work-dir
+            - --work-folder
             - $(CONTAINER_ROOT)/tabsdata/work
-            - --log-config
+            - --logging-configuration
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
             - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
@@ -188,7 +188,7 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
-            - --bundle-dir
+            - --bundle-folder
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
             - --bundle-archive
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/archive/bundle.tar.zst
@@ -236,11 +236,11 @@ spec:
           restartPolicy: Always
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_run_manifest_trigger${{system:tdk_exe_suffix}}"]
           args:
-            - --shared-dir
+            - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
-            - --work-dir
+            - --work-folder
             - $(CONTAINER_ROOT)/tabsdata/work
-            - --log-config
+            - --logging-configuration
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
             - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
@@ -260,7 +260,7 @@ spec:
             - env:SECRET__TD_TRIGGER_METHOD
             - --trigger-authorization
             - env:SECRET__TD_TRIGGER_AUTHORIZATION
-            - --back-off-secs
+            - --back-off-seconds
             - "30"
           securityContext:
             allowPrivilegeEscalation: false
@@ -306,13 +306,13 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_run_streamer${{system:tdk_exe_suffix}}"]
           args:
-            - --shared-dir
+            - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
-            - --work-dir
+            - --work-folder
             - $(CONTAINER_ROOT)/tabsdata/work
             - --connection-file
             - $(CONTAINER_ROOT)/tabsdata/connection/connection.yaml
-            - --log-config
+            - --logging-configuration
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
             - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
@@ -326,9 +326,9 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
-            - --bundle-dir
+            - --bundle-folder
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
-            - --out-dir
+            - --output-folder
             - $(CONTAINER_ROOT)/tabsdata/shared/out
           securityContext:
             allowPrivilegeEscalation: false

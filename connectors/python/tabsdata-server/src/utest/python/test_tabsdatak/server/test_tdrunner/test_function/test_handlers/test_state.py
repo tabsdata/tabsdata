@@ -297,7 +297,7 @@ CURRENT = {"last-modified": "2026-05-28T00:00:00Z"}
 
 def _context() -> _SrcContext:
     return _SrcContext(
-        work_dir=Path("/work"),
+        work_folder=Path("/work"),
         project_id="p-1",
         project="p",
         collection_id="cid",

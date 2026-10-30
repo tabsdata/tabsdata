@@ -19,13 +19,15 @@ SECRET_ENV_PREFIX = "SECRETS__STORAGE__MOUNTS__"
 SECRET_ENV_OPTIONS_INFIX = "__OPTIONS__"
 
 
-def load_mount_option_keys(storage_config_file: Path) -> dict[str, list[str]]:
+def load_mount_option_keys(storage_configuration_file: Path) -> dict[str, list[str]]:
     """Read the staged storage config and return ``{mount_id: [option_key, ...]}``."""
     try:
-        document = yaml.safe_load(storage_config_file.read_text(encoding="utf-8"))
+        document = yaml.safe_load(
+            storage_configuration_file.read_text(encoding="utf-8")
+        )
     except (OSError, yaml.YAMLError) as exc:
         raise CommandErrorCode.CMD_3.exception(
-            cause=exc, path=storage_config_file, detail=str(exc)
+            cause=exc, path=storage_configuration_file, detail=str(exc)
         )
     mounts = (document or {}).get(STORAGE_KEY, {}).get(MOUNTS_KEY, []) or []
     option_keys: dict[str, list[str]] = {}

@@ -17,13 +17,14 @@ entrypoint the console script resolves to. The compound imports
 
 from __future__ import annotations
 
-import argparse
-
-from tabsdatak.server._tdrunner.function._commons.run.command import (
-    build_parser,
-    command,
+from tabsdatak.server._tdrunner.function._commons.run.arguments import (
+    ArgumentsParser,
 )
+from tabsdatak.server._tdrunner.function._commons.run.command import command
 from tabsdatak.server._tdrunner.function._commons.run.version import version
+from tabsdatak.server._tdrunner.function.commands.fetch_request.arguments import (
+    FetchRequestArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.fetch_request.runner import (
     _fetch,
     run,
@@ -33,14 +34,14 @@ __all__ = ["_fetch", "run", "main"]
 
 VERSION = version()
 GENERATION = 1
-INFO = (
+INFORMATION = (
     "fetch-request — fetch a function-run definition (request.yaml) from the API server"
 )
-MAN = (
+MANUAL = (
     "fetch-request\n"
-    "    --shared-dir <PATH>\n"
-    "    --work-dir <PATH>\n"
-    "    --log-config <PATH>\n"
+    "    --shared-folder <PATH>\n"
+    "    --work-folder <PATH>\n"
+    "    --logging-configuration <PATH>\n"
     "    --liveness <PATH>\n"
     "    --responder-url <URL>\n"
     "    --responder-method <METHOD>\n"
@@ -55,40 +56,19 @@ MAN = (
 )
 
 
-def _build_parser():
-    parser = build_parser(
+def build_command_parser() -> ArgumentsParser:
+    return FetchRequestArguments.parser(
         program="fetch-request",
         description="Fetch a function-run definition (request.yaml) from a URL.",
         version=VERSION,
-        info=INFO,
-        manual=MAN,
+        information=INFORMATION,
+        manual=MANUAL,
     )
-    parser.add_argument(
-        "--resolver-url",
-        required=True,
-        help="Resolver endpoint URL.",
-    )
-    parser.add_argument(
-        "--resolver-method",
-        required=True,
-        help="Resolver HTTP method.",
-    )
-    parser.add_argument(
-        "--resolver-authorization",
-        required=True,
-        help="Resolver Authorization header value.",
-    )
-    parser.add_argument(
-        "--request-file",
-        required=True,
-        help="Path to write the fetched request body.",
-    )
-    return parser
 
 
-@command(name="td_fetch_request", parser=_build_parser)
-def main(args: argparse.Namespace) -> int:
-    return run(args)
+@command(name="td_fetch_request", parser=build_command_parser)
+def main(arguments: FetchRequestArguments) -> int:
+    return run(arguments)
 
 
 if __name__ == "__main__":  # pragma: no cover

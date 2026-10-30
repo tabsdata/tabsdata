@@ -96,7 +96,7 @@ class FromFlowRequestCtx(FlowCtx):
 
     def __init__(
         self,
-        work_dir: Path,
+        work_folder: Path,
         project_id: str,
         project: str,
         collection_id: str,
@@ -105,7 +105,7 @@ class FromFlowRequestCtx(FlowCtx):
         function: str,
         function_version_id: str,
     ):
-        self._work_dir = work_dir
+        self._work_folder = work_folder
         self._project_id = project_id
         self._project = project
         self._collection_id = collection_id
@@ -117,7 +117,7 @@ class FromFlowRequestCtx(FlowCtx):
 
     @property
     def work_dir(self) -> Path:
-        return self._work_dir
+        return self._work_folder
 
     @property
     def project_id(self) -> str:
@@ -227,7 +227,7 @@ class FromRequestCtx(TransactionCtx, FromFlowRequestCtx):
 
     def __init__(
         self,
-        work_dir: Path,
+        work_folder: Path,
         project_id: str,
         project: str,
         collection_id: str,
@@ -243,7 +243,7 @@ class FromRequestCtx(TransactionCtx, FromFlowRequestCtx):
         triggered_on: datetime,
     ):
         super().__init__(
-            work_dir=work_dir,
+            work_folder=work_folder,
             project_id=project_id,
             project=project,
             collection_id=collection_id,
@@ -260,10 +260,10 @@ class FromRequestCtx(TransactionCtx, FromFlowRequestCtx):
         self._triggered_on = triggered_on
 
     @classmethod
-    def from_info(cls, work_dir: Path, info: Info) -> Self:
+    def from_info(cls, work_folder: Path, info: Info) -> Self:
         """Build the context of the run ``info`` describes."""
         return cls(
-            work_dir=work_dir,
+            work_folder=work_folder,
             project_id=str(info.project_id),
             project=info.project,
             collection_id=str(info.collection_id),

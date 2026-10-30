@@ -17,7 +17,6 @@ from tabsdatak.server._tdrunner.function._commons.run.arguments import (
 class GetBundleArguments(CommandArguments):
     request: Path = option(help="Path to the request file.")
     bundle_folder: Path = option(
-        "--bundle-dir",
         help="Folder to extract the bundle into.",
     )
     bundle_archive: Path = option(help="Path to download the bundle archive to.")

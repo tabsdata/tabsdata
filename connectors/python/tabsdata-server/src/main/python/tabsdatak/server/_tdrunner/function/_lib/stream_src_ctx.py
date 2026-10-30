@@ -74,8 +74,8 @@ from tabsdatak.server._tdrunner.function._lib.stage_backend import (
     stage_backend_from_location,
 )
 from tabsdatak.server._tdrunner.function._lib.stage_layout import (
-    FILES_SUBDIR,
-    MANIFESTS_SUBDIR,
+    FILES_SUBFOLDER,
+    MANIFESTS_SUBFOLDER,
     STREAM_STATE_FILENAME,
     InvalidStateEnvelopeError,
     StreamStateView,
@@ -154,7 +154,7 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
     def __init__(
         self,
         *,
-        work_dir: Path,
+        work_folder: Path,
         project_id: str,
         project: str,
         collection_id: str,
@@ -167,7 +167,7 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
         tabsdata_version: str,
     ) -> None:
         super().__init__(
-            work_dir=work_dir,
+            work_folder=work_folder,
             project_id=project_id,
             project=project,
             collection_id=collection_id,
@@ -252,7 +252,7 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
                         f"plugin staged file slot {slot_idx} file {file_idx} "
                         f"({src_path}) does not exist"
                     )
-                rel = f"{FILES_SUBDIR}/{external_id}/{src_path.name}"
+                rel = f"{FILES_SUBFOLDER}/{external_id}/{src_path.name}"
                 self._backend.upload(src_path, rel)
                 moved_slot.append(rel)
             moved.append(moved_slot)
@@ -262,7 +262,9 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
         # and that we cross-reference the state file with, so an operator
         # can tie state ↔ manifest ↔ files together. Uploaded after the
         # files so a visible manifest never points at not-yet-staged data.
-        self._upload_text(f"{MANIFESTS_SUBDIR}/{manifest_filename}", json.dumps(moved))
+        self._upload_text(
+            f"{MANIFESTS_SUBFOLDER}/{manifest_filename}", json.dumps(moved)
+        )
         logger.info(
             "stream_src_ctx.stage: wrote manifest %s with %d slot(s); "
             "files per slot=%s",

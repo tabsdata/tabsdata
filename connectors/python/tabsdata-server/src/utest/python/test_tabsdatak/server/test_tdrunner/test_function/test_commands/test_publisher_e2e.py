@@ -69,13 +69,13 @@ from tabsdatak.common._archive.bundle import build_bundle
 #     no longer exist; report-completion takes the output stats from the
 #     outputs manifest.
 #   * state is no longer transported: prep-localize-state takes only
-#     `--request` and `--inputs-manifest` (no `--state-dir`, `--out`,
-#     `--state-manifest`, `--storage-config`); run-source-plugin and
+#     `--request` and `--inputs-manifest` (no `--state-folder`, `--transporter-request`,
+#     `--state-manifest`, `--storage-configuration`); run-source-plugin and
 #     run-function read the previous state where it is stored and hand this
-#     run's state over in `<state-dir>/state.parquet`; run-function writes it
+#     run's state over in `<state-folder>/state.parquet`; run-function writes it
 #     to `system_output[0]` and records it as the outputs manifest's `state`
 #     entry; prep-upload-state, its transporter step and report-completion's
-#     `--state-dir` are gone.
+#     `--state-folder` are gone.
 pytestmark = [
     pytest.mark.unit,
     pytest.mark.tabsdatak,
@@ -359,19 +359,19 @@ _STORAGE_CONFIG_COMMANDS = {
 
 
 def _with_storage_config(argv: list[str]) -> list[str]:
-    """Append a ``--storage-config`` pointing at a config that declares the
+    """Append a ``--storage-configuration`` pointing at a config that declares the
     ``ROOT`` mount (matching the ``env_prefix`` the e2e request locations
     use) for the transporter-prep commands that now require it."""
     if not argv or argv[0] not in _STORAGE_CONFIG_COMMANDS:
         return argv
-    if "--storage-config" in argv:
+    if "--storage-configuration" in argv:
         return argv
     request_path = Path(argv[argv.index("--request") + 1])
     storage_config = request_path.parent / "e2e-storage.yaml"
     storage_config.write_text(
         "storage:\n  mounts:\n    - id: ROOT\n      options: {}\n"
     )
-    return [*argv, "--storage-config", str(storage_config)]
+    return [*argv, "--storage-configuration", str(storage_config)]
 
 
 # --- end-to-end test ------------------------------------------------------
@@ -423,7 +423,7 @@ def test_publisher_full_chain(
             "get-bundle",
             "--request",
             str(request_yaml),
-            "--bundle-dir",
+            "--bundle-folder",
             str(extracted),
             "--scratch-dir",
             str(tmp_path / "localize-scratch"),
@@ -457,9 +457,9 @@ def test_publisher_full_chain(
             str(request_yaml),
             "--in-dir",
             str(in_dir),
-            "--state-dir",
+            "--state-folder",
             str(state_dir),
-            "--out",
+            "--transporter-request",
             str(localize_state_req),
             "--inputs-manifest",
             str(prep_loc_inputs_manifest),
@@ -531,15 +531,15 @@ def test_publisher_full_chain(
             "run-source-plugin",
             "--request",
             str(request_yaml),
-            "--bundle-dir",
+            "--bundle-folder",
             str(extracted),
-            "--out-dir",
+            "--output-folder",
             str(out_dir),
             "--inputs-manifest",
             str(inputs_manifest),
             "--connection-file",
             str(connection_yaml),
-            "--state-dir",
+            "--state-folder",
             str(state_dir),
             "--liveness",
             str(tmp_path / "liveness-rsp"),
@@ -572,7 +572,7 @@ def test_publisher_full_chain(
             str(request_yaml),
             "--inputs-manifest",
             str(inputs_manifest),
-            "--enriched-dir",
+            "--enriched-folder",
             str(enriched_dir),
             "--enriched-inputs-manifest",
             str(enriched_inputs_manifest),
@@ -613,15 +613,15 @@ def test_publisher_full_chain(
             "run-function",
             "--request",
             str(request_yaml),
-            "--bundle-dir",
+            "--bundle-folder",
             str(extracted),
             "--inputs-manifest",
             str(enriched_inputs_manifest),
-            "--out-dir",
+            "--output-folder",
             str(fn_out_dir),
             "--outputs-manifest",
             str(outputs_manifest),
-            "--state-dir",
+            "--state-folder",
             str(state_dir),
             "--liveness",
             str(tmp_path / "liveness-fn"),
@@ -667,7 +667,7 @@ def test_publisher_full_chain(
             str(request_yaml),
             "--outputs-manifest",
             str(outputs_manifest),
-            "--out",
+            "--transporter-request",
             str(upload_tables_req),
             "--liveness",
             str(tmp_path / "liveness-prep-up-tbl"),
@@ -727,9 +727,9 @@ def test_publisher_full_chain(
             "prep-upload-state",
             "--request",
             str(request_yaml),
-            "--state-dir",
+            "--state-folder",
             str(state_dir),
-            "--out",
+            "--transporter-request",
             str(upload_state_req),
             "--liveness",
             str(tmp_path / "liveness-prep-up-state"),
@@ -784,9 +784,9 @@ def test_publisher_full_chain(
             str(request_yaml),
             "--outputs-manifest",
             str(outputs_manifest),
-            "--state-dir",
+            "--state-folder",
             str(state_dir),
-            "--out",
+            "--response",
             str(response_yaml),
             "--liveness",
             str(tmp_path / "liveness-rc"),
@@ -873,7 +873,7 @@ def test_publisher_full_chain_multi_input_path(
             "get-bundle",
             "--request",
             str(request_yaml),
-            "--bundle-dir",
+            "--bundle-folder",
             str(extracted),
             "--scratch-dir",
             str(tmp_path / "localize-scratch"),
@@ -903,9 +903,9 @@ def test_publisher_full_chain_multi_input_path(
             str(request_yaml),
             "--in-dir",
             str(in_dir),
-            "--state-dir",
+            "--state-folder",
             str(state_dir),
-            "--out",
+            "--transporter-request",
             str(localize_state_req),
             "--inputs-manifest",
             str(tmp_path / "prep_loc_inputs.yaml"),
@@ -971,15 +971,15 @@ def test_publisher_full_chain_multi_input_path(
             "run-source-plugin",
             "--request",
             str(request_yaml),
-            "--bundle-dir",
+            "--bundle-folder",
             str(extracted),
-            "--out-dir",
+            "--output-folder",
             str(out_dir),
             "--inputs-manifest",
             str(inputs_manifest),
             "--connection-file",
             str(connection_yaml),
-            "--state-dir",
+            "--state-folder",
             str(state_dir),
             "--liveness",
             str(tmp_path / "liveness-rsp"),
@@ -1010,7 +1010,7 @@ def test_publisher_full_chain_multi_input_path(
             str(request_yaml),
             "--inputs-manifest",
             str(inputs_manifest),
-            "--enriched-dir",
+            "--enriched-folder",
             str(enriched_dir),
             "--enriched-inputs-manifest",
             str(enriched_inputs_manifest),
@@ -1038,15 +1038,15 @@ def test_publisher_full_chain_multi_input_path(
             "run-function",
             "--request",
             str(request_yaml),
-            "--bundle-dir",
+            "--bundle-folder",
             str(extracted),
             "--inputs-manifest",
             str(enriched_inputs_manifest),
-            "--out-dir",
+            "--output-folder",
             str(fn_out_dir),
             "--outputs-manifest",
             str(outputs_manifest),
-            "--state-dir",
+            "--state-folder",
             str(state_dir),
             "--liveness",
             str(tmp_path / "liveness-fn"),
@@ -1097,7 +1097,7 @@ def test_publisher_full_chain_multi_input_path(
             str(request_yaml),
             "--outputs-manifest",
             str(outputs_manifest),
-            "--out",
+            "--transporter-request",
             str(upload_tables_req),
             "--liveness",
             str(tmp_path / "liveness-prep-up-tbl"),
@@ -1155,9 +1155,9 @@ def test_publisher_full_chain_multi_input_path(
             "prep-upload-state",
             "--request",
             str(request_yaml),
-            "--state-dir",
+            "--state-folder",
             str(state_dir),
-            "--out",
+            "--transporter-request",
             str(upload_state_req),
             "--liveness",
             str(tmp_path / "liveness-prep-up-state"),
@@ -1211,9 +1211,9 @@ def test_publisher_full_chain_multi_input_path(
             str(request_yaml),
             "--outputs-manifest",
             str(outputs_manifest),
-            "--state-dir",
+            "--state-folder",
             str(state_dir),
-            "--out",
+            "--response",
             str(response_yaml),
             "--liveness",
             str(tmp_path / "liveness-rc"),

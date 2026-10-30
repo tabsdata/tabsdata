@@ -45,7 +45,7 @@ FunctionInfo = PublisherInfo | TransformerInfo | SubscriberInfo
 
 
 def load_function_def_or_raise(
-    bundle_dir: Path,
+    bundle_folder: Path,
     *,
     allowed_kinds: dict[str, type[FunctionInfo]],
     bad_bundle_code: ErrorCode,
@@ -61,22 +61,22 @@ def load_function_def_or_raise(
     typed exception class carries its own ``exit_code``.
 
     Templates that bind ``bad_bundle_code`` / ``bad_user_code_code`` /
-    ``wrong_kind_code`` can reference ``{bundle_dir}``, ``{manifest}``,
+    ``wrong_kind_code`` can reference ``{bundle_folder}``, ``{manifest}``,
     ``{kind}``, ``{allowed}``, and ``{detail}`` as placeholders
     (whichever apply at the failing site).
 
     Removed alongside the legacy form once every consumer migrates
     (TD-2263).
     """
-    manifest = bundle_dir / BUNDLE_MANIFEST_FILENAME
+    manifest = bundle_folder / BUNDLE_MANIFEST_FILENAME
     if not manifest.is_file():
         raise bad_bundle_code.exception(
-            bundle_dir=bundle_dir,
+            bundle_folder=bundle_folder,
             manifest=manifest,
-            detail=f"{BUNDLE_MANIFEST_FILENAME} not found in {bundle_dir}",
+            detail=f"{BUNDLE_MANIFEST_FILENAME} not found in {bundle_folder}",
         )
 
-    user_code_path = str((bundle_dir / BUNDLE_USER_CODE_DIRNAME).resolve())
+    user_code_path = str((bundle_folder / BUNDLE_USER_CODE_DIRNAME).resolve())
     if user_code_path not in sys.path:
         sys.path.insert(0, user_code_path)
 
@@ -85,7 +85,7 @@ def load_function_def_or_raise(
     except OSError as exc:
         raise bad_bundle_code.exception(
             cause=exc,
-            bundle_dir=bundle_dir,
+            bundle_folder=bundle_folder,
             manifest=manifest,
             detail=f"unreadable {manifest}: {exc}",
         )
@@ -95,7 +95,7 @@ def load_function_def_or_raise(
     except json.JSONDecodeError as exc:
         raise bad_bundle_code.exception(
             cause=exc,
-            bundle_dir=bundle_dir,
+            bundle_folder=bundle_folder,
             manifest=manifest,
             detail=f"malformed JSON in {manifest}: {exc}",
         )
@@ -104,7 +104,7 @@ def load_function_def_or_raise(
     info_cls = allowed_kinds.get(kind) if kind else None
     if info_cls is None:
         raise wrong_kind_code.exception(
-            bundle_dir=bundle_dir,
+            bundle_folder=bundle_folder,
             manifest=manifest,
             kind=kind,
             allowed=sorted(allowed_kinds),
@@ -118,7 +118,7 @@ def load_function_def_or_raise(
         return info_cls.from_dict(data)
     except ValidationError as exc:
         raise bad_user_code_code.exception(
-            cause=exc, bundle_dir=bundle_dir, detail=str(exc)
+            cause=exc, bundle_folder=bundle_folder, detail=str(exc)
         )
     except TabsdataException as exc:
         # ``JsonSerde.from_dict`` re-raises a pydantic ``ValidationError`` as
@@ -127,12 +127,12 @@ def load_function_def_or_raise(
         # the underlying validation error, which names the offending field.
         if not isinstance(exc.cause, ValidationError):
             raise bad_bundle_code.exception(
-                cause=exc, bundle_dir=bundle_dir, detail=str(exc)
+                cause=exc, bundle_folder=bundle_folder, detail=str(exc)
             )
         raise bad_user_code_code.exception(
-            cause=exc.cause, bundle_dir=bundle_dir, detail=str(exc.cause)
+            cause=exc.cause, bundle_folder=bundle_folder, detail=str(exc.cause)
         )
     except Exception as exc:
         raise bad_bundle_code.exception(
-            cause=exc, bundle_dir=bundle_dir, detail=str(exc)
+            cause=exc, bundle_folder=bundle_folder, detail=str(exc)
         )

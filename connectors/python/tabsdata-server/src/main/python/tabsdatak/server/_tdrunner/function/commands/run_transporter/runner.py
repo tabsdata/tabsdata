@@ -7,20 +7,21 @@
 The command's logic, callable without argparse or the responder. The
 package ``__init__`` wraps :func:`run` in the ``@command`` entrypoint
 for the console script; the compound imports :func:`run` directly and
-supplies a pre-built ``Namespace``.
+supplies pre-built ``RunTransporterArguments``.
 """
 
 from __future__ import annotations
 
-import argparse
 import logging
-from pathlib import Path
 
 from tabsdatak.common._transporter.invoker.transporter1 import (
     TransporterBinaryNotFoundError,
 )
 from tabsdatak.server._tdrunner.function._lib.transporter import (
     run_transporter,
+)
+from tabsdatak.server._tdrunner.function.commands.run_transporter.arguments import (
+    RunTransporterArguments,
 )
 from tabsdatak.server._tdrunner.function.commands.run_transporter.error import (
     RunTransporterErrorCode,
@@ -29,9 +30,9 @@ from tabsdatak.server._tdrunner.function.commands.run_transporter.error import (
 logger = logging.getLogger(__name__)
 
 
-def run(args: argparse.Namespace) -> int:
-    request_yaml = Path(args.request)
-    report = Path(args.report)
+def run(arguments: RunTransporterArguments) -> int:
+    request_yaml = arguments.request
+    report = arguments.report
     logger.info("Running td_transporter")
     logger.debug("Request: %s  Report: %s", request_yaml, report)
     try:

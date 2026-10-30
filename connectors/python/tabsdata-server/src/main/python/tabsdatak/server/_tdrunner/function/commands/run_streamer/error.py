@@ -78,13 +78,13 @@ class RunStreamerErrorCode(ErrorCode):
 
     RS_2 = ErrorDef(
         BadBundleError,
-        "could not load function_def.json from {bundle_dir}: {detail}",
+        "could not load function_def.json from {bundle_folder}: {detail}",
     )
     # ``load_function_def_or_raise`` bundle-shape failure.
 
     RS_3 = ErrorDef(
         BadUserCodeError,
-        "could not resolve user function from {bundle_dir}: {detail}",
+        "could not resolve user function from {bundle_folder}: {detail}",
     )
     # ``load_function_def_or_raise`` user-code failure.
 

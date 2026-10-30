@@ -65,13 +65,13 @@ from tabsdatak.common._archive.bundle import build_bundle
 #     run-destination-plugin copies those landing files to local public
 #     parquets for `write_out` (`Handoff`).
 #   * state is no longer transported: prep-localize-state takes only
-#     `--request` and `--inputs-manifest` (no `--state-dir`, `--out`,
-#     `--state-manifest`, `--storage-config`); run-source-plugin and
+#     `--request` and `--inputs-manifest` (no `--state-folder`, `--transporter-request`,
+#     `--state-manifest`, `--storage-configuration`); run-source-plugin and
 #     run-function read the previous state where it is stored and hand this
-#     run's state over in `<state-dir>/state.parquet`; run-function writes it
+#     run's state over in `<state-folder>/state.parquet`; run-function writes it
 #     to `system_output[0]` and records it as the outputs manifest's `state`
 #     entry; prep-upload-state, its transporter step and report-completion's
-#     `--state-dir` are gone.
+#     `--state-folder` are gone.
 pytestmark = [
     pytest.mark.unit,
     pytest.mark.tabsdatak,
@@ -244,19 +244,19 @@ _STORAGE_CONFIG_COMMANDS = {
 
 
 def _with_storage_config(argv: list[str]) -> list[str]:
-    """Append a ``--storage-config`` declaring the ``ROOT`` mount (matching
+    """Append a ``--storage-configuration`` declaring the ``ROOT`` mount (matching
     the ``env_prefix`` the e2e request locations use) for the transporter-prep
     commands that now require it."""
     if not argv or argv[0] not in _STORAGE_CONFIG_COMMANDS:
         return argv
-    if "--storage-config" in argv:
+    if "--storage-configuration" in argv:
         return argv
     request_path = Path(argv[argv.index("--request") + 1])
     storage_config = request_path.parent / "e2e-storage.yaml"
     storage_config.write_text(
         "storage:\n  mounts:\n    - id: ROOT\n      options: {}\n"
     )
-    return [*argv, "--storage-config", str(storage_config)]
+    return [*argv, "--storage-configuration", str(storage_config)]
 
 
 def _invoke(monkeypatch, main_fn, argv: list[str], *, responder_url: str) -> int:
@@ -327,7 +327,7 @@ def test_subscriber_full_chain(
             "get-bundle",
             "--request",
             str(request_yaml),
-            "--bundle-dir",
+            "--bundle-folder",
             str(extracted),
             "--scratch-dir",
             str(tmp_path / "localize-scratch"),
@@ -353,9 +353,9 @@ def test_subscriber_full_chain(
             str(request_yaml),
             "--in-dir",
             str(in_dir),
-            "--state-dir",
+            "--state-folder",
             str(state_dir),
-            "--out",
+            "--transporter-request",
             str(localize_state_req),
             "--inputs-manifest",
             str(inputs_manifest),
@@ -403,15 +403,15 @@ def test_subscriber_full_chain(
             "run-function",
             "--request",
             str(request_yaml),
-            "--bundle-dir",
+            "--bundle-folder",
             str(extracted),
             "--inputs-manifest",
             str(inputs_manifest),
-            "--out-dir",
+            "--output-folder",
             str(fn_out_dir),
             "--outputs-manifest",
             str(outputs_manifest),
-            "--state-dir",
+            "--state-folder",
             str(state_dir),
             "--liveness",
             str(tmp_path / "liveness-fn"),
@@ -449,7 +449,7 @@ def test_subscriber_full_chain(
             "run-destination-plugin",
             "--request",
             str(request_yaml),
-            "--bundle-dir",
+            "--bundle-folder",
             str(extracted),
             "--outputs-manifest",
             str(outputs_manifest),
@@ -488,9 +488,9 @@ def test_subscriber_full_chain(
             "prep-upload-state",
             "--request",
             str(request_yaml),
-            "--state-dir",
+            "--state-folder",
             str(state_dir),
-            "--out",
+            "--transporter-request",
             str(upload_state_req),
             "--liveness",
             str(tmp_path / "liveness-prep-up-state"),
@@ -535,9 +535,9 @@ def test_subscriber_full_chain(
             str(request_yaml),
             "--outputs-manifest",
             str(outputs_manifest),
-            "--state-dir",
+            "--state-folder",
             str(state_dir),
-            "--out",
+            "--response",
             str(response_yaml),
             "--liveness",
             str(tmp_path / "liveness-rc"),

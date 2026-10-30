@@ -127,7 +127,7 @@ def _set_argv(
             str(request_path),
             "--inputs-manifest",
             str(inputs_manifest),
-            "--enriched-dir",
+            "--enriched-folder",
             str(enriched_dir),
             "--enriched-inputs-manifest",
             str(enriched_manifest),

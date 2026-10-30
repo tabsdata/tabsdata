@@ -7,7 +7,7 @@
 Reads the function definition from the extracted bundle, imports the
 user's code, instantiates the matching SrcPlugin via the connector
 registry exposed by `tabsdatak._connectors`, and invokes read_in() to
-materialise parquet files in --out-dir.
+materialise parquet files in --output-folder.
 
 Supports two function-definition kinds:
 
@@ -32,13 +32,14 @@ Supports two function-definition kinds:
 
 from __future__ import annotations
 
-import argparse
-
-from tabsdatak.server._tdrunner.function._commons.run.command import (
-    build_parser,
-    command,
+from tabsdatak.server._tdrunner.function._commons.run.arguments import (
+    ArgumentsParser,
 )
+from tabsdatak.server._tdrunner.function._commons.run.command import command
 from tabsdatak.server._tdrunner.function._commons.run.version import version
+from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.arguments import (  # noqa: E501
+    RunSourcePluginArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.runner import (
     _build_manifest_stage_conn,
     _invoke_read_in,
@@ -63,70 +64,35 @@ __all__ = [
 
 VERSION = version()
 GENERATION = 1
-INFO = (
+INFORMATION = (
     "run-source-plugin — invoke the publisher's source plugin to produce parquet files"
 )
-MAN = (
-    "run-source-plugin --request <PATH> --bundle-dir <PATH> "
-    "--out-dir <PATH> --inputs-manifest <PATH> --liveness <PATH>\n\n"
-    "Loads function_def.json from --bundle-dir, instantiates the SrcPlugin "
+MANUAL = (
+    "run-source-plugin --request <PATH> --bundle-folder <PATH> "
+    "--output-folder <PATH> --inputs-manifest <PATH> --state-folder <PATH> "
+    "--connection-file <PATH> --liveness <PATH>\n\n"
+    "Loads function_def.json from --bundle-folder, instantiates the SrcPlugin "
     "matching the deserialised source spec, and invokes read_in() to "
-    "materialise parquet files under --out-dir. Writes a YAML manifest "
+    "materialise parquet files under --output-folder. Writes a YAML manifest "
     "at --inputs-manifest that maps each function input parameter (in "
     "declaration order) to the parquet files the plugin produced for "
     "it; consumed by the function runner."
 )
 
 
-def _build_parser():
-    parser = build_parser(
+def build_command_parser() -> ArgumentsParser:
+    return RunSourcePluginArguments.parser(
         program="run-source-plugin",
         description="Invoke the publisher's source plugin.",
         version=VERSION,
-        info=INFO,
-        manual=MAN,
+        information=INFORMATION,
+        manual=MANUAL,
     )
-    parser.add_argument("--request", required=True, help="Path to request.yaml")
-    parser.add_argument(
-        "--bundle-dir", required=True, help="Extracted bundle directory"
-    )
-    parser.add_argument(
-        "--out-dir",
-        required=True,
-        help="Directory where read_in writes parquet files",
-    )
-    parser.add_argument(
-        "--inputs-manifest",
-        required=True,
-        help=(
-            "Path where this command writes the YAML manifest mapping "
-            "each function input parameter to the parquet files produced "
-            "by the source plugin. Consumed by the function runner."
-        ),
-    )
-    parser.add_argument(
-        "--state-dir",
-        required=True,
-        dest="state_folder",
-        help=(
-            "Local folder where the plugin ctx scratch is drained "
-            "to <state-dir>/state.parquet, for run-function to pick up. "
-            "The previous run's state is read from system_input[0]'s "
-            "storage location."
-        ),
-    )
-    parser.add_argument(
-        "--connection-file",
-        required=True,
-        dest="connection_file",
-        help="Path to the connection definition file.",
-    )
-    return parser
 
 
-@command(name="td_run_source_plugin", parser=_build_parser)
-def main(args: argparse.Namespace) -> int:
-    return run(args)
+@command(name="td_run_source_plugin", parser=build_command_parser)
+def main(arguments: RunSourcePluginArguments) -> int:
+    return run(arguments)
 
 
 if __name__ == "__main__":  # pragma: no cover

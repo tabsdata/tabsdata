@@ -7,17 +7,15 @@
 The command's logic, callable without argparse or the responder. The
 package ``__init__`` wraps :func:`run` in the ``@command`` entrypoint
 for the console script; the compound imports :func:`run` directly and
-supplies a pre-built ``Namespace``.
+supplies pre-built ``FetchRequestArguments``.
 """
 
 from __future__ import annotations
 
-import argparse
 import json
 import logging
 import urllib.error
 import urllib.request
-from pathlib import Path
 
 import yaml
 
@@ -26,6 +24,9 @@ from tabsdatak.server._tdrunner.function._commons.http.request import (
 )
 from tabsdatak.server._tdrunner.function._commons.http.retry import call_with_retry
 from tabsdatak.server._tdrunner.function._commons.solver.arguments import resolve_value
+from tabsdatak.server._tdrunner.function.commands.fetch_request.arguments import (
+    FetchRequestArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.fetch_request.error import (
     FetchRequestErrorCode,
 )
@@ -62,11 +63,11 @@ def _fetch(url: str, method: str, authorization: str) -> bytes:
         )
 
 
-def run(args: argparse.Namespace) -> int:
-    url = resolve_value(args.resolver_url)
-    method = resolve_value(args.resolver_method)
-    authorization = resolve_value(args.resolver_authorization)
-    request_file = Path(args.request_file)
+def run(arguments: FetchRequestArguments) -> int:
+    url = resolve_value(arguments.resolver_url)
+    method = resolve_value(arguments.resolver_method)
+    authorization = resolve_value(arguments.resolver_authorization)
+    request_file = arguments.request_file
     logger.info("Fetching function-run request from the apiserver")
     logger.debug("Resolver: %s %s -> %s", method, url, request_file)
 

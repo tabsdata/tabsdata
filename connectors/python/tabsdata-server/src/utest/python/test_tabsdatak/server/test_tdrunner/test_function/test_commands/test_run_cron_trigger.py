@@ -17,9 +17,9 @@ from tabsdatak.server._tdrunner.function._commons.http.request import (
     HttpResponse,
 )
 from tabsdatak.server._tdrunner.function.commands.run_cron_trigger import (
-    _build_parser,
     _execution_request_body,
     _fire,
+    build_command_parser,
     main,
     runner,
 )
@@ -32,13 +32,13 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
 def _std_args() -> list[str]:
-    """The standard responder/liveness/log/journal args build_parser requires."""
+    """The standard responder/liveness/log/journal options every command requires."""
     return [
-        "--shared-dir",
+        "--shared-folder",
         "/s",
-        "--work-dir",
+        "--work-folder",
         "/w",
-        "--log-config",
+        "--logging-configuration",
         "/c",
         "--liveness",
         "/l",
@@ -73,9 +73,8 @@ def test_main_carries_tabsdata_command_metadata():
     assert getattr(main, "tabsdata_command_name", None) == "td_run_cron_trigger"
 
 
-def test_build_parser_accepts_trigger_triplet():
-    parser = _build_parser()
-    ns = parser.parse_args(
+def test_build_command_parser_accepts_trigger_triplet():
+    arguments = build_command_parser().parse(
         _std_args()
         + [
             "--trigger-url",
@@ -86,9 +85,9 @@ def test_build_parser_accepts_trigger_triplet():
             "val:Bearer t",
         ]
     )
-    assert ns.trigger_url == "env:SECRET__TD_TRIGGER_URL"
-    assert ns.trigger_method == "val:POST"
-    assert ns.trigger_authorization == "val:Bearer t"
+    assert arguments.trigger_url == "env:SECRET__TD_TRIGGER_URL"
+    assert arguments.trigger_method == "val:POST"
+    assert arguments.trigger_authorization == "val:Bearer t"
 
 
 # --- _fire: POST with retries, classify the response ----------------------
@@ -176,9 +175,7 @@ def test_fire_retries_until_the_apiserver_answers(monkeypatch, short_budget):
 
 
 def test_fire_raises_ct1_on_connection_error(monkeypatch, short_budget):
-    fake, captured = _capture_invoke(
-        raise_exc=HttpRequestError("connection refused")
-    )
+    fake, captured = _capture_invoke(raise_exc=HttpRequestError("connection refused"))
     monkeypatch.setattr(runner, "invoke", fake)
 
     with pytest.raises(CronTriggerConnectionError) as excinfo:

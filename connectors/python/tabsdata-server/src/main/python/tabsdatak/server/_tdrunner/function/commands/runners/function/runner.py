@@ -7,12 +7,11 @@
 The command's logic, callable without argparse. The package
 ``__init__`` wraps :func:`run` in the ``@command`` entrypoint for the
 console script; the compound imports :func:`run` directly and supplies
-a pre-built ``Namespace``.
+pre-built ``RunFunctionArguments``.
 """
 
 from __future__ import annotations
 
-import argparse
 import inspect
 import logging
 import typing
@@ -63,6 +62,9 @@ from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
+from tabsdatak.server._tdrunner.function.commands.runners.function.arguments import (
+    RunFunctionArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.runners.function.error import (
     RunFunctionErrorCode,
 )
@@ -116,7 +118,7 @@ _INFO_BY_KIND: dict[str, type[FunctionInfo]] = {
 }
 
 
-def _load_function_def(bundle_dir: Path) -> FunctionInfo:
+def _load_function_def(bundle_folder: Path) -> FunctionInfo:
     """Load the bundle's ``function_def.json`` -- thin wrapper over
     :func:`load_function_def_or_raise` accepting the three kinds
     run-function dispatches on.
@@ -125,7 +127,7 @@ def _load_function_def(bundle_dir: Path) -> FunctionInfo:
     ``BadBundleError`` (same exit code) to preserve the pre-refactor
     mapping (the test suite expects that)."""
     return load_function_def_or_raise(
-        bundle_dir,
+        bundle_folder,
         allowed_kinds=_INFO_BY_KIND,
         bad_bundle_code=RunFunctionErrorCode.RF_2,
         bad_user_code_code=RunFunctionErrorCode.RF_3,
@@ -461,23 +463,23 @@ def _read_stats(table_name: str, target: TableFile) -> TableStats:
         )
 
 
-def run(args: argparse.Namespace) -> int:
+def run(arguments: RunFunctionArguments) -> int:
     project_secret = take_project_secret()
-    request_path = Path(args.request)
-    bundle_dir = Path(args.bundle_dir)
-    inputs_manifest_path = Path(args.inputs_manifest)
-    out_dir = Path(args.out_dir)
-    outputs_manifest_path = Path(args.outputs_manifest)
-    state_folder = Path(args.state_folder)
+    request_path = arguments.request
+    bundle_folder = arguments.bundle_folder
+    inputs_manifest_path = arguments.inputs_manifest
+    output_folder = arguments.output_folder
+    outputs_manifest_path = arguments.outputs_manifest
+    state_folder = arguments.state_folder
 
     logger.info("Running user function")
     request = Request.load(request_path, RunFunctionErrorCode.RF_1)
-    info = _load_function_def(bundle_dir)
+    info = _load_function_def(bundle_folder)
     logger.debug(
         "Loaded function '%s' (kind=%s) from bundle %s",
         request.info.function,
         type(info).__name__,
-        bundle_dir,
+        bundle_folder,
     )
     try:
         entries = InputManifest.load(inputs_manifest_path).inputs
@@ -499,12 +501,12 @@ def run(args: argparse.Namespace) -> int:
             entries=len(entries), slots=len(table_modes)
         )
 
-    # Make the function's output directory available BEFORE invoking
+    # Make the function's output folder available BEFORE invoking
     # the user function: the FunctionCtx surfaces it as ``work_dir``
     # (per the PluginCtx contract), so a user function that drops a
     # sidecar file there mustn't fail with FileNotFoundError. Also
     # required up-front for ``_sink_outputs`` after the call.
-    out_dir.mkdir(parents=True, exist_ok=True)
+    output_folder.mkdir(parents=True, exist_ok=True)
 
     # Build the positional args for the user function from the
     # inputs manifest. Manifest order mirrors function parameter
@@ -530,12 +532,12 @@ def run(args: argparse.Namespace) -> int:
     state = State(request, state_folder)
     ctx: _FunctionContext | None = None
     if has_transaction_ctx_param(func):
-        ctx = _FunctionContext.from_info(out_dir, request.info).with_project_secret(
-            project_secret
-        )
+        ctx = _FunctionContext.from_info(
+            output_folder, request.info
+        ).with_project_secret(project_secret)
         state.hydrate(ctx, error_code=RunFunctionErrorCode.RF_18, prefer_local=True)
         call_args.append(ctx)
-        logger.debug("Hydrated ctx (work_dir=%s)", out_dir)
+        logger.debug("Hydrated ctx (work_folder=%s)", output_folder)
 
     output_tables = _output_table_names(info)
     logger.info(

@@ -120,11 +120,11 @@ spec:
               imagePullPolicy: IfNotPresent
               command: ["${{system:tdk_pyenv_fn_root}}/bin/td_run_cron_trigger"]
               args:
-                - --shared-dir
+                - --shared-folder
                 - $(CONTAINER_ROOT)/tabsdata/shared
-                - --work-dir
+                - --work-folder
                 - $(CONTAINER_ROOT)/tabsdata/work
-                - --log-config
+                - --logging-configuration
                 - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
                 - --liveness
                 - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
