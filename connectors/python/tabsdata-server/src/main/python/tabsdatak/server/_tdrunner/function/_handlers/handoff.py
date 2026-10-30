@@ -69,7 +69,7 @@ class DestinationHandoff(Handoff):
     ) -> None: ...
 
     @abstractmethod
-    def harvest(self) -> None: ...
+    def reap(self) -> None: ...
 
 
 @dataclass(kw_only=True)
@@ -115,7 +115,7 @@ class FileDestinationHandoff(DestinationHandoff):
     ) -> None:
         plugin.write_out(context, connection, destination, tables)
 
-    def harvest(self) -> None:
+    def reap(self) -> None:
         if self.tables_folder is not None:
             shutil.rmtree(self.tables_folder, ignore_errors=True)
             self.tables_folder = None

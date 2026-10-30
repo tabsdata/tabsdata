@@ -110,15 +110,15 @@ def test_file_handoff_grows_by_writing_the_tables_out(tmp_path):
     assert calls == [("context", "connection", "dest", tables)]
 
 
-def test_harvest_removes_what_seed_wrote(tmp_path):
+def test_reap_removes_what_seed_wrote(tmp_path):
     info = landing_info(tmp_path)
     files = handoff(tmp_path)
     tables = files.seed(info, OutputManifest(outputs=(land(info, 0, [1]),)))
-    files.harvest()
+    files.reap()
     assert not tables[0].parent.exists()
     assert (tmp_path / "work").is_dir()
 
 
-def test_harvest_without_seed_does_nothing(tmp_path):
-    handoff(tmp_path).harvest()
+def test_reap_without_seed_does_nothing(tmp_path):
+    handoff(tmp_path).reap()
     assert not (tmp_path / "work").exists()

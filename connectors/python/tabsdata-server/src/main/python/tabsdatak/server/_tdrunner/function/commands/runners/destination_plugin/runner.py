@@ -189,6 +189,6 @@ def run(arguments: RunDestinationPluginArguments) -> int:
             tables,
         )
     finally:
-        handoff.harvest()
+        handoff.reap()
     logger.info(f"Destination plugin wrote {len(tables)} table(s)")
     return 0
