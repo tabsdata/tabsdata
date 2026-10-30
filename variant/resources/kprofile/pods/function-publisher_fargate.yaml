@@ -495,7 +495,7 @@ spec:
               mountPath: /tabsdata/shared
             - name: work
               mountPath: /tabsdata/work
-        - name: 0090-source-plugin
+        - name: 0080-source-plugin
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_fn_root}}/bin/td_source_plugin"]
@@ -580,7 +580,7 @@ spec:
               mountPath: /tabsdata/shared
             - name: work
               mountPath: /tabsdata/work
-        - name: 0130-function
+        - name: 0090-function
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           command: ["${{system:tdk_pyenv_fn_root}}/bin/td_function"]

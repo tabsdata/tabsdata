@@ -569,7 +569,7 @@ def test_load_function_def_stream_publisher_kind_loads_stream_publisher_info(
     """A streamPublisherDef bundle deserialises as StreamPublisherInfo.
 
     Without this, `tdk fn trigger` on a `@stream_publisher` fails at
-    `0080-function` with WrongKindError (RF_4) — even though
+    the `function` step with WrongKindError (RF_4) — even though
     upstream steps (`source-plugin`'s substitution) have done their
     job materialising the staged inputs."""
     from tabsdatak._info import StreamPublisherInfo
