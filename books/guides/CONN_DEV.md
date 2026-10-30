@@ -177,10 +177,15 @@ hands its data to the runtime:
   (`channel.name` is that parameter's name, chosen by the user: use it
   in messages only); `channel.write(data, metadata=...)` lands a table,
   or a chunk of one, in the variant's format, and `read_in` returns
-  `self.bus`, annotated with the same variant. Variants, in order of
-  preference: `SrcBusOfLazyFrame` (`pl.LazyFrame`), `SrcBusOfDataFrame`
-  (`pl.DataFrame`), `SrcBusOfArrow` (`pa.RecordBatchReader`),
-  `SrcBusOfFile` (a local parquet `Path`);
+  `self.bus`, annotated with the same variant. Untyped data (CSV, JSON
+  lines, Excel) is written with every column a `String` plus
+  `schema=`, the types polars infers reading the whole source (e.g.
+  `pl.scan_csv(source, infer_schema_length=None).collect_schema()`):
+  the strings land as they are and the schema is applied when served.
+  Variants, in order of preference: `SrcBusOfLazyFrame`
+  (`pl.LazyFrame`), `SrcBusOfDataFrame` (`pl.DataFrame`),
+  `SrcBusOfArrow` (`pa.RecordBatchReader`), `SrcBusOfFile` (a local
+  parquet `Path`);
 - no third argument: the legacy form, `read_in` returns one list of
   `TableFileInput` per input. Deprecated since 2.3.0: registering such
   a plugin raises a `TabsdataDeprecatedWarning` (ignored by default

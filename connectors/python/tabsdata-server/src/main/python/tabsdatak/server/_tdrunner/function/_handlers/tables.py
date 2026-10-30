@@ -68,11 +68,16 @@ class TableFile:
     def read(self) -> pl.DataFrame:
         return self.scan().collect()
 
-    def sink(self, frame: pl.LazyFrame) -> pl.LazyFrame:
+    def sink(
+        self,
+        frame: pl.LazyFrame,
+        metadata: dict[str, str] | None = None,
+    ) -> pl.LazyFrame:
         locator = self.locator()
         return frame.sink_parquet(
             locator.uri,
             storage_options=locator.storage_options,
+            metadata=metadata,
             engine="streaming",
             lazy=True,
         )

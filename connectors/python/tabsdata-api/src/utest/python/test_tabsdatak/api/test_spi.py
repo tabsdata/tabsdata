@@ -961,7 +961,13 @@ class FileSrcChannel(SrcChannelOfFile):
     def position(self) -> int:
         return self._position
 
-    def write(self, data: Path, *, metadata: Any = None) -> None:
+    def write(
+        self,
+        data: Path,
+        *,
+        schema: Any = None,
+        metadata: Any = None,
+    ) -> None:
         self.written.append((data, metadata))
 
 

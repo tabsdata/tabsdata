@@ -227,6 +227,7 @@ class SrcChannel(_Channel, ABC):
         self,
         data: Any,
         *,
+        schema: pl.Schema | None = None,
         metadata: MetadataSpec | None = None,
     ) -> None:
         """Land one table, or one chunk of a table, in the variant's
@@ -234,6 +235,15 @@ class SrcChannel(_Channel, ABC):
 
         Args:
             data: The table or chunk, in the variant's format.
+            schema: For untyped data only, every column a `String`
+                as read from text (CSV, JSON lines, Excel cells): the
+                types polars infers for it, from the same reader over
+                the whole source (e.g. `pl.scan_csv(source,
+                infer_schema_length=None).collect_schema()` for data
+                read with `infer_schema=False`). The strings land as
+                they are, and the schema is applied when the table is
+                served. Leave it out for typed data, which lands with
+                its own types.
             metadata: Optional `MetadataSpec`. Each entry is added as
                 a metadata column on this write's rows, by convention
                 named with a leading `@`.
@@ -252,6 +262,7 @@ class SrcChannelOfLazyFrame(SrcChannel, ABC):
         self,
         data: pl.LazyFrame,
         *,
+        schema: pl.Schema | None = None,
         metadata: MetadataSpec | None = None,
     ) -> None:
         """Land a `LazyFrame`."""
@@ -269,6 +280,7 @@ class SrcChannelOfDataFrame(SrcChannel, ABC):
         self,
         data: pl.DataFrame,
         *,
+        schema: pl.Schema | None = None,
         metadata: MetadataSpec | None = None,
     ) -> None:
         """Land a `DataFrame`."""
@@ -286,6 +298,7 @@ class SrcChannelOfArrow(SrcChannel, ABC):
         self,
         data: pa.RecordBatchReader,
         *,
+        schema: pl.Schema | None = None,
         metadata: MetadataSpec | None = None,
     ) -> None:
         """Land a `RecordBatchReader`."""
@@ -303,6 +316,7 @@ class SrcChannelOfFile(SrcChannel, ABC):
         self,
         data: Path,
         *,
+        schema: pl.Schema | None = None,
         metadata: MetadataSpec | None = None,
     ) -> None:
         """Land a local parquet file."""
