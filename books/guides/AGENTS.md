@@ -131,7 +131,7 @@ also need `Src` / `StreamSrc` / `Dest`, import them from
 | Connection    | `Conn` (abstract; subclass as `<Name>Conn`). Connections are not declared in user flow code — they are registered on the function's collection and resolved by the runtime; the descriptor (`Src` / `Dest`) carries no `conn` field. |
 | Kind bindings | `SrcDef[C, S]`, `StreamSrcDef[C, AS]`, `DestDef[C, D]` (frozen pydantic dataclasses; instantiate one per concrete `Src` / `StreamSrc` / `Dest` subclass and expose it via the `tabsdatak.connectors` entry-point group; `conn=<Name>Conn` on each binds it to its connection type) |
 | Plugins       | `SrcPlugin[C, S]`, `StreamSrcPlugin[C, AS]`, `DestPlugin[C, D]` (abstract; subclass and implement `read_in` / `write_out`) |
-| Destination handoff | `DestBusOfLazyFrame`, `DestBusOfDataFrame`, `DestBusOfArrow`, `DestBusOfFile` (annotate `write_out`'s fourth parameter with one to receive one `DestChannel` per output, whose `read()` returns the table in that format; `list[TableFileSpec]` keeps the legacy local files); `dest_handoff(plugin)` |
+| Destination handoff | `DestBusOfLazyFrame`, `DestBusOfDataFrame`, `DestBusOfArrow`, `DestBusOfFile` (annotate `write_out`'s fourth parameter with one to receive one `DestChannel` per output, whose `read()` returns the table in that format; `list[TableFileSpec]` keeps the legacy local files) |
 | Contexts      | `SrcContext`, `StreamSrcPluginCtx`, `DestContext` (per-call handles passed to plugins; expose `work_dir()` etc.) |
 | Helper        | `Explorer[C]` (abstract — schema / metadata extractor) |
 | Enum          | `TableMode` (`SINGLE` / `ARRAY`) |

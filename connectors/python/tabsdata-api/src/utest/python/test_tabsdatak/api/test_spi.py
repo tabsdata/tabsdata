@@ -12,6 +12,7 @@ import pytest
 # noinspection PyProtectedMember
 from tabsdatak import _api
 from tabsdatak._api import LegacyDestTablesWarning, warn_legacy_dest
+from tabsdatak._handoff import DEST_BUSES, dest_bus_names, dest_handoff
 from tabsdatak.api import (
     BasicDictSpec,
     BatchThresholds,
@@ -25,7 +26,6 @@ from tabsdatak.api import (
 )
 from tabsdatak.error import ApiErrorCode, ApiException
 from tabsdatak.spi import (
-    DEST_BUSES,
     Conn,
     DestBus,
     DestBusOfArrow,
@@ -51,8 +51,6 @@ from tabsdatak.spi import (
     TableFileSpec,
     TableMode,
     check_plugin_param_type,
-    dest_bus_names,
-    dest_handoff,
 )
 
 

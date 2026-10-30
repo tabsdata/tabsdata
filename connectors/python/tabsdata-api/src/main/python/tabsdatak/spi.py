@@ -28,14 +28,12 @@ between framework and plugin during a trx.
 from __future__ import annotations
 
 import importlib
-import inspect
 from abc import ABC, abstractmethod
 from enum import Enum
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Annotated,
-    Any,
     Callable,
     ClassVar,
     Iterator,
@@ -44,8 +42,6 @@ from typing import (
     TypeAlias,
     Union,
     cast,
-    get_args,
-    get_origin,
     get_type_hints,
 )
 
@@ -510,7 +506,7 @@ class DestBus[Channel: DestChannel]:
         if self.channel_type is None:
             raise TypeError(
                 f"{type(self).__qualname__} has no channel type; use one of "
-                f"{dest_bus_names()}",
+                "its variants",
             )
         for position, channel in enumerate(channels):
             if not isinstance(channel, self.channel_type):
@@ -584,26 +580,9 @@ class DestBusOfFile(DestBus[DestChannelOfFile]):
     channel_type = DestChannelOfFile
 
 
-# The `DestBus` variants a plugin may declare, in order of preference.
-DEST_BUSES: tuple[type[DestBus], ...] = (
-    DestBusOfLazyFrame,
-    DestBusOfDataFrame,
-    DestBusOfArrow,
-    DestBusOfFile,
-)
-
 # What `DestPlugin.write_out` receives after `ctx`, `conn` and `dest`: a
 # `DestBus` variant, or the legacy list of local parquet files.
 DestTablesSpec: TypeAlias = Union[list[TableFileSpec], DestBus]
-
-
-def dest_bus_names() -> str:
-    """The `DestBus` variants a plugin may declare, in order of
-    preference, as text.
-
-    :categories: spi
-    """
-    return ", ".join(bus.__name__ for bus in DEST_BUSES)
 
 
 class DestContext(TransactionCtx, PluginCtx, ABC):
@@ -813,68 +792,6 @@ def check_plugin_param_type(
         )
 
 
-def _mentions_bus(annotation: Any) -> bool:
-    if isinstance(annotation, str):
-        return "DestBus" in annotation or "DestChannel" in annotation
-    if isinstance(annotation, type):
-        return issubclass(annotation, (DestBus, DestChannel))
-    origin = get_origin(annotation)
-    if origin is not None and _mentions_bus(origin):
-        return True
-    return any(_mentions_bus(argument) for argument in get_args(annotation))
-
-
-def dest_handoff(plugin: type[DestPlugin]) -> type[DestBus] | None:
-    """The `DestBus` variant `plugin.write_out` receives, or `None` when
-    it receives the legacy list of local parquet files.
-
-    :categories: spi
-
-    Reads the annotation of `write_out`'s fourth parameter, the data the
-    runtime passes after `ctx`, `conn` and `dest`. `list[TableFileSpec]`,
-    any other type unrelated to `DestBus`, or no annotation means the
-    legacy file list. Used by `DestDef` at registration and by the
-    runtime to choose the handoff.
-
-    Raises:
-        ValueError: The annotation names `DestBus` or `DestChannel` but
-            is not exactly one of the `DestBus` variants, or it does not
-            resolve at runtime.
-    """
-    method = plugin.write_out
-    if method is DestPlugin.write_out:
-        return None
-    parameters = list(inspect.signature(method).parameters.values())
-    if len(parameters) < 5 or parameters[4].kind not in (
-        inspect.Parameter.POSITIONAL_ONLY,
-        inspect.Parameter.POSITIONAL_OR_KEYWORD,
-    ):
-        return None
-    parameter = parameters[4]
-    if parameter.annotation is inspect.Parameter.empty:
-        return None
-    try:
-        declared = get_type_hints(method).get(parameter.name)
-    except Exception as error:
-        if _mentions_bus(parameter.annotation):
-            raise ValueError(
-                f"{plugin.__qualname__}.write_out: the annotation of "
-                f"`{parameter.name}` does not resolve at runtime ({error}); "
-                f"import the DestBus variant at module level",
-            ) from error
-        return None
-    if declared in DEST_BUSES:
-        return declared
-    if _mentions_bus(declared):
-        raise ValueError(
-            f"{plugin.__qualname__}.write_out: `{parameter.name}` is typed as "
-            f"{declared!r}; a destination plugin declares one of "
-            f"{dest_bus_names()} (in order of preference), or the legacy "
-            f"list[TableFileSpec]",
-        )
-    return None
-
-
 # The `SrcDef` / `StreamSrcDef` / `DestDef` dataclasses carry
 # `Type[...]` fields whose argument types are abstract classes
 # (`SrcPlugin`, `Explorer`, ...), not pydantic types.
@@ -1023,6 +940,8 @@ class DestDef[D: Dest]:
     def _validate(self) -> "DestDef":
         check_plugin_param_type(self.plugin, "write_out", "conn", self.conn)
         check_plugin_param_type(self.plugin, "write_out", "dest", self.dest)
+        from tabsdatak._handoff import dest_handoff
+
         if dest_handoff(self.plugin) is None:
             _api.warn_legacy_dest(self.plugin)
         if self.explorer is not None:

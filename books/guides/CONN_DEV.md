@@ -195,7 +195,7 @@ class _<Name>DestPlugin(DestPlugin[<Name>Conn, <Name>Dest]):
 
 Declare exactly one variant and import it at module level: `DestDef`
 refuses a bare `DestBus`, a `DestChannel` type or a union of variants
-when the connector is imported (`tabsdatak.spi.dest_handoff`).
+when the connector is imported.
 
 ## `<name>/error.py` — error enum
 

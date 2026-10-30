@@ -13,6 +13,7 @@ from pathlib import Path
 import polars as pl
 import pyarrow as pa
 
+from tabsdatak._handoff import dest_handoff
 from tabsdatak.server._tdrunner.function._commons.document.request import Info
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputManifest,
@@ -34,7 +35,6 @@ from tabsdatak.spi import (
     DestContext,
     DestPlugin,
     SrcPlugin,
-    dest_handoff,
 )
 from tabsdatak.tableframe import TableFrame
 

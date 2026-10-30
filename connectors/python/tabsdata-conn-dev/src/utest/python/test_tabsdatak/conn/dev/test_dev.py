@@ -14,6 +14,7 @@ import pytest
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.dev._plugin as plugin
+from tabsdatak._handoff import dest_handoff
 from tabsdatak.conn.dev import (
     MAX_DATA_BYTES,
     Data,
@@ -25,7 +26,7 @@ from tabsdatak.conn.dev import (
     TrashDestConn,
 )
 from tabsdatak.conn.dev.error import DevRuntimeException, DevValidateException
-from tabsdatak.spi import DestBusOfLazyFrame, DestChannelOfLazyFrame, dest_handoff
+from tabsdatak.spi import DestBusOfLazyFrame, DestChannelOfLazyFrame
 
 pytestmark = pytest.mark.conn_dev
 

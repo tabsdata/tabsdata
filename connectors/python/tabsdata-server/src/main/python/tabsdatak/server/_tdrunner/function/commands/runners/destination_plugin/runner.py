@@ -10,6 +10,7 @@ from pathlib import Path
 
 from tabsdatak._api import warn_legacy_dest
 from tabsdatak._connectors import get_dest
+from tabsdatak._handoff import dest_handoff
 from tabsdatak._info import KIND_SUBSCRIBER_DEF, SubscriberInfo
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
 from tabsdatak.server._tdrunner.function._commons.manifests.manifest import (
@@ -47,7 +48,6 @@ from tabsdatak.spi import (
     DestBus,
     DestContext,
     DestPlugin,
-    dest_handoff,
 )
 
 logger = logging.getLogger(__name__)
