@@ -39,7 +39,7 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
     command,
 )
 from tabsdatak.server._tdrunner.function._commons.run.version import version
-from tabsdatak.server._tdrunner.function.commands.run_source_plugin.runner import (
+from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.runner import (
     _build_manifest_stage_conn,
     _invoke_read_in,
     _load_function_def,

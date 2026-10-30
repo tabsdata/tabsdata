@@ -63,7 +63,7 @@ from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
-from tabsdatak.server._tdrunner.function.commands.run_function.error import (
+from tabsdatak.server._tdrunner.function.commands.runners.function.error import (
     RunFunctionErrorCode,
 )
 from tabsdatak.spi import TableMode

@@ -34,7 +34,7 @@ from tabsdatak.server._tdrunner.function._commons.manifests.output import (
 from tabsdatak.server._tdrunner.function._handlers.columns import ColumnPolicy, Zone
 from tabsdatak.server._tdrunner.function._handlers.handoff import FileDestinationHandoff
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
-from tabsdatak.server._tdrunner.function.commands.run_destination_plugin import (
+from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin import (
     _write_tables,
     _DestContext,
     _load_function_def,
@@ -43,7 +43,7 @@ from tabsdatak.server._tdrunner.function.commands.run_destination_plugin import 
     main,
     runner as runner_module,
 )
-from tabsdatak.server._tdrunner.function.commands.run_destination_plugin.error import (
+from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.error import (
     BadBundleError,
     BadManifestError,
     BadRequestError,
@@ -61,7 +61,7 @@ from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payl
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
-_MOD = "tabsdatak.server._tdrunner.function.commands.run_destination_plugin.runner"
+_MOD = "tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.runner"
 
 
 # --- shared fixtures ----------------------------------------------------

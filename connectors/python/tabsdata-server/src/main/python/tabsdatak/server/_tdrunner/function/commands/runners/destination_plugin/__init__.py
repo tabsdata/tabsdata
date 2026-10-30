@@ -33,7 +33,7 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
     command,
 )
 from tabsdatak.server._tdrunner.function._commons.run.version import version
-from tabsdatak.server._tdrunner.function.commands.run_destination_plugin.runner import (
+from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.runner import (  # noqa: E501
     _DestContext,
     _load_function_def,
     _read_tables,

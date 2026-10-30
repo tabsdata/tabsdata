@@ -45,7 +45,7 @@ from tabsdatak.server._tdrunner.function._handlers.state import (
     write_state,
 )
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
-from tabsdatak.server._tdrunner.function.commands.run_source_plugin import (
+from tabsdatak.server._tdrunner.function.commands.runners.source_plugin import (
     _build_manifest_stage_conn,
     _invoke_read_in,
     _load_function_def,
@@ -55,7 +55,7 @@ from tabsdatak.server._tdrunner.function.commands.run_source_plugin import (
     _write_inputs_manifest,
     main,
 )
-from tabsdatak.server._tdrunner.function.commands.run_source_plugin.error import (
+from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.error import (
     BadBundleError,
     BadRequestError,
     BadUserCodeError,
@@ -74,7 +74,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 HANDLER = TransporterHandler1()
 
 
-_MOD = "tabsdatak.server._tdrunner.function.commands.run_source_plugin.runner"
+_MOD = "tabsdatak.server._tdrunner.function.commands.runners.source_plugin.runner"
 
 
 # --- module-level stream-publisher fixture --------------------------------

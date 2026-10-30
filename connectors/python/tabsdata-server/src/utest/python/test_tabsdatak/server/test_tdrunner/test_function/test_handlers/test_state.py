@@ -26,10 +26,10 @@ from tabsdatak.server._tdrunner.function._handlers.state import (
     write_state,
 )
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
-from tabsdatak.server._tdrunner.function.commands.run_source_plugin import (
+from tabsdatak.server._tdrunner.function.commands.runners.source_plugin import (
     _SrcContext,
 )
-from tabsdatak.server._tdrunner.function.commands.run_source_plugin.error import (
+from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.error import (
     BadStateInError,
     BadStateOutError,
     RunSourcePluginErrorCode,

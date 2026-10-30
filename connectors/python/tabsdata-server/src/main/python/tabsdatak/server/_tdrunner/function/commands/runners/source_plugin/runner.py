@@ -47,7 +47,7 @@ from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
 from tabsdatak.server._tdrunner.function._lib.stage_backend import (
     stage_backend_from_location,
 )
-from tabsdatak.server._tdrunner.function.commands.run_source_plugin.error import (
+from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.error import (
     RunSourcePluginErrorCode,
 )
 from tabsdatak.spi import SrcPluginCtx, TableFileInput

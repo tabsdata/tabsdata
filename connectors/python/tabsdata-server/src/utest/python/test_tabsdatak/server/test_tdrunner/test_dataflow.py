@@ -31,7 +31,7 @@ import tabsdatak.server._tdrunner
 
 polars_loaded_first = "polars" in sys.modules
 
-import tabsdatak.server._tdrunner.function.commands.run_function
+import tabsdatak.server._tdrunner.function.commands.runners.function
 
 names = {names}
 print(json.dumps({{

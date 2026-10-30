@@ -485,7 +485,7 @@ def test_transformer_full_chain(
     assert (in_dir / "t_b.parquet").is_file()
 
     # --- 4. run-function -----------------------------------------------
-    from tabsdatak.server._tdrunner.function.commands.run_function import (
+    from tabsdatak.server._tdrunner.function.commands.runners.function import (
         main as rf_main,
     )
 
@@ -879,7 +879,7 @@ def test_transformer_full_chain_different_cardinalities(
     assert (in_dir / "t_c.parquet").is_file()
 
     # --- 4. run-function -----------------------------------------------
-    from tabsdatak.server._tdrunner.function.commands.run_function import (
+    from tabsdatak.server._tdrunner.function.commands.runners.function import (
         main as rf_main,
     )
 

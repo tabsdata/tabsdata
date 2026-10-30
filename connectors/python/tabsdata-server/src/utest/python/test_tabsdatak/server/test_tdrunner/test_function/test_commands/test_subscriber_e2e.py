@@ -392,7 +392,7 @@ def test_subscriber_full_chain(
     assert (in_dir / "t_b.parquet").is_file()
 
     # --- 4. run-function -----------------------------------------------
-    from tabsdatak.server._tdrunner.function.commands.run_function import (
+    from tabsdatak.server._tdrunner.function.commands.runners.function import (
         main as rf_main,
     )
 
@@ -431,7 +431,7 @@ def test_subscriber_full_chain(
 
     # --- 5. run-destination-plugin ------------------------------------
     from tabsdatak.conn.localfile import LocalFileDestConn
-    from tabsdatak.server._tdrunner.function.commands.run_destination_plugin import (
+    from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin import (
         main as rdp_main,
     )
 

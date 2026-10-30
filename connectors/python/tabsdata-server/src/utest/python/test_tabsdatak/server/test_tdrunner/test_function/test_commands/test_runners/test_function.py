@@ -54,7 +54,7 @@ from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputEntry,
     OutputManifest,
 )
-from tabsdatak.server._tdrunner.function.commands.run_function import (
+from tabsdatak.server._tdrunner.function.commands.runners.function import (
     _FunctionContext,
     _infer_table_modes,
     _invoke_user_function,
@@ -66,7 +66,7 @@ from tabsdatak.server._tdrunner.function.commands.run_function import (
     _sink_outputs,
     main,
 )
-from tabsdatak.server._tdrunner.function.commands.run_function.error import (
+from tabsdatak.server._tdrunner.function.commands.runners.function.error import (
     BadBundleError,
     BadInputParquetError,
     BadManifestError,
@@ -90,7 +90,7 @@ from test_tabsdatak.server.test_tdrunner.test_function.conftest import (
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
-_MOD = "tabsdatak.server._tdrunner.function.commands.run_function.runner"
+_MOD = "tabsdatak.server._tdrunner.function.commands.runners.function.runner"
 
 
 # --- shared fixtures ----------------------------------------------------

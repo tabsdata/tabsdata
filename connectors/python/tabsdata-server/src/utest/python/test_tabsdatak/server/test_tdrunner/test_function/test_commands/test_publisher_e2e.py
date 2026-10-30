@@ -511,7 +511,7 @@ def test_publisher_full_chain(
 
     # --- 4. run-source-plugin ------------------------------------------
     from tabsdatak.conn.localfile import LocalFileSrcConn
-    from tabsdatak.server._tdrunner.function.commands.run_source_plugin import (
+    from tabsdatak.server._tdrunner.function.commands.runners.source_plugin import (
         main as rsp_main,
     )
 
@@ -602,7 +602,7 @@ def test_publisher_full_chain(
         assert sys_col in enriched_cols, (sys_col, enriched_cols)
 
     # --- 6. run-function -----------------------------------------------
-    from tabsdatak.server._tdrunner.function.commands.run_function import (
+    from tabsdatak.server._tdrunner.function.commands.runners.function import (
         main as rf_main,
     )
 
@@ -951,7 +951,7 @@ def test_publisher_full_chain_multi_input_path(
 
     # --- 4. run-source-plugin ------------------------------------------
     from tabsdatak.conn.localfile import LocalFileSrcConn
-    from tabsdatak.server._tdrunner.function.commands.run_source_plugin import (
+    from tabsdatak.server._tdrunner.function.commands.runners.source_plugin import (
         main as rsp_main,
     )
 
@@ -1027,7 +1027,7 @@ def test_publisher_full_chain_multi_input_path(
     assert rc == 0
 
     # --- 6. run-function -----------------------------------------------
-    from tabsdatak.server._tdrunner.function.commands.run_function import (
+    from tabsdatak.server._tdrunner.function.commands.runners.function import (
         main as rf_main,
     )
 

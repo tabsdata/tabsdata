@@ -19,10 +19,13 @@ SECOND_GENERATION = {"get_bundle"}
 
 def versioned() -> list[str]:
     names = []
-    for module in pkgutil.iter_modules(commands.__path__):
-        command = importlib.import_module(f"{commands.__name__}.{module.name}")
+    prefix = f"{commands.__name__}."
+    for module in pkgutil.walk_packages(commands.__path__, prefix):
+        if not module.ispkg:
+            continue
+        command = importlib.import_module(module.name)
         if hasattr(command, "VERSION"):
-            names.append(module.name)
+            names.append(module.name.removeprefix(prefix))
     return sorted(names)
 
 

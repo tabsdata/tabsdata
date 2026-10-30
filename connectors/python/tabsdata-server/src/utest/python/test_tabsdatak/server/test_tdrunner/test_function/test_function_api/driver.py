@@ -22,11 +22,13 @@ from tabsdatak.server._tdrunner.function.commands import (
     prep_localize_state,
     prep_upload_raw,
     report_completion,
-    run_destination_plugin,
-    run_function,
-    run_source_plugin,
     run_transporter,
     stamp_inputs,
+)
+from tabsdatak.server._tdrunner.function.commands.runners import (
+    destination_plugin as run_destination_plugin,
+    function as run_function,
+    source_plugin as run_source_plugin,
 )
 
 from ..conftest import info_payload

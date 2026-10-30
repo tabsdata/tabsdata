@@ -45,7 +45,7 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
     command,
 )
 from tabsdatak.server._tdrunner.function._commons.run.version import version
-from tabsdatak.server._tdrunner.function.commands.run_function.runner import (
+from tabsdatak.server._tdrunner.function.commands.runners.function.runner import (
     _FunctionContext,
     _infer_table_modes,
     _invoke_user_function,
