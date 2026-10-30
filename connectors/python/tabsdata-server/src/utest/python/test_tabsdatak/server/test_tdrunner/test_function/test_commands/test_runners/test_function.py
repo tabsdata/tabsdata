@@ -20,11 +20,16 @@ from tabsdatak._info import PublisherInfo
 from tabsdatak.api import FunctionCtx, TableFrameSpec, TableFramesSpec
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak.server._tdrunner.function._commons.document.request import (
+    Info,
     Location,
     Request,
 )
 from tabsdatak.server._tdrunner.function._commons.solver.secrets import ProjectSecret
 from tabsdatak.server._tdrunner.function._handlers.columns import ColumnPolicy, Zone
+from tabsdatak.server._tdrunner.function._handlers.landing import (
+    LandedInputs,
+    Landing,
+)
 from tabsdatak.server._tdrunner.function._handlers.state import (
     STATE_FILE,
     StateOutput,
@@ -711,6 +716,10 @@ def test_scan_input_with_an_unusable_mount_raises_bad_input_parquet(
 # --- unit: _materialize_input_slot --------------------------------------
 
 
+def no_landing() -> LandedInputs:
+    return LandedInputs(Info.model_validate(info_payload()))
+
+
 def test_materialise_single_zero_files_is_none(tmp_path):
     assert (
         materialize_input_slot(
@@ -721,6 +730,7 @@ def test_materialise_single_zero_files_is_none(tmp_path):
             ),
             table_mode=TableMode.SINGLE,
             definition=None,
+            landed=no_landing(),
         )
         is None
     )
@@ -737,6 +747,7 @@ def test_materialise_single_one_file_is_table_frame(tmp_path):
         ),
         table_mode=TableMode.SINGLE,
         definition=None,
+        landed=no_landing(),
     )
     assert isinstance(output, TableFrame)
 
@@ -755,6 +766,7 @@ def test_materialise_single_two_files_raises_bad_manifest(tmp_path):
             ),
             table_mode=TableMode.SINGLE,
             definition=None,
+            landed=no_landing(),
         )
 
 
@@ -774,6 +786,7 @@ def test_materialise_single_chunked_publisher_input_is_one_table_frame(
         ),
         table_mode=TableMode.SINGLE,
         definition=fixture_publisher,
+        landed=no_landing(),
     )
 
     assert isinstance(output, TableFrame)
@@ -796,6 +809,7 @@ def test_materialise_array_returns_list_of_table_frames(tmp_path):
         ),
         table_mode=TableMode.ARRAY,
         definition=None,
+        landed=no_landing(),
     )
     assert isinstance(output, list)
     assert len(output) == 2
@@ -811,8 +825,65 @@ def test_materialise_array_empty_is_empty_list():
         ),
         table_mode=TableMode.ARRAY,
         definition=None,
+        landed=no_landing(),
     )
     assert output == []
+
+
+def landed_entry(root: Path, chunks: list[list[int]]) -> InputEntry:
+    landing = Landing(Location(uri=(root / "landing").as_uri(), env_prefix="ROOT"))
+    records = []
+    for index, values in enumerate(chunks):
+        landed = landing.land(0, index, pl.LazyFrame({"id": values}))
+        records.append(InputRecord(location=landed.data, schema=landed.schema))
+    return InputEntry(name="in_1", table_pos=0, tables=tuple(records))
+
+
+def test_materialise_single_landed_chunks_is_one_table_frame(
+    tmp_path,
+    fixture_publisher,
+):
+    output = materialize_input_slot(
+        landed_entry(tmp_path, [[1, 2], [3]]),
+        table_mode=TableMode.SINGLE,
+        definition=fixture_publisher,
+        landed=no_landing(),
+    )
+    assert isinstance(output, TableFrame)
+    assert output._to_polars_lf().collect()["id"].to_list() == [1, 2, 3]
+
+
+def test_materialise_array_landed_files_is_a_list(tmp_path, fixture_publisher):
+    output = materialize_input_slot(
+        landed_entry(tmp_path, [[1, 2], [3]]),
+        table_mode=TableMode.ARRAY,
+        definition=fixture_publisher,
+        landed=no_landing(),
+    )
+    assert isinstance(output, list)
+    assert [frame._to_polars_lf().collect()["id"].to_list() for frame in output] == [
+        [1, 2],
+        [3],
+    ]
+
+
+def test_materialise_a_missing_landed_file_raises_bad_input_parquet(
+    tmp_path,
+    fixture_publisher,
+):
+    missing = Location(uri=(tmp_path / "missing.s").as_uri(), env_prefix="ROOT")
+    entry = InputEntry(
+        name="in_1",
+        table_pos=0,
+        tables=(InputRecord(location=missing, schema=missing),),
+    )
+    with pytest.raises(BadInputParquetError):
+        materialize_input_slot(
+            entry,
+            table_mode=TableMode.SINGLE,
+            definition=fixture_publisher,
+            landed=no_landing(),
+        )
 
 
 # --- unit: _invoke_user_function ----------------------------------------

@@ -55,6 +55,7 @@ from tabsdatak.server._tdrunner.function._commons.symbols.function import (
     load_definition,
 )
 from tabsdatak.server._tdrunner.function._handlers.columns import ColumnPolicy, Zone
+from tabsdatak.server._tdrunner.function._handlers.landing import LandedInputs
 from tabsdatak.server._tdrunner.function._handlers.state import State, StateOutput
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
@@ -190,11 +191,34 @@ def scan_input(source: TableFile) -> pl.LazyFrame:
         )
 
 
-def build_input(record: InputRecord, *, definition: FunctionInfo) -> Input:
+def scan_record(
+    record: InputRecord,
+    landed: LandedInputs,
+) -> pl.LazyFrame | None:
+    if record.schema is not None:
+        try:
+            return landed.scan(record)
+        except Exception as error:
+            raise RunFunctionErrorCode.RF_9.exception(
+                cause=error,
+                path=record.location.uri if record.location else record.schema.uri,
+                detail=str(error),
+            )
     source = TableFile.of(record)
     if source is None:
         return None
-    frame = scan_input(source)
+    return scan_input(source)
+
+
+def build_input(
+    record: InputRecord,
+    *,
+    definition: FunctionInfo,
+    landed: LandedInputs,
+) -> Input:
+    frame = scan_record(record, landed)
+    if frame is None:
+        return None
     if is_publisher(definition):
         return TableFrame._build(frame, CreationMode.TAB)
     return TableFrame._build(
@@ -205,9 +229,15 @@ def build_input(record: InputRecord, *, definition: FunctionInfo) -> Input:
     )
 
 
-def build_chunked_input(records: tuple[InputRecord, ...]) -> Input:
-    sources = [TableFile.of(record) for record in records]
-    scans = [scan_input(source) for source in sources if source is not None]
+def build_chunked_input(
+    records: tuple[InputRecord, ...],
+    landed: LandedInputs,
+) -> Input:
+    scans = [
+        frame
+        for frame in (scan_record(record, landed) for record in records)
+        if frame is not None
+    ]
     if not scans:
         return None
     return TableFrame._build(pl.concat(scans, how="vertical_relaxed"), CreationMode.TAB)
@@ -218,19 +248,31 @@ def materialize_input_slot(
     *,
     table_mode: TableMode,
     definition: FunctionInfo,
+    landed: LandedInputs,
 ) -> InputSlot:
     records = entry.tables
     if table_mode is TableMode.SINGLE:
         if len(records) == 0:
             return None
         if len(records) == 1:
-            return build_input(records[0], definition=definition)
+            return build_input(
+                records[0],
+                definition=definition,
+                landed=landed,
+            )
         if is_publisher(definition):
-            return build_chunked_input(records)
+            return build_chunked_input(records, landed)
         raise RunFunctionErrorCode.RF_11.exception(count=len(records))
     if entry.is_empty:
         return []
-    return [build_input(record, definition=definition) for record in records]
+    return [
+        build_input(
+            record,
+            definition=definition,
+            landed=landed,
+        )
+        for record in records
+    ]
 
 
 def invoke_user_function(
@@ -402,11 +444,13 @@ def run(arguments: RunFunctionArguments) -> int:
 
     arguments.output_folder.mkdir(parents=True, exist_ok=True)
 
+    landed = LandedInputs(request.info)
     call_arguments: list[Any] = [
         materialize_input_slot(
             entry,
             table_mode=table_mode,
             definition=definition,
+            landed=landed,
         )
         for entry, table_mode in zip(entries, table_modes)
     ]

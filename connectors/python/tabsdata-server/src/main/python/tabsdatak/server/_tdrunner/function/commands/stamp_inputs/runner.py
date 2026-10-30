@@ -27,6 +27,10 @@ from tabsdatak.server._tdrunner.function._commons.manifests.input import (
 from tabsdatak.server._tdrunner.function._commons.manifests.manifest import (
     ManifestError,
 )
+from tabsdatak.server._tdrunner.function._handlers.landing import (
+    raw_version,
+    stamp,
+)
 from tabsdatak.server._tdrunner.function.commands.stamp_inputs.error import (
     StampInputsErrorCode,
 )
@@ -34,12 +38,8 @@ from tabsdatak.server._tdrunner.function.commands.stamp_inputs.options import (
     StampInputsArguments,
 )
 from tabsdatak.spi import MetadataSpec
-from tabsdatak.tableframe import TableFrame
-from tabsdatak.tableframe._engine.column.connector import add_connector_columns
 from tabsdatak.tableframe._engine.column.generator import IdxGenerator
-from tabsdatak.tableframe._engine.constant.emptiness import EMPTY_VERSION
 from tabsdatak.tableframe._engine.model.frame import DataVersion
-from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 
 logger = logging.getLogger(__name__)
 
@@ -61,10 +61,12 @@ def _stamp_file(
         )
 
     try:
-        lf = add_connector_columns(lf, metadata)
-        stamped = TableFrame._build(
-            lf, CreationMode.RAW, idx=idx, version=version
-        )._to_polars_lf(drop_system_columns=False)
+        stamped = stamp(
+            lf,
+            idx=idx,
+            version=version,
+            metadata=metadata,
+        )
     except Exception as exc:
         raise StampInputsErrorCode.SI_4.exception(
             cause=exc, path=src_path, detail=str(exc)
@@ -100,15 +102,7 @@ def run(arguments: StampInputsArguments) -> int:
         inputs_manifest,
     )
 
-    version = (
-        DataVersion
-        .builder()
-        .with_execution(str(request.info.execution_id))
-        .with_transaction(str(request.info.transaction_id))
-        .with_version(EMPTY_VERSION)
-        .with_timestamp(request.info.triggered_on_datetime)
-        .build()
-    )
+    version = raw_version(request.info)
     logger.debug(
         "Stamping with execution=%s transaction=%s timestamp=%s",
         version.execution,

@@ -12,10 +12,18 @@ import polars as pl
 
 from tabsdatak.server._tdrunner.function._commons.document.request import (
     LANDING_SUFFIX,
+    Info,
     Location,
 )
+from tabsdatak.server._tdrunner.function._commons.manifests.input import InputRecord
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.spi import MetadataSpec
+from tabsdatak.tableframe import TableFrame
+from tabsdatak.tableframe._engine.column.connector import add_connector_columns
+from tabsdatak.tableframe._engine.column.generator import IdxGenerator
+from tabsdatak.tableframe._engine.constant.emptiness import EMPTY_VERSION
+from tabsdatak.tableframe._engine.model.frame import DataVersion
+from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 
 SCHEMA_SUFFIX = ".s"
 TABSDATA_LANDING_FACTS_KEY = "tabsdata.landing.facts"
@@ -42,6 +50,12 @@ class LandedFile:
 
 class LandingError(Exception):
     pass
+
+
+class NotLandedError(LandingError):
+    def __init__(self, record: InputRecord) -> None:
+        super().__init__(f"Input record {record} has no landed data and schema")
+        self.record = record
 
 
 class SchemaMismatchError(LandingError):
@@ -130,4 +144,96 @@ def check_inferred(
             position,
             f"a schema is only for untyped data, every column a String, but "
             f"{typed} are typed",
+        )
+
+
+def parse(
+    name: str,
+    dtype: pl.DataType,
+) -> pl.Expr:
+    text = pl.col(name)
+    if dtype == pl.String:
+        return text
+    if dtype == pl.Boolean:
+        parsed = text.str.to_lowercase().replace_strict(
+            {"true": True, "false": False},
+            return_dtype=pl.Boolean,
+        )
+    elif dtype == pl.Date:
+        parsed = text.str.to_date(strict=True)
+    elif isinstance(dtype, pl.Datetime):
+        parsed = text.str.to_datetime(
+            time_unit=dtype.time_unit,
+            time_zone=dtype.time_zone,
+            strict=True,
+        )
+    elif dtype == pl.Time:
+        parsed = text.str.to_time(strict=True)
+    else:
+        parsed = text.cast(dtype, strict=True)
+    return parsed.alias(name)
+
+
+def scan_landed(
+    data: Location,
+    schema: Location,
+) -> tuple[pl.LazyFrame, MetadataSpec | None]:
+    description = TableFile.stored(schema)
+    locator = description.locator()
+    facts = json.loads(
+        pl.read_parquet_metadata(
+            locator.uri,
+            storage_options=locator.storage_options,
+        )[TABSDATA_LANDING_FACTS_KEY],
+    )
+    frame = TableFile.stored(data).scan()
+    if Origin(facts["origin"]) is Origin.INFERRED:
+        target = description.scan().collect_schema()
+        frame = frame.select(parse(name, dtype) for name, dtype in target.items())
+    return frame, facts["metadata"]
+
+
+def raw_version(info: Info) -> DataVersion:
+    return (
+        DataVersion
+        .builder()
+        .with_execution(str(info.execution_id))
+        .with_transaction(str(info.transaction_id))
+        .with_version(EMPTY_VERSION)
+        .with_timestamp(info.triggered_on_datetime)
+        .build()
+    )
+
+
+def stamp(
+    frame: pl.LazyFrame,
+    *,
+    idx: int,
+    version: DataVersion,
+    metadata: MetadataSpec | None,
+) -> pl.LazyFrame:
+    return TableFrame._build(
+        add_connector_columns(frame, metadata),
+        CreationMode.RAW,
+        idx=idx,
+        version=version,
+    )._to_polars_lf(drop_system_columns=False)
+
+
+# Serves a run's landed inputs in manifest order, numbering every landed file
+# from one sequence, as stamp-inputs numbers the files it stamps.
+class LandedInputs:
+    def __init__(self, info: Info) -> None:
+        self.version = raw_version(info)
+        self.idx = IdxGenerator()
+
+    def scan(self, record: InputRecord) -> pl.LazyFrame:
+        if record.location is None or record.schema is None:
+            raise NotLandedError(record)
+        frame, metadata = scan_landed(record.location, record.schema)
+        return stamp(
+            frame,
+            idx=self.idx(),
+            version=self.version,
+            metadata=metadata,
         )
