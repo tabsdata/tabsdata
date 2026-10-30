@@ -23,7 +23,7 @@ from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputManifest,
 )
 from tabsdatak.server._tdrunner.function._handlers.columns import ColumnPolicy, Zone
-from tabsdatak.server._tdrunner.function._handlers.handoff import FileDestinationHandoff
+from tabsdatak.server._tdrunner.function._handlers.handoff import DestinationHandoff
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin import (
     main,
@@ -47,6 +47,7 @@ from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.run
     resolve_plugin,
     write_tables,
 )
+from tabsdatak.spi import DestBusOfFile
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payload
@@ -332,8 +333,12 @@ def test_resolve_plugin_unknown_dest_raises_no_plugin(fixture_subscriber, monkey
 # --- unit: read_tables -------------------------------------------------
 
 
-def file_handoff(tmp_path: Path) -> FileDestinationHandoff:
-    return FileDestinationHandoff(base_folder=tmp_path / "work")
+def file_handoff(tmp_path: Path) -> DestinationHandoff:
+    return DestinationHandoff(
+        base_folder=tmp_path / "work",
+        bus=DestBusOfFile,
+        legacy=True,
+    )
 
 
 def test_read_tables_maps_an_output_without_data_to_bad_manifest(tmp_path):
@@ -387,7 +392,7 @@ def test_write_tables_returns_normally(tmp_path):
         context,
         object(),
         object(),
-        [Path("/x")],
+        DestBusOfFile([]),
     )
     assert len(calls) == 1
 
@@ -411,7 +416,7 @@ def test_write_tables_wraps_plugin_exception(tmp_path):
             context,
             object(),
             object(),
-            [],
+            DestBusOfFile([]),
         )
 
 

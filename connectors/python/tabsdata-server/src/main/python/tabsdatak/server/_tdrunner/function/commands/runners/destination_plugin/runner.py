@@ -44,6 +44,7 @@ from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.opt
 from tabsdatak.spi import (
     Conn,
     Dest,
+    DestBus,
     DestContext,
     DestPlugin,
     dest_handoff,
@@ -107,7 +108,7 @@ def read_tables(
     handoff: DestinationHandoff,
     request: Request,
     manifest: OutputManifest,
-) -> list[Path]:
+) -> DestBus:
     try:
         return handoff.seed(request.info, manifest)
     except MissingOutputError as error:
@@ -131,7 +132,7 @@ def write_tables(
     context: DestContext,
     connection: Conn,
     destination: Dest,
-    tables: list[Path],
+    bus: DestBus,
 ) -> None:
     try:
         handoff.grow(
@@ -139,7 +140,7 @@ def write_tables(
             context,
             connection,
             destination,
-            tables,
+            bus,
         )
     except Exception as error:
         raise RunDestinationPluginErrorCode.RDP_6.exception(
@@ -171,24 +172,24 @@ def run(arguments: RunDestinationPluginArguments) -> int:
     work_folder = arguments.work_folder or Path(tempfile.gettempdir())
     handoff = Handoff.of(plugin, work_folder)
     try:
-        tables = read_tables(
+        bus = read_tables(
             handoff,
             request,
             manifest,
         )
-        logger.debug(f"Outputs {outputs} handed over as {tables}")
+        logger.debug(f"Outputs {outputs} handed over as {type(bus).__name__}")
         context = DestinationContext.from_info(arguments.bundle_folder, request.info)
         notify_step_destination_write(arguments)
-        logger.info(f"Writing {len(tables)} table(s) through {type(plugin).__name__}")
+        logger.info(f"Writing {len(bus)} table(s) through {type(plugin).__name__}")
         write_tables(
             handoff,
             plugin,
             context,
             connection,
             subscriber.destination,
-            tables,
+            bus,
         )
     finally:
         handoff.reap()
-    logger.info(f"Destination plugin wrote {len(tables)} table(s)")
+    logger.info(f"Destination plugin wrote {len(bus)} table(s)")
     return 0
