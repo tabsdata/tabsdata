@@ -9,18 +9,20 @@ system. Imported from `tabsdatak.conn.dev`:
 
 * `DataGenSrcConn` / `DataGenSrc` -- a `@publisher` source that
   emits in-line `Data` (a Polars or Pandas dataframe), one output
-  slot per `Data`.
+  slot per `Data`, handed over as local parquet files.
+* `DevFrameSrcConn` / `DevFrameSrc` -- the same source, handing its
+  `Data` over as `LazyFrame`\\ s.
 * `TrashDestConn` / `TrashDest` -- a `@subscriber` sink to
   nowhere; the frame is discarded.
-* `ProbeDestConn` / `ProbeDest` -- a `@subscriber` destination that
-  writes no data: it reports, per run, what it received through its
-  `DestBusOfLazyFrame` (each output's name, position, rows and
-  columns) as a JSON file in the connection's folder.
+* `DevFrameDestConn` / `DevFrameDest` -- a `@subscriber` destination
+  that receives `LazyFrame`\\ s and writes no data: it reports, per
+  run, the table it received for each output (its type, rows and
+  columns, by position) as a JSON file in the connection's folder.
 
 Each `Data` carries its dataframe as base64-encoded parquet on the
 wire; the combined encoded size of all dataframes may not exceed 10 MB.
 The connection is registered on a collection; a flow function only
-references `DataGenSrc` / `TrashDest`.
+references the source or destination.
 
 Examples:
     .. code-block:: python
@@ -53,8 +55,8 @@ from tabsdatak.api import (
 from tabsdatak.conn.dev.error import DevErrorCode
 from tabsdatak.spi import Conn
 
-# Combined budget for every dataframe carried by a `DataGenSrc`,
-# measured as the length of its base64-encoded parquet payload.
+# Combined budget for every dataframe carried by a `DataGenSrc` or a
+# `DevFrameSrc`, measured as the length of its base64-encoded parquet payload.
 MAX_DATA_BYTES = 10 * 1024 * 1024
 
 
@@ -73,7 +75,8 @@ def _to_polars(df: Any) -> Any:
 
 
 class Data:
-    """One dataframe emitted by `DataGenSrc`, optionally chunked.
+    """One dataframe emitted by `DataGenSrc` or `DevFrameSrc`,
+    optionally chunked.
 
     :categories: source
 
@@ -169,6 +172,12 @@ class Data:
         )
 
 
+def _check_budget(data: list[Data], error: DevErrorCode) -> None:
+    total = sum(len(d.parquet_b64()) for d in data)
+    if total > MAX_DATA_BYTES:
+        raise error.exception(size=total, limit=MAX_DATA_BYTES)
+
+
 # --- Connections ----------------------------------------------------
 
 
@@ -183,9 +192,20 @@ class DataGenSrcConn(Conn):
     """
 
 
+@_api.dataclass(DevErrorCode.DEV_13, kw_only=True)
+class DevFrameSrcConn(Conn):
+    """Connection for `DevFrameSrc` -- no configuration.
+
+    :categories: source
+
+    The source generates its data in-line, so the connection carries
+    nothing.
+    """
+
+
 @_api.dataclass(DevErrorCode.DEV_9, kw_only=True)
-class ProbeDestConn(Conn):
-    """Connection for `ProbeDest` -- the folder its reports go to.
+class DevFrameDestConn(Conn):
+    """Connection for `DevFrameDest` -- the folder its reports go to.
 
     :categories: destination
 
@@ -255,9 +275,42 @@ class DataGenSrc(Src):
 
         Called by the framework; raises `DevValidateException`.
         """
-        total = sum(len(d.parquet_b64()) for d in self.data)
-        if total > MAX_DATA_BYTES:
-            raise DevErrorCode.DEV_7.exception(size=total, limit=MAX_DATA_BYTES)
+        _check_budget(self.data, DevErrorCode.DEV_7)
+
+
+@_api.dataclass(DevErrorCode.DEV_14, kw_only=True)
+class DevFrameSrc(Src):
+    """Source emitting in-line dataframes for `@publisher` as
+    `LazyFrame`\\ s -- one slot per `Data`.
+
+    :categories: source
+
+    Emits what `DataGenSrc` emits, chunking included, through the frame
+    handoff instead of local parquet files.
+
+    Args:
+        data: The `Data` entries to emit, one output slot each. Their
+            combined base64-parquet size may not exceed 10 MB.
+
+    Examples:
+        .. code-block:: python
+
+            @publisher(
+                source=DevFrameSrc(data=[Data(rows_df, chunk_size=5)]),
+                output_tables=["rows"],
+            )
+            def gen(rows: TableFrameSpec):
+                return rows
+    """
+
+    data: list[Data]
+
+    def validate(self) -> None:
+        """Validate the combined `Data` payload fits the 10 MB budget.
+
+        Called by the framework; raises `DevValidateException`.
+        """
+        _check_budget(self.data, DevErrorCode.DEV_15)
 
 
 # --- Destination ----------------------------------------------------
@@ -276,15 +329,15 @@ class TrashDest(Dest):
 
 
 @_api.dataclass(DevErrorCode.DEV_10, kw_only=True)
-class ProbeDest(Dest):
-    """Destination reporting what a `@subscriber` hands it -- it writes
-    no data.
+class DevFrameDest(Dest):
+    """Destination reporting the `LazyFrame`\\ s a `@subscriber` hands
+    it -- it writes no data.
 
     :categories: destination
 
-    Each run writes one JSON report to its connection's folder: the
-    `DestBus` variant it received and, per output, the name, position,
-    row count and column names. Useful to check what a destination
+    Each run writes one JSON report to its connection's folder with,
+    per output and by position, the type of the table it received, its
+    row count and its column names. Useful to check what a destination
     receives without an external system.
 
     Args:
@@ -293,8 +346,8 @@ class ProbeDest(Dest):
     Examples:
         .. code-block:: python
 
-            @subscriber(destination=ProbeDest(outputs=2), input_tables=["a", "b"])
-            def probe(a: TableFrameSpec, b: TableFrameSpec):
+            @subscriber(destination=DevFrameDest(outputs=2), input_tables=["a", "b"])
+            def report(a: TableFrameSpec, b: TableFrameSpec):
                 return a, b
     """
 

@@ -1589,7 +1589,7 @@ LegacyDestTablesWarning = deprecated_category(
         "write_out takes list[TableFileSpec], so the plugin receives a local "
         "parquet copy of every table"
     ),
-    replacement="annotate write_out's tables with a DestBus variant",
+    replacement="declare list[pl.LazyFrame] as DestPlugin's third type argument",
     since="2.3.0",
 )
 
@@ -1597,7 +1597,7 @@ LegacyDestTablesWarning = deprecated_category(
 def warn_legacy_dest(plugin: type) -> str:
     message = (
         f"{plugin.__module__}.{plugin.__qualname__}.write_out takes the "
-        f"deprecated list[TableFileSpec]; declare a DestBus variant instead"
+        f"deprecated list[TableFileSpec]; declare list[pl.LazyFrame] instead"
     )
     warnings.warn(message, category=LegacyDestTablesWarning, stacklevel=2)
     return message
@@ -1610,7 +1610,7 @@ LegacySrcTablesWarning = deprecated_category(
         "read_in returns list[list[TableFileInput]], so the plugin materialises "
         "every table as local parquet files"
     ),
-    replacement="declare a SrcBus variant as SrcPlugin's third type argument",
+    replacement="return list[Iterable[LazyFrameInput]] from read_in",
     since="2.3.0",
 )
 
@@ -1618,8 +1618,7 @@ LegacySrcTablesWarning = deprecated_category(
 def warn_legacy_src(plugin: type) -> str:
     message = (
         f"{plugin.__module__}.{plugin.__qualname__}.read_in returns the "
-        f"deprecated list[list[TableFileInput]]; declare a SrcBus variant "
-        f"instead"
+        f"deprecated list[list[TableFileInput]]; return LazyFrameInputs instead"
     )
     warnings.warn(message, category=LegacySrcTablesWarning, stacklevel=2)
     return message

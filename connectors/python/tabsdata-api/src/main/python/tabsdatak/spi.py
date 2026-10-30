@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import importlib
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import (
@@ -38,8 +39,7 @@ from typing import (
     Callable,
     ClassVar,
     Generic,
-    Iterator,
-    Sequence,
+    Iterable,
     Type,
     TypeAlias,
     Union,
@@ -65,7 +65,6 @@ from tabsdatak.error import ApiErrorCode
 
 if TYPE_CHECKING:
     import polars as pl
-    import pyarrow as pa
 
 
 class Conn(_api.DescriptorBase, ABC):
@@ -144,252 +143,62 @@ class TableMode(Enum):
 
     :categories: spi
 
-    * `SINGLE` -- one table: the writes to the input's `SrcChannel` (or
-      the files `read_in` returns for it) are chunks of that table,
-      concatenated.
-    * `ARRAY` -- a list of tables, one per write (or file).
+    * `SINGLE` -- one table: the frames (or files) `read_in` returns
+      for the input are chunks of that table, concatenated.
+    * `ARRAY` -- a list of tables, one per frame (or file).
     """
 
     SINGLE = "single"
     ARRAY = "array"
 
 
-class _Channel(ABC):
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """The name of the function input or output it carries."""
-
-    @property
-    @abstractmethod
-    def position(self) -> int:
-        """Its position among the function's inputs or outputs."""
-
-
-class _Bus[Channel: _Channel]:
-    channel_type: ClassVar[type[_Channel] | None] = None
-
-    def __init__(self, channels: Sequence[Channel]) -> None:
-        if self.channel_type is None:
-            raise TypeError(
-                f"{type(self).__qualname__} has no channel type; use one of "
-                "its variants",
-            )
-        for position, channel in enumerate(channels):
-            if not isinstance(channel, self.channel_type):
-                raise TypeError(
-                    f"{type(self).__qualname__} holds "
-                    f"{self.channel_type.__qualname__} channels, not "
-                    f"{type(channel).__qualname__}",
-                )
-            if channel.position != position:
-                raise ValueError(
-                    f"Channel {channel.name!r} is at position {position} but "
-                    f"declares position {channel.position}",
-                )
-        self._channels = list(channels)
-        self._names = {channel.name: channel for channel in self._channels}
-
-    def __len__(self) -> int:
-        return len(self._channels)
-
-    def __iter__(self) -> Iterator[Channel]:
-        return iter(self._channels)
-
-    def __getitem__(self, key: int | str) -> Channel:
-        if isinstance(key, str):
-            try:
-                return self._names[key]
-            except KeyError:
-                raise KeyError(
-                    f"No channel named {key!r}; channels are {list(self._names)}",
-                ) from None
-        return self._channels[key]
-
-
-class SrcChannel(_Channel, ABC):
-    """One input of the publisher, as a source plugin fills it.
+@dataclass(frozen=True)
+class LazyFrameInput:
+    """One table `SrcPlugin.read_in` produces for a publisher input, as
+    a polars `LazyFrame`, with what the runtime cannot learn from the
+    frame itself.
 
     :categories: spi
-
-    Abstract, and never built by a plugin: the runtime builds the
-    channels of the `SrcBus` variant the plugin declares, one per
-    publisher input, before `read_in` runs. The plugin lands the
-    input's data with `write()`, once or several times; the `SrcDef`'s
-    `table_mode` says how the writes are served: `TableMode.SINGLE`
-    concatenates them as chunks of one table, `TableMode.ARRAY` gives
-    the function a list with one table per write. An input never
-    written gets `None` (`SINGLE`) or an empty list (`ARRAY`).
-    """
-
-    @abstractmethod
-    def write(
-        self,
-        data: Any,
-        *,
-        schema: pl.Schema | None = None,
-        metadata: MetadataSpec | None = None,
-    ) -> None:
-        """Land one table, or one chunk of a table, in the variant's
-        format.
-
-        Args:
-            data: The table or chunk, in the variant's format.
-            schema: For untyped data only, every column a `String`
-                as read from text (CSV, JSON lines, Excel cells): the
-                types polars infers for it, from the same reader over
-                the whole source (e.g. `pl.scan_csv(source,
-                infer_schema_length=None).collect_schema()` for data
-                read with `infer_schema=False`). The strings land as
-                they are, and the schema is applied when the table is
-                served. Leave it out for typed data, which lands with
-                its own types.
-            metadata: Optional `MetadataSpec`. Each entry is added as
-                a metadata column on this write's rows, by convention
-                named with a leading `@`.
-        """
-
-
-class SrcChannelOfLazyFrame(SrcChannel, ABC):
-    """A `SrcChannel` taking polars `LazyFrame`\\ s, which the runtime
-    sinks to storage in one streaming pass.
-
-    :categories: spi
-    """
-
-    @abstractmethod
-    def write(
-        self,
-        data: pl.LazyFrame,
-        *,
-        schema: pl.Schema | None = None,
-        metadata: MetadataSpec | None = None,
-    ) -> None:
-        """Land a `LazyFrame`."""
-
-
-class SrcChannelOfDataFrame(SrcChannel, ABC):
-    """A `SrcChannel` taking polars `DataFrame`\\ s, each a table or
-    chunk in memory.
-
-    :categories: spi
-    """
-
-    @abstractmethod
-    def write(
-        self,
-        data: pl.DataFrame,
-        *,
-        schema: pl.Schema | None = None,
-        metadata: MetadataSpec | None = None,
-    ) -> None:
-        """Land a `DataFrame`."""
-
-
-class SrcChannelOfArrow(SrcChannel, ABC):
-    """A `SrcChannel` taking pyarrow `RecordBatchReader`\\ s, landed one
-    record batch at a time.
-
-    :categories: spi
-    """
-
-    @abstractmethod
-    def write(
-        self,
-        data: pa.RecordBatchReader,
-        *,
-        schema: pl.Schema | None = None,
-        metadata: MetadataSpec | None = None,
-    ) -> None:
-        """Land a `RecordBatchReader`."""
-
-
-class SrcChannelOfFile(SrcChannel, ABC):
-    """A `SrcChannel` taking local parquet files the plugin wrote under
-    its work folder.
-
-    :categories: spi
-    """
-
-    @abstractmethod
-    def write(
-        self,
-        data: Path,
-        *,
-        schema: pl.Schema | None = None,
-        metadata: MetadataSpec | None = None,
-    ) -> None:
-        """Land a local parquet file."""
-
-
-class SrcBus[Channel: SrcChannel](_Bus[Channel]):
-    """The channels a source plugin fills in one run, one per publisher
-    input.
-
-    :categories: spi
-
-    A plugin addresses a channel by position (`bus[0]`): position `i` is
-    the `i`-th entry of its configuration (as many as
-    `SrcDef.cardinality` counts) and feeds the function's `i`-th
-    parameter. `bus["orders"]` also works, but the name is the
-    parameter's, chosen by the user, so plugins only use it in messages.
-
-    Use one of its variants, which fix the format of every channel:
-    `SrcBusOfLazyFrame`, `SrcBusOfDataFrame`, `SrcBusOfArrow` or
-    `SrcBusOfFile`. A plugin declares its variant as the third type
-    argument of `SrcPlugin`.
 
     Args:
-        channels: The channels, ordered by position.
+        frame: The table, or one chunk of it.
+        schema: For untyped data only, every column a `String` as read
+            from text (CSV, JSON lines, Excel cells): the types polars
+            infers for it, from the same reader over the whole source
+            (e.g. `pl.scan_csv(source, infer_schema_length=None)
+            .collect_schema()` for data read with
+            `infer_schema=False`). The strings land as they are, and the
+            schema is applied when the table is served. Leave it out for
+            typed data, which lands with its own types.
+        metadata: Optional `MetadataSpec`. Each entry is added as a
+            metadata column on the frame's rows, by convention named
+            with a leading `@`.
     """
 
-    channel_type: ClassVar[type[SrcChannel] | None] = None
+    frame: pl.LazyFrame
+    schema: pl.Schema | None = None
+    metadata: MetadataSpec | None = None
 
 
-class SrcBusOfLazyFrame(SrcBus[SrcChannelOfLazyFrame]):
-    """A `SrcBus` of `SrcChannelOfLazyFrame`: the preferred format,
-    streamed by polars to storage.
+def to_lazy_frame_inputs(
+    frames: list[list[pl.LazyFrame]],
+) -> list[Iterable[LazyFrameInput]]:
+    """Wrap per-input `LazyFrame`\\ s as `LazyFrameInput`\\ s with no
+    schema or metadata -- the shape `SrcPlugin.read_in` returns.
 
     :categories: spi
     """
-
-    channel_type = SrcChannelOfLazyFrame
-
-
-class SrcBusOfDataFrame(SrcBus[SrcChannelOfDataFrame]):
-    """A `SrcBus` of `SrcChannelOfDataFrame`: each table or chunk in
-    memory.
-
-    :categories: spi
-    """
-
-    channel_type = SrcChannelOfDataFrame
+    return [[LazyFrameInput(frame=frame) for frame in slot] for slot in frames]
 
 
-class SrcBusOfArrow(SrcBus[SrcChannelOfArrow]):
-    """A `SrcBus` of `SrcChannelOfArrow`: each table or chunk streamed
-    as Arrow record batches.
-
-    :categories: spi
-    """
-
-    channel_type = SrcChannelOfArrow
-
-
-class SrcBusOfFile(SrcBus[SrcChannelOfFile]):
-    """A `SrcBus` of `SrcChannelOfFile`: each table or chunk written to
-    a local parquet file first. Least preferred; for plugins whose
-    reader produces files.
-
-    :categories: spi
-    """
-
-    channel_type = SrcChannelOfFile
-
-
-# What `SrcPlugin.read_in` returns: the `SrcBus` it filled, or the legacy
-# local parquet files, one inner list per publisher input.
-SrcTablesSpec: TypeAlias = Union[list[list[TableFileInput]], SrcBus]
+# What `SrcPlugin.read_in` returns, one entry per publisher input: the
+# tables produced for it, all `LazyFrameInput` (a list, or a generator), or
+# all the legacy local parquet files. A union of lists, not a list of a
+# union, so that a plugin declares one form for every table.
+SrcTablesSpec: TypeAlias = Union[
+    list[Iterable[LazyFrameInput]],
+    list[list[TableFileInput]],
+]
 
 
 class PluginCtx(_FlowCtx, ABC):
@@ -418,51 +227,22 @@ class SrcPluginCtx(TransactionCtx, PluginCtx, ABC):
     """
 
 
-_C = TypeVar("_C", bound=Conn)
-_S = TypeVar("_S", bound=Src)
-_B = TypeVar("_B", bound=SrcBus, default=SrcBus)
-
-
-class SrcPlugin(ABC, Generic[_C, _S, _B]):
+class SrcPlugin[C: Conn, S: Src](ABC):
     """Plugin implementing the read-side of a `Src` subclass.
 
     :categories: spi
 
-    The third type argument is the plugin's contract with the runtime:
-    a `SrcBus` variant (`SrcPlugin[MyConn, MySrc, SrcBusOfLazyFrame]`)
-    makes `bus` hold one channel per publisher input, in that variant's
-    format; `read_in` writes into it and returns it, annotated with the
-    same variant. Without it, the legacy form, `read_in` returns local
-    parquet files. Declare exactly one variant; `SrcDef` refuses any
-    other type, and a return annotation that differs. Variants, in
-    order of preference: `SrcBusOfLazyFrame`, `SrcBusOfDataFrame`,
-    `SrcBusOfArrow`, `SrcBusOfFile`.
+    The return annotation of `read_in` is the plugin's contract with the
+    runtime: `list[Iterable[LazyFrameInput]]` returns `LazyFrame`\\ s,
+    which the runtime lands as `read_in` produces them;
+    `list[list[TableFileInput]]`, or no annotation, is the legacy form,
+    local parquet files.
     """
 
     # devguide-ref: source handoff
 
-    _bus: _B | None = None
-
-    @property
-    def bus(self) -> _B:
-        """One channel per publisher input, in the format of the
-        `SrcBus` variant the plugin declares. Set by the runtime before
-        `read_in` runs.
-
-        Raises:
-            RuntimeError: The plugin declares no `SrcBus` variant, or
-                `read_in` is not running.
-        """
-        if self._bus is None:
-            raise RuntimeError(
-                f"{type(self).__qualname__} has no bus: declare a SrcBus "
-                f"variant as the third type argument of SrcPlugin, and use "
-                f"the bus inside read_in",
-            )
-        return self._bus
-
     @abstractmethod
-    def read_in(self, ctx: SrcPluginCtx, conn: _C, src: _S) -> SrcTablesSpec:
+    def read_in(self, ctx: SrcPluginCtx, conn: C, src: S) -> SrcTablesSpec:
         """Read `src` into the publisher's inputs.
 
         Args:
@@ -471,10 +251,17 @@ class SrcPlugin(ABC, Generic[_C, _S, _B]):
             src: The `Src` config declared on the flow.
 
         Returns:
-            `bus`, after writing each input into its channel. Legacy
-            plugins return one inner list of `TableFileInput` per
-            input, parquet files under `ctx.work_dir`, served as
-            `SrcDef.table_mode` says. Wrap bare paths with
+            One entry per input, by position: position `i` is the `i`-th
+            entry of the configuration (as many as `SrcDef.cardinality`
+            counts) and feeds the function's `i`-th parameter. Each
+            entry holds the tables produced for that input, served as
+            `SrcDef.table_mode` says: a list, or any iterable, such as a
+            generator yielding one page at a time, so that only one is
+            in memory. The runtime takes the entries in order, and
+            lands each table as it takes it. Legacy plugins return one
+            inner list of `TableFileInput` per input, parquet files
+            under `ctx.work_dir`. Wrap bare frames with
+            `to_lazy_frame_inputs`, bare paths with
             `to_table_file_inputs`.
         """
 
@@ -686,133 +473,11 @@ class StreamSrcPlugin[C: Conn, SS: StreamSrc](ABC):
         `ctx.thresholds`)."""
 
 
-class DestChannel(_Channel, ABC):
-    """One position of the subscriber's outputs, as a destination plugin
-    receives it.
-
-    :categories: spi
-
-    Abstract, and never built by a plugin: the runtime hands over the
-    channels of the `DestBus` variant the plugin's `write_out`
-    declares. A channel holds one table, which `read()` returns in the
-    variant's format.
-    """
-
-    @abstractmethod
-    def read(self) -> object:
-        """The table, in the variant's format."""
-
-
-class DestChannelOfLazyFrame(DestChannel, ABC):
-    """A `DestChannel` whose table is a polars `LazyFrame` scanning it
-    from storage: nothing is read until the plugin collects or sinks it.
-
-    :categories: spi
-    """
-
-    @abstractmethod
-    def read(self) -> pl.LazyFrame:
-        """The table, as a `LazyFrame`."""
-
-
-class DestChannelOfDataFrame(DestChannel, ABC):
-    """A `DestChannel` whose table is a polars `DataFrame`: the whole
-    table in memory.
-
-    :categories: spi
-    """
-
-    @abstractmethod
-    def read(self) -> pl.DataFrame:
-        """The table, as a `DataFrame`."""
-
-
-class DestChannelOfArrow(DestChannel, ABC):
-    """A `DestChannel` whose table is a pyarrow `RecordBatchReader`
-    streaming it one record batch at a time.
-
-    :categories: spi
-    """
-
-    @abstractmethod
-    def read(self) -> pa.RecordBatchReader:
-        """The table, as a `RecordBatchReader`."""
-
-
-class DestChannelOfFile(DestChannel, ABC):
-    """A `DestChannel` whose table is a local parquet file under the
-    plugin's work folder, copied from storage before `write_out` runs.
-
-    :categories: spi
-    """
-
-    @abstractmethod
-    def read(self) -> Path:
-        """The table, as a local parquet file."""
-
-
-class DestBus[Channel: DestChannel](_Bus[Channel]):
-    """The channels a destination plugin receives in one run, one per
-    subscriber output, by position (`bus[0]`) or by name
-    (`bus["out_0"]`).
-
-    :categories: spi
-
-    Use one of its variants, which fix the format of every channel:
-    `DestBusOfLazyFrame`, `DestBusOfDataFrame`, `DestBusOfArrow` or
-    `DestBusOfFile`. The variant a plugin
-    declares on `write_out` is the format it receives.
-
-    Args:
-        channels: The channels, ordered by position.
-    """
-
-    channel_type: ClassVar[type[DestChannel] | None] = None
-
-
-class DestBusOfLazyFrame(DestBus[DestChannelOfLazyFrame]):
-    """A `DestBus` of `DestChannelOfLazyFrame`: the preferred format,
-    streamed by polars from storage.
-
-    :categories: spi
-    """
-
-    channel_type = DestChannelOfLazyFrame
-
-
-class DestBusOfDataFrame(DestBus[DestChannelOfDataFrame]):
-    """A `DestBus` of `DestChannelOfDataFrame`: each table in memory.
-
-    :categories: spi
-    """
-
-    channel_type = DestChannelOfDataFrame
-
-
-class DestBusOfArrow(DestBus[DestChannelOfArrow]):
-    """A `DestBus` of `DestChannelOfArrow`: each table streamed as Arrow
-    record batches.
-
-    :categories: spi
-    """
-
-    channel_type = DestChannelOfArrow
-
-
-class DestBusOfFile(DestBus[DestChannelOfFile]):
-    """A `DestBus` of `DestChannelOfFile`: each table copied to a local
-    parquet file first. Least preferred; for plugins that need a file on
-    disk.
-
-    :categories: spi
-    """
-
-    channel_type = DestChannelOfFile
-
-
-# What `DestPlugin.write_out` receives after `ctx`, `conn` and `dest`: a
-# `DestBus` variant, or the legacy list of local parquet files.
-DestTablesSpec: TypeAlias = Union[list[TableFileSpec], DestBus]
+# What `DestPlugin.write_out` receives after `ctx`, `conn` and `dest`, one
+# table per subscriber output: all `LazyFrame`s scanning them from storage,
+# or all the legacy local parquet files. A union of lists, not a list of a
+# union, so that a plugin declares one form for every table.
+type DestTablesSpec = Union[list["pl.LazyFrame"], list[TableFileSpec]]
 
 
 class DestContext(TransactionCtx, PluginCtx, ABC):
@@ -823,20 +488,24 @@ class DestContext(TransactionCtx, PluginCtx, ABC):
     """
 
 
-class DestPlugin[C: Conn, D: Dest](ABC):
+_C = TypeVar("_C", bound=Conn)
+_D = TypeVar("_D", bound=Dest)
+_T = TypeVar("_T", bound=DestTablesSpec, default=list[TableFileSpec])
+
+
+class DestPlugin(ABC, Generic[_C, _D, _T]):
     """Plugin implementing the write-side of a `Dest` subclass.
 
     :categories: spi
 
-    The annotation of `write_out`'s `tables` parameter is the plugin's
-    contract with the runtime: a `DestBus` variant receives the
-    subscriber's outputs in that variant's format, and
-    `list[TableFileSpec]` (or no annotation) receives them as local
-    parquet files, the legacy form. Declare exactly one variant;
-    `DestDef` refuses any other `DestBus` or `DestChannel` type.
-    Variants, in order of preference: `DestBusOfLazyFrame`,
-    `DestBusOfDataFrame`, `DestBusOfArrow`, `DestBusOfFile`. Import the
-    variant at module level, so the annotation resolves at runtime.
+    The third type argument is the plugin's contract with the runtime:
+    `list[pl.LazyFrame]` (`DestPlugin[MyConn, MyDest, list[pl.LazyFrame]]`)
+    receives each of the subscriber's outputs as a `LazyFrame` scanning
+    it from storage, and `write_out`'s `tables` is annotated with the
+    same type. Without it, the legacy form, `tables` is a list of local
+    parquet files. `DestDef` refuses any other type, and a `tables`
+    annotation that differs. Import polars at module level, so the
+    annotation resolves at runtime.
     """
 
     # devguide-ref: destination handoff
@@ -845,9 +514,9 @@ class DestPlugin[C: Conn, D: Dest](ABC):
     def write_out(
         self,
         ctx: DestContext,
-        conn: C,
-        dest: D,
-        tables: DestTablesSpec,
+        conn: _C,
+        dest: _D,
+        tables: _T,
     ):
         """Push the subscriber's outputs in `tables` to `dest`.
 
@@ -855,11 +524,10 @@ class DestPlugin[C: Conn, D: Dest](ABC):
             ctx: The `DestContext` for this trx.
             conn: The resolved connection.
             dest: The `Dest` config declared on the flow.
-            tables: One table per target, in the format the override
-                declares: a `DestBus` variant, or a list of local
-                parquet files. Passed positionally, so any parameter
-                name works. The runtime guarantees as many tables as
-                `dest`'s declared target count.
+            tables: One table per target, by position, in the form the
+                plugin declares: `LazyFrame`s, or local parquet files.
+                The runtime guarantees as many tables as `dest`'s
+                declared target count.
         """
 
 
@@ -1135,6 +803,15 @@ class StreamSrcDef[S: StreamSrc]:
         return self
 
 
+# A `DestPlugin` of either form. Type checkers need every type argument, or
+# a bare `DestPlugin` would mean the legacy form only; pydantic validates the
+# class itself, as it refuses a parametrized class in `type[...]`.
+if TYPE_CHECKING:
+    _AnyDestPlugin: TypeAlias = Type[DestPlugin[Any, Any, Any]]
+else:
+    _AnyDestPlugin: TypeAlias = Type[DestPlugin]
+
+
 @_api.dataclass(ApiErrorCode.API_16, config=_ARBITRARY)
 class DestDef[D: Dest]:
     """Entry-point registration for a `Dest` binding.
@@ -1166,7 +843,7 @@ class DestDef[D: Dest]:
     conn: Type[Conn]
     dest: Type[D]
     cardinality: Callable[[D], int]
-    plugin: Type[DestPlugin]
+    plugin: _AnyDestPlugin
     explorer: Type[Explorer] | None
     icon: str | None
 
@@ -1174,9 +851,9 @@ class DestDef[D: Dest]:
     def _validate(self) -> "DestDef":
         check_plugin_param_type(self.plugin, "write_out", "conn", self.conn)
         check_plugin_param_type(self.plugin, "write_out", "dest", self.dest)
-        from tabsdatak._handoff import dest_handoff
+        from tabsdatak._handoff import dest_frames
 
-        if dest_handoff(self.plugin) is None:
+        if not dest_frames(self.plugin):
             _api.warn_legacy_dest(self.plugin)
         if self.explorer is not None:
             check_plugin_param_type(self.explorer, "metadata", "conn", self.conn)

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from tabsdatak._api import warn_legacy_dest
 from tabsdatak._connectors import get_dest
-from tabsdatak._handoff import dest_handoff
+from tabsdatak._handoff import dest_frames
 from tabsdatak._info import KIND_SUBSCRIBER_DEF, SubscriberInfo
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
 from tabsdatak.server._tdrunner.function._commons.manifests.manifest import (
@@ -30,6 +30,7 @@ from tabsdatak.server._tdrunner.function._commons.symbols.function import (
 )
 from tabsdatak.server._tdrunner.function._handlers.handoff import (
     DestinationHandoff,
+    DestinationSlot,
     Handoff,
     MissingOutputError,
     OutputCopyError,
@@ -45,7 +46,6 @@ from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.opt
 from tabsdatak.spi import (
     Conn,
     Dest,
-    DestBus,
     DestContext,
     DestPlugin,
 )
@@ -108,7 +108,7 @@ def read_tables(
     handoff: DestinationHandoff,
     request: Request,
     manifest: OutputManifest,
-) -> DestBus:
+) -> list[DestinationSlot]:
     try:
         return handoff.seed(request.info, manifest)
     except MissingOutputError as error:
@@ -132,7 +132,7 @@ def write_tables(
     context: DestContext,
     connection: Conn,
     destination: Dest,
-    bus: DestBus,
+    slots: list[DestinationSlot],
 ) -> None:
     try:
         handoff.grow(
@@ -140,7 +140,7 @@ def write_tables(
             context,
             connection,
             destination,
-            bus,
+            slots,
         )
     except Exception as error:
         raise RunDestinationPluginErrorCode.RDP_6.exception(
@@ -154,7 +154,7 @@ def run(arguments: RunDestinationPluginArguments) -> int:
     request = Request.load(arguments.request, RunDestinationPluginErrorCode.RDP_1)
     subscriber = load_function_definition(arguments.bundle_folder)
     plugin = resolve_plugin(subscriber)
-    if dest_handoff(type(plugin)) is None:
+    if not dest_frames(type(plugin)):
         logger.warning(warn_legacy_dest(type(plugin)))
     connection = load_connection(arguments.connection_file)
     logger.debug(
@@ -172,24 +172,24 @@ def run(arguments: RunDestinationPluginArguments) -> int:
     work_folder = arguments.work_folder or Path(tempfile.gettempdir())
     handoff = Handoff.of(plugin, work_folder)
     try:
-        bus = read_tables(
+        slots = read_tables(
             handoff,
             request,
             manifest,
         )
-        logger.debug(f"Outputs {outputs} handed over as {type(bus).__name__}")
+        logger.debug(f"Outputs {outputs} handed over as {slots}")
         context = DestinationContext.from_info(arguments.bundle_folder, request.info)
         notify_step_destination_write(arguments)
-        logger.info(f"Writing {len(bus)} table(s) through {type(plugin).__name__}")
+        logger.info(f"Writing {len(slots)} table(s) through {type(plugin).__name__}")
         write_tables(
             handoff,
             plugin,
             context,
             connection,
             subscriber.destination,
-            bus,
+            slots,
         )
     finally:
         handoff.reap()
-    logger.info(f"Destination plugin wrote {len(bus)} table(s)")
+    logger.info(f"Destination plugin wrote {len(slots)} table(s)")
     return 0

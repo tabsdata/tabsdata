@@ -168,79 +168,98 @@ class _<Name>Explorer(Explorer[<Name>Conn]):
 
 ### Source handoff
 
-The third type argument of `SrcPlugin` decides how a source plugin
-hands its data to the runtime:
+The return annotation of `read_in` decides how a source plugin hands
+its data to the runtime:
 
-- a `SrcBus` variant: `self.bus` holds one `SrcChannel` per publisher
-  input, addressed by position (`bus[0]`): position `i` is the plugin's
-  `i`-th configured entry and feeds the function's `i`-th parameter
-  (`channel.name` is that parameter's name, chosen by the user: use it
-  in messages only); `channel.write(data, metadata=...)` lands a table,
-  or a chunk of one, in the variant's format, and `read_in` returns
-  `self.bus`, annotated with the same variant. Untyped data (CSV, JSON
-  lines, Excel) is written with every column a `String` plus
-  `schema=`, the types polars infers reading the whole source (e.g.
+- `list[Iterable[LazyFrameInput]]`: `read_in` returns one entry per
+  publisher input, by position: position `i` is the plugin's `i`-th
+  configured entry and feeds the function's `i`-th parameter. Each
+  entry holds the tables produced for that input, each a
+  `LazyFrameInput`: a `pl.LazyFrame` plus optional `metadata=` (each
+  entry becomes a column, by convention named with a leading `@`) and
+  `schema=`; `to_lazy_frame_inputs` wraps bare frames, as
+  `to_table_file_inputs` wraps bare paths. An entry is a list, or any
+  iterable: a generator yielding one page or chunk at a time keeps a
+  single one in memory, since the runtime takes the entries in order
+  and lands each table as it takes it. Untyped data (CSV, JSON lines,
+  Excel) is returned with every column a `String` plus `schema=`, the
+  types polars infers reading the whole source (e.g.
   `pl.scan_csv(source, infer_schema_length=None).collect_schema()`):
-  the strings land as they are and the schema is applied when served.
-  Variants, in order of preference: `SrcBusOfLazyFrame`
-  (`pl.LazyFrame`), `SrcBusOfDataFrame` (`pl.DataFrame`),
-  `SrcBusOfArrow` (`pa.RecordBatchReader`), `SrcBusOfFile` (a local
-  parquet `Path`);
-- no third argument: the legacy form, `read_in` returns one list of
-  `TableFileInput` per input. Deprecated since 2.3.0: registering such
-  a plugin raises a `TabsdataDeprecatedWarning` (ignored by default
-  like every Tabsdata deprecation), and each run logs a warning in the
-  source step. Stream stage plugins (`StreamStageSrcPlugin`) are
-  exempt: their `read_in` is framework code.
+  the strings land as they are and the schema is applied when served;
+- `list[list[TableFileInput]]`, or no annotation: the legacy form,
+  local parquet files. Deprecated since 2.3.0: registering such a plugin
+  raises a `TabsdataDeprecatedWarning` (ignored by default like every
+  Tabsdata deprecation), and each run logs a warning in the source
+  step. Stream stage plugins (`StreamStageSrcPlugin`) are exempt: their
+  `read_in` is framework code.
 
-`SrcDef.table_mode` says how the writes to one input are served:
+`SrcDef.table_mode` says how the tables of one input are served:
 `TableMode.SINGLE` concatenates them as chunks of one table,
-`TableMode.ARRAY` gives the function one table per write.
+`TableMode.ARRAY` gives the function a list with one table each. The
+runtime checks there is one entry per input, and that every table is
+of the form the annotation declares: a plugin never mixes forms.
 
 ```python
-from tabsdatak.spi import SrcBusOfLazyFrame, SrcPlugin
+from collections.abc import Iterable, Iterator
 
-class _<Name>SrcPlugin(SrcPlugin[<Name>Conn, <Name>Src, SrcBusOfLazyFrame]):
-    def read_in(self, ctx, conn, src) -> SrcBusOfLazyFrame:
-        for entry, channel in zip(src.<entries>, self.bus):
-            channel.write(...)  # a pl.LazyFrame read from entry
-        return self.bus
+import polars as pl
+
+from tabsdatak.spi import LazyFrameInput, SrcPlugin, to_lazy_frame_inputs
+
+class _<Name>SrcPlugin(SrcPlugin[<Name>Conn, <Name>Src]):
+    def read_in(self, ctx, conn, src) -> list[Iterable[LazyFrameInput]]:
+        return to_lazy_frame_inputs(
+            [[pl.scan_parquet(entry)] for entry in src.<entries>],
+        )
+
+class _<Name>PagedSrcPlugin(SrcPlugin[<Name>Conn, <Name>Src]):
+    def read_in(self, ctx, conn, src) -> list[Iterable[LazyFrameInput]]:
+        return [self.pages(entry) for entry in src.<entries>]
+
+    def pages(self, entry) -> Iterator[LazyFrameInput]:
+        for number, page in enumerate(...):  # pages read from entry
+            yield LazyFrameInput(page.lazy(), metadata={"@page": number})
 ```
 
-`SrcDef` refuses, when the connector is imported, a third argument
-that is not exactly one variant, a `read_in` whose return annotation
-is not that variant, and a legacy `read_in` annotated to return a bus.
+The annotation is `list[Iterable[LazyFrameInput]]` exactly, whether
+the entries are lists or generators: `list` is invariant, so a
+narrower `list[list[LazyFrameInput]]` would not match `read_in`'s base
+signature. `SrcDef` refuses, when the connector is imported, a return
+annotation naming `LazyFrameInput` in any other shape, one naming bare
+`pl.LazyFrame`s, and one naming frames that does not resolve at
+runtime.
 
 ### Destination handoff
 
-The annotation of `write_out`'s fourth parameter decides how a
-destination plugin receives the subscriber's outputs:
+The third type argument of `DestPlugin` decides how a destination
+plugin receives the subscriber's outputs:
 
-- a `DestBus` variant: one `DestChannel` per output position, by
-  position (`bus[0]`) or by name (`bus["out_0"]`); `channel.read()`
-  returns its table in the variant's format. Variants, in order of
-  preference: `DestBusOfLazyFrame` (`pl.LazyFrame`),
-  `DestBusOfDataFrame` (`pl.DataFrame`), `DestBusOfArrow`
-  (`pa.RecordBatchReader`), `DestBusOfFile` (a local parquet `Path`);
-- `list[TableFileSpec]`, or no annotation: the legacy form, one local
-  parquet file per position. Deprecated since 2.3.0: registering such
-  a plugin raises a `TabsdataDeprecatedWarning` (ignored by default
-  like every Tabsdata deprecation), and each run logs a warning in the
-  destination step.
+- `list[pl.LazyFrame]`: `write_out`'s `tables` (annotated with the same
+  type) holds one `pl.LazyFrame` per output, by position, scanning it
+  from storage: nothing is read until the plugin collects or sinks it.
+  The forms are a union of lists (`DestTablesSpec`), never a list of a
+  union, so every table a plugin receives has the one type it declares.
+  Import polars at module level, so the annotation resolves at runtime;
+- no third argument: the legacy form, `tables` is a
+  `list[TableFileSpec]`, one local parquet file per position.
+  Deprecated since 2.3.0: registering such a plugin raises a
+  `TabsdataDeprecatedWarning` (ignored by default like every Tabsdata
+  deprecation), and each run logs a warning in the destination step.
 
 ```python
-from tabsdatak.spi import DestBusOfLazyFrame, DestPlugin
+import polars as pl
 
-class _<Name>DestPlugin(DestPlugin[<Name>Conn, <Name>Dest]):
-    def write_out(self, ctx, conn, dest, bus: DestBusOfLazyFrame) -> None:
-        for channel in bus:
-            frame = channel.read()  # pl.LazyFrame
+from tabsdatak.spi import DestPlugin
+
+class _<Name>DestPlugin(DestPlugin[<Name>Conn, <Name>Dest, list[pl.LazyFrame]]):
+    def write_out(self, ctx, conn, dest, tables: list[pl.LazyFrame]) -> None:
+        for position, frame in enumerate(tables):
             ...
 ```
 
-Declare exactly one variant and import it at module level: `DestDef`
-refuses a bare `DestBus`, a `DestChannel` type or a union of variants
-when the connector is imported.
+`DestDef` refuses, when the connector is imported, a third argument
+other than `list[pl.LazyFrame]`, a `tables` annotation that differs
+from it, and a legacy `write_out` taking frames.
 
 ## `<name>/error.py` — error enum
 

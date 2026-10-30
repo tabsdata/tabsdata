@@ -5,10 +5,10 @@
 import polars as pl
 
 from tabsdatak.api import TableFrameSpec, publisher, subscriber
-from tabsdatak.conn.dev import Data, DataGenSrc, ProbeDest
+from tabsdatak.conn.dev import Data, DevFrameDest, DevFrameSrc
 
-SOURCE_COLLECTION = "probe_source"
-PUBLISHED_TABLE = "probe_published"
+SOURCE_COLLECTION = "frame_source"
+PUBLISHED_TABLE = "frame_published"
 
 GENERATED_FRAME = pl.DataFrame({
     "id": [1, 2, 3],
@@ -17,7 +17,7 @@ GENERATED_FRAME = pl.DataFrame({
 
 
 @publisher(
-    source=DataGenSrc(data=[Data(GENERATED_FRAME)]),
+    source=DevFrameSrc(data=[Data(GENERATED_FRAME)]),
     output_tables=[PUBLISHED_TABLE],
 )
 def publish(frame: TableFrameSpec) -> TableFrameSpec:
@@ -25,8 +25,8 @@ def publish(frame: TableFrameSpec) -> TableFrameSpec:
 
 
 @subscriber(
-    destination=ProbeDest(),
+    destination=DevFrameDest(),
     input_tables=[f"{SOURCE_COLLECTION}/{PUBLISHED_TABLE}"],
 )
-def probe(frame: TableFrameSpec) -> TableFrameSpec:
+def report(frame: TableFrameSpec) -> TableFrameSpec:
     return frame

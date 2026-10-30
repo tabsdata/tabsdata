@@ -5,24 +5,28 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from pathlib import Path
 
 import polars as pl
 
 from tabsdatak.conn.dev import (
+    Data,
     DataGenSrc,
     DataGenSrcConn,
-    ProbeDest,
-    ProbeDestConn,
+    DevFrameDest,
+    DevFrameDestConn,
+    DevFrameSrc,
+    DevFrameSrcConn,
     TrashDest,
     TrashDestConn,
 )
 from tabsdatak.conn.dev.error import DevErrorCode
 from tabsdatak.spi import (
-    DestBusOfLazyFrame,
     DestContext,
     DestDef,
     DestPlugin,
+    LazyFrameInput,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
@@ -51,20 +55,43 @@ class DataGenSrcPlugin(SrcPlugin[DataGenSrcConn, DataGenSrc]):
         return slots
 
     @staticmethod
-    def _read_slot(ctx: SrcPluginCtx, i: int, data) -> list[TableFileInput]:
-        frame = data.frame
-        if data.chunk_size is None:
-            chunk = frame
-        else:
-            key = f"{_OFFSET_PREFIX}{i}"
-            offset = int(ctx.get_attr(key) or 0)
-            if offset >= frame.height:
-                return []
-            chunk = frame.slice(offset, data.chunk_size)
-            ctx.set_attr(key, offset + chunk.height)
+    def _read_slot(ctx: SrcPluginCtx, i: int, data: Data) -> list[TableFileInput]:
+        chunk = _next_chunk(ctx, i, data)
+        if chunk is None:
+            return []
         path = ctx.work_dir / f"datagen_{i}.parquet"
         chunk.write_parquet(path)
         return [TableFileInput(file=path)]
+
+
+class DevFrameSrcPlugin(SrcPlugin[DevFrameSrcConn, DevFrameSrc]):
+    def read_in(
+        self,
+        ctx: SrcPluginCtx,
+        conn: DevFrameSrcConn,
+        src: DevFrameSrc,
+    ) -> list[Iterable[LazyFrameInput]]:
+        tables: list[Iterable[LazyFrameInput]] = []
+        for i, data in enumerate(src.data):
+            try:
+                chunk = _next_chunk(ctx, i, data)
+            except Exception as exc:
+                raise DevErrorCode.DEV_16.exception(cause=exc, slot=i)
+            tables.append([] if chunk is None else [LazyFrameInput(chunk.lazy())])
+        return tables
+
+
+def _next_chunk(ctx: SrcPluginCtx, i: int, data: Data) -> pl.DataFrame | None:
+    frame = data.frame
+    if data.chunk_size is None:
+        return frame
+    key = f"{_OFFSET_PREFIX}{i}"
+    offset = int(ctx.get_attr(key) or 0)
+    if offset >= frame.height:
+        return None
+    chunk = frame.slice(offset, data.chunk_size)
+    ctx.set_attr(key, offset + chunk.height)
+    return chunk
 
 
 class TrashDestPlugin(DestPlugin[TrashDestConn, TrashDest]):
@@ -78,24 +105,24 @@ class TrashDestPlugin(DestPlugin[TrashDestConn, TrashDest]):
         pass
 
 
-class ProbeDestPlugin(DestPlugin[ProbeDestConn, ProbeDest]):
-    def write_out(  # type: ignore[override]
+class DevFrameDestPlugin(
+    DestPlugin[DevFrameDestConn, DevFrameDest, list[pl.LazyFrame]],
+):
+    def write_out(
         self,
         ctx: DestContext,
-        conn: ProbeDestConn,
-        dest: ProbeDest,
-        bus: DestBusOfLazyFrame,
+        conn: DevFrameDestConn,
+        dest: DevFrameDest,
+        tables: list[pl.LazyFrame],
     ) -> None:
         report = {
-            "bus": type(bus).__name__,
-            "channels": [
+            "tables": [
                 {
-                    "name": channel.name,
-                    "position": channel.position,
-                    "rows": channel.read().select(pl.len()).collect().item(),
-                    "columns": channel.read().collect_schema().names(),
+                    "type": type(table).__name__,
+                    "rows": table.select(pl.len()).collect().item(),
+                    "columns": table.collect_schema().names(),
                 }
-                for channel in bus
+                for table in tables
             ],
         }
         path = Path(conn.folder) / f"{ctx.transaction_id}.json"
@@ -126,6 +153,20 @@ DATAGEN_SRC = SrcDef(
 )
 
 
+DEV_FRAME_SRC = SrcDef(
+    conn=DevFrameSrcConn,
+    type_="dev-frame-in",
+    system="Development",
+    src_version="v1",
+    src=DevFrameSrc,
+    table_mode=TableMode.SINGLE,
+    cardinality=lambda src: len(src.data),
+    plugin=DevFrameSrcPlugin,
+    explorer=None,
+    icon=None,
+)
+
+
 TRASH_DEST = DestDef(
     conn=TrashDestConn,
     type_="dev-trash-out",
@@ -139,14 +180,14 @@ TRASH_DEST = DestDef(
 )
 
 
-PROBE_DEST = DestDef(
-    conn=ProbeDestConn,
-    type_="dev-probe-out",
+DEV_FRAME_DEST = DestDef(
+    conn=DevFrameDestConn,
+    type_="dev-frame-out",
     system="Development",
     dest_version="v1",
-    dest=ProbeDest,
+    dest=DevFrameDest,
     cardinality=lambda dest: dest.outputs,
-    plugin=ProbeDestPlugin,
+    plugin=DevFrameDestPlugin,
     explorer=None,
     icon=None,
 )

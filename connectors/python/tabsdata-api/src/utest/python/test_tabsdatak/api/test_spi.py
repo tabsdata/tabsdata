@@ -5,9 +5,11 @@
 from __future__ import annotations
 
 import types
+import typing
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Iterable, Iterator, Sequence
 
+import polars as pl
 import pytest
 
 # noinspection PyProtectedMember
@@ -19,13 +21,9 @@ from tabsdatak._api import (
     warn_legacy_src,
 )
 from tabsdatak._handoff import (
-    DEST_BUSES,
-    SRC_BUSES,
     deprecated_src,
-    dest_bus_names,
-    dest_handoff,
-    src_bus_names,
-    src_handoff,
+    dest_frames,
+    src_frames,
 )
 from tabsdatak.api import (
     BasicDictSpec,
@@ -41,24 +39,13 @@ from tabsdatak.api import (
 from tabsdatak.error import ApiErrorCode, ApiException
 from tabsdatak.spi import (
     Conn,
-    DestBus,
-    DestBusOfArrow,
-    DestBusOfFile,
-    DestBusOfLazyFrame,
-    DestChannelOfFile,
-    DestChannelOfLazyFrame,
     DestContext,
     DestDef,
     DestPlugin,
     Explorer,
     FilesSpec,
+    LazyFrameInput,
     PluginCtx,
-    SrcBus,
-    SrcBusOfDataFrame,
-    SrcBusOfFile,
-    SrcBusOfLazyFrame,
-    SrcChannelOfFile,
-    SrcChannelOfLazyFrame,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
@@ -73,6 +60,7 @@ from tabsdatak.spi import (
     TableFileSpec,
     TableMode,
     check_plugin_param_type,
+    to_lazy_frame_inputs,
 )
 
 
@@ -723,25 +711,7 @@ def test_stage_receives_positional_per_table_manifest():
     assert ctx.staged[0][0] == manifest
 
 
-# --- destination handoff: DestBus / DestChannel ---------------------------
-
-
-class FileChannel(DestChannelOfFile):
-    def __init__(self, name: str, position: int, file: Path) -> None:
-        self._name = name
-        self._position = position
-        self._file = file
-
-    @property
-    def name(self) -> str:
-        return self._name
-
-    @property
-    def position(self) -> int:
-        return self._position
-
-    def read(self) -> Path:
-        return self._file
+# --- destination handoff: list[pl.LazyFrame] ------------------------------
 
 
 class LegacyDestPlugin(DestPlugin[_Conn, _SDDest]):
@@ -760,47 +730,83 @@ class UnannotatedDestPlugin(DestPlugin[_Conn, _SDDest]):
         return None
 
 
-class LazyFrameDestPlugin(DestPlugin[_Conn, _SDDest]):
-    def write_out(  # type: ignore[override]
+class LazyFrameDestPlugin(DestPlugin[_Conn, _SDDest, list[pl.LazyFrame]]):
+    def write_out(
         self,
         ctx: DestContext,
         conn: _Conn,
         dest: _SDDest,
-        bus: DestBusOfLazyFrame,
+        tables: list[pl.LazyFrame],
     ) -> None:
         return None
 
 
-class BareBusDestPlugin(DestPlugin[_Conn, _SDDest]):
-    def write_out(  # type: ignore[override]
+class InheritedDestPlugin(LazyFrameDestPlugin):
+    pass
+
+
+class ExplicitLegacyDestPlugin(DestPlugin[_Conn, _SDDest, list[TableFileSpec]]):
+    def write_out(
         self,
         ctx: DestContext,
         conn: _Conn,
         dest: _SDDest,
-        bus: DestBus,
+        tables: list[TableFileSpec],
     ) -> None:
         return None
 
 
-class ChannelDestPlugin(DestPlugin[_Conn, _SDDest]):
-    def write_out(  # type: ignore[override]
+class DataFrameDestPlugin(DestPlugin[_Conn, _SDDest, list[pl.DataFrame]]):  # type: ignore[type-var]
+    def write_out(
         self,
         ctx: DestContext,
         conn: _Conn,
         dest: _SDDest,
-        bus: DestChannelOfLazyFrame,
+        tables: list[pl.DataFrame],
     ) -> None:
         return None
 
 
-class MixedBusDestPlugin(DestPlugin[_Conn, _SDDest]):
+class BareFrameDestPlugin(DestPlugin[_Conn, _SDDest, pl.LazyFrame]):  # type: ignore[type-var]
+    def write_out(
+        self,
+        ctx: DestContext,
+        conn: _Conn,
+        dest: _SDDest,
+        tables: pl.LazyFrame,
+    ) -> None:
+        return None
+
+
+class UndeclaredFramesDestPlugin(DestPlugin[_Conn, _SDDest]):
     def write_out(  # type: ignore[override]
         self,
         ctx: DestContext,
         conn: _Conn,
         dest: _SDDest,
-        bus: DestBusOfLazyFrame | DestBusOfArrow,
+        tables: list[pl.LazyFrame],
     ) -> None:
+        return None
+
+
+class OtherTablesDestPlugin(DestPlugin[_Conn, _SDDest, list[pl.LazyFrame]]):
+    def write_out(  # type: ignore[override]
+        self,
+        ctx: DestContext,
+        conn: _Conn,
+        dest: _SDDest,
+        tables: list[TableFileSpec],
+    ) -> None:
+        return None
+
+
+class UnannotatedFramesDestPlugin(DestPlugin[_Conn, _SDDest, list[pl.LazyFrame]]):
+    def write_out(self, ctx, conn, dest, tables):  # type: ignore[no-untyped-def]
+        return None
+
+
+class UnresolvedFramesDestPlugin(DestPlugin[_Conn, _SDDest, list[pl.LazyFrame]]):
+    def write_out(self, ctx, conn, dest, tables: MissingFrames):  # type: ignore[name-defined]  # noqa: F821
         return None
 
 
@@ -818,7 +824,7 @@ class OtherTypeDestPlugin(DestPlugin[_Conn, _SDDest]):
 def register(plugin: type[DestPlugin]) -> DestDef:
     return DestDef(
         conn=_Conn,
-        type_="bus",
+        type_="frames",
         system="Test",
         dest_version="v1",
         dest=_SDDest,
@@ -831,10 +837,15 @@ def register(plugin: type[DestPlugin]) -> DestDef:
 
 @pytest.mark.parametrize(
     "plugin",
-    [LegacyDestPlugin, UnannotatedDestPlugin, OtherTypeDestPlugin],
+    [
+        LegacyDestPlugin,
+        UnannotatedDestPlugin,
+        OtherTypeDestPlugin,
+        ExplicitLegacyDestPlugin,
+    ],
 )
-def test_a_plugin_without_a_bus_keeps_the_file_list(plugin):
-    assert dest_handoff(plugin) is None
+def test_a_plugin_without_frames_keeps_the_file_list(plugin):
+    assert not dest_frames(plugin)
     register(plugin)
 
 
@@ -842,85 +853,43 @@ def test_a_plugin_overriding_nothing_keeps_the_file_list():
     class Abstract(DestPlugin):
         pass
 
-    assert dest_handoff(Abstract) is None
-
-
-@pytest.mark.parametrize("bus", DEST_BUSES)
-def test_a_plugin_receives_the_bus_variant_it_declares(bus):
-    namespace: dict = {}
-    exec(
-        "def write_out(self, context, connection, destination, bus: Bus): pass",
-        {"Bus": bus},
-        namespace,
-    )
-    plugin = type("VariantPlugin", (DestPlugin,), namespace)
-    plugin.write_out.__annotations__["bus"] = bus
-    assert dest_handoff(plugin) is bus
-
-
-def test_a_lazy_frame_plugin_registers_with_its_variant():
-    assert dest_handoff(LazyFrameDestPlugin) is DestBusOfLazyFrame
-    register(LazyFrameDestPlugin)
+    assert not dest_frames(Abstract)
 
 
 @pytest.mark.parametrize(
     "plugin",
-    [BareBusDestPlugin, ChannelDestPlugin, MixedBusDestPlugin],
+    [LazyFrameDestPlugin, InheritedDestPlugin],
 )
-def test_a_plugin_must_declare_exactly_one_bus_variant(plugin):
-    with pytest.raises(ValueError, match="DestBusOfLazyFrame, DestBusOfDataFrame"):
-        dest_handoff(plugin)
+def test_a_plugin_receives_the_lazy_frames_it_declares(plugin):
+    assert dest_frames(plugin)
+    register(plugin)
+
+
+@pytest.mark.parametrize(
+    "plugin, message",
+    [
+        (DataFrameDestPlugin, "declares list\\[pl.LazyFrame\\] as the third type"),
+        (BareFrameDestPlugin, "declares list\\[pl.LazyFrame\\] as the third type"),
+        (UndeclaredFramesDestPlugin, "declares no frames"),
+        (OtherTablesDestPlugin, "annotate it with list\\[pl.LazyFrame\\]"),
+        (UnannotatedFramesDestPlugin, "annotate its fourth parameter"),
+        (UnresolvedFramesDestPlugin, "does not resolve at runtime"),
+    ],
+)
+def test_a_plugin_must_take_the_lazy_frames_it_declares(plugin, message):
+    with pytest.raises(ValueError, match=message):
+        dest_frames(plugin)
     with pytest.raises(ApiException) as raised:
         register(plugin)
     assert raised.value.api_error is ApiErrorCode.API_16
 
 
-def test_a_bus_annotation_must_resolve_at_runtime():
+def test_an_unresolved_legacy_annotation_keeps_the_file_list():
     class Unresolved(DestPlugin):
-        def write_out(self, ctx, conn, dest, bus: "MissingDestBus"):  # noqa: F821
+        def write_out(self, ctx, conn, dest, tables: "MissingFiles"):  # noqa: F821
             return None
 
-    with pytest.raises(ValueError, match="does not resolve at runtime"):
-        dest_handoff(Unresolved)
-
-
-def test_the_bus_variants_go_in_order_of_preference():
-    assert dest_bus_names() == (
-        "DestBusOfLazyFrame, DestBusOfDataFrame, DestBusOfArrow, DestBusOfFile"
-    )
-
-
-def test_a_bus_gives_its_channels_by_position_and_by_name():
-    first = FileChannel("out_0", 0, Path("a.parquet"))
-    second = FileChannel("out_1", 1, Path("b.parquet"))
-    bus = DestBusOfFile([first, second])
-    assert len(bus) == 2
-    assert list(bus) == [first, second]
-    assert bus[1] is second
-    assert bus["out_0"] is first
-    with pytest.raises(KeyError, match="out_0"):
-        bus["missing"]
-
-
-def test_the_base_bus_cannot_be_built():
-    with pytest.raises(TypeError, match="has no channel type"):
-        DestBus([])
-
-
-def test_a_bus_refuses_channels_of_another_variant():
-    with pytest.raises(TypeError, match="holds DestChannelOfLazyFrame"):
-        DestBusOfLazyFrame([FileChannel("out_0", 0, Path("a.parquet"))])
-
-
-def test_a_bus_refuses_channels_out_of_position():
-    with pytest.raises(ValueError, match="at position 0 but declares position 1"):
-        DestBusOfFile([FileChannel("out_1", 1, Path("a.parquet"))])
-
-
-def test_a_channel_reads_its_one_table():
-    channel = FileChannel("out_0", 0, Path("a.parquet"))
-    assert channel.read() == Path("a.parquet")
-    assert (channel.name, channel.position) == ("out_0", 0)
+    assert not dest_frames(Unresolved)
 
 
 def test_registering_a_legacy_plugin_warns_it_is_deprecated():
@@ -928,7 +897,7 @@ def test_registering_a_legacy_plugin_warns_it_is_deprecated():
         register(LegacyDestPlugin)
 
 
-def test_registering_a_bus_plugin_warns_nothing(recwarn):
+def test_registering_a_frames_plugin_warns_nothing(recwarn):
     register(LazyFrameDestPlugin)
     assert not [
         warning
@@ -941,94 +910,24 @@ def test_the_legacy_warning_names_the_replacement():
     with pytest.warns(LegacyDestTablesWarning) as raised:
         message = warn_legacy_dest(LegacyDestPlugin)
     assert "LegacyDestPlugin.write_out" in message
-    assert "DestBus variant" in str(raised[0].message)
+    assert "declare list[pl.LazyFrame]" in str(raised[0].message)
 
 
-# --- source handoff: SrcBus / SrcChannel ------------------------------------
+# --- source handoff: list[Iterable[LazyFrameInput]] -------------------------
 
 
-class FileSrcChannel(SrcChannelOfFile):
-    def __init__(self, name: str, position: int) -> None:
-        self._name = name
-        self._position = position
-        self.written: list[tuple[Path, Any]] = []
-
-    @property
-    def name(self) -> str:
-        return self._name
-
-    @property
-    def position(self) -> int:
-        return self._position
-
-    def write(
-        self,
-        data: Path,
-        *,
-        schema: Any = None,
-        metadata: Any = None,
-    ) -> None:
-        self.written.append((data, metadata))
-
-
-class LazyFrameSrcPlugin(SrcPlugin[_Conn, _CheckSrc, SrcBusOfLazyFrame]):
+class LazyFrameSrcPlugin(SrcPlugin[_Conn, _CheckSrc]):
     def read_in(
         self,
         ctx: SrcPluginCtx,
         conn: _Conn,
         src: _CheckSrc,
-    ) -> SrcBusOfLazyFrame:
-        return self.bus
+    ) -> list[Iterable[LazyFrameInput]]:
+        return [[LazyFrameInput(pl.LazyFrame({"a": [1]}))]]
 
 
 class InheritedSrcPlugin(LazyFrameSrcPlugin):
     pass
-
-
-class FileSrcPlugin(SrcPlugin[_Conn, _CheckSrc, SrcBusOfFile]):
-    def read_in(
-        self,
-        ctx: SrcPluginCtx,
-        conn: _Conn,
-        src: _CheckSrc,
-    ) -> SrcBusOfFile:
-        self.bus["orders"].write(Path("a.parquet"), metadata={"@page": 1})
-        return self.bus
-
-
-class UnannotatedBusSrcPlugin(SrcPlugin[_Conn, _CheckSrc, SrcBusOfLazyFrame]):
-    def read_in(self, ctx, conn, src):  # type: ignore[no-untyped-def]
-        return self.bus
-
-
-class OtherVariantSrcPlugin(SrcPlugin[_Conn, _CheckSrc, SrcBusOfLazyFrame]):
-    def read_in(  # type: ignore[override]
-        self,
-        ctx: SrcPluginCtx,
-        conn: _Conn,
-        src: _CheckSrc,
-    ) -> SrcBusOfDataFrame:
-        raise NotImplementedError
-
-
-class ChannelSrcPlugin(SrcPlugin[_Conn, _CheckSrc, SrcChannelOfLazyFrame]):  # type: ignore[type-var]
-    def read_in(
-        self,
-        ctx: SrcPluginCtx,
-        conn: _Conn,
-        src: _CheckSrc,
-    ) -> SrcChannelOfLazyFrame:  # type: ignore[override]
-        raise NotImplementedError
-
-
-class UndeclaredBusSrcPlugin(SrcPlugin[_Conn, _CheckSrc]):
-    def read_in(
-        self,
-        ctx: SrcPluginCtx,
-        conn: _Conn,
-        src: _CheckSrc,
-    ) -> SrcBusOfLazyFrame:
-        raise NotImplementedError
 
 
 class SpecSrcPlugin(SrcPlugin[_Conn, _CheckSrc]):
@@ -1041,15 +940,10 @@ class SpecSrcPlugin(SrcPlugin[_Conn, _CheckSrc]):
         return [[]]
 
 
-class UnresolvedSrcPlugin(SrcPlugin[_Conn, _CheckSrc, SrcBusOfLazyFrame]):
-    def read_in(self, ctx, conn, src) -> MissingSrcBus:  # type: ignore[name-defined]  # noqa: F821
-        raise NotImplementedError
-
-
 def register_source(plugin: type[SrcPlugin]) -> SrcDef:
     return SrcDef(
         conn=_Conn,
-        type_="bus",
+        type_="frames",
         system="Test",
         src_version="v1",
         src=_CheckSrc,
@@ -1061,12 +955,37 @@ def register_source(plugin: type[SrcPlugin]) -> SrcDef:
     )
 
 
+SCOPE = {
+    "pl": pl,
+    "Iterable": Iterable,
+    "Iterator": Iterator,
+    "Sequence": Sequence,
+    "LazyFrameInput": LazyFrameInput,
+    "TableFileInput": TableFileInput,
+    "typing": typing,
+}
+
+
+def returning(annotation: str, scope: dict[str, Any]) -> type[SrcPlugin]:
+    namespace: dict = {}
+    exec(
+        f"def read_in(self, context, connection, source) -> {annotation}: pass",
+        scope,
+        namespace,
+    )
+    return types.new_class(
+        "ReturningPlugin",
+        (SrcPlugin[_Conn, _CheckSrc],),
+        exec_body=lambda body: body.update(namespace),
+    )
+
+
 @pytest.mark.parametrize(
     "plugin",
     [_GoodSrcPlugin, _PluginNoAnnotation, SpecSrcPlugin],
 )
-def test_a_source_plugin_without_a_bus_keeps_the_file_list(plugin):
-    assert src_handoff(plugin) is None
+def test_a_source_plugin_without_frames_keeps_the_file_list(plugin):
+    assert not src_frames(plugin)
     register_source(plugin)
 
 
@@ -1074,96 +993,84 @@ def test_a_source_plugin_overriding_nothing_keeps_the_file_list():
     class Abstract(SrcPlugin):
         pass
 
-    assert src_handoff(Abstract) is None
-
-
-@pytest.mark.parametrize("bus", SRC_BUSES)
-def test_a_source_plugin_writes_into_the_bus_variant_it_declares(bus):
-    namespace: dict = {}
-    exec(
-        "def read_in(self, context, connection, source) -> Bus: return self.bus",
-        {"Bus": bus},
-        namespace,
-    )
-    plugin = types.new_class(
-        "VariantPlugin",
-        (SrcPlugin[_Conn, _CheckSrc, bus],),
-        exec_body=lambda body: body.update(namespace),
-    )
-    assert src_handoff(plugin) is bus
-
-
-def test_a_lazy_frame_source_plugin_registers_with_its_variant():
-    assert src_handoff(LazyFrameSrcPlugin) is SrcBusOfLazyFrame
-    register_source(LazyFrameSrcPlugin)
-
-
-def test_a_source_plugin_inherits_the_variant_of_its_base():
-    assert src_handoff(InheritedSrcPlugin) is SrcBusOfLazyFrame
+    assert not src_frames(Abstract)
 
 
 @pytest.mark.parametrize(
-    "plugin, message",
+    "annotation",
     [
-        (UnannotatedBusSrcPlugin, "annotate read_in with -> SrcBusOfLazyFrame"),
-        (OtherVariantSrcPlugin, "annotate read_in with -> SrcBusOfLazyFrame"),
-        (ChannelSrcPlugin, "SrcBusOfLazyFrame, SrcBusOfDataFrame"),
-        (UndeclaredBusSrcPlugin, "declares no SrcBus variant"),
-        (UnresolvedSrcPlugin, "does not resolve at runtime"),
+        "list[Iterable[LazyFrameInput]]",
+        "list[typing.Iterable[LazyFrameInput]]",
     ],
 )
-def test_a_source_plugin_must_declare_one_variant_and_return_it(plugin, message):
-    with pytest.raises(ValueError, match=message):
-        src_handoff(plugin)
+def test_a_source_plugin_returning_frames_lands_them(annotation):
+    plugin = returning(annotation, SCOPE)
+    assert src_frames(plugin)
+    register_source(plugin)
+
+
+@pytest.mark.parametrize(
+    "annotation",
+    [
+        "list[list[pl.LazyFrame]]",
+        "list[Iterator[pl.LazyFrame]]",
+    ],
+)
+def test_a_source_plugin_wraps_its_frames_in_lazy_frame_inputs(annotation):
+    plugin = returning(annotation, SCOPE)
+    with pytest.raises(ValueError, match="to_lazy_frame_inputs"):
+        src_frames(plugin)
     with pytest.raises(ApiException) as raised:
         register_source(plugin)
     assert raised.value.api_error is ApiErrorCode.API_14
 
 
-def test_the_source_bus_variants_go_in_order_of_preference():
-    assert src_bus_names() == (
-        "SrcBusOfLazyFrame, SrcBusOfDataFrame, SrcBusOfArrow, SrcBusOfFile"
-    )
+def test_a_source_plugin_inherits_the_frames_of_its_base():
+    assert src_frames(InheritedSrcPlugin)
 
 
-def test_a_source_plugin_writes_through_the_bus_it_is_given():
-    plugin = FileSrcPlugin()
-    channel = FileSrcChannel("orders", 0)
-    bus = SrcBusOfFile([channel])
-    plugin._bus = bus
-    assert plugin.bus is bus
-    returned = plugin.read_in(
-        cast(SrcPluginCtx, None),
-        _Conn(),
-        _CheckSrc(),
-    )
-    assert returned is bus
-    assert channel.written == [(Path("a.parquet"), {"@page": 1})]
+@pytest.mark.parametrize(
+    "annotation",
+    [
+        "list[list[LazyFrameInput]]",
+        "list[Iterator[LazyFrameInput]]",
+        "Sequence[Iterable[LazyFrameInput]]",
+        "list[Iterable[LazyFrameInput | TableFileInput]]",
+    ],
+)
+def test_a_source_plugin_returns_exactly_iterables_of_inputs(annotation):
+    plugin = returning(annotation, SCOPE)
+    with pytest.raises(ValueError, match="-> list\\[Iterable\\[LazyFrameInput\\]\\]"):
+        src_frames(plugin)
+    with pytest.raises(ApiException) as raised:
+        register_source(plugin)
+    assert raised.value.api_error is ApiErrorCode.API_14
 
 
-def test_a_source_plugin_without_a_bus_cannot_use_it():
-    with pytest.raises(RuntimeError, match="third type argument of SrcPlugin"):
-        _GoodSrcPlugin().bus
+def test_a_frames_annotation_must_resolve_at_runtime():
+    plugin = returning('"list[Iterable[LazyFrameInput]]"', {})
+    with pytest.raises(ValueError, match="does not resolve at runtime"):
+        src_frames(plugin)
 
 
-def test_a_source_bus_gives_its_channels_by_position_and_by_name():
-    first = FileSrcChannel("orders", 0)
-    second = FileSrcChannel("customers", 1)
-    bus = SrcBusOfFile([first, second])
-    assert len(bus) == 2
-    assert list(bus) == [first, second]
-    assert bus[1] is second
-    assert bus["orders"] is first
+def test_an_unresolved_legacy_annotation_keeps_the_source_file_list():
+    assert not src_frames(returning('"list[list[MissingInput]]"', {}))
 
 
-def test_the_base_source_bus_cannot_be_built():
-    with pytest.raises(TypeError, match="has no channel type"):
-        SrcBus([])
+def test_a_lazy_frame_input_carries_nothing_by_default():
+    frame = pl.LazyFrame({"a": ["1"]})
+    table = LazyFrameInput(frame)
+    assert (table.frame, table.schema, table.metadata) == (frame, None, None)
+    with pytest.raises(AttributeError):
+        table.metadata = {"@page": 1}  # type: ignore[misc]
 
 
-def test_a_source_bus_refuses_channels_of_another_variant():
-    with pytest.raises(TypeError, match="holds SrcChannelOfLazyFrame"):
-        SrcBusOfLazyFrame([FileSrcChannel("orders", 0)])
+def test_bare_frames_wrap_as_lazy_frame_inputs():
+    first, second = pl.LazyFrame({"a": [1]}), pl.LazyFrame({"a": [2]})
+    assert to_lazy_frame_inputs([[first, second], []]) == [
+        [LazyFrameInput(first), LazyFrameInput(second)],
+        [],
+    ]
 
 
 def test_registering_a_legacy_source_plugin_warns_it_is_deprecated():
@@ -1171,7 +1078,7 @@ def test_registering_a_legacy_source_plugin_warns_it_is_deprecated():
         register_source(_GoodSrcPlugin)
 
 
-def test_registering_a_bus_source_plugin_warns_nothing(recwarn):
+def test_registering_a_frames_source_plugin_warns_nothing(recwarn):
     register_source(LazyFrameSrcPlugin)
     assert not [
         warning
@@ -1184,7 +1091,7 @@ def test_a_stream_stage_source_plugin_is_not_deprecated():
     class Stage(StreamStageSrcPlugin):
         pass
 
-    assert src_handoff(Stage) is None
+    assert not src_frames(Stage)
     assert not deprecated_src(Stage)
     assert deprecated_src(_GoodSrcPlugin)
 
@@ -1193,4 +1100,4 @@ def test_the_legacy_source_warning_names_the_replacement():
     with pytest.warns(LegacySrcTablesWarning) as raised:
         message = warn_legacy_src(_GoodSrcPlugin)
     assert "_GoodSrcPlugin.read_in" in message
-    assert "SrcBus variant" in str(raised[0].message)
+    assert "return LazyFrameInputs" in str(raised[0].message)

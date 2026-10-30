@@ -47,7 +47,6 @@ from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.run
     resolve_plugin,
     write_tables,
 )
-from tabsdatak.spi import DestBusOfFile
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payload
@@ -336,7 +335,6 @@ def test_resolve_plugin_unknown_dest_raises_no_plugin(fixture_subscriber, monkey
 def file_handoff(tmp_path: Path) -> DestinationHandoff:
     return DestinationHandoff(
         base_folder=tmp_path / "work",
-        bus=DestBusOfFile,
         legacy=True,
     )
 
@@ -392,7 +390,7 @@ def test_write_tables_returns_normally(tmp_path):
         context,
         object(),
         object(),
-        DestBusOfFile([]),
+        [],
     )
     assert len(calls) == 1
 
@@ -416,7 +414,7 @@ def test_write_tables_wraps_plugin_exception(tmp_path):
             context,
             object(),
             object(),
-            DestBusOfFile([]),
+            [],
         )
 
 

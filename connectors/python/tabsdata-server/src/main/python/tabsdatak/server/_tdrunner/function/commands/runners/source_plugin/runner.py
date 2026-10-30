@@ -57,7 +57,7 @@ from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.error im
 from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.options import (  # noqa: E501
     RunSourcePluginArguments,
 )
-from tabsdatak.spi import Conn, SrcBus, SrcPlugin, SrcPluginCtx
+from tabsdatak.spi import Conn, SrcPlugin, SrcPluginCtx
 
 logger = logging.getLogger(__name__)
 
@@ -189,7 +189,6 @@ def write_in(
     handoff: SourceHandoff,
     binding: SourceBinding,
     context: SrcPluginCtx,
-    bus: SrcBus,
 ) -> list[list[LandedFile]]:
     try:
         handoff.grow(
@@ -197,7 +196,6 @@ def write_in(
             context,
             binding.connection,
             binding.source,
-            bus,
         )
     except InputCountError as error:
         raise RunSourcePluginErrorCode.RSP_7.exception(
@@ -270,17 +268,16 @@ def land_inputs(
     if handoff.legacy and deprecated_src(type(binding.plugin)):
         logger.warning(warn_legacy_src(type(binding.plugin)))
     names = input_names(publisher, binding.cardinality)
-    bus = handoff.seed(
+    slots = handoff.seed(
         request.info,
         names,
         variable=binding.cardinality < 0,
     )
-    logger.info(f"Landing {len(bus)} input(s) through {type(bus).__name__}")
+    logger.info(f"Landing {len(slots)} input(s)")
     landed = write_in(
         handoff,
         binding,
         context,
-        bus,
     )
     logger.info(f"Source plugin landed {sum(len(files) for files in landed)} file(s)")
     state.drain(context, error_code=RunSourcePluginErrorCode.RSP_10)

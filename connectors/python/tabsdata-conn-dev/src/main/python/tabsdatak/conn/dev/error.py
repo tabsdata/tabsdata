@@ -72,17 +72,34 @@ class DevErrorCode(ErrorCode):
     )  # DataGenSrcPlugin.read_in
     DEV_9 = ErrorDef(
         ConnInitException,
-        "ProbeDestConn validation failed",
-    )  # ProbeDestConn
+        "DevFrameDestConn validation failed",
+    )  # DevFrameDestConn
     DEV_10 = ErrorDef(
         ConnInitException,
-        "ProbeDest validation failed",
-    )  # ProbeDest
+        "DevFrameDest validation failed",
+    )  # DevFrameDest
     DEV_11 = ErrorDef(
         DevValidateException,
-        "ProbeDest.outputs must be a positive integer (got {value})",
-    )  # ProbeDest.validate()
+        "DevFrameDest.outputs must be a positive integer (got {value})",
+    )  # DevFrameDest.validate()
     DEV_12 = ErrorDef(
         DevRuntimeException,
-        "ProbeDest could not write its report to {path}",
-    )  # ProbeDestPlugin.write_out
+        "DevFrameDest could not write its report to {path}",
+    )  # DevFrameDestPlugin.write_out
+    DEV_13 = ErrorDef(
+        ConnInitException,
+        "DevFrameSrcConn validation failed",
+    )  # DevFrameSrcConn
+    DEV_14 = ErrorDef(
+        ConnInitException,
+        "DevFrameSrc validation failed",
+    )  # DevFrameSrc
+    DEV_15 = ErrorDef(
+        DevValidateException,
+        "DevFrameSrc data is {size} bytes as base64 parquet, "
+        "over the {limit} byte budget",
+    )  # DevFrameSrc.validate()
+    DEV_16 = ErrorDef(
+        DevRuntimeException,
+        "DevFrameSrc read failed (slot={slot})",
+    )  # DevFrameSrcPlugin.read_in

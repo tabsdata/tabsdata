@@ -21,14 +21,15 @@ from pathlib import Path
 from typing import cast
 
 from tabsdatak import _connectors
-from tabsdatak.conn.dev import DataGenSrc, ProbeDest, TrashDest
+from tabsdatak.conn.dev import DataGenSrc, DevFrameDest, DevFrameSrc, TrashDest
 from tabsdatak.spi import DestDef, SrcDef
 
 _GROUP = "tabsdatak.connectors"
 
 _SRC_TYPE = "dev-datagen-in"
 _DEST_TYPE = "dev-trash-out"
-_PROBE_TYPE = "dev-probe-out"
+_FRAME_SRC_TYPE = "dev-frame-in"
+_FRAME_DEST_TYPE = "dev-frame-out"
 
 
 def _declared_entry_points() -> dict[str, str]:
@@ -59,15 +60,22 @@ def test_dest_def():
     assert dd.dest == TrashDest
 
 
-def test_probe_dest_def():
-    d = _connectors._registry()[_PROBE_TYPE]
+def test_frame_src_def():
+    d = _connectors._registry()[_FRAME_SRC_TYPE]
+    assert isinstance(d, SrcDef)
+    sd = cast(SrcDef, d)
+    assert sd.src == DevFrameSrc
+
+
+def test_frame_dest_def():
+    d = _connectors._registry()[_FRAME_DEST_TYPE]
     assert isinstance(d, DestDef)
     dd = cast(DestDef, d)
-    assert dd.dest == ProbeDest
+    assert dd.dest == DevFrameDest
 
 
 def test_declared_entry_points_are_the_registered_defs():
-    assert len(_ENTRY_POINTS) == 3
+    assert len(_ENTRY_POINTS) == 4
     registry = _connectors._registry()
     for name, value in sorted(_ENTRY_POINTS.items()):
         module, _, attr = value.partition(":")
@@ -76,7 +84,13 @@ def test_declared_entry_points_are_the_registered_defs():
 
 
 def test_scan_does_not_warn_about_this_connector():
-    tokens = {*_ENTRY_POINTS, _SRC_TYPE, _DEST_TYPE, _PROBE_TYPE}
+    tokens = {
+        *_ENTRY_POINTS,
+        _SRC_TYPE,
+        _DEST_TYPE,
+        _FRAME_SRC_TYPE,
+        _FRAME_DEST_TYPE,
+    }
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", RuntimeWarning)
         _connectors.reload_connectors()

@@ -674,7 +674,7 @@ def write_legacy(
             },
         ),
     )
-    bus = handoff.seed(
+    handoff.seed(
         info,
         names,
         variable=variable,
@@ -688,7 +688,6 @@ def write_legacy(
             len(names),
         ),
         object(),
-        bus,
     )
 
 

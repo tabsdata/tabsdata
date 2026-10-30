@@ -14,19 +14,20 @@ import pytest
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.dev._plugin as plugin
-from tabsdatak._handoff import dest_handoff
+from tabsdatak._handoff import dest_frames, src_frames
 from tabsdatak.conn.dev import (
     MAX_DATA_BYTES,
     Data,
     DataGenSrc,
     DataGenSrcConn,
-    ProbeDest,
-    ProbeDestConn,
+    DevFrameDest,
+    DevFrameDestConn,
+    DevFrameSrc,
+    DevFrameSrcConn,
     TrashDest,
     TrashDestConn,
 )
 from tabsdatak.conn.dev.error import DevRuntimeException, DevValidateException
-from tabsdatak.spi import DestBusOfLazyFrame, DestChannelOfLazyFrame
 
 pytestmark = pytest.mark.conn_dev
 
@@ -181,6 +182,49 @@ def test_read_in_returns_one_slot_per_data_independently(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# DevFrameSrc
+# ---------------------------------------------------------------------------
+
+
+def _read_frames(ctx, src) -> list:
+    slots = plugin.DevFrameSrcPlugin().read_in(ctx, DevFrameSrcConn(), src)
+    out = []
+    for slot in slots:
+        tables = list(slot)
+        out.append(None if not tables else tables[0].frame.collect())
+    return out
+
+
+def test_frame_src_returns_lazy_frame_inputs():
+    assert src_frames(plugin.DevFrameSrcPlugin)
+
+
+def test_frame_src_round_trips_its_data():
+    src = DevFrameSrc(data=[Data(pl.DataFrame({"a": [1, 2]}), chunk_size=1)])
+    assert DevFrameSrc.from_json(src.to_json()) == src
+
+
+def test_frame_src_rejects_combined_data_over_budget():
+    half = _incompressible_df(300_000)
+    with pytest.raises(DevValidateException, match="DevFrameSrc"):
+        DevFrameSrc(data=[Data(half), Data(half)])
+
+
+def test_frame_src_emits_what_datagen_emits(tmp_path):
+    frames_ctx = FakeSrcCtx(tmp_path)
+    files_ctx = FakeSrcCtx(tmp_path)
+    full = pl.DataFrame({"a": [1, 2, 3]})
+    chunked = pl.DataFrame({"b": [7, 8]})
+    data = [Data(full), Data(chunked, chunk_size=1)]
+    for _ in range(3):
+        frames = _read_frames(frames_ctx, DevFrameSrc(data=data))
+        files = _read(files_ctx, DataGenSrc(data=data))
+        assert [None if f is None else f.to_dicts() for f in frames] == [
+            None if f is None else f.to_dicts() for f in files
+        ]
+
+
+# ---------------------------------------------------------------------------
 # TrashDest
 # ---------------------------------------------------------------------------
 
@@ -211,77 +255,57 @@ def test_conns_share_kind_but_are_distinct_classes():
 
 
 # ---------------------------------------------------------------------------
-# ProbeDest
+# DevFrameDest
 # ---------------------------------------------------------------------------
-
-
-class LazyFrameChannel(DestChannelOfLazyFrame):
-    def __init__(self, name: str, position: int, frame: pl.LazyFrame) -> None:
-        self._name = name
-        self._position = position
-        self._frame = frame
-
-    @property
-    def name(self) -> str:
-        return self._name
-
-    @property
-    def position(self) -> int:
-        return self._position
-
-    def read(self) -> pl.LazyFrame:
-        return self._frame
 
 
 class TransactionContext:
     transaction_id = "trx-1"
 
 
-def test_probe_dest_round_trips_and_defaults_to_one_output():
-    dest = ProbeDest()
+def test_frame_dest_round_trips_and_defaults_to_one_output():
+    dest = DevFrameDest()
     assert dest.outputs == 1
-    assert ProbeDest.from_json(ProbeDest(outputs=2).to_json()) == ProbeDest(outputs=2)
+    assert DevFrameDest.from_json(DevFrameDest(outputs=2).to_json()) == DevFrameDest(
+        outputs=2
+    )
 
 
 @pytest.mark.parametrize("bad", [0, -1])
-def test_probe_dest_rejects_a_non_positive_output_count(bad):
+def test_frame_dest_rejects_a_non_positive_output_count(bad):
     with pytest.raises(DevValidateException):
-        ProbeDest(outputs=bad).validate()
+        DevFrameDest(outputs=bad).validate()
 
 
-def test_probe_dest_receives_a_lazy_frame_bus():
-    assert dest_handoff(plugin.ProbeDestPlugin) is DestBusOfLazyFrame
+def test_frame_dest_receives_lazy_frames():
+    assert dest_frames(plugin.DevFrameDestPlugin)
 
 
-def test_probe_dest_reports_what_each_channel_holds(tmp_path):
-    bus = DestBusOfLazyFrame(
+def test_frame_dest_reports_what_each_table_holds(tmp_path):
+    plugin.DevFrameDestPlugin().write_out(
+        TransactionContext(),
+        DevFrameDestConn(folder=str(tmp_path)),
+        DevFrameDest(outputs=2),
         [
-            LazyFrameChannel("out_0", 0, pl.LazyFrame({"a": [1, 2], "b": ["x", "y"]})),
-            LazyFrameChannel("out_1", 1, pl.LazyFrame({"c": [3]})),
+            pl.LazyFrame({"a": [1, 2], "b": ["x", "y"]}),
+            pl.LazyFrame({"c": [3]}),
         ],
     )
-    plugin.ProbeDestPlugin().write_out(
-        TransactionContext(),
-        ProbeDestConn(folder=str(tmp_path)),
-        ProbeDest(outputs=2),
-        bus,
-    )
     assert json.loads((tmp_path / "trx-1.json").read_text()) == {
-        "bus": "DestBusOfLazyFrame",
-        "channels": [
-            {"name": "out_0", "position": 0, "rows": 2, "columns": ["a", "b"]},
-            {"name": "out_1", "position": 1, "rows": 1, "columns": ["c"]},
+        "tables": [
+            {"type": "LazyFrame", "rows": 2, "columns": ["a", "b"]},
+            {"type": "LazyFrame", "rows": 1, "columns": ["c"]},
         ],
     }
 
 
-def test_probe_dest_reports_an_unwritable_folder(tmp_path):
+def test_frame_dest_reports_an_unwritable_folder(tmp_path):
     blocked = tmp_path / "file"
     blocked.write_text("")
     with pytest.raises(DevRuntimeException):
-        plugin.ProbeDestPlugin().write_out(
+        plugin.DevFrameDestPlugin().write_out(
             TransactionContext(),
-            ProbeDestConn(folder=str(blocked)),
-            ProbeDest(),
-            DestBusOfLazyFrame([]),
+            DevFrameDestConn(folder=str(blocked)),
+            DevFrameDest(),
+            [],
         )
