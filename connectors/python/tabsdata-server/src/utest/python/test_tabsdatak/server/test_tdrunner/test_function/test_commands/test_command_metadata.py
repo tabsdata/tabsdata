@@ -17,6 +17,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 SECOND_GENERATION = {
     "get_bundle",
     "runners.destination_plugin",
+    "runners.function",
     "runners.source_plugin",
 }
 

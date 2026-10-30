@@ -2,18 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Tests for the run-function command.
-
-Covers:
-  * Helper-function unit tests (`_load_function_def`,
-    `_infer_table_modes`, `_materialize_input_slot`,
-    `_invoke_user_function`, `_output_targets`, `_sink_outputs`).
-  * `main()` error paths and end-to-end happy path: bundle a real
-    publisher, write an inputs manifest pointing at a real parquet,
-    invoke `main()`, verify the output parquet contents + the
-    outputs manifest.
-"""
-
 from __future__ import annotations
 
 import importlib
@@ -54,18 +42,7 @@ from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputEntry,
     OutputManifest,
 )
-from tabsdatak.server._tdrunner.function.commands.runners.function import (
-    _FunctionContext,
-    _infer_table_modes,
-    _invoke_user_function,
-    _load_function_def,
-    _materialize_input_slot,
-    _output_table_names,
-    _output_targets,
-    _scan_input,
-    _sink_outputs,
-    main,
-)
+from tabsdatak.server._tdrunner.function.commands.runners.function import main
 from tabsdatak.server._tdrunner.function.commands.runners.function.error import (
     BadBundleError,
     BadInputParquetError,
@@ -79,29 +56,42 @@ from tabsdatak.server._tdrunner.function.commands.runners.function.error import 
     RunFunctionErrorCode,
     UserFunctionFailedError,
 )
+from tabsdatak.server._tdrunner.function.commands.runners.function.runner import (
+    FunctionContext,
+    infer_table_modes,
+    invoke_user_function,
+    load_function_definition,
+    materialize_input_slot,
+    output_table_names,
+    output_targets,
+    scan_input,
+    sink_outputs,
+)
 from tabsdatak.spi import DestContext, SrcPluginCtx, TableMode
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 from test_tabsdatak.server.conftest import TESTING_RESOURCES_FOLDER
-from test_tabsdatak.server.test_tdrunner.test_function.conftest import (
-    info_payload as _info,
-)
+from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payload
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
-_MOD = "tabsdatak.server._tdrunner.function.commands.runners.function.runner"
+RUNNER_MODULE = "tabsdatak.server._tdrunner.function.commands.runners.function.runner"
 
 
 # --- shared fixtures ----------------------------------------------------
 
 
-def _write_sample_parquet(path: Path) -> None:
+def write_sample_parquet(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     pl.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]}).write_parquet(path)
 
 
-def _slot_entry(name: str, table_pos: int, files: list[str]) -> InputEntry:
+def slot_entry(
+    name: str,
+    table_pos: int,
+    files: list[str],
+) -> InputEntry:
     return InputEntry(
         name=name,
         table_pos=table_pos,
@@ -111,30 +101,44 @@ def _slot_entry(name: str, table_pos: int, files: list[str]) -> InputEntry:
     )
 
 
-_PROJECTS = Path(TESTING_RESOURCES_FOLDER) / "run_function"
+PROJECTS = Path(TESTING_RESOURCES_FOLDER) / "run_function"
 
 
-def _copy_project(tmp_path: Path, monkeypatch, name: str) -> Path:
+def copy_project(
+    tmp_path: Path,
+    monkeypatch,
+    name: str,
+) -> Path:
     """Copy a user project from the test resources into ``tmp_path`` and
     make it importable."""
     project = tmp_path / name
     shutil.copytree(
-        _PROJECTS / name, project, ignore=shutil.ignore_patterns("__pycache__")
+        PROJECTS / name,
+        project,
+        ignore=shutil.ignore_patterns("__pycache__"),
     )
     monkeypatch.syspath_prepend(str(project))
     importlib.invalidate_caches()
     return project
 
 
-def _bundle(tmp_path: Path, project: Path, function) -> Path:
+def build_test_bundle(
+    tmp_path: Path,
+    project: Path,
+    function,
+) -> Path:
     bundle_path = tmp_path / f"{project.name}.tar.zst"
-    build_bundle(function, project, bundle_path)
+    build_bundle(
+        function,
+        project,
+        bundle_path,
+    )
     extracted = tmp_path / f"{project.name}_extracted"
     extract_bundle(bundle_path, extracted)
     return extracted
 
 
-def _forget(package: str) -> None:
+def forget(package: str) -> None:
     for name in list(sys.modules):
         if name == package or name.startswith(f"{package}."):
             del sys.modules[name]
@@ -146,8 +150,12 @@ def user_project(tmp_path, monkeypatch) -> Path:
     function, make it importable, return the project root."""
     srcdata = tmp_path / "srcdata"
     srcdata.mkdir()
-    yield _copy_project(tmp_path, monkeypatch, "publisher_project")
-    _forget("my_pkg")
+    yield copy_project(
+        tmp_path,
+        monkeypatch,
+        "publisher_project",
+    )
+    forget("my_pkg")
 
 
 @pytest.fixture
@@ -159,8 +167,16 @@ def fixture_publisher(user_project) -> PublisherInfo:
 
 
 @pytest.fixture
-def built_bundle(tmp_path, user_project, fixture_publisher) -> Path:
-    return _bundle(tmp_path, user_project, fixture_publisher)
+def built_bundle(
+    tmp_path,
+    user_project,
+    fixture_publisher,
+) -> Path:
+    return build_test_bundle(
+        tmp_path,
+        user_project,
+        fixture_publisher,
+    )
 
 
 # A trivial @transformer source used to build a transformer bundle.
@@ -170,12 +186,20 @@ def built_bundle(tmp_path, user_project, fixture_publisher) -> Path:
 def transformer_bundle(tmp_path, monkeypatch) -> Path:
     """Materialise a tiny @transformer-decorated function in a fresh
     project, build + extract its bundle, return the extracted dir."""
-    project = _copy_project(tmp_path, monkeypatch, "tx_project")
+    project = copy_project(
+        tmp_path,
+        monkeypatch,
+        "tx_project",
+    )
     from tx_pkg.transformer import my_transformer  # noqa: E402
 
-    yield _bundle(tmp_path, project, my_transformer)
+    yield build_test_bundle(
+        tmp_path,
+        project,
+        my_transformer,
+    )
 
-    _forget("tx_pkg")
+    forget("tx_pkg")
 
 
 # A trivial @subscriber-decorated function used to verify kind dispatch
@@ -186,12 +210,20 @@ def transformer_bundle(tmp_path, monkeypatch) -> Path:
 def subscriber_bundle(tmp_path, monkeypatch) -> Path:
     """Materialise a tiny @subscriber-decorated function in a fresh
     project, build + extract its bundle, return the extracted dir."""
-    project = _copy_project(tmp_path, monkeypatch, "sub_project")
+    project = copy_project(
+        tmp_path,
+        monkeypatch,
+        "sub_project",
+    )
     from sub_pkg.subscriber import my_subscriber  # noqa: E402
 
-    yield _bundle(tmp_path, project, my_subscriber)
+    yield build_test_bundle(
+        tmp_path,
+        project,
+        my_subscriber,
+    )
 
-    _forget("sub_pkg")
+    forget("sub_pkg")
 
 
 # A trivial @stream_publisher-decorated function used to verify kind
@@ -205,12 +237,20 @@ def stream_publisher_bundle(tmp_path, monkeypatch) -> Path:
     """Materialise a tiny @stream_publisher-decorated function in a
     fresh project, build + extract its bundle, return the extracted
     dir."""
-    project = _copy_project(tmp_path, monkeypatch, "sp_project")
+    project = copy_project(
+        tmp_path,
+        monkeypatch,
+        "sp_project",
+    )
     from sp_pkg.stream_publisher import my_stream_publisher  # noqa: E402
 
-    yield _bundle(tmp_path, project, my_stream_publisher)
+    yield build_test_bundle(
+        tmp_path,
+        project,
+        my_stream_publisher,
+    )
 
-    _forget("sp_pkg")
+    forget("sp_pkg")
 
 
 # A 2-path publisher (cardinality 2). The source plugin produces one
@@ -223,12 +263,20 @@ def multi_publisher_bundle(tmp_path, monkeypatch) -> Path:
     srcdata = tmp_path / "mp_srcdata"
     srcdata.mkdir()
 
-    project = _copy_project(tmp_path, monkeypatch, "mp_project")
+    project = copy_project(
+        tmp_path,
+        monkeypatch,
+        "mp_project",
+    )
     from mp_pkg.publisher import multi_publisher  # noqa: E402
 
-    yield _bundle(tmp_path, project, multi_publisher)
+    yield build_test_bundle(
+        tmp_path,
+        project,
+        multi_publisher,
+    )
 
-    _forget("mp_pkg")
+    forget("mp_pkg")
 
 
 # A 3-input transformer. Mixes SINGLE and ARRAY modes to also exercise
@@ -237,50 +285,83 @@ def multi_publisher_bundle(tmp_path, monkeypatch) -> Path:
 def multi_transformer_bundle(tmp_path, monkeypatch) -> Path:
     """A transformer with 3 input_tables → 3 input parameters,
     mixing SINGLE and ARRAY slot modes."""
-    project = _copy_project(tmp_path, monkeypatch, "mtx_project")
+    project = copy_project(
+        tmp_path,
+        monkeypatch,
+        "mtx_project",
+    )
     from mtx_pkg.transformer import multi_transformer  # noqa: E402
 
-    yield _bundle(tmp_path, project, multi_transformer)
+    yield build_test_bundle(
+        tmp_path,
+        project,
+        multi_transformer,
+    )
 
-    _forget("mtx_pkg")
+    forget("mtx_pkg")
 
 
 @pytest.fixture(
-    params=["udf_transformer", "broken_udf_transformer"], ids=["valid", "broken"]
+    params=["udf_transformer", "broken_udf_transformer"],
+    ids=["valid", "broken"],
 )
-def udf_transformer_bundle(request, tmp_path, monkeypatch) -> tuple[Path, bool]:
+def udf_transformer_bundle(
+    request,
+    tmp_path,
+    monkeypatch,
+) -> tuple[Path, bool]:
     """A transformer applying a UDF; the broken one returns a row short."""
-    project = _copy_project(tmp_path, monkeypatch, "udf_project")
+    project = copy_project(
+        tmp_path,
+        monkeypatch,
+        "udf_project",
+    )
     function = getattr(importlib.import_module("udf_pkg.transformer"), request.param)
 
     yield (
-        _bundle(tmp_path, project, function),
+        build_test_bundle(
+            tmp_path,
+            project,
+            function,
+        ),
         request.param == "broken_udf_transformer",
     )
 
-    _forget("udf_pkg")
+    forget("udf_pkg")
 
 
 @pytest.fixture(
     params=["quality_udf_transformer", "failing_quality_udf_transformer"],
     ids=["passing", "failing"],
 )
-def quality_udf_transformer_bundle(request, tmp_path, monkeypatch):
+def quality_udf_transformer_bundle(
+    request,
+    tmp_path,
+    monkeypatch,
+):
     """A transformer applying a UDF with data quality on its output; the
     failing one does not tolerate the row its Fail operator flags."""
-    project = _copy_project(tmp_path, monkeypatch, "udf_project")
+    project = copy_project(
+        tmp_path,
+        monkeypatch,
+        "udf_project",
+    )
     module = importlib.import_module("udf_pkg.transformer")
 
     yield (
-        _bundle(tmp_path, project, getattr(module, request.param)),
+        build_test_bundle(
+            tmp_path,
+            project,
+            getattr(module, request.param),
+        ),
         module,
         request.param == "failing_quality_udf_transformer",
     )
 
-    _forget("udf_pkg")
+    forget("udf_pkg")
 
 
-def _input_table(entry: dict, index: int) -> dict:
+def input_table(entry: dict, index: int) -> dict:
     table = {
         "collection_id": 1,
         "collection": "c",
@@ -294,7 +375,7 @@ def _input_table(entry: dict, index: int) -> dict:
     return {"Table": table}
 
 
-def _output_table(entry: dict, index: int) -> dict:
+def output_table(entry: dict, index: int) -> dict:
     table = {
         "collection_id": 1,
         "collection": "c",
@@ -309,31 +390,39 @@ def _output_table(entry: dict, index: int) -> dict:
     return {"Table": table}
 
 
-def _stored(root: Path, table: str) -> Path:
+def stored_path(root: Path, table: str) -> Path:
     return root / "storage" / f"{table}.t"
 
 
-def _landing(root: Path) -> Path:
+def landing_path(root: Path) -> Path:
     return root / "landing"
 
 
-def _stored_output(root: Path, table: str, index: int) -> dict:
-    location = {"uri": _stored(root, table).as_uri(), "env_prefix": "ROOT"}
-    return _output_table({"table": table, "location": location}, index)
+def stored_output(
+    root: Path,
+    table: str,
+    index: int,
+) -> dict:
+    location = {"uri": stored_path(root, table).as_uri(), "env_prefix": "ROOT"}
+    return output_table({"table": table, "location": location}, index)
 
 
-def _write_request(path: Path, *outputs: str) -> Path:
+def write_request(path: Path, *outputs: str) -> Path:
     path.write_text(
         yaml.safe_dump({
             "Function": {
-                "info": _info(
+                "info": info_payload(
                     function_landing={
-                        "uri": _landing(path.parent).as_uri(),
+                        "uri": landing_path(path.parent).as_uri(),
                         "env_prefix": "ROOT",
                     }
                 ),
                 "output": [
-                    _stored_output(path.parent, table, index)
+                    stored_output(
+                        path.parent,
+                        table,
+                        index,
+                    )
                     for index, table in enumerate(outputs)
                 ],
             }
@@ -342,7 +431,7 @@ def _write_request(path: Path, *outputs: str) -> Path:
     return path
 
 
-def _set_argv(
+def set_arguments(
     monkeypatch,
     request_path: Path,
     bundle_dir: Path,
@@ -394,16 +483,16 @@ def _set_argv(
 
 
 def test_load_function_def_happy(built_bundle):
-    info = _load_function_def(built_bundle)
-    assert isinstance(info, PublisherInfo)
-    assert list(info.output_tables) == ["my_table", "untouched"]
+    definition = load_function_definition(built_bundle)
+    assert isinstance(definition, PublisherInfo)
+    assert list(definition.output_tables) == ["my_table", "untouched"]
 
 
 def test_load_function_def_missing_manifest_raises_bad_bundle(tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()
     with pytest.raises(BadBundleError):
-        _load_function_def(empty)
+        load_function_definition(empty)
 
 
 def test_load_function_def_malformed_json_raises_bad_bundle(tmp_path):
@@ -411,7 +500,7 @@ def test_load_function_def_malformed_json_raises_bad_bundle(tmp_path):
     bad.mkdir()
     (bad / BUNDLE_MANIFEST_FILENAME).write_text("{ not json")
     with pytest.raises(BadBundleError):
-        _load_function_def(bad)
+        load_function_definition(bad)
 
 
 def test_load_function_def_unresolvable_func_raises_bad_user_code(built_bundle):
@@ -423,7 +512,7 @@ def test_load_function_def_unresolvable_func_raises_bad_user_code(built_bundle):
     data["spec"]["func"] = "nonexistent.module:nope"
     manifest.write_text(json.dumps(data))
     with pytest.raises(BadUserCodeError):
-        _load_function_def(built_bundle)
+        load_function_definition(built_bundle)
 
 
 def test_load_function_def_unknown_kind_raises_bad_bundle(built_bundle):
@@ -434,7 +523,7 @@ def test_load_function_def_unknown_kind_raises_bad_bundle(built_bundle):
     data["kind"] = "autoPublisherDef"  # not yet handled here
     manifest.write_text(json.dumps(data))
     with pytest.raises(BadBundleError):
-        _load_function_def(built_bundle)
+        load_function_definition(built_bundle)
 
 
 def test_load_function_def_missing_kind_raises_bad_bundle(built_bundle):
@@ -443,7 +532,7 @@ def test_load_function_def_missing_kind_raises_bad_bundle(built_bundle):
     del data["kind"]
     manifest.write_text(json.dumps(data))
     with pytest.raises(BadBundleError):
-        _load_function_def(built_bundle)
+        load_function_definition(built_bundle)
 
 
 def test_load_function_def_transformer_kind_loads_transformer_info(
@@ -452,9 +541,9 @@ def test_load_function_def_transformer_kind_loads_transformer_info(
     """A transformerDef bundle deserialises as TransformerInfo."""
     from tabsdatak._info import TransformerInfo
 
-    info = _load_function_def(transformer_bundle)
-    assert isinstance(info, TransformerInfo)
-    assert list(info.output_tables) == ["t_out"]
+    definition = load_function_definition(transformer_bundle)
+    assert isinstance(definition, TransformerInfo)
+    assert list(definition.output_tables) == ["t_out"]
 
 
 def test_load_function_def_subscriber_kind_loads_subscriber_info(
@@ -463,11 +552,11 @@ def test_load_function_def_subscriber_kind_loads_subscriber_info(
     """A subscriberDef bundle deserialises as SubscriberInfo."""
     from tabsdatak._info import SubscriberInfo
 
-    info = _load_function_def(subscriber_bundle)
-    assert isinstance(info, SubscriberInfo)
+    definition = load_function_definition(subscriber_bundle)
+    assert isinstance(definition, SubscriberInfo)
     # SubscriberInfo has no `output_tables` attribute — names get
     # synthesised by `_output_table_names`.
-    assert not hasattr(info, "output_tables")
+    assert not hasattr(definition, "output_tables")
 
 
 def test_load_function_def_stream_publisher_kind_loads_stream_publisher_info(
@@ -481,9 +570,9 @@ def test_load_function_def_stream_publisher_kind_loads_stream_publisher_info(
     job materialising the staged inputs."""
     from tabsdatak._info import StreamPublisherInfo
 
-    info = _load_function_def(stream_publisher_bundle)
-    assert isinstance(info, StreamPublisherInfo)
-    assert list(info.output_tables) == ["people_streamed"]
+    definition = load_function_definition(stream_publisher_bundle)
+    assert isinstance(definition, StreamPublisherInfo)
+    assert list(definition.output_tables) == ["people_streamed"]
 
 
 # --- unit: _output_table_names -----------------------------------------
@@ -491,7 +580,7 @@ def test_load_function_def_stream_publisher_kind_loads_stream_publisher_info(
 
 def test_output_table_names_publisher_returns_declared_names(fixture_publisher):
     # Publisher fixture declares ["my_table", "untouched"].
-    assert _output_table_names(fixture_publisher) == ["my_table", "untouched"]
+    assert output_table_names(fixture_publisher) == ["my_table", "untouched"]
 
 
 def test_output_table_names_subscriber_synthesises_indexed_names(
@@ -500,63 +589,68 @@ def test_output_table_names_subscriber_synthesises_indexed_names(
     """Subscribers don't declare output table names — they're
     synthesised as `out_0, out_1, ...` from the destination's
     cardinality. LocalFileDest with one path → cardinality 1."""
-    info = _load_function_def(subscriber_bundle)
-    assert _output_table_names(info) == ["out_0"]
+    definition = load_function_definition(subscriber_bundle)
+    assert output_table_names(definition) == ["out_0"]
 
 
 def test_output_table_names_subscriber_unregistered_dest_raises_no_plugin(
-    subscriber_bundle, monkeypatch
+    subscriber_bundle,
+    monkeypatch,
 ):
     """If the destination class has no registered DestDef, surface
     EXIT_NO_PLUGIN rather than letting the bare KeyError bubble."""
-    info = _load_function_def(subscriber_bundle)
+    definition = load_function_definition(subscriber_bundle)
 
-    def _raise(_cls):
+    def missing_destination(_destination_class):
         raise KeyError("no DestDef registered")
 
-    monkeypatch.setattr(f"{_MOD}.get_dest", _raise)
+    monkeypatch.setattr(f"{RUNNER_MODULE}.get_dest", missing_destination)
     with pytest.raises(NoPluginError):
-        _output_table_names(info)
+        output_table_names(definition)
 
 
 # --- unit: _infer_table_modes ------------------------------------------
 
 
-def _fn_single(in_1: TableFrameSpec):
+def single_slot_function(in_1: TableFrameSpec):
     pass
 
 
-def _fn_array(in_1: TableFramesSpec):
+def array_slot_function(in_1: TableFramesSpec):
     pass
 
 
-def _fn_mixed(a: TableFrameSpec, b: TableFramesSpec, c: TableFrameSpec):
+def mixed_slot_function(
+    first: TableFrameSpec,
+    second: TableFramesSpec,
+    third: TableFrameSpec,
+):
     pass
 
 
-def _fn_no_params():
+def function_without_parameters():
     pass
 
 
-def _fn_unannotated(in_1):
+def unannotated_function(in_1):
     pass
 
 
-def _fn_wrong_annotation(in_1: int):
+def wrongly_annotated_function(in_1: int):
     pass
 
 
 def test_infer_table_modes_single_slot():
-    assert _infer_table_modes(_fn_single) == [TableMode.SINGLE]
+    assert infer_table_modes(single_slot_function) == [TableMode.SINGLE]
 
 
 def test_infer_table_modes_array_slot():
-    assert _infer_table_modes(_fn_array) == [TableMode.ARRAY]
+    assert infer_table_modes(array_slot_function) == [TableMode.ARRAY]
 
 
 def test_infer_table_modes_mixed_slots():
     """Transformer-style: SINGLE and ARRAY parameters interleaved."""
-    assert _infer_table_modes(_fn_mixed) == [
+    assert infer_table_modes(mixed_slot_function) == [
         TableMode.SINGLE,
         TableMode.ARRAY,
         TableMode.SINGLE,
@@ -564,51 +658,54 @@ def test_infer_table_modes_mixed_slots():
 
 
 def test_infer_table_modes_no_params_returns_empty():
-    assert _infer_table_modes(_fn_no_params) == []
+    assert infer_table_modes(function_without_parameters) == []
 
 
 def test_infer_table_modes_unannotated_param_raises_bad_user_code():
     with pytest.raises(BadUserCodeError):
-        _infer_table_modes(_fn_unannotated)
+        infer_table_modes(unannotated_function)
 
 
 def test_infer_table_modes_wrong_annotation_raises_bad_user_code():
     with pytest.raises(BadUserCodeError):
-        _infer_table_modes(_fn_wrong_annotation)
+        infer_table_modes(wrongly_annotated_function)
 
 
 # --- unit: _scan_input --------------------------------------------------
 
 
 def test_scan_input_happy(tmp_path):
-    p = tmp_path / "x.parquet"
-    _write_sample_parquet(p)
-    lf = _scan_input(TableFile.of(InputRecord(file=str(p))))
-    assert isinstance(lf, pl.LazyFrame)
+    parquet_path = tmp_path / "x.parquet"
+    write_sample_parquet(parquet_path)
+    frame = scan_input(TableFile.of(InputRecord(file=str(parquet_path))))
+    assert isinstance(frame, pl.LazyFrame)
 
 
 def test_scan_input_garbage_raises_bad_input_parquet(tmp_path):
-    p = tmp_path / "x.parquet"
-    p.write_bytes(b"not a parquet")
+    parquet_path = tmp_path / "x.parquet"
+    parquet_path.write_bytes(b"not a parquet")
     with pytest.raises(BadInputParquetError):
-        _scan_input(TableFile.of(InputRecord(file=str(p))))
+        scan_input(TableFile.of(InputRecord(file=str(parquet_path))))
 
 
 def test_scan_input_from_a_stored_location(tmp_path):
-    p = tmp_path / "x.parquet"
-    _write_sample_parquet(p)
-    record = InputRecord(location=Location(uri=p.as_uri(), env_prefix="ROOT"))
-    lf = _scan_input(TableFile.of(record))
-    assert lf.collect()["name"].to_list() == ["a", "b", "c"]
+    parquet_path = tmp_path / "x.parquet"
+    write_sample_parquet(parquet_path)
+    record = InputRecord(
+        location=Location(uri=parquet_path.as_uri(), env_prefix="ROOT")
+    )
+    frame = scan_input(TableFile.of(record))
+    assert frame.collect()["name"].to_list() == ["a", "b", "c"]
 
 
 def test_scan_input_with_an_unusable_mount_raises_bad_input_parquet(
-    tmp_path, monkeypatch
+    tmp_path,
+    monkeypatch,
 ):
     monkeypatch.setenv("SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__REGION", "eu")
     record = InputRecord(location=Location(uri="s3://b/x.parquet", env_prefix="ROOT"))
     with pytest.raises(BadInputParquetError, match="s3://b/x.parquet"):
-        _scan_input(TableFile.of(record))
+        scan_input(TableFile.of(record))
 
 
 # --- unit: _materialize_input_slot --------------------------------------
@@ -616,90 +713,125 @@ def test_scan_input_with_an_unusable_mount_raises_bad_input_parquet(
 
 def test_materialise_single_zero_files_is_none(tmp_path):
     assert (
-        _materialize_input_slot(
-            _slot_entry("in_1", 0, []), table_mode=TableMode.SINGLE, info=None
+        materialize_input_slot(
+            slot_entry(
+                "in_1",
+                0,
+                [],
+            ),
+            table_mode=TableMode.SINGLE,
+            definition=None,
         )
         is None
     )
 
 
 def test_materialise_single_one_file_is_table_frame(tmp_path):
-    p = tmp_path / "x.parquet"
-    _write_sample_parquet(p)
-    out = _materialize_input_slot(
-        _slot_entry("in_1", 0, [str(p)]), table_mode=TableMode.SINGLE, info=None
+    parquet_path = tmp_path / "x.parquet"
+    write_sample_parquet(parquet_path)
+    output = materialize_input_slot(
+        slot_entry(
+            "in_1",
+            0,
+            [str(parquet_path)],
+        ),
+        table_mode=TableMode.SINGLE,
+        definition=None,
     )
-    assert isinstance(out, TableFrame)
+    assert isinstance(output, TableFrame)
 
 
 def test_materialise_single_two_files_raises_bad_manifest(tmp_path):
-    a = tmp_path / "a.parquet"
-    b = tmp_path / "b.parquet"
-    _write_sample_parquet(a)
-    _write_sample_parquet(b)
+    first = tmp_path / "a.parquet"
+    second = tmp_path / "b.parquet"
+    write_sample_parquet(first)
+    write_sample_parquet(second)
     with pytest.raises(BadManifestError):
-        _materialize_input_slot(
-            _slot_entry("in_1", 0, [str(a), str(b)]),
+        materialize_input_slot(
+            slot_entry(
+                "in_1",
+                0,
+                [str(first), str(second)],
+            ),
             table_mode=TableMode.SINGLE,
-            info=None,
+            definition=None,
         )
 
 
 def test_materialise_single_chunked_publisher_input_is_one_table_frame(
-    tmp_path, fixture_publisher
+    tmp_path,
+    fixture_publisher,
 ):
-    a, b = tmp_path / "a.parquet", tmp_path / "b.parquet"
-    pl.DataFrame({"id": [1, 2], "name": ["a", "b"]}).write_parquet(a)
-    pl.DataFrame({"id": [None, None], "name": ["c", "d"]}).write_parquet(b)
+    first, second = tmp_path / "a.parquet", tmp_path / "b.parquet"
+    pl.DataFrame({"id": [1, 2], "name": ["a", "b"]}).write_parquet(first)
+    pl.DataFrame({"id": [None, None], "name": ["c", "d"]}).write_parquet(second)
 
-    out = _materialize_input_slot(
-        _slot_entry("in_1", 0, [str(a), str(b)]),
+    output = materialize_input_slot(
+        slot_entry(
+            "in_1",
+            0,
+            [str(first), str(second)],
+        ),
         table_mode=TableMode.SINGLE,
-        info=fixture_publisher,
+        definition=fixture_publisher,
     )
 
-    assert isinstance(out, TableFrame)
-    df = out._to_polars_lf().collect()
-    assert df["name"].to_list() == ["a", "b", "c", "d"]
-    assert df["id"].to_list() == [1, 2, None, None]
-    assert df["id"].dtype == pl.Int64
+    assert isinstance(output, TableFrame)
+    frame = output._to_polars_lf().collect()
+    assert frame["name"].to_list() == ["a", "b", "c", "d"]
+    assert frame["id"].to_list() == [1, 2, None, None]
+    assert frame["id"].dtype == pl.Int64
 
 
 def test_materialise_array_returns_list_of_table_frames(tmp_path):
-    a = tmp_path / "a.parquet"
-    b = tmp_path / "b.parquet"
-    _write_sample_parquet(a)
-    _write_sample_parquet(b)
-    out = _materialize_input_slot(
-        _slot_entry("in_1", 0, [str(a), str(b)]),
+    first = tmp_path / "a.parquet"
+    second = tmp_path / "b.parquet"
+    write_sample_parquet(first)
+    write_sample_parquet(second)
+    output = materialize_input_slot(
+        slot_entry(
+            "in_1",
+            0,
+            [str(first), str(second)],
+        ),
         table_mode=TableMode.ARRAY,
-        info=None,
+        definition=None,
     )
-    assert isinstance(out, list)
-    assert len(out) == 2
-    assert all(isinstance(x, TableFrame) for x in out)
+    assert isinstance(output, list)
+    assert len(output) == 2
+    assert all(isinstance(item, TableFrame) for item in output)
 
 
 def test_materialise_array_empty_is_empty_list():
-    out = _materialize_input_slot(
-        _slot_entry("in_1", 0, []), table_mode=TableMode.ARRAY, info=None
+    output = materialize_input_slot(
+        slot_entry(
+            "in_1",
+            0,
+            [],
+        ),
+        table_mode=TableMode.ARRAY,
+        definition=None,
     )
-    assert out == []
+    assert output == []
 
 
 # --- unit: _invoke_user_function ----------------------------------------
 
 
-def _fake_table_frame() -> TableFrame:
+def fake_table_frame() -> TableFrame:
     return TableFrame._build(pl.DataFrame({"x": [1]}).lazy(), CreationMode.MUT)
 
 
 def test_invoke_user_function_happy():
-    def fn(in_1):
+    def function(in_1):
         return (in_1, None)
 
-    result = _invoke_user_function(fn, [_fake_table_frame()], ["t1", "t2"])
-    assert isinstance(result, tuple)
+    result = invoke_user_function(
+        function,
+        [fake_table_frame()],
+        ["t1", "t2"],
+    )
+    assert isinstance(result, list)
     assert len(result) == 2
     assert isinstance(result[0], TableFrame)
     assert result[1] is None
@@ -710,111 +842,150 @@ def test_invoke_user_function_runs_without_the_storage_secrets(monkeypatch):
     monkeypatch.setenv(variable, "secret")
     seen = {}
 
-    def fn(in_1):
+    def function(in_1):
         seen["value"] = os.environ.get(variable)
         return in_1
 
-    _invoke_user_function(fn, [_fake_table_frame()], ["t1"])
+    invoke_user_function(
+        function,
+        [fake_table_frame()],
+        ["t1"],
+    )
 
     assert seen == {"value": None}
     assert os.environ[variable] == "secret"
 
 
 def test_invoke_user_function_raises_maps_to_user_function_failed():
-    def fn(in_1):
+    def function(in_1):
         raise RuntimeError("boom")
 
     with pytest.raises(UserFunctionFailedError):
-        _invoke_user_function(fn, [_fake_table_frame()], ["t1"])
+        invoke_user_function(
+            function,
+            [fake_table_frame()],
+            ["t1"],
+        )
 
 
 def test_invoke_user_function_non_tuple_return_raises_shape_mismatch():
     # With more than one output slot a bare (non-tuple) return is still
     # rejected -- the single-output convenience does not apply.
-    def fn(in_1):
-        return _fake_table_frame()  # missing tuple wrap, but 2 outputs expected
+    def function(in_1):
+        return fake_table_frame()  # missing tuple wrap, but 2 outputs expected
 
     with pytest.raises(OutputShapeMismatchError):
-        _invoke_user_function(fn, [_fake_table_frame()], ["t1", "t2"])
+        invoke_user_function(
+            function,
+            [fake_table_frame()],
+            ["t1", "t2"],
+        )
 
 
 def test_invoke_user_function_bare_single_output_is_wrapped():
     # Single-output convenience: a lone value returned bare is wrapped
     # into a 1-tuple, mirroring the relaxed signature check.
-    def fn(in_1):
+    def function(in_1):
         return in_1  # bare TableFrame, one output slot
 
-    result = _invoke_user_function(fn, [_fake_table_frame()], ["t1"])
-    assert isinstance(result, tuple)
+    result = invoke_user_function(
+        function,
+        [fake_table_frame()],
+        ["t1"],
+    )
+    assert isinstance(result, list)
     assert len(result) == 1
     assert isinstance(result[0], TableFrame)
 
 
 def test_invoke_user_function_bare_single_output_none_is_wrapped():
     # A bare ``None`` for a single output slot is also wrapped.
-    def fn(in_1):
+    def function(in_1):
         return None
 
-    result = _invoke_user_function(fn, [_fake_table_frame()], ["t1"])
-    assert result == (None,)
+    result = invoke_user_function(
+        function,
+        [fake_table_frame()],
+        ["t1"],
+    )
+    assert result == [None]
 
 
 def test_invoke_user_function_wrong_length_raises_shape_mismatch():
-    def fn(in_1):
-        return (_fake_table_frame(), _fake_table_frame())  # returns 2, expects 1
+    def function(in_1):
+        return (fake_table_frame(), fake_table_frame())  # returns 2, expects 1
 
     with pytest.raises(OutputShapeMismatchError):
-        _invoke_user_function(fn, [_fake_table_frame()], ["t1"])
+        invoke_user_function(
+            function,
+            [fake_table_frame()],
+            ["t1"],
+        )
 
 
 def test_invoke_user_function_wrong_element_type_raises_shape_mismatch():
-    def fn(in_1):
+    def function(in_1):
         return ("not a table frame",)
 
     with pytest.raises(OutputShapeMismatchError):
-        _invoke_user_function(fn, [_fake_table_frame()], ["t1"])
+        invoke_user_function(
+            function,
+            [fake_table_frame()],
+            ["t1"],
+        )
 
 
 # --- unit: _output_targets ----------------------------------------------
 
 
-def _request(tmp_path: Path, *outputs: str) -> Request:
+def build_request(tmp_path: Path, *outputs: str) -> Request:
     return Request.load(
-        _write_request(tmp_path / "request.yaml", *outputs), RunFunctionErrorCode.RF_1
+        write_request(tmp_path / "request.yaml", *outputs),
+        RunFunctionErrorCode.RF_1,
     )
 
 
 def test_output_targets_of_a_publisher_are_their_stored_locations(
-    tmp_path, fixture_publisher
+    tmp_path,
+    fixture_publisher,
 ):
-    targets = _output_targets(
-        _request(tmp_path, "untouched", "my_table"),
+    targets = output_targets(
+        build_request(
+            tmp_path,
+            "untouched",
+            "my_table",
+        ),
         fixture_publisher,
         ["my_table", "untouched"],
     )
     assert [target.uri for target in targets] == [
-        _stored(tmp_path, "my_table").as_uri(),
-        _stored(tmp_path, "untouched").as_uri(),
+        stored_path(tmp_path, "my_table").as_uri(),
+        stored_path(tmp_path, "untouched").as_uri(),
     ]
 
 
 def test_output_targets_reject_a_table_without_location(tmp_path, fixture_publisher):
     with pytest.raises(BadRequestError, match="untouched"):
-        _output_targets(
-            _request(tmp_path, "my_table"),
+        output_targets(
+            build_request(tmp_path, "my_table"),
             fixture_publisher,
             ["my_table", "untouched"],
         )
 
 
 def test_output_targets_of_a_subscriber_are_its_landing_files(
-    tmp_path, subscriber_bundle
+    tmp_path,
+    subscriber_bundle,
 ):
-    info = _load_function_def(subscriber_bundle)
-    targets = _output_targets(_request(tmp_path), info, ["out_0", "out_1"])
+    definition = load_function_definition(subscriber_bundle)
+    targets = output_targets(
+        build_request(tmp_path),
+        definition,
+        ["out_0", "out_1"],
+    )
     assert [target.uri for target in targets] == [
-        f"{_landing(tmp_path).as_uri()}/0.t",
-        f"{_landing(tmp_path).as_uri()}/1.t",
+        f"{landing_path(tmp_path).as_uri()}/0.t",
+        f"{landing_path(tmp_path).as_uri()}/1.t",
     ]
 
 
@@ -824,14 +995,23 @@ def test_output_targets_of_a_subscriber_are_its_landing_files(
 HOST = ColumnPolicy(Zone.HOST)
 
 
-def _targets(tmp_path: Path, *tables: str) -> list[TableFile]:
-    return [TableFile.local(_stored(tmp_path, table)) for table in tables]
+def stored_targets(tmp_path: Path, *tables: str) -> list[TableFile]:
+    return [TableFile.local(stored_path(tmp_path, table)) for table in tables]
 
 
 def test_sink_outputs_writes_each_table_frame(tmp_path):
-    result = (_fake_table_frame(), _fake_table_frame())
-    targets = _targets(tmp_path, "t1", "t2")
-    entries = _sink_outputs(result, ["t1", "t2"], targets, HOST).outputs
+    result = (fake_table_frame(), fake_table_frame())
+    targets = stored_targets(
+        tmp_path,
+        "t1",
+        "t2",
+    )
+    entries = sink_outputs(
+        result,
+        ["t1", "t2"],
+        targets,
+        HOST,
+    ).outputs
     assert [entry.name for entry in entries] == ["t1", "t2"]
     for entry, target in zip(entries, targets):
         assert entry.uri == target.uri
@@ -840,26 +1020,43 @@ def test_sink_outputs_writes_each_table_frame(tmp_path):
 
 
 def test_sink_outputs_none_value_records_no_uri_nor_stats(tmp_path):
-    result = (None, _fake_table_frame())
-    entries = _sink_outputs(
-        result, ["t1", "t2"], _targets(tmp_path, "t1", "t2"), HOST
+    result = (None, fake_table_frame())
+    entries = sink_outputs(
+        result,
+        ["t1", "t2"],
+        stored_targets(
+            tmp_path,
+            "t1",
+            "t2",
+        ),
+        HOST,
     ).outputs
     assert entries[0] == OutputEntry(name="t1")
     assert entries[1].stats is not None
-    assert not _stored(tmp_path, "t1").exists()
+    assert not stored_path(tmp_path, "t1").exists()
 
 
 def test_sink_outputs_write_failure_maps_to_output_write_failed(tmp_path, monkeypatch):
     def broken_sink(self, *arguments):
         raise RuntimeError("disk full")
 
-    monkeypatch.setattr(TableFrame, "_observed", broken_sink)
+    monkeypatch.setattr(
+        TableFrame,
+        "_observed",
+        broken_sink,
+    )
     with pytest.raises(OutputWriteFailedError, match="t1.t"):
-        _sink_outputs((_fake_table_frame(),), ["t1"], _targets(tmp_path, "t1"), HOST)
+        sink_outputs(
+            (fake_table_frame(),),
+            ["t1"],
+            stored_targets(tmp_path, "t1"),
+            HOST,
+        )
 
 
 def test_sink_outputs_failure_while_writing_maps_to_output_write_failed(
-    tmp_path, monkeypatch
+    tmp_path,
+    monkeypatch,
 ):
     def fail(batch):
         raise RuntimeError("disk full")
@@ -867,25 +1064,43 @@ def test_sink_outputs_failure_while_writing_maps_to_output_write_failed(
     def failing_sink(self, *arguments):
         return pl.LazyFrame({"x": [1]}).map_batches(fail)
 
-    monkeypatch.setattr(TableFrame, "_observed", failing_sink)
+    monkeypatch.setattr(
+        TableFrame,
+        "_observed",
+        failing_sink,
+    )
     with pytest.raises(OutputWriteFailedError, match="t1, t2"):
-        _sink_outputs(
-            (_fake_table_frame(), _fake_table_frame()),
+        sink_outputs(
+            (fake_table_frame(), fake_table_frame()),
             ["t1", "t2"],
-            _targets(tmp_path, "t1", "t2"),
+            stored_targets(
+                tmp_path,
+                "t1",
+                "t2",
+            ),
             HOST,
         )
 
 
 def test_sink_outputs_unreadable_stats_map_to_output_write_failed(
-    tmp_path, monkeypatch
+    tmp_path,
+    monkeypatch,
 ):
     def unreadable(self):
         raise OSError("gone")
 
-    monkeypatch.setattr(TableFile, "stats", unreadable)
+    monkeypatch.setattr(
+        TableFile,
+        "stats",
+        unreadable,
+    )
     with pytest.raises(OutputWriteFailedError, match="stats of output 't1'"):
-        _sink_outputs((_fake_table_frame(),), ["t1"], _targets(tmp_path, "t1"), HOST)
+        sink_outputs(
+            (fake_table_frame(),),
+            ["t1"],
+            stored_targets(tmp_path, "t1"),
+            HOST,
+        )
 
 
 def test_sink_outputs_writes_every_output_in_one_pass(tmp_path, monkeypatch):
@@ -896,24 +1111,33 @@ def test_sink_outputs_writes_every_output_in_one_pass(tmp_path, monkeypatch):
         collected.append(len(plans))
         return collect_all(plans, **options)
 
-    monkeypatch.setattr(pl, "collect_all", counting)
-    _sink_outputs(
-        (_fake_table_frame(), _fake_table_frame(), None),
+    monkeypatch.setattr(
+        pl,
+        "collect_all",
+        counting,
+    )
+    sink_outputs(
+        (fake_table_frame(), fake_table_frame(), None),
         ["t1", "t2", "t3"],
-        _targets(tmp_path, "t1", "t2", "t3"),
+        stored_targets(
+            tmp_path,
+            "t1",
+            "t2",
+            "t3",
+        ),
         HOST,
     )
     assert collected == [2]
 
 
-def _state_output(tmp_path: Path, values: dict) -> StateOutput:
+def state_output(tmp_path: Path, values: dict) -> StateOutput:
     source = tmp_path / "state" / STATE_FILE
     source.parent.mkdir(parents=True, exist_ok=True)
     write_state(values, source)
     return StateOutput(
         name=STATE_TABLE,
         source=TableFile.local(source),
-        target=TableFile.local(_stored(tmp_path, STATE_TABLE)),
+        target=TableFile.local(stored_path(tmp_path, STATE_TABLE)),
     )
 
 
@@ -925,54 +1149,72 @@ def test_sink_outputs_writes_the_state_in_the_same_pass(tmp_path, monkeypatch):
         collected.append(len(plans))
         return collect_all(plans, **options)
 
-    monkeypatch.setattr(pl, "collect_all", counting)
-    state = _state_output(tmp_path, {"cursor": 250})
-    manifest = _sink_outputs(
-        (_fake_table_frame(),),
+    monkeypatch.setattr(
+        pl,
+        "collect_all",
+        counting,
+    )
+    state = state_output(tmp_path, {"cursor": 250})
+    manifest = sink_outputs(
+        (fake_table_frame(),),
         ["t1"],
-        _targets(tmp_path, "t1"),
+        stored_targets(tmp_path, "t1"),
         HOST,
         state=state,
     )
     assert collected == [2]
     assert [entry.name for entry in manifest.outputs] == ["t1"]
     assert manifest.state == OutputEntry(
-        name=STATE_TABLE, uri=state.target.uri, stats=state.target.stats()
+        name=STATE_TABLE,
+        uri=state.target.uri,
+        stats=state.target.stats(),
     )
-    assert _stored_state(tmp_path) == {"cursor": 250}
+    assert stored_state(tmp_path) == {"cursor": 250}
 
 
 def test_sink_outputs_writes_the_state_without_outputs(tmp_path):
-    state = _state_output(tmp_path, {})
-    manifest = _sink_outputs(
-        (None,), ["t1"], _targets(tmp_path, "t1"), HOST, state=state
+    state = state_output(tmp_path, {})
+    manifest = sink_outputs(
+        (None,),
+        ["t1"],
+        stored_targets(tmp_path, "t1"),
+        HOST,
+        state=state,
     )
     assert manifest.outputs == (OutputEntry(name="t1"),)
     assert manifest.state.stats.column_count == 0
-    assert _stored_state(tmp_path) == {}
+    assert stored_state(tmp_path) == {}
 
 
 def test_sink_outputs_without_state_records_none(tmp_path):
-    manifest = _sink_outputs(
-        (_fake_table_frame(),), ["t1"], _targets(tmp_path, "t1"), HOST
+    manifest = sink_outputs(
+        (fake_table_frame(),),
+        ["t1"],
+        stored_targets(tmp_path, "t1"),
+        HOST,
     )
     assert manifest.state is None
 
 
 def test_sink_outputs_state_write_failure_maps_to_output_write_failed(
-    tmp_path, monkeypatch
+    tmp_path,
+    monkeypatch,
 ):
     def broken_copy(self, target):
         raise RuntimeError("disk full")
 
-    monkeypatch.setattr(TableFile, "copy", broken_copy)
+    monkeypatch.setattr(
+        TableFile,
+        "copy",
+        broken_copy,
+    )
     with pytest.raises(OutputWriteFailedError, match=STATE_TABLE):
-        _sink_outputs(
+        sink_outputs(
             (None,),
             ["t1"],
-            _targets(tmp_path, "t1"),
+            stored_targets(tmp_path, "t1"),
             HOST,
-            state=_state_output(tmp_path, {}),
+            state=state_output(tmp_path, {}),
         )
 
 
@@ -982,21 +1224,25 @@ def test_sink_outputs_keeps_system_columns(tmp_path, zone):
         TD_SYSTEM_COLUMN_PREFIX,
     )
 
-    _sink_outputs(
-        (_fake_table_frame(),),
+    sink_outputs(
+        (fake_table_frame(),),
         ["t1"],
-        _targets(tmp_path, "t1"),
+        stored_targets(tmp_path, "t1"),
         ColumnPolicy(zone),
     )
-    columns = pl.read_parquet_schema(_stored(tmp_path, "t1"))
-    assert any(c.startswith(TD_SYSTEM_COLUMN_PREFIX) for c in columns)
+    columns = pl.read_parquet_schema(stored_path(tmp_path, "t1"))
+    assert any(third.startswith(TD_SYSTEM_COLUMN_PREFIX) for third in columns)
 
 
 # --- main: error paths --------------------------------------------------
 
 
-def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch, http_ok_url):
-    _set_argv(
+def test_main_missing_request_returns_bad_request(
+    tmp_path,
+    monkeypatch,
+    http_ok_url,
+):
+    set_arguments(
         monkeypatch,
         tmp_path / "no-such.yaml",
         tmp_path / "bundle",
@@ -1009,11 +1255,15 @@ def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch, http_ok
     assert main() == BadRequestError.exit_code
 
 
-def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch, http_ok_url):
-    req = _write_request(tmp_path / "request.yaml")
-    _set_argv(
+def test_main_missing_bundle_returns_bad_bundle(
+    tmp_path,
+    monkeypatch,
+    http_ok_url,
+):
+    request_path = write_request(tmp_path / "request.yaml")
+    set_arguments(
         monkeypatch,
-        req,
+        request_path,
         tmp_path / "no-bundle",
         tmp_path / "inputs.yaml",
         tmp_path / "out",
@@ -1025,32 +1275,51 @@ def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch, http_ok_u
 
 
 def test_main_invalid_options_returns_1(monkeypatch):
-    monkeypatch.setattr(sys, "argv", ["run-function", "--request", "x"])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["run-function", "--request", "x"],
+    )
     assert main() == 1
 
 
 # --- main: end-to-end ---------------------------------------------------
 
 
-def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok_url):
+def test_main_end_to_end_happy_path(
+    tmp_path,
+    built_bundle,
+    monkeypatch,
+    http_ok_url,
+):
     """Real publisher, real bundle, real inputs manifest pointing at a
     real parquet. Invoke main(); verify outputs."""
     # Write the request.
-    request_path = _write_request(tmp_path / "request.yaml", "my_table", "untouched")
+    request_path = write_request(
+        tmp_path / "request.yaml",
+        "my_table",
+        "untouched",
+    )
 
     # Write a sample parquet and an inputs manifest pointing at it.
     raw_parquet = tmp_path / "raw" / "rows.parquet"
-    _write_sample_parquet(raw_parquet)
+    write_sample_parquet(raw_parquet)
     inputs_manifest = tmp_path / "inputs.yaml"
-    InputManifest(inputs=(_slot_entry("in_1", 0, [str(raw_parquet)]),)).write(
-        inputs_manifest
-    )
+    InputManifest(
+        inputs=(
+            slot_entry(
+                "in_1",
+                0,
+                [str(raw_parquet)],
+            ),
+        )
+    ).write(inputs_manifest)
 
     out_dir = tmp_path / "fn_out"
     outputs_manifest = tmp_path / "outputs.yaml"
     liveness = tmp_path / "live"
 
-    _set_argv(
+    set_arguments(
         monkeypatch,
         request_path,
         built_bundle,
@@ -1060,24 +1329,24 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
         liveness,
         responder_url=http_ok_url,
     )
-    rc = main()
-    assert rc == 0, f"main() returned {rc}"
+    status = main()
+    assert status == 0, f"main() returned {status}"
 
     # One output was written to its stored location for `my_table` (the
     # function returned a LazyFrame), nothing for `untouched` (function
     # returned None), and nothing locally.
-    my_table_file = _stored(tmp_path, "my_table")
+    my_table_file = stored_path(tmp_path, "my_table")
     assert my_table_file.is_file()
-    assert not _stored(tmp_path, "untouched").exists()
+    assert not stored_path(tmp_path, "untouched").exists()
     assert not list(out_dir.rglob("*.parquet"))
 
     # The user function added a `marker` column; the underlying data
     # comes through unchanged.
-    df = pl.read_parquet(my_table_file)
-    assert "marker" in df.columns
-    assert df["marker"].to_list() == ["from_user_fn"] * 3
-    assert df["id"].to_list() == [1, 2, 3]
-    assert df["name"].to_list() == ["a", "b", "c"]
+    frame = pl.read_parquet(my_table_file)
+    assert "marker" in frame.columns
+    assert frame["marker"].to_list() == ["from_user_fn"] * 3
+    assert frame["id"].to_list() == [1, 2, 3]
+    assert frame["name"].to_list() == ["a", "b", "c"]
 
     # Outputs manifest shape: my_table → uri and stats, untouched → null,
     # and no state (the request declares no system output).
@@ -1100,22 +1369,35 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
 
 
 def test_main_outputs_manifest_write_failure(
-    tmp_path, built_bundle, monkeypatch, http_ok_url
+    tmp_path,
+    built_bundle,
+    monkeypatch,
+    http_ok_url,
 ):
     """If the outputs-manifest write fails, surface OutputsManifestWriteFailedError."""
-    request_path = _write_request(tmp_path / "request.yaml", "my_table", "untouched")
-    raw_parquet = tmp_path / "raw" / "rows.parquet"
-    _write_sample_parquet(raw_parquet)
-    inputs_manifest = tmp_path / "inputs.yaml"
-    InputManifest(inputs=(_slot_entry("in_1", 0, [str(raw_parquet)]),)).write(
-        inputs_manifest
+    request_path = write_request(
+        tmp_path / "request.yaml",
+        "my_table",
+        "untouched",
     )
+    raw_parquet = tmp_path / "raw" / "rows.parquet"
+    write_sample_parquet(raw_parquet)
+    inputs_manifest = tmp_path / "inputs.yaml"
+    InputManifest(
+        inputs=(
+            slot_entry(
+                "in_1",
+                0,
+                [str(raw_parquet)],
+            ),
+        )
+    ).write(inputs_manifest)
 
     # Point --outputs-manifest at an existing directory → write fails.
     bad_target = tmp_path / "i-am-a-dir"
     bad_target.mkdir()
 
-    _set_argv(
+    set_arguments(
         monkeypatch,
         request_path,
         built_bundle,
@@ -1132,14 +1414,17 @@ def test_main_outputs_manifest_write_failure(
 
 
 def test_main_multi_cardinality_publisher_concatenates_two_slots(
-    tmp_path, multi_publisher_bundle, monkeypatch, http_ok_url
+    tmp_path,
+    multi_publisher_bundle,
+    monkeypatch,
+    http_ok_url,
 ):
     """A publisher whose source has 2 paths produces 2 input slots, and
     the user function declares 2 parameters. Exercises the full _run()
     flow with input_count > 1 on the publisher path — guards against
     the regression where _input_count was hardcoded to 1 for
     publishers."""
-    request_path = _write_request(tmp_path / "request.yaml", "concat")
+    request_path = write_request(tmp_path / "request.yaml", "concat")
 
     # One parquet per slot.
     a_parquet = tmp_path / "raw" / "a.parquet"
@@ -1151,14 +1436,22 @@ def test_main_multi_cardinality_publisher_concatenates_two_slots(
     inputs_manifest = tmp_path / "inputs.yaml"
     InputManifest(
         inputs=(
-            _slot_entry("in_a", 0, [str(a_parquet)]),
-            _slot_entry("in_b", 1, [str(b_parquet)]),
+            slot_entry(
+                "in_a",
+                0,
+                [str(a_parquet)],
+            ),
+            slot_entry(
+                "in_b",
+                1,
+                [str(b_parquet)],
+            ),
         )
     ).write(inputs_manifest)
 
     out_dir = tmp_path / "fn_out"
     outputs_manifest = tmp_path / "outputs.yaml"
-    _set_argv(
+    set_arguments(
         monkeypatch,
         request_path,
         multi_publisher_bundle,
@@ -1168,47 +1461,62 @@ def test_main_multi_cardinality_publisher_concatenates_two_slots(
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    rc = main()
-    assert rc == 0, f"main() returned {rc}"
+    status = main()
+    assert status == 0, f"main() returned {status}"
 
-    concat_file = _stored(tmp_path, "concat")
+    concat_file = stored_path(tmp_path, "concat")
     assert concat_file.is_file()
-    df = pl.read_parquet(concat_file)
+    frame = pl.read_parquet(concat_file)
     # Both inputs got concatenated (2 + 2 rows).
-    assert df.height == 4
-    assert sorted(df["id"].to_list()) == [1, 2, 10, 11]
+    assert frame.height == 4
+    assert sorted(frame["id"].to_list()) == [1, 2, 10, 11]
 
 
 def test_main_multi_cardinality_transformer_with_mixed_modes(
-    tmp_path, multi_transformer_bundle, monkeypatch, http_ok_url
+    tmp_path,
+    multi_transformer_bundle,
+    monkeypatch,
+    http_ok_url,
 ):
     """A transformer with 3 input_tables (mixed SINGLE/ARRAY/SINGLE) and
     one output. Exercises the full _run() flow with input_count > 1 on
     the transformer path AND with mixed slot modes — guards against
     regressions in both per-slot mode inference and the slot count."""
-    request_path = _write_request(tmp_path / "request.yaml", "merged")
+    request_path = write_request(tmp_path / "request.yaml", "merged")
 
     # Three input parquets: a (SINGLE), b (ARRAY, one file), c (SINGLE).
-    a = tmp_path / "raw" / "a.parquet"
-    b = tmp_path / "raw" / "b.parquet"
-    c = tmp_path / "raw" / "c.parquet"
-    a.parent.mkdir(parents=True, exist_ok=True)
-    pl.DataFrame({"id": [1], "name": ["a"]}).write_parquet(a)
-    pl.DataFrame({"id": [2], "name": ["b"]}).write_parquet(b)
-    pl.DataFrame({"id": [3], "name": ["c"]}).write_parquet(c)
+    first = tmp_path / "raw" / "a.parquet"
+    second = tmp_path / "raw" / "b.parquet"
+    third = tmp_path / "raw" / "c.parquet"
+    first.parent.mkdir(parents=True, exist_ok=True)
+    pl.DataFrame({"id": [1], "name": ["a"]}).write_parquet(first)
+    pl.DataFrame({"id": [2], "name": ["b"]}).write_parquet(second)
+    pl.DataFrame({"id": [3], "name": ["c"]}).write_parquet(third)
 
     inputs_manifest = tmp_path / "inputs.yaml"
     InputManifest(
         inputs=(
-            _slot_entry("a", 0, [str(a)]),
-            _slot_entry("b", 1, [str(b)]),
-            _slot_entry("c", 2, [str(c)]),
+            slot_entry(
+                "a",
+                0,
+                [str(first)],
+            ),
+            slot_entry(
+                "b",
+                1,
+                [str(second)],
+            ),
+            slot_entry(
+                "c",
+                2,
+                [str(third)],
+            ),
         )
     ).write(inputs_manifest)
 
     out_dir = tmp_path / "fn_out"
     outputs_manifest = tmp_path / "outputs.yaml"
-    _set_argv(
+    set_arguments(
         monkeypatch,
         request_path,
         multi_transformer_bundle,
@@ -1218,29 +1526,38 @@ def test_main_multi_cardinality_transformer_with_mixed_modes(
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    rc = main()
-    assert rc == 0, f"main() returned {rc}"
+    status = main()
+    assert status == 0, f"main() returned {status}"
 
-    merged_file = _stored(tmp_path, "merged")
+    merged_file = stored_path(tmp_path, "merged")
     assert merged_file.is_file()
-    df = pl.read_parquet(merged_file)
-    assert df.height == 3
-    assert sorted(df["id"].to_list()) == [1, 2, 3]
+    frame = pl.read_parquet(merged_file)
+    assert frame.height == 3
+    assert sorted(frame["id"].to_list()) == [1, 2, 3]
 
 
 def test_main_transformer_with_a_udf(
-    tmp_path, udf_transformer_bundle, monkeypatch, http_ok_url
+    tmp_path,
+    udf_transformer_bundle,
+    monkeypatch,
+    http_ok_url,
 ):
     bundle, broken = udf_transformer_bundle
-    request_path = _write_request(tmp_path / "request.yaml", "t_out")
+    request_path = write_request(tmp_path / "request.yaml", "t_out")
     source = tmp_path / "raw" / "in.parquet"
-    _write_sample_parquet(source)
+    write_sample_parquet(source)
     inputs_manifest = tmp_path / "inputs.yaml"
-    InputManifest(inputs=(_slot_entry("t_in", 0, [str(source)]),)).write(
-        inputs_manifest
-    )
+    InputManifest(
+        inputs=(
+            slot_entry(
+                "t_in",
+                0,
+                [str(source)],
+            ),
+        )
+    ).write(inputs_manifest)
     out_dir = tmp_path / "fn_out"
-    _set_argv(
+    set_arguments(
         monkeypatch,
         request_path,
         bundle,
@@ -1257,30 +1574,47 @@ def test_main_transformer_with_a_udf(
         assert exit_code == OutputWriteFailedError.exit_code
         return
     assert exit_code == 0, f"main() returned {exit_code}"
-    df = pl.read_parquet(_stored(tmp_path, "t_out"))
-    assert df.select("id", "name", "doubled", "label").to_dicts() == [
+    frame = pl.read_parquet(stored_path(tmp_path, "t_out"))
+    assert frame.select(
+        "id",
+        "name",
+        "doubled",
+        "label",
+    ).to_dicts() == [
         {"id": 1, "name": "a", "doubled": 2, "label": "A"},
         {"id": 2, "name": "b", "doubled": 4, "label": "B"},
         {"id": 3, "name": "c", "doubled": 6, "label": "C"},
     ]
-    assert "$td.id" in df.columns
+    assert "$td.id" in frame.columns
 
 
 def test_main_evaluates_a_udf_once_per_row_with_data_quality(
-    tmp_path, quality_udf_transformer_bundle, monkeypatch, http_ok_url
+    tmp_path,
+    quality_udf_transformer_bundle,
+    monkeypatch,
+    http_ok_url,
 ):
     bundle, module, failing = quality_udf_transformer_bundle
-    request_path = _write_request(
-        tmp_path / "request.yaml", "t_out", "t_out_quality", "t_out_quality_summary"
+    request_path = write_request(
+        tmp_path / "request.yaml",
+        "t_out",
+        "t_out_quality",
+        "t_out_quality_summary",
     )
     source = tmp_path / "raw" / "in.parquet"
-    _write_sample_parquet(source)
+    write_sample_parquet(source)
     inputs_manifest = tmp_path / "inputs.yaml"
-    InputManifest(inputs=(_slot_entry("t_in", 0, [str(source)]),)).write(
-        inputs_manifest
-    )
+    InputManifest(
+        inputs=(
+            slot_entry(
+                "t_in",
+                0,
+                [str(source)],
+            ),
+        )
+    ).write(inputs_manifest)
     out_dir = tmp_path / "fn_out"
-    _set_argv(
+    set_arguments(
         monkeypatch,
         request_path,
         bundle,
@@ -1304,26 +1638,39 @@ def test_main_evaluates_a_udf_once_per_row_with_data_quality(
     assert set(stored) == {"t_out", "t_out_quality", "t_out_quality_summary"}
     assert stored["t_out"]["doubled"].to_list() == [2, 4, 6]
     summary = stored["t_out_quality_summary"]
-    assert summary.select("dq.total", "dq.true", "dq.false").row(0) == (3, 2, 1)
+    assert summary.select(
+        "dq.total",
+        "dq.true",
+        "dq.false",
+    ).row(0) == (3, 2, 1)
 
 
 def test_main_manifest_length_mismatch_returns_bad_manifest(
-    tmp_path, multi_publisher_bundle, monkeypatch, http_ok_url
+    tmp_path,
+    multi_publisher_bundle,
+    monkeypatch,
+    http_ok_url,
 ):
     """The multi-cardinality publisher declares 2 input slots; feeding
     it a 1-entry manifest must surface BadManifestError rather than
     silently dropping the second slot."""
-    request_path = _write_request(tmp_path / "request.yaml")
+    request_path = write_request(tmp_path / "request.yaml")
     a_parquet = tmp_path / "raw" / "a.parquet"
     a_parquet.parent.mkdir(parents=True, exist_ok=True)
     pl.DataFrame({"id": [1]}).write_parquet(a_parquet)
 
     inputs_manifest = tmp_path / "inputs.yaml"
-    InputManifest(inputs=(_slot_entry("in_a", 0, [str(a_parquet)]),)).write(
-        inputs_manifest
-    )
+    InputManifest(
+        inputs=(
+            slot_entry(
+                "in_a",
+                0,
+                [str(a_parquet)],
+            ),
+        )
+    ).write(inputs_manifest)
 
-    _set_argv(
+    set_arguments(
         monkeypatch,
         request_path,
         multi_publisher_bundle,
@@ -1340,8 +1687,22 @@ def test_main_manifest_length_mismatch_returns_bad_manifest(
 
 
 def test_main_carries_tabsdata_command_metadata():
-    assert getattr(main, "tabsdata_command", False) is True
-    assert getattr(main, "tabsdata_command_name", None) == "td_run_function"
+    assert (
+        getattr(
+            main,
+            "tabsdata_command",
+            False,
+        )
+        is True
+    )
+    assert (
+        getattr(
+            main,
+            "tabsdata_command_name",
+            None,
+        )
+        == "td_run_function"
+    )
 
 
 # --- T5: FunctionCtx + initial_values lifecycle -------------------------
@@ -1351,7 +1712,7 @@ def test_function_context_is_a_function_ctx_subclass():
     """``_FunctionContext`` must be a concrete FunctionCtx so that
     ``isinstance(ctx, FunctionCtx)`` holds at the call boundary, and
     must NOT also satisfy the SrcPluginCtx / DestContext role tags."""
-    c = _FunctionContext(
+    third = FunctionContext(
         work_folder=Path("/work"),
         project_id="p-1",
         project="p",
@@ -1367,13 +1728,13 @@ def test_function_context_is_a_function_ctx_subclass():
         physical_function_run_id="pfr-1",
         triggered_on=datetime.fromisoformat("2026-06-04T07:14:28.376000+00:00"),
     )
-    assert isinstance(c, FunctionCtx)
-    assert not isinstance(c, SrcPluginCtx)
-    assert not isinstance(c, DestContext)
+    assert isinstance(third, FunctionCtx)
+    assert not isinstance(third, SrcPluginCtx)
+    assert not isinstance(third, DestContext)
 
 
 def test_function_context_serves_the_project_secret():
-    c = _FunctionContext(
+    third = FunctionContext(
         work_folder=Path("/work"),
         project_id="p-1",
         project="p",
@@ -1389,10 +1750,10 @@ def test_function_context_serves_the_project_secret():
         physical_function_run_id="pfr-1",
         triggered_on=datetime.fromisoformat("2026-06-04T07:14:28.376000+00:00"),
     ).with_project_secret(ProjectSecret({"aws": {"key1": "mykey1"}}))
-    assert c.secret_names == ["aws"]
-    assert c.secret_keys("aws") == ["key1"]
-    assert c.secret("aws", "key1") == "mykey1"
-    assert c.secret("aws.key1") == "mykey1"
+    assert third.secret_names == ["aws"]
+    assert third.secret_keys("aws") == ["key1"]
+    assert third.secret("aws", "key1") == "mykey1"
+    assert third.secret("aws.key1") == "mykey1"
 
 
 def test_infer_table_modes_skips_trailing_ctx_param():
@@ -1400,10 +1761,13 @@ def test_infer_table_modes_skips_trailing_ctx_param():
     ``_infer_table_modes`` must skip it — only the input slots are
     real table-mode-bearing parameters."""
 
-    def f(in_1: TableFrameSpec, ctx: FunctionCtx) -> TableFrameSpec:
+    def function_with_context(
+        in_1: TableFrameSpec,
+        context: FunctionCtx,
+    ) -> TableFrameSpec:
         return None
 
-    modes = _infer_table_modes(f)
+    modes = infer_table_modes(function_with_context)
     assert modes == [TableMode.SINGLE]
 
 
@@ -1411,10 +1775,13 @@ def test_infer_table_modes_does_not_skip_without_ctx():
     """No trailing ctx → every parameter is a slot. Sanity check that
     the trim only kicks in when has_transaction_ctx_param is True."""
 
-    def f(in_1: TableFrameSpec, in_2: TableFrameSpec) -> TableFrameSpec:
+    def function_with_context(
+        in_1: TableFrameSpec,
+        in_2: TableFrameSpec,
+    ) -> TableFrameSpec:
         return None
 
-    modes = _infer_table_modes(f)
+    modes = infer_table_modes(function_with_context)
     assert modes == [TableMode.SINGLE, TableMode.SINGLE]
 
 
@@ -1427,81 +1794,116 @@ def ctx_aware_built_bundle(tmp_path, monkeypatch) -> Path:
     trailing ``ctx: TransactionCtx`` parameter."""
     srcdata = tmp_path / "srcdata"
     srcdata.mkdir()
-    _write_sample_parquet(srcdata / "rows.parquet")
+    write_sample_parquet(srcdata / "rows.parquet")
 
-    project = _copy_project(tmp_path, monkeypatch, "ctx_project")
+    project = copy_project(
+        tmp_path,
+        monkeypatch,
+        "ctx_project",
+    )
     from my_pkg.publisher import my_publisher  # noqa: E402
 
-    yield _bundle(tmp_path, project, my_publisher)
+    yield build_test_bundle(
+        tmp_path,
+        project,
+        my_publisher,
+    )
 
-    _forget("my_pkg")
+    forget("my_pkg")
 
 
-def _write_inputs_manifest_for(input_files: list[str], path: Path) -> None:
+def write_inputs_manifest_for(input_files: list[str], path: Path) -> None:
     """Helper: write a minimal inputs manifest mapping ``in_1`` to
     ``input_files`` (ARRAY mode → list)."""
-    InputManifest(inputs=(_slot_entry("in_1", 0, input_files),)).write(path)
+    InputManifest(
+        inputs=(
+            slot_entry(
+                "in_1",
+                0,
+                input_files,
+            ),
+        )
+    ).write(path)
 
 
 STATE_TABLE = "td.fn_state__F-1"
 
 
-def _previous_state(root: Path) -> Path:
+def previous_state_path(root: Path) -> Path:
     return root / "storage" / "previous-state.t"
 
 
-def _request_with_state_slots(
+def request_with_state_slots(
     path: Path,
     *,
     outputs: tuple[str, ...] = ("my_table",),
     previous: dict | None = None,
 ) -> Path:
-    info = _info()
-    info["execution_id"] = 2
-    info["transaction_id"] = 3
-    info["physical_function_run_id"] = 4
-    info["function_landing"] = {
-        "uri": _landing(path.parent).as_uri(),
+    definition = info_payload()
+    definition["execution_id"] = 2
+    definition["transaction_id"] = 3
+    definition["physical_function_run_id"] = 4
+    definition["function_landing"] = {
+        "uri": landing_path(path.parent).as_uri(),
         "env_prefix": "ROOT",
     }
     state_in = None
     if previous is not None:
-        _previous_state(path.parent).parent.mkdir(parents=True, exist_ok=True)
-        write_state(previous, _previous_state(path.parent))
-        state_in = {"uri": _previous_state(path.parent).as_uri(), "env_prefix": "ROOT"}
+        previous_state_path(path.parent).parent.mkdir(parents=True, exist_ok=True)
+        write_state(previous, previous_state_path(path.parent))
+        state_in = {
+            "uri": previous_state_path(path.parent).as_uri(),
+            "env_prefix": "ROOT",
+        }
     path.write_text(
         yaml.safe_dump({
             "Function": {
-                "info": info,
+                "info": definition,
                 "output": [
-                    _stored_output(path.parent, table, index)
+                    stored_output(
+                        path.parent,
+                        table,
+                        index,
+                    )
                     for index, table in enumerate(outputs)
                 ],
                 "system_input": [
-                    _input_table({"table": STATE_TABLE, "location": state_in}, 0)
+                    input_table({"table": STATE_TABLE, "location": state_in}, 0)
                 ],
-                "system_output": [_stored_output(path.parent, STATE_TABLE, 0)],
+                "system_output": [
+                    stored_output(
+                        path.parent,
+                        STATE_TABLE,
+                        0,
+                    )
+                ],
             }
         })
     )
     return path
 
 
-def _stored_state(root: Path) -> dict:
-    return read_state(TableFile.local(_stored(root, STATE_TABLE)))
+def stored_state(root: Path) -> dict:
+    return read_state(TableFile.local(stored_path(root, STATE_TABLE)))
 
 
-def _run_with_state(
-    tmp_path, bundle, monkeypatch, http_ok_url, request_path, *, local=None
+def run_with_state(
+    tmp_path,
+    bundle,
+    monkeypatch,
+    http_ok_url,
+    request_path,
+    *,
+    local=None,
 ) -> OutputManifest:
     inputs_manifest = tmp_path / "inputs.yaml"
-    _write_inputs_manifest_for([str(_seed_input_parquet(tmp_path))], inputs_manifest)
+    write_inputs_manifest_for([str(seed_input_parquet(tmp_path))], inputs_manifest)
     outputs_manifest = tmp_path / "outputs.yaml"
     state_folder = tmp_path / "state"
     state_folder.mkdir()
     if local is not None:
         write_state(local, state_folder / STATE_FILE)
-    _set_argv(
+    set_arguments(
         monkeypatch,
         request_path,
         bundle,
@@ -1512,115 +1914,152 @@ def _run_with_state(
         state_dir=state_folder,
         responder_url=http_ok_url,
     )
-    rc = main()
-    assert rc == 0, rc
+    status = main()
+    assert status == 0, status
     return OutputManifest.load(outputs_manifest)
 
 
 def test_main_ctx_aware_function_first_run_writes_its_state(
-    tmp_path, ctx_aware_built_bundle, monkeypatch, http_ok_url
+    tmp_path,
+    ctx_aware_built_bundle,
+    monkeypatch,
+    http_ok_url,
 ):
     """First run for the flow: no previous state. The user function
     sees ``None`` for ``get_attr``, sets a value, and run-function writes
     the drained state to system_output[0] with its stats."""
-    req = _request_with_state_slots(tmp_path / "request.yaml")
-    manifest = _run_with_state(
-        tmp_path, ctx_aware_built_bundle, monkeypatch, http_ok_url, req
+    request_path = request_with_state_slots(tmp_path / "request.yaml")
+    manifest = run_with_state(
+        tmp_path,
+        ctx_aware_built_bundle,
+        monkeypatch,
+        http_ok_url,
+        request_path,
     )
-    assert _stored_state(tmp_path) == {"my-key": "from-user-fn"}
+    assert stored_state(tmp_path) == {"my-key": "from-user-fn"}
     assert read_state(TableFile.local(tmp_path / "state" / STATE_FILE)) == {
         "my-key": "from-user-fn"
     }
     assert manifest.state == OutputEntry(
         name=STATE_TABLE,
-        uri=_stored(tmp_path, STATE_TABLE).as_uri(),
-        stats=TableFile.local(_stored(tmp_path, STATE_TABLE)).stats(),
+        uri=stored_path(tmp_path, STATE_TABLE).as_uri(),
+        stats=TableFile.local(stored_path(tmp_path, STATE_TABLE)).stats(),
     )
     assert manifest.state.stats.row_count == 1
 
 
 def test_main_ctx_aware_function_prefers_this_run_state(
-    tmp_path, ctx_aware_built_bundle, monkeypatch, http_ok_url
+    tmp_path,
+    ctx_aware_built_bundle,
+    monkeypatch,
+    http_ok_url,
 ):
     """When run-source-plugin already drained this run's state, the user
     function reads it, not the previous run's."""
-    req = _request_with_state_slots(
-        tmp_path / "request.yaml", previous={"my-key": "from-state-in"}
+    request_path = request_with_state_slots(
+        tmp_path / "request.yaml",
+        previous={"my-key": "from-state-in"},
     )
-    _run_with_state(
+    run_with_state(
         tmp_path,
         ctx_aware_built_bundle,
         monkeypatch,
         http_ok_url,
-        req,
+        request_path,
         local={"my-key": "preset"},
     )
-    assert _stored_state(tmp_path) == {"my-key": "again-after-preset"}
+    assert stored_state(tmp_path) == {"my-key": "again-after-preset"}
 
 
 def test_main_ctx_aware_function_reads_the_previous_state_where_stored(
-    tmp_path, ctx_aware_built_bundle, monkeypatch, http_ok_url
+    tmp_path,
+    ctx_aware_built_bundle,
+    monkeypatch,
+    http_ok_url,
 ):
     """Without this run's state (transformer / subscriber chains), the
     user function hydrates from the previous run's stored state."""
-    req = _request_with_state_slots(
-        tmp_path / "request.yaml", previous={"my-key": "from-state-in"}
+    request_path = request_with_state_slots(
+        tmp_path / "request.yaml",
+        previous={"my-key": "from-state-in"},
     )
-    _run_with_state(tmp_path, ctx_aware_built_bundle, monkeypatch, http_ok_url, req)
-    assert _stored_state(tmp_path) == {"my-key": "again-after-from-state-in"}
+    run_with_state(
+        tmp_path,
+        ctx_aware_built_bundle,
+        monkeypatch,
+        http_ok_url,
+        request_path,
+    )
+    assert stored_state(tmp_path) == {"my-key": "again-after-from-state-in"}
 
 
 def test_main_function_without_ctx_writes_no_state(
-    tmp_path, built_bundle, monkeypatch, http_ok_url
+    tmp_path,
+    built_bundle,
+    monkeypatch,
+    http_ok_url,
 ):
     """A function with no ctx drains nothing; without a state drained by
     run-source-plugin there is no state to write."""
-    req = _request_with_state_slots(
-        tmp_path / "request.yaml", outputs=("my_table", "untouched")
+    request_path = request_with_state_slots(
+        tmp_path / "request.yaml",
+        outputs=("my_table", "untouched"),
     )
-    manifest = _run_with_state(tmp_path, built_bundle, monkeypatch, http_ok_url, req)
-    assert not (tmp_path / "state" / STATE_FILE).exists()
-    assert not _stored(tmp_path, STATE_TABLE).exists()
-    assert manifest.state is None
-
-
-def test_main_function_without_ctx_writes_the_source_plugin_state(
-    tmp_path, built_bundle, monkeypatch, http_ok_url
-):
-    """The state run-source-plugin drained is written even when the user
-    function has no ctx."""
-    req = _request_with_state_slots(
-        tmp_path / "request.yaml", outputs=("my_table", "untouched")
-    )
-    manifest = _run_with_state(
+    manifest = run_with_state(
         tmp_path,
         built_bundle,
         monkeypatch,
         http_ok_url,
-        req,
+        request_path,
+    )
+    assert not (tmp_path / "state" / STATE_FILE).exists()
+    assert not stored_path(tmp_path, STATE_TABLE).exists()
+    assert manifest.state is None
+
+
+def test_main_function_without_ctx_writes_the_source_plugin_state(
+    tmp_path,
+    built_bundle,
+    monkeypatch,
+    http_ok_url,
+):
+    """The state run-source-plugin drained is written even when the user
+    function has no ctx."""
+    request_path = request_with_state_slots(
+        tmp_path / "request.yaml",
+        outputs=("my_table", "untouched"),
+    )
+    manifest = run_with_state(
+        tmp_path,
+        built_bundle,
+        monkeypatch,
+        http_ok_url,
+        request_path,
         local={"cursor": 250},
     )
-    assert _stored_state(tmp_path) == {"cursor": 250}
+    assert stored_state(tmp_path) == {"cursor": 250}
     assert manifest.state.name == STATE_TABLE
 
 
-def _seed_input_parquet(tmp_path: Path) -> Path:
+def seed_input_parquet(tmp_path: Path) -> Path:
     """Write a simple parquet so the inputs manifest references a real
     file (run-function won't fail materialising the slot). Mirrors the
     fixture publisher's expected input shape."""
     import pyarrow as pa
     import pyarrow.parquet as pq
 
-    out = tmp_path / "input.parquet"
-    pq.write_table(pa.table({"id": [1, 2, 3]}), out)
-    return out
+    output = tmp_path / "input.parquet"
+    pq.write_table(pa.table({"id": [1, 2, 3]}), output)
+    return output
 
 
 # --- mkdir ordering: out_dir exists before the user function runs --------
 
 
 def test_main_creates_out_dir_before_invoking_user_function(
-    tmp_path, monkeypatch, http_ok_url
+    tmp_path,
+    monkeypatch,
+    http_ok_url,
 ):
     """A ctx-aware user function may surface ``ctx.work_dir`` (==
     ``out_dir`` for run-function) and try to write a sidecar there;
@@ -1629,24 +2068,32 @@ def test_main_creates_out_dir_before_invoking_user_function(
     immediately on entry."""
     srcdata = tmp_path / "srcdata"
     srcdata.mkdir()
-    _write_sample_parquet(srcdata / "rows.parquet")
+    write_sample_parquet(srcdata / "rows.parquet")
 
-    project = _copy_project(tmp_path, monkeypatch, "work_dir_project")
+    project = copy_project(
+        tmp_path,
+        monkeypatch,
+        "work_dir_project",
+    )
     from my_pkg.publisher import my_publisher  # noqa: E402
 
-    extracted = _bundle(tmp_path, project, my_publisher)
+    extracted = build_test_bundle(
+        tmp_path,
+        project,
+        my_publisher,
+    )
 
-    req = _request_with_state_slots(tmp_path / "request.yaml")
+    request_path = request_with_state_slots(tmp_path / "request.yaml")
     inputs_manifest = tmp_path / "inputs.yaml"
-    _write_inputs_manifest_for([str(_seed_input_parquet(tmp_path))], inputs_manifest)
+    write_inputs_manifest_for([str(seed_input_parquet(tmp_path))], inputs_manifest)
     out_dir = tmp_path / "fn_out"  # deliberately does NOT exist yet
     outputs_manifest = tmp_path / "outputs.yaml"
     state_dir = tmp_path / "state"
     state_dir.mkdir()
 
-    _set_argv(
+    set_arguments(
         monkeypatch,
-        req,
+        request_path,
         extracted,
         inputs_manifest,
         out_dir,
@@ -1655,10 +2102,10 @@ def test_main_creates_out_dir_before_invoking_user_function(
         state_dir=state_dir,
         responder_url=http_ok_url,
     )
-    rc = main()
-    _forget("my_pkg")
+    status = main()
+    forget("my_pkg")
 
-    assert rc == 0, rc
+    assert status == 0, status
 
 
 # --- ctx parameter works for @transformer and @subscriber too -----------
@@ -1670,7 +2117,7 @@ def test_main_creates_out_dir_before_invoking_user_function(
 # the ctx surface in the future hits a test failure.
 
 
-def _build_extracted_bundle(
+def build_extracted_bundle(
     tmp_path: Path,
     monkeypatch,
     request,
@@ -1684,19 +2131,30 @@ def _build_extracted_bundle(
     the decorated function, build + extract the bundle, return the
     extracted dir. Cleans up ``sys.modules`` registration via a pytest
     ``request`` finalizer."""
-    project = _copy_project(tmp_path, monkeypatch, project_name)
+    project = copy_project(
+        tmp_path,
+        monkeypatch,
+        project_name,
+    )
     mod = importlib.import_module(f"{pkg_name}.{module_name}")
-    request.addfinalizer(lambda: _forget(pkg_name))
-    return _bundle(tmp_path, project, getattr(mod, decorated_name))
+    request.addfinalizer(lambda: forget(pkg_name))
+    return build_test_bundle(
+        tmp_path,
+        project,
+        getattr(mod, decorated_name),
+    )
 
 
 def test_main_ctx_aware_transformer_hydrates_and_drains(
-    tmp_path, monkeypatch, request, http_ok_url
+    tmp_path,
+    monkeypatch,
+    request,
+    http_ok_url,
 ):
     """A @transformer that declares a trailing ``ctx: TransactionCtx`` gets the
     same hydrate / drain / write treatment as a
     publisher. Verifies the runtime is kind-agnostic."""
-    extracted = _build_extracted_bundle(
+    extracted = build_extracted_bundle(
         tmp_path,
         monkeypatch,
         request,
@@ -1708,24 +2166,33 @@ def test_main_ctx_aware_transformer_hydrates_and_drains(
 
     # Only the previous state: transformers run in chains without
     # run-source-plugin, so the stored-state path is the one exercised.
-    req = _request_with_state_slots(
+    request_path = request_with_state_slots(
         tmp_path / "request.yaml",
         outputs=("t_out",),
         previous={"smoke.last-seen": "from-state-in"},
     )
-    _run_with_state(tmp_path, extracted, monkeypatch, http_ok_url, req)
-    assert _stored_state(tmp_path) == {"smoke.last-seen": "tx-after-from-state-in"}
+    run_with_state(
+        tmp_path,
+        extracted,
+        monkeypatch,
+        http_ok_url,
+        request_path,
+    )
+    assert stored_state(tmp_path) == {"smoke.last-seen": "tx-after-from-state-in"}
 
 
 def test_main_ctx_aware_subscriber_hydrates_and_drains(
-    tmp_path, monkeypatch, request, http_ok_url
+    tmp_path,
+    monkeypatch,
+    request,
+    http_ok_url,
 ):
     """A @subscriber that declares a trailing ``ctx: TransactionCtx`` also
     round-trips state cleanly. Pins kind-agnostic runtime behaviour
     for the third decorator kind."""
     dest_out = tmp_path / "sub_dest"
     dest_out.mkdir()
-    extracted = _build_extracted_bundle(
+    extracted = build_extracted_bundle(
         tmp_path,
         monkeypatch,
         request,
@@ -1735,9 +2202,16 @@ def test_main_ctx_aware_subscriber_hydrates_and_drains(
         decorated_name="my_subscriber",
     )
 
-    req = _request_with_state_slots(
-        tmp_path / "request.yaml", previous={"smoke.last-seen": "from-state-in"}
+    request_path = request_with_state_slots(
+        tmp_path / "request.yaml",
+        previous={"smoke.last-seen": "from-state-in"},
     )
-    _run_with_state(tmp_path, extracted, monkeypatch, http_ok_url, req)
-    assert _stored_state(tmp_path) == {"smoke.last-seen": "sub-after-from-state-in"}
-    assert (_landing(tmp_path) / "0.t").is_file()
+    run_with_state(
+        tmp_path,
+        extracted,
+        monkeypatch,
+        http_ok_url,
+        request_path,
+    )
+    assert stored_state(tmp_path) == {"smoke.last-seen": "sub-after-from-state-in"}
+    assert (landing_path(tmp_path) / "0.t").is_file()

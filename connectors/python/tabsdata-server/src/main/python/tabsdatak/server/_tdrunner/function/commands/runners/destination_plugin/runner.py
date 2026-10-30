@@ -120,8 +120,6 @@ def run(arguments: RunDestinationPluginArguments) -> int:
     )
     manifest = load_manifest(arguments.outputs_manifest)
     outputs = manifest.outputs
-    # A subscriber that returns None for every output produced no data this
-    # run: the destination is left untouched, rather than failing on them.
     if outputs and all(output.uri is None for output in outputs):
         logger.info(
             f"The subscriber returned no data for its {len(outputs)} output(s); "

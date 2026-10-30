@@ -210,8 +210,8 @@ class FromRequestCtx(TransactionCtx, FromFlowRequestCtx):
     multiple inheritance:
 
         class SourceContext(FromRequestCtx, SrcPluginCtx): ...
-        class _DestContext(FromRequestCtx, DestContext): ...
-        class _FunctionContext(FromRequestCtx, FunctionCtx): ...
+        class DestinationContext(FromRequestCtx, DestContext): ...
+        class FunctionContext(FromRequestCtx, FunctionCtx): ...
 
     Subclassing :class:`tabsdatak.api.TransactionCtx` keeps the implementation
     type-honestly related to the API contract it satisfies. The base
@@ -219,8 +219,8 @@ class FromRequestCtx(TransactionCtx, FromFlowRequestCtx):
     compatibly with the role-typed bases above, which all list
     :class:`TransactionCtx` before :class:`PluginCtx` (= ``FlowCtx``); listing
     ``FromFlowRequestCtx`` first here would put ``FlowCtx`` before
-    ``TransactionCtx`` and break the MRO merge in ``_DestContext`` /
-    ``SourceContext`` / ``_FunctionContext``. The streamer-pod context
+    ``TransactionCtx`` and break the MRO merge in ``DestinationContext`` /
+    ``SourceContext`` / ``FunctionContext``. The streamer-pod context
     uses :class:`FromFlowRequestCtx` directly (no trx fields) and
     does not pass through this class.
     """

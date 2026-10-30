@@ -147,7 +147,7 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
     itself has none. This is why the runtime
     mixin used here is :class:`FromFlowRequestCtx` rather than the
     full :class:`FromRequestCtx` used by ``SourceContext`` /
-    ``_DestContext`` / ``_FunctionContext`` -- those role-typed
+    ``DestinationContext`` / ``FunctionContext`` -- those role-typed
     contexts inherit :class:`TransactionCtx`, so they get the trx fields too.
     """
 

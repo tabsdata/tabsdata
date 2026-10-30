@@ -2,14 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""run-function runner.
-
-The command's logic, callable without argparse. The package
-``__init__`` wraps :func:`run` in the ``@command`` entrypoint for the
-console script; the compound imports :func:`run` directly and supplies
-pre-built ``RunFunctionArguments``.
-"""
-
 from __future__ import annotations
 
 import inspect
@@ -59,6 +51,7 @@ from tabsdatak.server._tdrunner.function._handlers.columns import ColumnPolicy, 
 from tabsdatak.server._tdrunner.function._handlers.state import State, StateOutput
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.server._tdrunner.function._lib.function_def import (
+    FunctionInfo,
     load_function_def_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
@@ -69,30 +62,25 @@ from tabsdatak.server._tdrunner.function.commands.runners.function.options impor
     RunFunctionArguments,
 )
 from tabsdatak.spi import TableMode
+from tabsdatak.tableframe import TableFrame
+from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 
 logger = logging.getLogger(__name__)
 
-# The Info classes this command knows how to invoke. The runner is
-# agnostic of *what* the function does — it just needs the call shape
-# (input modes, output names/count) which it derives uniformly from
-# each Info shape via `_output_table_names`.
-#
-# StreamPublisherInfo shares Publisher's call shape: by the time this
-# command runs, the inputs have already been materialised on disk by
-# `run_source_plugin` (which substitutes the user-declared
-# StreamSrc/StreamSrcConn for the publisher-side StreamStageSrc +
-# ManifestStageSrcPlugin). The user function is invoked exactly the
-# same way; only the upstream input-production differs.
-FunctionInfo = PublisherInfo | StreamPublisherInfo | TransformerInfo | SubscriberInfo
+SUBSCRIBER_OUTPUT_PREFIX = "out_"
+
+DEFINITION_BY_KIND: dict[str, type[FunctionInfo]] = {
+    KIND_PUBLISHER_DEF: PublisherInfo,
+    KIND_STREAM_PUBLISHER_DEF: StreamPublisherInfo,
+    KIND_TRANSFORMER_DEF: TransformerInfo,
+    KIND_SUBSCRIBER_DEF: SubscriberInfo,
+}
+
+Input = TableFrame | None
+InputSlot = Input | list[Input]
 
 
-class _FunctionContext(FromRequestCtx, FunctionCtx):
-    """Concrete :class:`FunctionCtx` for the run-function command.
-
-    Behaviour comes from :class:`FromRequestCtx`, plus the project
-    secret the runner took from the environment.
-    """
-
+class FunctionContext(FromRequestCtx, FunctionCtx):
     _project_secret = ProjectSecret({})
 
     def with_project_secret(self, project_secret: ProjectSecret) -> Self:
@@ -106,257 +94,172 @@ class _FunctionContext(FromRequestCtx, FunctionCtx):
     def secret_keys(self, name: str) -> list[str]:
         return self._project_secret.keys(name)
 
-    def secret(self, name: str, key: str | None = None) -> str:
+    def secret(
+        self,
+        name: str,
+        key: str | None = None,
+    ) -> str:
         return self._project_secret.value(name, key)
 
 
-_INFO_BY_KIND: dict[str, type[FunctionInfo]] = {
-    KIND_PUBLISHER_DEF: PublisherInfo,
-    KIND_STREAM_PUBLISHER_DEF: StreamPublisherInfo,
-    KIND_TRANSFORMER_DEF: TransformerInfo,
-    KIND_SUBSCRIBER_DEF: SubscriberInfo,
-}
-
-
-def _load_function_def(bundle_folder: Path) -> FunctionInfo:
-    """Load the bundle's ``function_def.json`` -- thin wrapper over
-    :func:`load_function_def_or_raise` accepting the three kinds
-    run-function dispatches on.
-
-    Both bundle-shape failures and unknown-kind failures land on
-    ``BadBundleError`` (same exit code) to preserve the pre-refactor
-    mapping (the test suite expects that)."""
+def load_function_definition(bundle_folder: Path) -> FunctionInfo:
     return load_function_def_or_raise(
         bundle_folder,
-        allowed_kinds=_INFO_BY_KIND,
+        allowed_kinds=DEFINITION_BY_KIND,
         bad_bundle_code=RunFunctionErrorCode.RF_2,
         bad_user_code_code=RunFunctionErrorCode.RF_3,
         wrong_kind_code=RunFunctionErrorCode.RF_4,
     )
 
 
-def _infer_table_modes(func: Callable) -> list[TableMode]:
-    """Derive the table-mode (SINGLE / ARRAY) for each input slot
-    parameter of the user function from its type annotations.
-
-    The count of returned modes equals the number of *slot*
-    parameters: the trailing ``ctx: TransactionCtx`` parameter (if declared)
-    is stripped before iteration because it isn't an input slot.
-    ``@publisher`` / ``@transformer`` / ``@subscriber`` validate at
-    decoration time that the function has exactly the expected slot
-    parameters plus the optional ctx, so iterating the remaining
-    params here is correct for all three kinds.
-
-    Each slot parameter must be annotated as either
-    ``TableFrameSpec`` (single-mode) or ``TableFramesSpec``
-    (array-mode). Because the decorator's
-    ``_check_callable_signature`` already enforces that, the
-    BadUserCodeError branches below are defensive fallbacks for
-    runtime invariant violations rather than realistic user errors.
-    """
+def load_inputs(path: Path) -> tuple[InputEntry, ...]:
     try:
-        hints = typing.get_type_hints(func)
-    except Exception as exc:
-        raise RunFunctionErrorCode.RF_6.exception(cause=exc, detail=str(exc))
-    params = list(inspect.signature(func).parameters.values())
-    # The trailing ``ctx: TransactionCtx`` parameter (if declared) is not an
-    # input slot -- skip it when inferring slot modes.
-    if has_transaction_ctx_param(func) and params:
-        params = params[:-1]
+        return InputManifest.load(path).inputs
+    except ManifestError as error:
+        raise RunFunctionErrorCode.RF_5.exception(
+            cause=error,
+            path=path,
+            detail=str(error),
+        )
+
+
+def infer_table_modes(function: Callable) -> list[TableMode]:
+    try:
+        hints = typing.get_type_hints(function)
+    except Exception as error:
+        raise RunFunctionErrorCode.RF_6.exception(cause=error, detail=str(error))
+    parameters = list(inspect.signature(function).parameters.values())
+    if has_transaction_ctx_param(function) and parameters:
+        parameters = parameters[:-1]
     modes: list[TableMode] = []
-    for p in params:
-        hint = hints.get(p.name)
+    for parameter in parameters:
+        hint = hints.get(parameter.name)
         if hint is not None and _is_single_slot(hint):
             modes.append(TableMode.SINGLE)
         elif hint is not None and _is_array_slot(hint):
             modes.append(TableMode.ARRAY)
         else:
-            raise RunFunctionErrorCode.RF_7.exception(param=p.name)
+            raise RunFunctionErrorCode.RF_7.exception(parameter=parameter.name)
     return modes
 
 
-def _output_table_names(info: FunctionInfo) -> list[str]:
-    """Return the output table names for this function.
-
-    Publishers and transformers declare these explicitly via
-    `info.output_tables`. Subscribers don't declare names — output
-    count is `dest.cardinality(info.destination)` and names are
-    synthesised as `["out_0", "out_1", ...]`. The synthetic names
-    only flow through internal artifacts (parquet filenames and the
-    outputs manifest); the destination plugin downstream consumes
-    the parquet list positionally and doesn't depend on the names.
-
-    Raises:
-        NoPluginError: the subscriber's destination class has no
-            registered DestDef (the connector package isn't
-            installed in the runtime).
-    """
-    if isinstance(info, SubscriberInfo):
+def output_table_names(definition: FunctionInfo) -> list[str]:
+    if isinstance(definition, SubscriberInfo):
         try:
-            dest_def = get_dest(type(info.destination))
-        except KeyError as exc:
+            destination = get_dest(type(definition.destination))
+        except KeyError as error:
             raise RunFunctionErrorCode.RF_8.exception(
-                cause=exc, dest_type=type(info.destination).__name__, detail=str(exc)
+                cause=error,
+                destination_type=type(definition.destination).__name__,
+                detail=str(error),
             )
-        n = dest_def.cardinality(info.destination)
-        return [f"out_{i}" for i in range(n)]
-    return list(info.output_tables)
+        count = destination.cardinality(definition.destination)
+        return [f"{SUBSCRIBER_OUTPUT_PREFIX}{position}" for position in range(count)]
+    return list(definition.output_tables)
 
 
-def _scan_input(source: TableFile) -> pl.LazyFrame:
+def is_publisher(definition: FunctionInfo) -> bool:
+    return isinstance(definition, (PublisherInfo, StreamPublisherInfo))
+
+
+def scan_input(source: TableFile) -> pl.LazyFrame:
     try:
         return source.scan()
     except Exception as error:
         raise RunFunctionErrorCode.RF_9.exception(
-            cause=error, path=source.uri, detail=str(error)
+            cause=error,
+            path=source.uri,
+            detail=str(error),
         )
 
 
-def _build_input(record: InputRecord, *, info: FunctionInfo):
-    """Wrap one manifest table record into a `TableFrame`.
-
-    A record with neither `file` nor `location` (a version member with no
-    physical data) yields `None`, preserving its position in a
-    multi-version slot.
-    Publisher inputs are the enriched parquets stamp-inputs already wrote, so
-    they keep their system columns as-is (TAB). The transformer / subscriber inputs
-    are stored tables whose pristine columns are regenerated for a fresh
-    per-function view (MUT), seeded with the record's version metadata and its
-    provenance idx (`input_idx`).
-    """
-    from tabsdatak.tableframe import TableFrame
-    from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
-
+def build_input(record: InputRecord, *, definition: FunctionInfo) -> Input:
     source = TableFile.of(record)
     if source is None:
         return None
-    lf = _scan_input(source)
-    if isinstance(info, (PublisherInfo, StreamPublisherInfo)):
-        # Stream-publisher inputs are also publisher-side: the
-        # ``stamp-inputs`` step (0070) wrote enriched parquets with
-        # the framework's system columns, just like a regular
-        # publisher's. TAB mode preserves those columns instead of
-        # regenerating them via MUT (which is the right choice for
-        # transformer / subscriber inputs that come from stored
-        # tables).
-        return TableFrame._build(lf, CreationMode.TAB)
+    frame = scan_input(source)
+    # Publisher inputs were already stamped with their system columns, which
+    # they keep; stored tables get them regenerated for this function.
+    if is_publisher(definition):
+        return TableFrame._build(frame, CreationMode.TAB)
     return TableFrame._build(
-        lf,
+        frame,
         CreationMode.MUT,
         idx=record.input_idx,
         version=record.version(),
     )
 
 
-def _materialize_input_slot(
+def build_chunked_input(records: tuple[InputRecord, ...]) -> Input:
+    sources = [TableFile.of(record) for record in records]
+    scans = [scan_input(source) for source in sources if source is not None]
+    if not scans:
+        return None
+    return TableFrame._build(pl.concat(scans, how="vertical_relaxed"), CreationMode.TAB)
+
+
+def materialize_input_slot(
     entry: InputEntry,
     *,
     table_mode: TableMode,
-    info: FunctionInfo,
-):
-    """Turn one inputs-manifest entry into the value the user function
-    expects for that input parameter.
-
-    SINGLE mode:
-      * no records      → `None`
-      * one record      → `TableFrame` (or `None` for a record without data)
-      * many records    → for a publisher, the files a source plugin
-        wrote for one table (a query read in chunks), concatenated into
-        one `TableFrame`; for a transformer or subscriber they would be
-        several versions of a stored table, a contract violation (a
-        SINGLE slot resolves to exactly one table)
-
-    ARRAY mode:
-      * `is_empty` entry → `[]`
-      * any records      → `list[TableFrame | None]`, one element per
-        record in order (members without data stay as `None`)
-    """
+    definition: FunctionInfo,
+) -> InputSlot:
     records = entry.tables
     if table_mode is TableMode.SINGLE:
         if len(records) == 0:
             return None
         if len(records) == 1:
-            return _build_input(records[0], info=info)
-        if isinstance(info, (PublisherInfo, StreamPublisherInfo)):
-            return _build_chunked_input(records)
+            return build_input(records[0], definition=definition)
+        # Several files in one single-table slot are the chunks a source plugin
+        # wrote for one publisher input; for stored tables they are an error.
+        if is_publisher(definition):
+            return build_chunked_input(records)
         raise RunFunctionErrorCode.RF_11.exception(count=len(records))
     if entry.is_empty:
         return []
-    return [_build_input(record, info=info) for record in records]
+    return [build_input(record, definition=definition) for record in records]
 
 
-def _build_chunked_input(records: tuple[InputRecord, ...]):
-    """One `TableFrame` over the files a source plugin wrote for one
-    publisher input: the chunks are scanned lazily and concatenated,
-    widening a column whose type differs between chunks."""
-    from tabsdatak.tableframe import TableFrame
-    from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
-
-    sources = [
-        source for source in (TableFile.of(record) for record in records) if source
-    ]
-    if not sources:
-        return None
-    scans = [_scan_input(source) for source in sources]
-    return TableFrame._build(pl.concat(scans, how="vertical_relaxed"), CreationMode.TAB)
-
-
-def _invoke_user_function(func, call_args: list, output_tables: list[str]) -> tuple:
-    """Call the user function and validate its return shape.
-
-    Expected return: a tuple with exactly `len(output_tables)` elements.
-    Each element must be a `TableFrame` or `None`.
-
-    Single-output convenience: when the function declares exactly one
-    output slot, the lone value may be returned bare, without the
-    enclosing 1-tuple -- it is wrapped here so the downstream length /
-    element checks see the canonical tuple shape. This mirrors the
-    signature relaxation in ``tabsdatak._api.check_callable_signature``.
-    """
-    from tabsdatak.tableframe import TableFrame
-
+def invoke_user_function(
+    function: Callable,
+    call_arguments: list[Any],
+    output_tables: list[str],
+) -> list[Input]:
     try:
         with StorageSecrets().managed():
-            result = func(*call_args)
-    except Exception as exc:
-        raise RunFunctionErrorCode.RF_12.exception(cause=exc, detail=str(exc))
-
+            result = function(*call_arguments)
+    except Exception as error:
+        raise RunFunctionErrorCode.RF_12.exception(cause=error, detail=str(error))
     if not isinstance(result, tuple):
-        if len(output_tables) == 1:
-            result = (result,)
-        else:
+        if len(output_tables) != 1:
             raise RunFunctionErrorCode.RF_13.exception(
                 actual_type=type(result).__name__
             )
+        result = (result,)
     if len(result) != len(output_tables):
         raise RunFunctionErrorCode.RF_14.exception(
             returned=len(result),
             expected=len(output_tables),
             tables=list(output_tables),
         )
-    for i, value in enumerate(result):
+    for position, value in enumerate(result):
         if value is not None and not isinstance(value, TableFrame):
             raise RunFunctionErrorCode.RF_15.exception(
-                slot=i,
-                table=output_tables[i],
+                slot=position,
+                table=output_tables[position],
                 actual_type=type(value).__name__,
             )
-    return result
+    return list(result)
 
 
-def _output_targets(
+def output_targets(
     request: Request,
-    info: FunctionInfo,
+    definition: FunctionInfo,
     output_tables: list[str],
 ) -> list[TableFile]:
-    """Where each output table is written.
-
-    Publisher / transformer outputs are stored tables, written straight
-    to the location the request assigns them. Subscriber outputs feed a
-    destination plugin, so they land in the run's landing area, one file
-    per output position, for the plugin step to read.
-    """
-    if isinstance(info, SubscriberInfo):
+    # Subscriber outputs land in the run's landing area for the destination
+    # plugin step; the others are stored tables, written where the request says.
+    if isinstance(definition, SubscriberInfo):
         return [
             TableFile.stored(request.info.landing_file(position))
             for position in range(len(output_tables))
@@ -370,8 +273,20 @@ def _output_targets(
     return targets
 
 
-def _sink_outputs(
-    result: tuple,
+def read_stats(table_name: str, target: TableFile) -> TableStats:
+    try:
+        return target.stats()
+    except Exception as error:
+        raise RunFunctionErrorCode.RF_21.exception(
+            cause=error,
+            table=table_name,
+            path=target.uri,
+            detail=str(error),
+        )
+
+
+def sink_outputs(
+    result: list[Input],
     output_tables: list[str],
     targets: list[TableFile],
     policy: ColumnPolicy,
@@ -379,21 +294,15 @@ def _sink_outputs(
     checks: list[Check] | None = None,
     state: StateOutput | None = None,
 ) -> OutputManifest:
-    """Sink each non-None output to its target, copy the run's state to
-    its storage location, settle the data-quality checks, and build the
-    outputs-manifest entries with the stats read from each written
-    file's footer.
-
-    `policy` decides which framework columns the outputs keep: stored
-    tables for publishers / transformers, landing files for subscribers,
-    which the destination plugin step reshapes before its handoff.
-
-    Every output and the state are written, and every check evaluated,
-    in one streaming pass, so the plan the outputs share runs once.
-    """
+    # Every output and the state are written, and every check is evaluated, in
+    # one streaming pass, so the plan they share runs once.
     plans: list[pl.LazyFrame] = []
     written: list[tuple[str, TableFile]] = []
-    for table_name, value, target in zip(output_tables, result, targets):
+    for table_name, value, target in zip(
+        output_tables,
+        result,
+        targets,
+    ):
         if value is None:
             continue
         try:
@@ -431,14 +340,13 @@ def _sink_outputs(
                 path=", ".join(target.uri for _, target in written),
                 detail=str(error),
             )
-        for check, verdict in zip(
-            pending,
-            results[len(plans) :],
-        ):
+        for check, verdict in zip(pending, results[len(plans) :]):
             check.enforce(verdict)
     entries = {
         table_name: OutputEntry(
-            name=table_name, uri=target.uri, stats=_read_stats(table_name, target)
+            name=table_name,
+            uri=target.uri,
+            stats=read_stats(table_name, target),
         )
         for table_name, target in written
     }
@@ -451,160 +359,128 @@ def _sink_outputs(
     )
 
 
-def _read_stats(table_name: str, target: TableFile) -> TableStats:
+def write_outputs_manifest(manifest: OutputManifest, path: Path) -> None:
     try:
-        return target.stats()
-    except Exception as error:
-        raise RunFunctionErrorCode.RF_21.exception(
+        manifest.write(path)
+    except OSError as error:
+        raise RunFunctionErrorCode.RF_17.exception(
             cause=error,
-            table=table_name,
-            path=target.uri,
+            path=path,
             detail=str(error),
         )
 
 
 def run(arguments: RunFunctionArguments) -> int:
     project_secret = take_project_secret()
-    request_path = arguments.request
-    bundle_folder = arguments.bundle_folder
-    inputs_manifest_path = arguments.inputs_manifest
-    output_folder = arguments.output_folder
-    outputs_manifest_path = arguments.outputs_manifest
-    state_folder = arguments.state_folder
 
-    logger.info("Running user function")
-    request = Request.load(request_path, RunFunctionErrorCode.RF_1)
-    info = _load_function_def(bundle_folder)
+    logger.info("Running the user function")
+    request = Request.load(arguments.request, RunFunctionErrorCode.RF_1)
+    definition = load_function_definition(arguments.bundle_folder)
     logger.debug(
-        "Loaded function '%s' (kind=%s) from bundle %s",
-        request.info.function,
-        type(info).__name__,
-        bundle_folder,
+        f"Function '{request.info.function}' ({type(definition).__name__}) "
+        f"loaded from {arguments.bundle_folder}"
     )
-    try:
-        entries = InputManifest.load(inputs_manifest_path).inputs
-    except ManifestError as error:
-        raise RunFunctionErrorCode.RF_5.exception(
-            cause=error, path=inputs_manifest_path, detail=str(error)
-        )
-    logger.debug(
-        "Inputs manifest has %d slot(s): %s; manifest path %s",
-        len(entries),
-        entries,
-        inputs_manifest_path,
-    )
+    entries = load_inputs(arguments.inputs_manifest)
+    logger.debug(f"Inputs manifest {arguments.inputs_manifest} lists {entries}")
 
-    func = _unwrap_info(info.func)
-    table_modes = _infer_table_modes(func)
+    function = _unwrap_info(definition.func)
+    table_modes = infer_table_modes(function)
     if len(entries) != len(table_modes):
         raise RunFunctionErrorCode.RF_10.exception(
-            entries=len(entries), slots=len(table_modes)
+            entries=len(entries),
+            slots=len(table_modes),
         )
 
-    # Make the function's output folder available BEFORE invoking
-    # the user function: the FunctionCtx surfaces it as ``work_dir``
-    # (per the PluginCtx contract), so a user function that drops a
-    # sidecar file there mustn't fail with FileNotFoundError. Also
-    # required up-front for ``_sink_outputs`` after the call.
-    output_folder.mkdir(parents=True, exist_ok=True)
+    arguments.output_folder.mkdir(parents=True, exist_ok=True)
 
-    # Build the positional args for the user function from the
-    # inputs manifest. Manifest order mirrors function parameter
-    # order; each entry carries the per-table records (file, provenance
-    # idx and version metadata) the materialization needs, so no
-    # correlation with the request is required.
-    call_args: list[Any] = []
-    for entry, table_mode in zip(entries, table_modes):
-        call_args.append(
-            _materialize_input_slot(entry, table_mode=table_mode, info=info)
+    call_arguments: list[Any] = [
+        materialize_input_slot(
+            entry,
+            table_mode=table_mode,
+            definition=definition,
         )
+        for entry, table_mode in zip(entries, table_modes)
+    ]
     logger.debug(
-        "Materialised %d input slot(s) with modes %s",
-        len(call_args),
-        [m.name if hasattr(m, "name") else str(m) for m in table_modes],
+        f"{len(call_arguments)} input slot(s) built, with modes "
+        f"{[mode.name for mode in table_modes]}"
     )
 
-    # If the user function declares a trailing ``ctx: TransactionCtx``
-    # parameter, construct a FunctionCtx and hydrate it before
-    # invocation. The state run-source-plugin drained on this run wins
-    # (publisher chains); otherwise the previous run's state is read
-    # where it is stored (transformer / subscriber chains).
-    state = State(request, state_folder)
-    ctx: _FunctionContext | None = None
-    if has_transaction_ctx_param(func):
-        ctx = _FunctionContext.from_info(
-            output_folder, request.info
+    state = State(request, arguments.state_folder)
+    context = (
+        FunctionContext.from_info(
+            arguments.output_folder,
+            request.info,
         ).with_project_secret(project_secret)
-        state.hydrate(ctx, error_code=RunFunctionErrorCode.RF_18, prefer_local=True)
-        call_args.append(ctx)
-        logger.debug("Hydrated ctx (work_folder=%s)", output_folder)
-
-    output_tables = _output_table_names(info)
-    logger.info(
-        "Invoking user function with %d positional arg(s); expecting %d output slot(s)",
-        len(call_args),
-        len(output_tables),
+        if has_transaction_ctx_param(function)
+        else None
     )
-    result = _invoke_user_function(func, call_args, output_tables)
-    # Data quality and the sinks below all read the frames the function
-    # returned; caching them makes the single streaming pass that writes the
-    # outputs compute each frame once, however many tables and checks read it.
-    result = tuple(None if frame is None else frame._cached() for frame in result)
+    if context is not None:
+        state.hydrate(
+            context,
+            error_code=RunFunctionErrorCode.RF_18,
+            prefer_local=True,
+        )
+        call_arguments.append(context)
+        logger.debug(f"Function context ready on {arguments.output_folder}")
 
-    if ctx is not None:
-        state.drain(ctx, error_code=RunFunctionErrorCode.RF_19)
-        logger.debug("Drained ctx scratch to %s", state.file)
+    output_tables = output_table_names(definition)
+    logger.info(
+        f"Calling the user function with {len(call_arguments)} argument(s), "
+        f"for {len(output_tables)} output(s)"
+    )
+    result = invoke_user_function(
+        function,
+        call_arguments,
+        output_tables,
+    )
+    result = [None if frame is None else frame._cached() for frame in result]
 
-    # Apply the function's data-quality actions over its output tables. In-place
-    # actions rewrite an output frame; producing actions yield extra derived
-    # tables. Both sink as normal outputs; their catalog type is set at
-    # registration. Skipped entirely when no data-quality action is declared, so
-    # ordinary runs are unaffected. Derived tables register under their kind's
-    # TableType at registration time, not here.
+    if context is not None:
+        state.drain(context, error_code=RunFunctionErrorCode.RF_19)
+        logger.debug(f"State drained to {state.file}")
+
     checks: list[Check] = []
-    if dataquality.driver.has_data_quality(getattr(info, "on_tables", None)):
-        dq_result = dataquality.driver.run_data_quality(
+    on_tables = None if isinstance(definition, SubscriberInfo) else definition.on_tables
+    if dataquality.driver.has_data_quality(on_tables):
+        quality = dataquality.driver.run_data_quality(
             collection=request.info.collection,
             output_tables=output_tables,
-            output_frames=list(result),
-            on_tables=info.on_tables,
+            output_frames=result,
+            on_tables=on_tables,
         )
-        result = list(dq_result.output_frames)
-        checks = dq_result.checks
-        for derived in dq_result.derived:
+        result = list(quality.output_frames)
+        checks = quality.checks
+        for derived in quality.derived:
             output_tables.append(derived.name)
             result.append(derived.frame)
         logger.info(
-            "Data quality produced %d derived table(s): %s",
-            len(dq_result.derived),
-            [derived.name for derived in dq_result.derived],
+            f"Data quality derived {len(quality.derived)} table(s): "
+            f"{[derived.name for derived in quality.derived]}"
         )
 
-    outputs_manifest = _sink_outputs(
+    outputs_manifest = sink_outputs(
         result,
         output_tables,
-        _output_targets(request, info, output_tables),
-        ColumnPolicy(Zone.LAND if isinstance(info, SubscriberInfo) else Zone.HOST),
+        output_targets(
+            request,
+            definition,
+            output_tables,
+        ),
+        ColumnPolicy(
+            Zone.LAND if isinstance(definition, SubscriberInfo) else Zone.HOST
+        ),
         checks=checks,
         state=state.output(),
     )
     outputs = outputs_manifest.outputs
     written = sum(1 for entry in outputs if entry.stats is not None)
     logger.info(
-        "User function returned %d slot(s) for tables %s; %d written, %d returned None",
-        len(outputs),
-        output_tables,
-        written,
-        len(outputs) - written,
+        f"User function returned {len(outputs)} output(s) for {output_tables}: "
+        f"{written} written, {len(outputs) - written} None"
     )
-    logger.debug("Outputs manifest entries: %s", outputs)
+    logger.debug(f"Outputs manifest entries: {outputs}")
 
-    try:
-        outputs_manifest.write(outputs_manifest_path)
-    except OSError as exc:
-        raise RunFunctionErrorCode.RF_17.exception(
-            cause=exc, path=outputs_manifest_path, detail=str(exc)
-        )
-    logger.debug("Wrote outputs manifest to %s", outputs_manifest_path)
-
+    write_outputs_manifest(outputs_manifest, arguments.outputs_manifest)
+    logger.debug(f"Outputs manifest written to {arguments.outputs_manifest}")
     return 0
