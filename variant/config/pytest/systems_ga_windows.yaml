@@ -32,6 +32,8 @@
   hmac-access-key$: GCS__HMAC_ACCESS_KEY
   hmac-secret-key$: GCS__HMAC_SECRET_KEY
   sys-path$: GCS__SYS_PATH
+- name: postgresnative
+  type: postgresnative
 - name: s3
   type: s3
   bucket$: S3__BUCKET
