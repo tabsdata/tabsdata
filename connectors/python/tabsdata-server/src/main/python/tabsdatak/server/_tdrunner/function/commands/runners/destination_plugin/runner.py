@@ -8,6 +8,7 @@ import logging
 import tempfile
 from pathlib import Path
 
+from tabsdatak._api import warn_legacy_dest
 from tabsdatak._connectors import get_dest
 from tabsdatak._info import KIND_SUBSCRIBER_DEF, SubscriberInfo
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
@@ -40,7 +41,13 @@ from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.err
 from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.options import (  # noqa: E501
     RunDestinationPluginArguments,
 )
-from tabsdatak.spi import Conn, Dest, DestContext, DestPlugin
+from tabsdatak.spi import (
+    Conn,
+    Dest,
+    DestContext,
+    DestPlugin,
+    dest_handoff,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +153,8 @@ def run(arguments: RunDestinationPluginArguments) -> int:
     request = Request.load(arguments.request, RunDestinationPluginErrorCode.RDP_1)
     subscriber = load_function_definition(arguments.bundle_folder)
     plugin = resolve_plugin(subscriber)
+    if dest_handoff(type(plugin)) is None:
+        logger.warning(warn_legacy_dest(type(plugin)))
     connection = load_connection(arguments.connection_file)
     logger.debug(
         f"Destination plugin {type(plugin).__name__} "

@@ -49,6 +49,7 @@ import os
 import re
 import sys
 import typing
+import warnings
 from datetime import datetime, timezone
 from typing import Any, Callable, ClassVar, TypeVar, Union, dataclass_transform
 
@@ -65,6 +66,8 @@ from pydantic import (
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 from pydantic.errors import PydanticSchemaGenerationError
 from pydantic_core import core_schema
+
+from tabsdatak._annotations import deprecated_category
 
 # Error codes and exceptions live in `tabsdatak.api_error` so callers
 # only depend on that module when they want to react to errors.
@@ -1577,3 +1580,24 @@ def callable_from_str(spec: str) -> Callable[..., Any]:
             f"callable {spec!r}: did not resolve to a callable (got {type(obj)})"
         )
     return obj
+
+
+# Warning category of a destination plugin still taking the legacy list of
+# local parquet files.
+LegacyDestTablesWarning = deprecated_category(
+    reason=(
+        "write_out takes list[TableFileSpec], so the plugin receives a local "
+        "parquet copy of every table"
+    ),
+    replacement="annotate write_out's tables with a DestBus variant",
+    since="2.3.0",
+)
+
+
+def warn_legacy_dest(plugin: type) -> str:
+    message = (
+        f"{plugin.__module__}.{plugin.__qualname__}.write_out takes the "
+        f"deprecated list[TableFileSpec]; declare a DestBus variant instead"
+    )
+    warnings.warn(message, category=LegacyDestTablesWarning, stacklevel=2)
+    return message

@@ -178,7 +178,10 @@ destination plugin receives the subscriber's outputs:
   `DestBusOfDataFrame` (`pl.DataFrame`), `DestBusOfArrow`
   (`pa.RecordBatchReader`), `DestBusOfFile` (a local parquet `Path`);
 - `list[TableFileSpec]`, or no annotation: the legacy form, one local
-  parquet file per position.
+  parquet file per position. Deprecated since 2.3.0: registering such
+  a plugin raises a `TabsdataDeprecatedWarning` (ignored by default
+  like every Tabsdata deprecation), and each run logs a warning in the
+  destination step.
 
 ```python
 from tabsdatak.spi import DestBusOfLazyFrame, DestPlugin

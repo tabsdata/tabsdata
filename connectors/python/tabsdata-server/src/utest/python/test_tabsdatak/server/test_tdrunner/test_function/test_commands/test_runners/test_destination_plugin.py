@@ -590,6 +590,27 @@ def shipping_setup(
     return tmp_path / "destination" / "sink.parquet"
 
 
+def test_main_logs_that_a_legacy_plugin_is_deprecated(
+    tmp_path,
+    built_bundle,
+    monkeypatch,
+    http_ok_url,
+    capfd,
+):
+    shipping_setup(
+        tmp_path,
+        built_bundle,
+        monkeypatch,
+        http_ok_url,
+    )
+    assert main() == 0
+    output = capfd.readouterr()
+    assert (
+        "LocalFileDestPlugin.write_out takes the deprecated list[TableFileSpec]"
+        in output.out + output.err
+    )
+
+
 def test_main_tells_the_server_before_it_writes(
     tmp_path,
     built_bundle,

@@ -1023,7 +1023,8 @@ class DestDef[D: Dest]:
     def _validate(self) -> "DestDef":
         check_plugin_param_type(self.plugin, "write_out", "conn", self.conn)
         check_plugin_param_type(self.plugin, "write_out", "dest", self.dest)
-        dest_handoff(self.plugin)
+        if dest_handoff(self.plugin) is None:
+            _api.warn_legacy_dest(self.plugin)
         if self.explorer is not None:
             check_plugin_param_type(self.explorer, "metadata", "conn", self.conn)
             check_plugin_param_type(self.explorer, "data", "conn", self.conn)

@@ -11,6 +11,7 @@ import pytest
 
 # noinspection PyProtectedMember
 from tabsdatak import _api
+from tabsdatak._api import LegacyDestTablesWarning, warn_legacy_dest
 from tabsdatak.api import (
     BasicDictSpec,
     BatchThresholds,
@@ -900,3 +901,24 @@ def test_a_channel_reads_its_one_table():
     channel = FileChannel("out_0", 0, Path("a.parquet"))
     assert channel.read() == Path("a.parquet")
     assert (channel.name, channel.position) == ("out_0", 0)
+
+
+def test_registering_a_legacy_plugin_warns_it_is_deprecated():
+    with pytest.warns(LegacyDestTablesWarning, match="LegacyDestPlugin.write_out"):
+        register(LegacyDestPlugin)
+
+
+def test_registering_a_bus_plugin_warns_nothing(recwarn):
+    register(LazyFrameDestPlugin)
+    assert not [
+        warning
+        for warning in recwarn
+        if issubclass(warning.category, LegacyDestTablesWarning)
+    ]
+
+
+def test_the_legacy_warning_names_the_replacement():
+    with pytest.warns(LegacyDestTablesWarning) as raised:
+        message = warn_legacy_dest(LegacyDestPlugin)
+    assert "LegacyDestPlugin.write_out" in message
+    assert "DestBus variant" in str(raised[0].message)
