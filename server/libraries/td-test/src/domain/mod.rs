@@ -254,8 +254,9 @@ impl FromAttr for Option<BTreeMap<String, i64>> {
 /// Implemented by [`define_backend!`](crate::define_backend), which derives
 /// [`Backend::build`] from the struct's fields.
 pub trait Backend: Sized + Clone + Send + Sync + 'static {
-    /// The vendor slug the descriptor must carry, e.g. `s3`.
-    const SYSTEM_TYPE: &'static str;
+    /// The vendor slugs the descriptor may carry, e.g. `s3`: more than one when
+    /// tdd runs the same server in more than one way, reached alike.
+    const SYSTEM_TYPES: &'static [&'static str];
     /// Which family of the tdd store the descriptor is read from.
     const ROLE: Role;
 
@@ -443,11 +444,11 @@ fn resolve<B: Backend>(name: &str) -> Result<B, Unavailable> {
             descriptor.role.as_str()
         )));
     }
-    if descriptor.system != B::SYSTEM_TYPE {
+    if !B::SYSTEM_TYPES.contains(&descriptor.system.as_str()) {
         return Err(Unavailable::Fail(format!(
             "'{name}' is a '{}' {kind}, but was requested as a '{}' one",
             descriptor.system,
-            B::SYSTEM_TYPE
+            B::SYSTEM_TYPES.join("' or '")
         )));
     }
 

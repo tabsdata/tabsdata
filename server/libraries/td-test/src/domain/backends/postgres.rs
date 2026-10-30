@@ -5,7 +5,10 @@
 //! Fixture structs for the `postgres` backend — port of
 //! `tabsdatax.itest.fixture.backends.postgres`.
 //!
-//! A tdd `postgres` system is a container running the server; a domain is one
+//! A tdd `postgres` system is a container running the server, and a
+//! `postgresnative` one the same server run from downloaded binaries, where
+//! there is no container (GA's Windows and macOS runners); tests reach both
+//! alike. A domain is one
 //! database in it, owned by a role of the same name, holding the tables
 //! `create-data` seeded. Postgres calls the entity container a schema, so the
 //! descriptor carries the database name as `DATABASE` and `SCHEMA` alike. The
@@ -22,12 +25,13 @@ use url::Url;
 pub const MAINTENANCE_DB: &str = "postgres";
 
 crate::define_backend! {
-    /// A `postgres` system: the container and its superuser.
-    pub struct PostgresSystem: system("postgres") {
+    /// A `postgres` system: the server and its superuser.
+    pub struct PostgresSystem: system("postgres", "postgresnative") {
         name: String,
         system_kind: String,
-        docker_container_name: String,
-        image: String,
+        /// The container's, absent for a `postgresnative` system.
+        docker_container_name: Option<String>,
+        image: Option<String>,
         external_host: String,
         /// The host-side port the container publishes, as the descriptor spells
         /// it. [`PostgresSystem::port`] is the parsed form.
@@ -39,10 +43,11 @@ crate::define_backend! {
 
 crate::define_backend! {
     /// A `postgres` domain: one database, with its own owner role.
-    pub struct PostgresDomain: domain("postgres") {
+    pub struct PostgresDomain: domain("postgres", "postgresnative") {
         name: String,
         system_kind: String,
-        image: String,
+        /// The system's container image, empty or absent for `postgresnative`.
+        image: Option<String>,
         external_host: String,
         port: String,
         user: String,
@@ -255,9 +260,9 @@ mod tests {
 
     #[test]
     fn test_roles_and_system_types() {
-        assert_eq!(PostgresSystem::SYSTEM_TYPE, "postgres");
+        assert_eq!(PostgresSystem::SYSTEM_TYPES, ["postgres", "postgresnative"]);
         assert_eq!(PostgresSystem::ROLE, Role::System);
-        assert_eq!(PostgresDomain::SYSTEM_TYPE, "postgres");
+        assert_eq!(PostgresDomain::SYSTEM_TYPES, ["postgres", "postgresnative"]);
         assert_eq!(PostgresDomain::ROLE, Role::Domain);
     }
 
@@ -266,7 +271,7 @@ mod tests {
         let d = domain();
         assert_eq!(d.name, "landing");
         assert_eq!(d.system_kind, "sql");
-        assert_eq!(d.image, "postgres:17");
+        assert_eq!(d.image.as_deref(), Some("postgres:17"));
         assert_eq!(d.external_host, "127.0.0.1");
         assert_eq!(d.port, "15432");
         assert_eq!(d.user, "d_tucu_0_landing");
@@ -303,8 +308,26 @@ mod tests {
     fn test_build_system_from_descriptor() {
         let s = PostgresSystem::build(&Attrs::of(&system())).unwrap();
         assert_eq!(s.name, "postgres");
-        assert_eq!(s.docker_container_name, "tdd_postgres");
+        assert_eq!(s.docker_container_name.as_deref(), Some("tdd_postgres"));
         assert_eq!(s.user, "postgres");
+        assert_eq!(s.port().unwrap(), 15432);
+    }
+
+    #[test]
+    fn test_build_native_domain_and_system_without_a_container() {
+        let mut domain = landing();
+        domain.system = "postgresnative".to_string();
+        domain.meta.insert("IMAGE".to_string(), String::new());
+        let d = PostgresDomain::build(&Attrs::of(&domain)).unwrap();
+        assert_eq!(d.image.as_deref(), Some(""));
+        d.url().unwrap();
+
+        let mut system = system();
+        system.system = "postgresnative".to_string();
+        system.meta.remove("DOCKER_CONTAINER_NAME");
+        system.meta.remove("IMAGE");
+        let s = PostgresSystem::build(&Attrs::of(&system)).unwrap();
+        assert_eq!(s.docker_container_name, None);
         assert_eq!(s.port().unwrap(), 15432);
     }
 

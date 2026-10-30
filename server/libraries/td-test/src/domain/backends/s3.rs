@@ -195,9 +195,9 @@ mod tests {
 
     #[test]
     fn test_roles_and_system_types() {
-        assert_eq!(S3System::SYSTEM_TYPE, "s3");
+        assert_eq!(S3System::SYSTEM_TYPES, ["s3"]);
         assert_eq!(S3System::ROLE, Role::System);
-        assert_eq!(S3Domain::SYSTEM_TYPE, "s3");
+        assert_eq!(S3Domain::SYSTEM_TYPES, ["s3"]);
         assert_eq!(S3Domain::ROLE, Role::Domain);
     }
 

@@ -172,9 +172,9 @@ mod tests {
 
     #[test]
     fn test_roles_and_system_types() {
-        assert_eq!(FsSystem::SYSTEM_TYPE, "fs");
+        assert_eq!(FsSystem::SYSTEM_TYPES, ["fs"]);
         assert_eq!(FsSystem::ROLE, Role::System);
-        assert_eq!(FsDomain::SYSTEM_TYPE, "fs");
+        assert_eq!(FsDomain::SYSTEM_TYPES, ["fs"]);
         assert_eq!(FsDomain::ROLE, Role::Domain);
     }
 

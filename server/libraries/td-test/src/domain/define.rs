@@ -30,7 +30,7 @@
 macro_rules! define_backend {
     (
         $(#[$attr:meta])*
-        $vis:vis struct $name:ident : $role:ident ( $system_type:literal ) {
+        $vis:vis struct $name:ident : $role:ident ( $( $system_type:literal ),+ ) {
             $( $(#[$field_attr:meta])* $field:ident : $ty:ty ),+ $(,)?
         }
     ) => {
@@ -42,7 +42,7 @@ macro_rules! define_backend {
         }
 
         impl $crate::domain::Backend for $name {
-            const SYSTEM_TYPE: &'static str = $system_type;
+            const SYSTEM_TYPES: &'static [&'static str] = &[ $( $system_type ),+ ];
             const ROLE: $crate::domain::Role = $crate::define_backend!(@role $role);
 
             fn build(

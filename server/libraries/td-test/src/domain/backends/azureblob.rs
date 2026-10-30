@@ -197,9 +197,9 @@ mod tests {
 
     #[test]
     fn test_roles_and_system_types() {
-        assert_eq!(AzureblobSystem::SYSTEM_TYPE, "azureblob");
+        assert_eq!(AzureblobSystem::SYSTEM_TYPES, ["azureblob"]);
         assert_eq!(AzureblobSystem::ROLE, Role::System);
-        assert_eq!(AzureblobDomain::SYSTEM_TYPE, "azureblob");
+        assert_eq!(AzureblobDomain::SYSTEM_TYPES, ["azureblob"]);
         assert_eq!(AzureblobDomain::ROLE, Role::Domain);
     }
 

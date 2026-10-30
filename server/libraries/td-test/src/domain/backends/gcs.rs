@@ -241,9 +241,9 @@ mod tests {
 
     #[test]
     fn test_roles_and_system_types() {
-        assert_eq!(GcsSystem::SYSTEM_TYPE, "gcs");
+        assert_eq!(GcsSystem::SYSTEM_TYPES, ["gcs"]);
         assert_eq!(GcsSystem::ROLE, Role::System);
-        assert_eq!(GcsDomain::SYSTEM_TYPE, "gcs");
+        assert_eq!(GcsDomain::SYSTEM_TYPES, ["gcs"]);
         assert_eq!(GcsDomain::ROLE, Role::Domain);
     }
 
