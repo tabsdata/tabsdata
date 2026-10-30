@@ -12,9 +12,9 @@ from tabsdatax.itest.fixture.backends.fs import FsDomain, fs_domain
 from tabsdatax.itest.fixture.functions.harness import CollectionFactory, run_function
 from tabsdatax.itest.fixture.instances.tabsdata import Instance, tabsdata_instance
 from tabsdatax.itest.fixture.monikers import moniker
-from testi_tabsdatak.conn.common.function_project import function_module
 
 from tabsdatak.conn.dev import DataGenSrcConn, ProbeDestConn
+from testi_tabsdatak.conn.common.function_project import function_module
 
 pytestmark = pytest.mark.conn_dev
 
