@@ -160,10 +160,10 @@ spec:
             - name: runtimes
               mountPath: /tabsdata/runtimes
               readOnly: true
-        - name: 0030-conn-resources-extractor
+        - name: 0030-cxassets
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_td_root}}/bin/td_conn_resources_extractor"]
+          command: ["${{system:tdk_pyenv_td_root}}/bin/td_cxassets"]
           args:
             - --output-dir
             - /tabsdata/resources/ui/connectors

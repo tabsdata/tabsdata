@@ -248,7 +248,7 @@ pods:
     apiserver_gke.yaml:
       action: replace
     apiserver_kminus.yaml:
-      action: retain
+      action: replace
   cron-publisher.yaml:
     cron-publisher_aks.yaml:
       action: replace

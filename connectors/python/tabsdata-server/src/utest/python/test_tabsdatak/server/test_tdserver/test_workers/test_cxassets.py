@@ -2,7 +2,7 @@
 #  Copyright 2026 Tabsdata Inc.
 #
 
-"""Tests for the connector-resources extractor worker.
+"""Tests for the cxassets worker, which extracts the connectors' assets.
 
 Covers filename derivation and ``perform()``: writing each connector's icon
 plus a sibling ``.json`` metadata file (holding ``system``) directly into the
@@ -17,14 +17,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from tabsdatak.server._tdserver.workers import conn_resources_extractor as extractor
-from tabsdatak.server._tdserver.workers.conn_resources_extractor import (
-    ConnResourcesExtractor,
+from tabsdatak.server._tdserver.workers import cxassets
+from tabsdatak.server._tdserver.workers.cxassets import (
+    CxAssets,
     icon_filename,
     metadata_filename,
     resource_stem,
 )
-from tabsdatak.server._tdserver.workers.conn_resources_extractor.error import (
+from tabsdatak.server._tdserver.workers.cxassets.error import (
     ResourceExtractionError,
 )
 
@@ -69,22 +69,18 @@ def test_icon_and_metadata_filenames_share_stem_and_differ_by_suffix():
 # --- perform() ------------------------------------------------------------
 
 
-def test_perform_writes_icon_and_metadata_directly_in_output_dir(
-    tmp_path, monkeypatch
-):
+def test_perform_writes_icon_and_metadata_directly_in_output_dir(tmp_path, monkeypatch):
     source = tmp_path / "source" / "mysql.svg"
     source.parent.mkdir(parents=True)
     source.write_text("<svg>mysql</svg>")
 
     plugin = _plugin("tabsdatak.conn.mysql", "MySQLSrc")
-    definition = _src_def(
-        plugin, icon="conn/mysql/resources/mysql.svg", system="MySQL"
-    )
-    monkeypatch.setattr(extractor, "available_definitions", lambda: [definition])
-    monkeypatch.setattr(extractor, "td_resource", lambda icon: source)
+    definition = _src_def(plugin, icon="conn/mysql/resources/mysql.svg", system="MySQL")
+    monkeypatch.setattr(cxassets, "available_definitions", lambda: [definition])
+    monkeypatch.setattr(cxassets, "td_resource", lambda icon: source)
 
     out = tmp_path / "connectors"
-    worker = ConnResourcesExtractor(output_dir=out)
+    worker = CxAssets(output_dir=out)
     worker.perform()
 
     svg = out / "tabsdatak-conn-mysql-MySQLSrc.svg"
@@ -108,11 +104,11 @@ def test_perform_handles_both_src_and_dest_defs(tmp_path, monkeypatch):
         _src_def(src_plugin, "conn/mysql/resources/mysql.svg", "MySQL"),
         _dest_def(dest_plugin, "conn/mysql/resources/mysql.svg", "MySQL"),
     ]
-    monkeypatch.setattr(extractor, "available_definitions", lambda: definitions)
-    monkeypatch.setattr(extractor, "td_resource", lambda icon: source)
+    monkeypatch.setattr(cxassets, "available_definitions", lambda: definitions)
+    monkeypatch.setattr(cxassets, "td_resource", lambda icon: source)
 
     out = tmp_path / "connectors"
-    worker = ConnResourcesExtractor(output_dir=out)
+    worker = CxAssets(output_dir=out)
     worker.perform()
 
     for stem in ("tabsdatak-conn-mysql-MySQLSrc", "tabsdatak-conn-mysql-MySQLDest"):
@@ -125,15 +121,15 @@ def test_perform_handles_both_src_and_dest_defs(tmp_path, monkeypatch):
 def test_perform_skips_defs_without_icon(tmp_path, monkeypatch):
     plugin = _plugin("tabsdatak.conn.noicon", "NoIconSrc")
     definition = _src_def(plugin, icon=None, system="NoIcon")
-    monkeypatch.setattr(extractor, "available_definitions", lambda: [definition])
+    monkeypatch.setattr(cxassets, "available_definitions", lambda: [definition])
 
     def _never(icon):  # td_resource must not be consulted for icon-less defs
         raise AssertionError("td_resource should not be called when icon is None")
 
-    monkeypatch.setattr(extractor, "td_resource", _never)
+    monkeypatch.setattr(cxassets, "td_resource", _never)
 
     out = tmp_path / "connectors"
-    worker = ConnResourcesExtractor(output_dir=out)
+    worker = CxAssets(output_dir=out)
     worker.perform()
 
     assert worker.skipped == 1
@@ -148,15 +144,15 @@ def test_perform_records_failure_and_raises_when_icon_missing(tmp_path, monkeypa
     definition = _src_def(
         plugin, icon="conn/broken/resources/missing.svg", system="Broken"
     )
-    monkeypatch.setattr(extractor, "available_definitions", lambda: [definition])
+    monkeypatch.setattr(cxassets, "available_definitions", lambda: [definition])
 
     def _missing(icon):
         raise FileNotFoundError(icon)
 
-    monkeypatch.setattr(extractor, "td_resource", _missing)
+    monkeypatch.setattr(cxassets, "td_resource", _missing)
 
     out = tmp_path / "connectors"
-    worker = ConnResourcesExtractor(output_dir=out)
+    worker = CxAssets(output_dir=out)
     with pytest.raises(ResourceExtractionError):
         worker.perform()
 
@@ -177,7 +173,7 @@ def test_defs_sharing_a_conn_declare_the_same_icon():
     SOSQL and report sources do), and the UI cannot tell them apart, so they
     must agree on the icon for that resolution to be correct."""
     icons: dict[type, set[str | None]] = {}
-    for definition in extractor.available_definitions():
+    for definition in cxassets.available_definitions():
         conn = getattr(definition, "conn", None)
         if conn is None:
             continue

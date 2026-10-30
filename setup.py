@@ -236,8 +236,7 @@ for path in yaml_root_folder_tabsdatak.rglob("*.yaml"):
 console_scripts: list[str] = [
     "tabsdata = tabsdatak.main.tabsdata:main",
     "td_apiready = tabsdatak.server._tdserver.workers.apiready:main",
-    "td_conn_resources_extractor = "
-    "tabsdatak.server._tdserver.workers.conn_resources_extractor:main",
+    "td_cxassets = tabsdatak.server._tdserver.workers.cxassets:main",
     "td_dbready = tabsdatak.server._tdserver.workers.dbready:main",
     "td_pyvenv = tabsdatak.common._interpreter.python.pyvenv:main",
     "td_resource = tabsdatak.common._resources.reader:main",

@@ -12,8 +12,8 @@ class ResourceExtractionError(WorkerRuntimeException):
     exit_code = ExitCode.OUTPUT
 
 
-class ConnResourcesExtractorErrorCode(ErrorCode):
-    CONN_RESOURCES_1 = ErrorDef(
+class CxAssetsErrorCode(ErrorCode):
+    CX_ASSETS_1 = ErrorDef(
         ResourceExtractionError,
         "Could not extract {count} connector icon(s): {details}.",
     )

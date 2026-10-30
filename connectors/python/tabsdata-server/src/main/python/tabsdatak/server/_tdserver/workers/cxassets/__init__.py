@@ -16,14 +16,17 @@ from tabsdatak._logging import setup_logging
 from tabsdatak.common._resources.reader import td_resource
 from tabsdatak.common._runtime.worker import Worker
 from tabsdatak.common._runtime.worker.error import ExitCode
-from tabsdatak.server._tdserver.workers.conn_resources_extractor.error import (
-    ConnResourcesExtractorErrorCode,
+from tabsdatak.server._tdserver.workers.cxassets.error import (
+    CxAssetsErrorCode,
 )
 
 logger = logging.getLogger(__name__)
 
-PROG = "td_conn_resources_extractor"
-DESCRIPTION = "Extract every available connector plugin's resources into a directory."
+PROG = "td_cxassets"
+DESCRIPTION = (
+    "Extract every available connector plugin's assets (cx: connector) into a "
+    "directory."
+)
 
 ARG_OUTPUT_DIR = "--output-dir"
 ARG_LOG_CONFIG = "--log-config"
@@ -78,7 +81,7 @@ def available_definitions() -> list:
     return definitions
 
 
-class ConnResourcesExtractor(Worker):
+class CxAssets(Worker):
     """Extract each available connector plugin's declared icon into
     ``output_dir``, alongside a ``.json`` metadata file holding the
     connector's ``system``. Both files are named after the plugin's full
@@ -122,7 +125,7 @@ class ConnResourcesExtractor(Worker):
                 f"Extracted '{icon}' -> {icon_target.name} (+ {metadata_target.name})."
             )
         if self.failures:
-            raise ConnResourcesExtractorErrorCode.CONN_RESOURCES_1.exception(
+            raise CxAssetsErrorCode.CX_ASSETS_1.exception(
                 count=len(self.failures),
                 details="; ".join(self.failures),
             )
@@ -149,7 +152,7 @@ def main() -> int:
     args = build_parser().parse_args()
     if args.log_config:
         setup_logging(args.log_config)
-    worker = ConnResourcesExtractor(output_dir=Path(args.output_dir))
+    worker = CxAssets(output_dir=Path(args.output_dir))
     logger.info(f"Extracting connector resources into {worker.output_dir}.")
     code = worker.run()
     if code == ExitCode.SUCCESS:
