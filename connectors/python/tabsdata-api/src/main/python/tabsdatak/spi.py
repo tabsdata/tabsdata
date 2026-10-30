@@ -34,8 +34,10 @@ from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Annotated,
+    Any,
     Callable,
     ClassVar,
+    Generic,
     Iterator,
     Sequence,
     Type,
@@ -46,6 +48,7 @@ from typing import (
 )
 
 from pydantic import ConfigDict, model_validator
+from typing_extensions import TypeVar
 
 import tabsdatak._api as _api
 from tabsdatak._legacy import module_getattr
@@ -136,18 +139,243 @@ def to_table_file_inputs(
 
 
 class TableMode(Enum):
-    """How a `SrcPlugin` returns slot contents -- the length of each
-    inner list in `SrcPlugin.read_in`'s return.
+    """How the data a `SrcPlugin` lands for one publisher input is
+    served to the function. Declared once, on the `SrcDef`.
 
     :categories: spi
 
-    * `SINGLE` -- exactly one `TableFileInput` per output slot.
-    * `ARRAY` -- one or more `TableFileInput` per output slot
-      (file-shard style).
+    * `SINGLE` -- one table: the writes to the input's `SrcChannel` (or
+      the files `read_in` returns for it) are chunks of that table,
+      concatenated.
+    * `ARRAY` -- a list of tables, one per write (or file).
     """
 
     SINGLE = "single"
     ARRAY = "array"
+
+
+class _Channel(ABC):
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """The name of the function input or output it carries."""
+
+    @property
+    @abstractmethod
+    def position(self) -> int:
+        """Its position among the function's inputs or outputs."""
+
+
+class _Bus[Channel: _Channel]:
+    channel_type: ClassVar[type[_Channel] | None] = None
+
+    def __init__(self, channels: Sequence[Channel]) -> None:
+        if self.channel_type is None:
+            raise TypeError(
+                f"{type(self).__qualname__} has no channel type; use one of "
+                "its variants",
+            )
+        for position, channel in enumerate(channels):
+            if not isinstance(channel, self.channel_type):
+                raise TypeError(
+                    f"{type(self).__qualname__} holds "
+                    f"{self.channel_type.__qualname__} channels, not "
+                    f"{type(channel).__qualname__}",
+                )
+            if channel.position != position:
+                raise ValueError(
+                    f"Channel {channel.name!r} is at position {position} but "
+                    f"declares position {channel.position}",
+                )
+        self._channels = list(channels)
+        self._names = {channel.name: channel for channel in self._channels}
+
+    def __len__(self) -> int:
+        return len(self._channels)
+
+    def __iter__(self) -> Iterator[Channel]:
+        return iter(self._channels)
+
+    def __getitem__(self, key: int | str) -> Channel:
+        if isinstance(key, str):
+            try:
+                return self._names[key]
+            except KeyError:
+                raise KeyError(
+                    f"No channel named {key!r}; channels are {list(self._names)}",
+                ) from None
+        return self._channels[key]
+
+
+class SrcChannel(_Channel, ABC):
+    """One input of the publisher, as a source plugin fills it.
+
+    :categories: spi
+
+    Abstract, and never built by a plugin: the runtime builds the
+    channels of the `SrcBus` variant the plugin declares, one per
+    publisher input, before `read_in` runs. The plugin lands the
+    input's data with `write()`, once or several times; the `SrcDef`'s
+    `table_mode` says how the writes are served: `TableMode.SINGLE`
+    concatenates them as chunks of one table, `TableMode.ARRAY` gives
+    the function a list with one table per write. An input never
+    written gets `None` (`SINGLE`) or an empty list (`ARRAY`).
+    """
+
+    @abstractmethod
+    def write(
+        self,
+        data: Any,
+        *,
+        metadata: MetadataSpec | None = None,
+    ) -> None:
+        """Land one table, or one chunk of a table, in the variant's
+        format.
+
+        Args:
+            data: The table or chunk, in the variant's format.
+            metadata: Optional `MetadataSpec`. Each entry is added as
+                a metadata column on this write's rows, by convention
+                named with a leading `@`.
+        """
+
+
+class SrcChannelOfLazyFrame(SrcChannel, ABC):
+    """A `SrcChannel` taking polars `LazyFrame`\\ s, which the runtime
+    sinks to storage in one streaming pass.
+
+    :categories: spi
+    """
+
+    @abstractmethod
+    def write(
+        self,
+        data: pl.LazyFrame,
+        *,
+        metadata: MetadataSpec | None = None,
+    ) -> None:
+        """Land a `LazyFrame`."""
+
+
+class SrcChannelOfDataFrame(SrcChannel, ABC):
+    """A `SrcChannel` taking polars `DataFrame`\\ s, each a table or
+    chunk in memory.
+
+    :categories: spi
+    """
+
+    @abstractmethod
+    def write(
+        self,
+        data: pl.DataFrame,
+        *,
+        metadata: MetadataSpec | None = None,
+    ) -> None:
+        """Land a `DataFrame`."""
+
+
+class SrcChannelOfArrow(SrcChannel, ABC):
+    """A `SrcChannel` taking pyarrow `RecordBatchReader`\\ s, landed one
+    record batch at a time.
+
+    :categories: spi
+    """
+
+    @abstractmethod
+    def write(
+        self,
+        data: pa.RecordBatchReader,
+        *,
+        metadata: MetadataSpec | None = None,
+    ) -> None:
+        """Land a `RecordBatchReader`."""
+
+
+class SrcChannelOfFile(SrcChannel, ABC):
+    """A `SrcChannel` taking local parquet files the plugin wrote under
+    its work folder.
+
+    :categories: spi
+    """
+
+    @abstractmethod
+    def write(
+        self,
+        data: Path,
+        *,
+        metadata: MetadataSpec | None = None,
+    ) -> None:
+        """Land a local parquet file."""
+
+
+class SrcBus[Channel: SrcChannel](_Bus[Channel]):
+    """The channels a source plugin fills in one run, one per publisher
+    input.
+
+    :categories: spi
+
+    A plugin addresses a channel by position (`bus[0]`): position `i` is
+    the `i`-th entry of its configuration (as many as
+    `SrcDef.cardinality` counts) and feeds the function's `i`-th
+    parameter. `bus["orders"]` also works, but the name is the
+    parameter's, chosen by the user, so plugins only use it in messages.
+
+    Use one of its variants, which fix the format of every channel:
+    `SrcBusOfLazyFrame`, `SrcBusOfDataFrame`, `SrcBusOfArrow` or
+    `SrcBusOfFile`. A plugin declares its variant as the third type
+    argument of `SrcPlugin`.
+
+    Args:
+        channels: The channels, ordered by position.
+    """
+
+    channel_type: ClassVar[type[SrcChannel] | None] = None
+
+
+class SrcBusOfLazyFrame(SrcBus[SrcChannelOfLazyFrame]):
+    """A `SrcBus` of `SrcChannelOfLazyFrame`: the preferred format,
+    streamed by polars to storage.
+
+    :categories: spi
+    """
+
+    channel_type = SrcChannelOfLazyFrame
+
+
+class SrcBusOfDataFrame(SrcBus[SrcChannelOfDataFrame]):
+    """A `SrcBus` of `SrcChannelOfDataFrame`: each table or chunk in
+    memory.
+
+    :categories: spi
+    """
+
+    channel_type = SrcChannelOfDataFrame
+
+
+class SrcBusOfArrow(SrcBus[SrcChannelOfArrow]):
+    """A `SrcBus` of `SrcChannelOfArrow`: each table or chunk streamed
+    as Arrow record batches.
+
+    :categories: spi
+    """
+
+    channel_type = SrcChannelOfArrow
+
+
+class SrcBusOfFile(SrcBus[SrcChannelOfFile]):
+    """A `SrcBus` of `SrcChannelOfFile`: each table or chunk written to
+    a local parquet file first. Least preferred; for plugins whose
+    reader produces files.
+
+    :categories: spi
+    """
+
+    channel_type = SrcChannelOfFile
+
+
+# What `SrcPlugin.read_in` returns: the `SrcBus` it filled, or the legacy
+# local parquet files, one inner list per publisher input.
+SrcTablesSpec: TypeAlias = Union[list[list[TableFileInput]], SrcBus]
 
 
 class PluginCtx(_FlowCtx, ABC):
@@ -176,16 +404,52 @@ class SrcPluginCtx(TransactionCtx, PluginCtx, ABC):
     """
 
 
-class SrcPlugin[C: Conn, S: Src](ABC):
+_C = TypeVar("_C", bound=Conn)
+_S = TypeVar("_S", bound=Src)
+_B = TypeVar("_B", bound=SrcBus, default=SrcBus)
+
+
+class SrcPlugin(ABC, Generic[_C, _S, _B]):
     """Plugin implementing the read-side of a `Src` subclass.
 
     :categories: spi
+
+    The third type argument is the plugin's contract with the runtime:
+    a `SrcBus` variant (`SrcPlugin[MyConn, MySrc, SrcBusOfLazyFrame]`)
+    makes `bus` hold one channel per publisher input, in that variant's
+    format; `read_in` writes into it and returns it, annotated with the
+    same variant. Without it, the legacy form, `read_in` returns local
+    parquet files. Declare exactly one variant; `SrcDef` refuses any
+    other type, and a return annotation that differs. Variants, in
+    order of preference: `SrcBusOfLazyFrame`, `SrcBusOfDataFrame`,
+    `SrcBusOfArrow`, `SrcBusOfFile`.
     """
 
+    # devguide-ref: source handoff
+
+    _bus: _B | None = None
+
+    @property
+    def bus(self) -> _B:
+        """One channel per publisher input, in the format of the
+        `SrcBus` variant the plugin declares. Set by the runtime before
+        `read_in` runs.
+
+        Raises:
+            RuntimeError: The plugin declares no `SrcBus` variant, or
+                `read_in` is not running.
+        """
+        if self._bus is None:
+            raise RuntimeError(
+                f"{type(self).__qualname__} has no bus: declare a SrcBus "
+                f"variant as the third type argument of SrcPlugin, and use "
+                f"the bus inside read_in",
+            )
+        return self._bus
+
     @abstractmethod
-    def read_in(self, ctx: SrcPluginCtx, conn: C, src: S) -> list[list[TableFileInput]]:
-        """Materialise `src`'s output slots to parquet under
-        `ctx.work_dir`.
+    def read_in(self, ctx: SrcPluginCtx, conn: _C, src: _S) -> SrcTablesSpec:
+        """Read `src` into the publisher's inputs.
 
         Args:
             ctx: The `SrcPluginCtx` for this trx (work dir, state).
@@ -193,13 +457,12 @@ class SrcPlugin[C: Conn, S: Src](ABC):
             src: The `Src` config declared on the flow.
 
         Returns:
-            One inner list of `TableFileInput` per output slot. In
-            `SINGLE` `TableMode` each inner list holds exactly one
-            file; in `ARRAY` mode it may hold more. Wrap bare paths
-            with `to_table_file_inputs`.
+            `bus`, after writing each input into its channel. Legacy
+            plugins return one inner list of `TableFileInput` per
+            input, parquet files under `ctx.work_dir`, served as
+            `SrcDef.table_mode` says. Wrap bare paths with
+            `to_table_file_inputs`.
         """
-
-    # if TableMode is SINGLE, inner list must always have 1 element.
 
 
 FilesSpec: TypeAlias = Annotated[list[TableFileSpec], _api.NON_EMPTY_LIST_FIELD]
@@ -409,7 +672,7 @@ class StreamSrcPlugin[C: Conn, SS: StreamSrc](ABC):
         `ctx.thresholds`)."""
 
 
-class DestChannel(ABC):
+class DestChannel(_Channel, ABC):
     """One position of the subscriber's outputs, as a destination plugin
     receives it.
 
@@ -420,16 +683,6 @@ class DestChannel(ABC):
     declares. A channel holds one table, which `read()` returns in the
     variant's format.
     """
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """The output's name."""
-
-    @property
-    @abstractmethod
-    def position(self) -> int:
-        """The output's position among the subscriber's outputs."""
 
     @abstractmethod
     def read(self) -> object:
@@ -484,7 +737,7 @@ class DestChannelOfFile(DestChannel, ABC):
         """The table, as a local parquet file."""
 
 
-class DestBus[Channel: DestChannel]:
+class DestBus[Channel: DestChannel](_Bus[Channel]):
     """The channels a destination plugin receives in one run, one per
     subscriber output, by position (`bus[0]`) or by name
     (`bus["out_0"]`).
@@ -501,43 +754,6 @@ class DestBus[Channel: DestChannel]:
     """
 
     channel_type: ClassVar[type[DestChannel] | None] = None
-
-    def __init__(self, channels: Sequence[Channel]) -> None:
-        if self.channel_type is None:
-            raise TypeError(
-                f"{type(self).__qualname__} has no channel type; use one of "
-                "its variants",
-            )
-        for position, channel in enumerate(channels):
-            if not isinstance(channel, self.channel_type):
-                raise TypeError(
-                    f"{type(self).__qualname__} holds "
-                    f"{self.channel_type.__qualname__} channels, not "
-                    f"{type(channel).__qualname__}",
-                )
-            if channel.position != position:
-                raise ValueError(
-                    f"Channel {channel.name!r} is at position {position} but "
-                    f"declares position {channel.position}",
-                )
-        self._channels = list(channels)
-        self._names = {channel.name: channel for channel in self._channels}
-
-    def __len__(self) -> int:
-        return len(self._channels)
-
-    def __iter__(self) -> Iterator[Channel]:
-        return iter(self._channels)
-
-    def __getitem__(self, key: int | str) -> Channel:
-        if isinstance(key, str):
-            try:
-                return self._names[key]
-            except KeyError:
-                raise KeyError(
-                    f"No channel named {key!r}; channels are {list(self._names)}",
-                ) from None
-        return self._channels[key]
 
 
 class DestBusOfLazyFrame(DestBus[DestChannelOfLazyFrame]):
@@ -818,8 +1034,8 @@ class SrcDef[S: Src]:
         src_version: Connector schema version.
         conn: Concrete `Conn` subclass the source binds to.
         src: Concrete `Src` subclass this binding registers.
-        table_mode: Whether `read_in` produces one file per slot or
-            many; see `TableMode`.
+        table_mode: How the data landed for each publisher input is
+            served: one table or a list of tables; see `TableMode`.
         cardinality: Callable returning the number of output slots
             `src` declares (e.g. `lambda s: len(s.paths)`).
         plugin: `SrcPlugin` subclass implementing `read_in`.
@@ -842,8 +1058,11 @@ class SrcDef[S: Src]:
 
     @model_validator(mode="after")
     def _validate(self) -> "SrcDef":
+        from tabsdatak._handoff import src_handoff
+
         check_plugin_param_type(self.plugin, "read_in", "conn", self.conn)
         check_plugin_param_type(self.plugin, "read_in", "src", self.src)
+        src_handoff(self.plugin)
         if self.explorer is not None:
             check_plugin_param_type(self.explorer, "metadata", "conn", self.conn)
             check_plugin_param_type(self.explorer, "data", "conn", self.conn)

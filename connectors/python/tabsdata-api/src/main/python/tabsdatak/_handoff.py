@@ -15,6 +15,22 @@ from tabsdatak.spi import (
     DestBusOfLazyFrame,
     DestChannel,
     DestPlugin,
+    SrcBus,
+    SrcBusOfArrow,
+    SrcBusOfDataFrame,
+    SrcBusOfFile,
+    SrcBusOfLazyFrame,
+    SrcChannel,
+    SrcPlugin,
+    SrcTablesSpec,
+)
+
+# The `SrcBus` variants a plugin may declare, in order of preference.
+SRC_BUSES: tuple[type[SrcBus], ...] = (
+    SrcBusOfLazyFrame,
+    SrcBusOfDataFrame,
+    SrcBusOfArrow,
+    SrcBusOfFile,
 )
 
 # The `DestBus` variants a plugin may declare, in order of preference.
@@ -24,6 +40,10 @@ DEST_BUSES: tuple[type[DestBus], ...] = (
     DestBusOfArrow,
     DestBusOfFile,
 )
+
+
+def src_bus_names() -> str:
+    return ", ".join(bus.__name__ for bus in SRC_BUSES)
 
 
 def dest_bus_names() -> str:
@@ -42,6 +62,72 @@ def mentions_bus(
     if origin is not None and mentions_bus(origin, family):
         return True
     return any(mentions_bus(argument, family) for argument in get_args(annotation))
+
+
+def declared_src_bus(plugin: type[SrcPlugin]) -> Any:
+    for klass in plugin.__mro__:
+        for base in klass.__dict__.get("__orig_bases__", ()):
+            if get_origin(base) is SrcPlugin:
+                return get_args(base)[2]
+    return SrcBus
+
+
+def src_handoff(plugin: type[SrcPlugin]) -> type[SrcBus] | None:
+    """The `SrcBus` variant `plugin` writes into, or `None` when its
+    `read_in` returns the legacy list of local parquet files.
+
+    Reads the third type argument of `SrcPlugin` in the plugin's bases;
+    left out, it defaults to `SrcBus`, the legacy form. A declared
+    variant must also be `read_in`'s return annotation, exactly. Used by
+    `SrcDef` at registration and by the runtime to choose the handoff.
+
+    Raises:
+        ValueError: The third type argument is not one of the `SrcBus`
+            variants; `read_in` does not return the declared variant;
+            a legacy `read_in` returns a `SrcBus`; or the return
+            annotation does not resolve at runtime.
+    """
+    declared = declared_src_bus(plugin)
+    if declared is not SrcBus and declared not in SRC_BUSES:
+        raise ValueError(
+            f"{plugin.__qualname__} declares {declared!r} as its bus; a source "
+            f"plugin declares one of {src_bus_names()} (in order of "
+            f"preference) as the third type argument of SrcPlugin, or none "
+            f"for the legacy files",
+        )
+    variant = None if declared is SrcBus else declared
+    method = plugin.read_in
+    if method is SrcPlugin.read_in:
+        return variant
+    family = (SrcBus, SrcChannel)
+    try:
+        returned = get_type_hints(method).get("return")
+    except Exception as error:
+        if variant is not None or mentions_bus(
+            method.__annotations__.get("return"),
+            family,
+        ):
+            raise ValueError(
+                f"{plugin.__qualname__}.read_in: the return annotation does not "
+                f"resolve at runtime ({error}); import the SrcBus variant at "
+                f"module level",
+            ) from error
+        return None
+    if variant is not None:
+        if returned is not variant:
+            raise ValueError(
+                f"{plugin.__qualname__}.read_in: returns {returned!r}, but the "
+                f"plugin declares {variant.__name__}; annotate read_in with "
+                f"-> {variant.__name__}",
+            )
+        return variant
+    if returned != SrcTablesSpec and mentions_bus(returned, family):
+        raise ValueError(
+            f"{plugin.__qualname__}.read_in: returns {returned!r}, but the "
+            f"plugin declares no SrcBus variant; declare it as the third type "
+            f"argument of SrcPlugin",
+        )
+    return None
 
 
 def dest_handoff(plugin: type[DestPlugin]) -> type[DestBus] | None:

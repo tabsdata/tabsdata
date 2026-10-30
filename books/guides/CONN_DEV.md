@@ -166,6 +166,42 @@ class _<Name>Explorer(Explorer[<Name>Conn]):
 )
 ```
 
+### Source handoff
+
+The third type argument of `SrcPlugin` decides how a source plugin
+hands its data to the runtime:
+
+- a `SrcBus` variant: `self.bus` holds one `SrcChannel` per publisher
+  input, addressed by position (`bus[0]`): position `i` is the plugin's
+  `i`-th configured entry and feeds the function's `i`-th parameter
+  (`channel.name` is that parameter's name, chosen by the user: use it
+  in messages only); `channel.write(data, metadata=...)` lands a table,
+  or a chunk of one, in the variant's format, and `read_in` returns
+  `self.bus`, annotated with the same variant. Variants, in order of
+  preference: `SrcBusOfLazyFrame` (`pl.LazyFrame`), `SrcBusOfDataFrame`
+  (`pl.DataFrame`), `SrcBusOfArrow` (`pa.RecordBatchReader`),
+  `SrcBusOfFile` (a local parquet `Path`);
+- no third argument: the legacy form, `read_in` returns one list of
+  `TableFileInput` per input.
+
+`SrcDef.table_mode` says how the writes to one input are served:
+`TableMode.SINGLE` concatenates them as chunks of one table,
+`TableMode.ARRAY` gives the function one table per write.
+
+```python
+from tabsdatak.spi import SrcBusOfLazyFrame, SrcPlugin
+
+class _<Name>SrcPlugin(SrcPlugin[<Name>Conn, <Name>Src, SrcBusOfLazyFrame]):
+    def read_in(self, ctx, conn, src) -> SrcBusOfLazyFrame:
+        for entry, channel in zip(src.<entries>, self.bus):
+            channel.write(...)  # a pl.LazyFrame read from entry
+        return self.bus
+```
+
+`SrcDef` refuses, when the connector is imported, a third argument
+that is not exactly one variant, a `read_in` whose return annotation
+is not that variant, and a legacy `read_in` annotated to return a bus.
+
 ### Destination handoff
 
 The annotation of `write_out`'s fourth parameter decides how a
