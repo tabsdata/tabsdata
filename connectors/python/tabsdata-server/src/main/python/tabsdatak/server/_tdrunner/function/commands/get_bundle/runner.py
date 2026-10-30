@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import argparse
 import logging
 import tarfile
 from pathlib import Path
@@ -20,6 +19,9 @@ from tabsdatak.server._tdrunner.function._commons.document.request import (
     Location,
 )
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
+from tabsdatak.server._tdrunner.function.commands.get_bundle.arguments import (
+    GetBundleArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.get_bundle.error import (
     GetBundleErrorCode,
 )
@@ -46,26 +48,23 @@ def fetch(source: StorageLocation, bundle_archive: Path) -> None:
     logger.debug(f"Bundle archive of {size} bytes downloaded to {bundle_archive}")
 
 
-def extract(bundle_archive: Path, bundle_dir: Path) -> None:
+def extract(bundle_archive: Path, bundle_folder: Path) -> None:
     try:
-        extract_bundle(bundle_archive, bundle_dir)
+        extract_bundle(bundle_archive, bundle_folder)
     except (tarfile.TarError, FileNotFoundError, zstandard.ZstdError) as error:
         raise GetBundleErrorCode.GB_4.exception(cause=error, detail=str(error))
 
 
-def run(arguments: argparse.Namespace) -> int:
-    request_path = Path(arguments.request)
-    bundle_dir = Path(arguments.bundle_dir)
-    bundle_archive = Path(arguments.bundle_archive)
-
+def run(arguments: GetBundleArguments) -> int:
     logger.info("Getting the function bundle")
-    request = AnyRequest.load(request_path, GetBundleErrorCode.GB_1)
+    request = AnyRequest.load(arguments.request, GetBundleErrorCode.GB_1)
     bundle = request.info.function_bundle
     logger.debug(
-        f"Bundle {bundle.uri} goes to archive {bundle_archive} and folder {bundle_dir}"
+        f"Bundle {bundle.uri} goes to archive {arguments.bundle_archive} "
+        f"and folder {arguments.bundle_folder}"
     )
-    fetch(storage_location(bundle), bundle_archive)
-    logger.info(f"Extracting the bundle archive into {bundle_dir}")
-    extract(bundle_archive, bundle_dir)
+    fetch(storage_location(bundle), arguments.bundle_archive)
+    logger.info(f"Extracting the bundle archive into {arguments.bundle_folder}")
+    extract(arguments.bundle_archive, arguments.bundle_folder)
     logger.info("Function bundle ready")
     return 0

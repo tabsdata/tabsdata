@@ -12,7 +12,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, NoReturn
+from typing import Any, Callable
 
 from tabsdatak._logging import setup_logging
 from tabsdatak.common._enums import WorkerCallbackStatus
@@ -21,6 +21,12 @@ from tabsdatak.server._tdrunner.function._commons.http.request import (
     DEFAULT_TIMEOUT_SECONDS,
 )
 from tabsdatak.server._tdrunner.function._commons.http.retry import call_with_retry
+from tabsdatak.server._tdrunner.function._commons.run.arguments import (
+    ArgumentsParser,
+    CommandArguments,
+    Parser,
+    add_print_options,
+)
 from tabsdatak.server._tdrunner.function._commons.run.dataflow import Dataflow
 from tabsdatak.server._tdrunner.function._commons.solver.arguments import (
     resolve_value,
@@ -50,25 +56,6 @@ STALE_OUTCOME = "Stale"
 DESTINATION_WRITE_REPORT = "destination write"
 
 
-class Parser(argparse.ArgumentParser):
-    def error(self, message: str) -> NoReturn:  # type: ignore[override]
-        raise CommandErrorCode.CMD_1.exception(detail=message)
-
-
-def make_print_action(text: str) -> type[argparse.Action]:
-    class PrintAction(argparse.Action):
-        def __init__(self, option_strings, dest, **options):
-            options["nargs"] = 0
-            options.setdefault("default", argparse.SUPPRESS)
-            super().__init__(option_strings, dest, **options)
-
-        def __call__(self, parser, namespace, values, option_string=None):
-            print(text)
-            parser.exit(0)
-
-    return PrintAction
-
-
 def build_parser(
     program: str,
     description: str,
@@ -78,24 +65,7 @@ def build_parser(
     manual: str = "",
 ) -> argparse.ArgumentParser:
     parser = Parser(prog=program, description=description)
-    parser.add_argument(
-        "--man",
-        "-m",
-        action=make_print_action(manual),
-        help="Print the detailed user guide and exit.",
-    )
-    parser.add_argument(
-        "--version",
-        "-v",
-        action=make_print_action(version),
-        help="Print the command build version and exit.",
-    )
-    parser.add_argument(
-        "--info",
-        "-i",
-        action=make_print_action(info),
-        help="Print the command build info and exit.",
-    )
+    add_print_options(parser, version=version, information=info, manual=manual)
     parser.add_argument(
         "--shared-dir",
         "-s",
@@ -169,7 +139,7 @@ def run_command(main: Callable[[], int | None]) -> int:
 
 
 def notify(
-    arguments: argparse.Namespace,
+    arguments: CommandArguments | argparse.Namespace,
     body: dict[str, Any],
     what: str,
 ) -> None:
@@ -212,7 +182,7 @@ def outcome(answer: bytes) -> str | None:
 
 
 def notify_status(
-    arguments: argparse.Namespace,
+    arguments: CommandArguments | argparse.Namespace,
     payload: CallbackRequest,
 ) -> None:
     status = payload.status
@@ -220,7 +190,7 @@ def notify_status(
     notify(arguments, payload.to_body(), str(status))
 
 
-def notify_status_running(arguments: argparse.Namespace) -> None:
+def notify_status_running(arguments: CommandArguments | argparse.Namespace) -> None:
     journal = Journal.load(
         Path(arguments.journal_file),
         strict=True,
@@ -235,7 +205,7 @@ def notify_status_running(arguments: argparse.Namespace) -> None:
 
 
 def notify_status_done(
-    arguments: argparse.Namespace,
+    arguments: CommandArguments | argparse.Namespace,
     *,
     output: dict[str, Any] | None = None,
     exit_code: int = EXIT_STATUS_SUCCESS,
@@ -258,7 +228,7 @@ def notify_status_done(
 
 
 def notify_status_failed(
-    arguments: argparse.Namespace | None,
+    arguments: CommandArguments | argparse.Namespace | None,
     exit_code: int,
     error: BaseException,
 ) -> None:
@@ -292,7 +262,9 @@ def notify_status_failed(
         logger.warning("Failed to post Failed status to responder", exc_info=True)
 
 
-def notify_step_destination_write(arguments: argparse.Namespace) -> None:
+def notify_step_destination_write(
+    arguments: CommandArguments | argparse.Namespace,
+) -> None:
     notify(
         arguments,
         DestinationWriteMessage().to_body(),
@@ -318,22 +290,32 @@ def tabsdata_command(*, name: str) -> Callable[[Callable], Callable]:
     return wrap
 
 
+def parse(
+    parser: argparse.ArgumentParser,
+) -> tuple[CommandArguments | argparse.Namespace, Path | str | None]:
+    if isinstance(parser, ArgumentsParser):
+        arguments = parser.parse()
+        return arguments, arguments.logging_configuration
+    namespace = parser.parse_args()
+    return namespace, namespace.log_config
+
+
 def command(
     *,
     name: str,
     parser: Callable[[], argparse.ArgumentParser],
-) -> Callable[[Callable[[argparse.Namespace], int | None]], Callable[[], int]]:
+) -> Callable[[Callable[[Any], int | None]], Callable[[], int]]:
     def wrap(
-        body: Callable[[argparse.Namespace], int | None],
+        body: Callable[[Any], int | None],
     ) -> Callable[[], int]:
         @tabsdata_command(name=name)
         def main() -> int:
             extend_path()
-            arguments: argparse.Namespace | None = None
+            arguments: CommandArguments | argparse.Namespace | None = None
             try:
-                parsed = parser().parse_args()
+                parsed, logging_configuration = parse(parser())
                 arguments = parsed
-                setup_logging(parsed.log_config)
+                setup_logging(logging_configuration)
                 show_dataflow_settings()
                 install_liveness_handler(Path(parsed.liveness))
                 result = body(parsed)

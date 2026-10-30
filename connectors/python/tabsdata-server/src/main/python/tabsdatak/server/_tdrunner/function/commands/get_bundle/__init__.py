@@ -4,19 +4,20 @@
 
 from __future__ import annotations
 
-import argparse
-
-from tabsdatak.server._tdrunner.function._commons.run.command import (
-    build_parser,
-    command,
+from tabsdatak.server._tdrunner.function._commons.run.arguments import (
+    ArgumentsParser,
 )
+from tabsdatak.server._tdrunner.function._commons.run.command import command
 from tabsdatak.server._tdrunner.function._commons.run.version import version
+from tabsdatak.server._tdrunner.function.commands.get_bundle.arguments import (
+    GetBundleArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.get_bundle.runner import run
 
 VERSION = version()
 GENERATION = 2
-INFO = "get-bundle — download the function bundle and extract it"
-MAN = (
+INFORMATION = "get-bundle — download the function bundle and extract it"
+MANUAL = (
     "get-bundle --request <PATH> --bundle-dir <PATH> --bundle-archive <PATH> "
     "--liveness <PATH>\n\n"
     "Reads the bundle location from --request, downloads the bundle to "
@@ -27,34 +28,18 @@ MAN = (
 )
 
 
-def build_command_parser() -> argparse.ArgumentParser:
-    parser = build_parser(
+def build_command_parser() -> ArgumentsParser:
+    return GetBundleArguments.parser(
         program="get-bundle",
         description="Download and extract the function bundle.",
         version=VERSION,
-        info=INFO,
-        manual=MAN,
+        information=INFORMATION,
+        manual=MANUAL,
     )
-    parser.add_argument(
-        "--request",
-        required=True,
-        help="Path to the request file.",
-    )
-    parser.add_argument(
-        "--bundle-dir",
-        required=True,
-        help="Folder to extract the bundle into.",
-    )
-    parser.add_argument(
-        "--bundle-archive",
-        required=True,
-        help="Path to download the bundle archive to.",
-    )
-    return parser
 
 
 @command(name="td_get_bundle", parser=build_command_parser)
-def main(arguments: argparse.Namespace) -> int:
+def main(arguments: GetBundleArguments) -> int:
     return run(arguments)
 
 
