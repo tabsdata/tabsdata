@@ -24,7 +24,14 @@ from tabsdatak.api import (
 )
 from tabsdatak.error import ApiErrorCode, ApiException
 from tabsdatak.spi import (
+    DEST_BUSES,
     Conn,
+    DestBus,
+    DestBusOfArrow,
+    DestBusOfFile,
+    DestBusOfLazyFrame,
+    DestChannelOfFile,
+    DestChannelOfLazyFrame,
     DestContext,
     DestDef,
     DestPlugin,
@@ -43,6 +50,8 @@ from tabsdatak.spi import (
     TableFileSpec,
     TableMode,
     check_plugin_param_type,
+    dest_bus_names,
+    dest_handoff,
 )
 
 
@@ -691,3 +700,203 @@ def test_stage_receives_positional_per_table_manifest():
     manifest = [[Path("t0.parquet")], [], [Path("t2.parquet")]]
     ctx.stage(manifest, {})
     assert ctx.staged[0][0] == manifest
+
+
+# --- destination handoff: DestBus / DestChannel ---------------------------
+
+
+class FileChannel(DestChannelOfFile):
+    def __init__(self, name: str, position: int, file: Path) -> None:
+        self._name = name
+        self._position = position
+        self._file = file
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def position(self) -> int:
+        return self._position
+
+    def read(self) -> Path:
+        return self._file
+
+
+class LegacyDestPlugin(DestPlugin[_Conn, _SDDest]):
+    def write_out(
+        self,
+        ctx: DestContext,
+        conn: _Conn,
+        dest: _SDDest,
+        tables: list[TableFileSpec],
+    ) -> None:
+        return None
+
+
+class UnannotatedDestPlugin(DestPlugin[_Conn, _SDDest]):
+    def write_out(self, ctx, conn, dest, tables):  # type: ignore[no-untyped-def]
+        return None
+
+
+class LazyFrameDestPlugin(DestPlugin[_Conn, _SDDest]):
+    def write_out(  # type: ignore[override]
+        self,
+        ctx: DestContext,
+        conn: _Conn,
+        dest: _SDDest,
+        bus: DestBusOfLazyFrame,
+    ) -> None:
+        return None
+
+
+class BareBusDestPlugin(DestPlugin[_Conn, _SDDest]):
+    def write_out(  # type: ignore[override]
+        self,
+        ctx: DestContext,
+        conn: _Conn,
+        dest: _SDDest,
+        bus: DestBus,
+    ) -> None:
+        return None
+
+
+class ChannelDestPlugin(DestPlugin[_Conn, _SDDest]):
+    def write_out(  # type: ignore[override]
+        self,
+        ctx: DestContext,
+        conn: _Conn,
+        dest: _SDDest,
+        bus: DestChannelOfLazyFrame,
+    ) -> None:
+        return None
+
+
+class MixedBusDestPlugin(DestPlugin[_Conn, _SDDest]):
+    def write_out(  # type: ignore[override]
+        self,
+        ctx: DestContext,
+        conn: _Conn,
+        dest: _SDDest,
+        bus: DestBusOfLazyFrame | DestBusOfArrow,
+    ) -> None:
+        return None
+
+
+class OtherTypeDestPlugin(DestPlugin[_Conn, _SDDest]):
+    def write_out(  # type: ignore[override]
+        self,
+        ctx: DestContext,
+        conn: _Conn,
+        dest: _SDDest,
+        tables: int,
+    ) -> None:
+        return None
+
+
+def register(plugin: type[DestPlugin]) -> DestDef:
+    return DestDef(
+        conn=_Conn,
+        type_="bus",
+        system="Test",
+        dest_version="v1",
+        dest=_SDDest,
+        cardinality=lambda d: 1,
+        plugin=plugin,
+        explorer=None,
+        icon=None,
+    )
+
+
+@pytest.mark.parametrize(
+    "plugin",
+    [LegacyDestPlugin, UnannotatedDestPlugin, OtherTypeDestPlugin],
+)
+def test_a_plugin_without_a_bus_keeps_the_file_list(plugin):
+    assert dest_handoff(plugin) is None
+    register(plugin)
+
+
+def test_a_plugin_overriding_nothing_keeps_the_file_list():
+    class Abstract(DestPlugin):
+        pass
+
+    assert dest_handoff(Abstract) is None
+
+
+@pytest.mark.parametrize("bus", DEST_BUSES)
+def test_a_plugin_receives_the_bus_variant_it_declares(bus):
+    namespace: dict = {}
+    exec(
+        "def write_out(self, context, connection, destination, bus: Bus): pass",
+        {"Bus": bus},
+        namespace,
+    )
+    plugin = type("VariantPlugin", (DestPlugin,), namespace)
+    plugin.write_out.__annotations__["bus"] = bus
+    assert dest_handoff(plugin) is bus
+
+
+def test_a_lazy_frame_plugin_registers_with_its_variant():
+    assert dest_handoff(LazyFrameDestPlugin) is DestBusOfLazyFrame
+    register(LazyFrameDestPlugin)
+
+
+@pytest.mark.parametrize(
+    "plugin",
+    [BareBusDestPlugin, ChannelDestPlugin, MixedBusDestPlugin],
+)
+def test_a_plugin_must_declare_exactly_one_bus_variant(plugin):
+    with pytest.raises(ValueError, match="DestBusOfLazyFrame, DestBusOfDataFrame"):
+        dest_handoff(plugin)
+    with pytest.raises(ApiException) as raised:
+        register(plugin)
+    assert raised.value.api_error is ApiErrorCode.API_16
+
+
+def test_a_bus_annotation_must_resolve_at_runtime():
+    class Unresolved(DestPlugin):
+        def write_out(self, ctx, conn, dest, bus: "MissingDestBus"):  # noqa: F821
+            return None
+
+    with pytest.raises(ValueError, match="does not resolve at runtime"):
+        dest_handoff(Unresolved)
+
+
+def test_the_bus_variants_go_in_order_of_preference():
+    assert dest_bus_names() == (
+        "DestBusOfLazyFrame, DestBusOfDataFrame, DestBusOfArrow, DestBusOfFile"
+    )
+
+
+def test_a_bus_gives_its_channels_by_position_and_by_name():
+    first = FileChannel("out_0", 0, Path("a.parquet"))
+    second = FileChannel("out_1", 1, Path("b.parquet"))
+    bus = DestBusOfFile([first, second])
+    assert len(bus) == 2
+    assert list(bus) == [first, second]
+    assert bus[1] is second
+    assert bus["out_0"] is first
+    with pytest.raises(KeyError, match="out_0"):
+        bus["missing"]
+
+
+def test_the_base_bus_cannot_be_built():
+    with pytest.raises(TypeError, match="has no channel type"):
+        DestBus([])
+
+
+def test_a_bus_refuses_channels_of_another_variant():
+    with pytest.raises(TypeError, match="holds DestChannelOfLazyFrame"):
+        DestBusOfLazyFrame([FileChannel("out_0", 0, Path("a.parquet"))])
+
+
+def test_a_bus_refuses_channels_out_of_position():
+    with pytest.raises(ValueError, match="at position 0 but declares position 1"):
+        DestBusOfFile([FileChannel("out_1", 1, Path("a.parquet"))])
+
+
+def test_a_channel_reads_its_one_table():
+    channel = FileChannel("out_0", 0, Path("a.parquet"))
+    assert channel.read() == Path("a.parquet")
+    assert (channel.name, channel.position) == ("out_0", 0)

@@ -28,17 +28,24 @@ between framework and plugin during a trx.
 from __future__ import annotations
 
 import importlib
+import inspect
 from abc import ABC, abstractmethod
 from enum import Enum
 from pathlib import Path
 from typing import (
+    TYPE_CHECKING,
     Annotated,
+    Any,
     Callable,
     ClassVar,
+    Iterator,
+    Sequence,
     Type,
     TypeAlias,
     Union,
     cast,
+    get_args,
+    get_origin,
     get_type_hints,
 )
 
@@ -56,6 +63,10 @@ from tabsdatak.api import (
     TransactionCtx,
 )
 from tabsdatak.error import ApiErrorCode
+
+if TYPE_CHECKING:
+    import polars as pl
+    import pyarrow as pa
 
 
 class Conn(_api.DescriptorBase, ABC):
@@ -402,6 +413,199 @@ class StreamSrcPlugin[C: Conn, SS: StreamSrc](ABC):
         `ctx.thresholds`)."""
 
 
+class DestChannel(ABC):
+    """One position of the subscriber's outputs, as a destination plugin
+    receives it.
+
+    :categories: spi
+
+    Abstract, and never built by a plugin: the runtime hands over the
+    channels of the `DestBus` variant the plugin's `write_out`
+    declares. A channel holds one table, which `read()` returns in the
+    variant's format.
+    """
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """The output's name."""
+
+    @property
+    @abstractmethod
+    def position(self) -> int:
+        """The output's position among the subscriber's outputs."""
+
+    @abstractmethod
+    def read(self) -> object:
+        """The table, in the variant's format."""
+
+
+class DestChannelOfLazyFrame(DestChannel, ABC):
+    """A `DestChannel` whose table is a polars `LazyFrame` scanning it
+    from storage: nothing is read until the plugin collects or sinks it.
+
+    :categories: spi
+    """
+
+    @abstractmethod
+    def read(self) -> pl.LazyFrame:
+        """The table, as a `LazyFrame`."""
+
+
+class DestChannelOfDataFrame(DestChannel, ABC):
+    """A `DestChannel` whose table is a polars `DataFrame`: the whole
+    table in memory.
+
+    :categories: spi
+    """
+
+    @abstractmethod
+    def read(self) -> pl.DataFrame:
+        """The table, as a `DataFrame`."""
+
+
+class DestChannelOfArrow(DestChannel, ABC):
+    """A `DestChannel` whose table is a pyarrow `RecordBatchReader`
+    streaming it one record batch at a time.
+
+    :categories: spi
+    """
+
+    @abstractmethod
+    def read(self) -> pa.RecordBatchReader:
+        """The table, as a `RecordBatchReader`."""
+
+
+class DestChannelOfFile(DestChannel, ABC):
+    """A `DestChannel` whose table is a local parquet file under the
+    plugin's work folder, copied from storage before `write_out` runs.
+
+    :categories: spi
+    """
+
+    @abstractmethod
+    def read(self) -> Path:
+        """The table, as a local parquet file."""
+
+
+class DestBus[Channel: DestChannel]:
+    """The channels a destination plugin receives in one run, one per
+    subscriber output, by position (`bus[0]`) or by name
+    (`bus["out_0"]`).
+
+    :categories: spi
+
+    Use one of its variants, which fix the format of every channel:
+    `DestBusOfLazyFrame`, `DestBusOfDataFrame`, `DestBusOfArrow` or
+    `DestBusOfFile`. The variant a plugin
+    declares on `write_out` is the format it receives.
+
+    Args:
+        channels: The channels, ordered by position.
+    """
+
+    channel_type: ClassVar[type[DestChannel] | None] = None
+
+    def __init__(self, channels: Sequence[Channel]) -> None:
+        if self.channel_type is None:
+            raise TypeError(
+                f"{type(self).__qualname__} has no channel type; use one of "
+                f"{dest_bus_names()}",
+            )
+        for position, channel in enumerate(channels):
+            if not isinstance(channel, self.channel_type):
+                raise TypeError(
+                    f"{type(self).__qualname__} holds "
+                    f"{self.channel_type.__qualname__} channels, not "
+                    f"{type(channel).__qualname__}",
+                )
+            if channel.position != position:
+                raise ValueError(
+                    f"Channel {channel.name!r} is at position {position} but "
+                    f"declares position {channel.position}",
+                )
+        self._channels = list(channels)
+        self._names = {channel.name: channel for channel in self._channels}
+
+    def __len__(self) -> int:
+        return len(self._channels)
+
+    def __iter__(self) -> Iterator[Channel]:
+        return iter(self._channels)
+
+    def __getitem__(self, key: int | str) -> Channel:
+        if isinstance(key, str):
+            try:
+                return self._names[key]
+            except KeyError:
+                raise KeyError(
+                    f"No channel named {key!r}; channels are {list(self._names)}",
+                ) from None
+        return self._channels[key]
+
+
+class DestBusOfLazyFrame(DestBus[DestChannelOfLazyFrame]):
+    """A `DestBus` of `DestChannelOfLazyFrame`: the preferred format,
+    streamed by polars from storage.
+
+    :categories: spi
+    """
+
+    channel_type = DestChannelOfLazyFrame
+
+
+class DestBusOfDataFrame(DestBus[DestChannelOfDataFrame]):
+    """A `DestBus` of `DestChannelOfDataFrame`: each table in memory.
+
+    :categories: spi
+    """
+
+    channel_type = DestChannelOfDataFrame
+
+
+class DestBusOfArrow(DestBus[DestChannelOfArrow]):
+    """A `DestBus` of `DestChannelOfArrow`: each table streamed as Arrow
+    record batches.
+
+    :categories: spi
+    """
+
+    channel_type = DestChannelOfArrow
+
+
+class DestBusOfFile(DestBus[DestChannelOfFile]):
+    """A `DestBus` of `DestChannelOfFile`: each table copied to a local
+    parquet file first. Least preferred; for plugins that need a file on
+    disk.
+
+    :categories: spi
+    """
+
+    channel_type = DestChannelOfFile
+
+
+# The `DestBus` variants a plugin may declare, in order of preference.
+DEST_BUSES: tuple[type[DestBus], ...] = (
+    DestBusOfLazyFrame,
+    DestBusOfDataFrame,
+    DestBusOfArrow,
+    DestBusOfFile,
+)
+
+# What `DestPlugin.write_out` receives after `ctx`, `conn` and `dest`: a
+# `DestBus` variant, or the legacy list of local parquet files.
+DestTablesSpec: TypeAlias = Union[list[TableFileSpec], DestBus]
+
+
+def dest_bus_names() -> str:
+    """The `DestBus` variants a plugin may declare, in order of
+    preference, as text.
+
+    :categories: spi
+    """
+    return ", ".join(bus.__name__ for bus in DEST_BUSES)
+
+
 class DestContext(TransactionCtx, PluginCtx, ABC):
     """Context handed to `DestPlugin.write_out` -- combines `TransactionCtx`
     with `PluginCtx`.
@@ -414,7 +618,19 @@ class DestPlugin[C: Conn, D: Dest](ABC):
     """Plugin implementing the write-side of a `Dest` subclass.
 
     :categories: spi
+
+    The annotation of `write_out`'s `tables` parameter is the plugin's
+    contract with the runtime: a `DestBus` variant receives the
+    subscriber's outputs in that variant's format, and
+    `list[TableFileSpec]` (or no annotation) receives them as local
+    parquet files, the legacy form. Declare exactly one variant;
+    `DestDef` refuses any other `DestBus` or `DestChannel` type.
+    Variants, in order of preference: `DestBusOfLazyFrame`,
+    `DestBusOfDataFrame`, `DestBusOfArrow`, `DestBusOfFile`. Import the
+    variant at module level, so the annotation resolves at runtime.
     """
+
+    # devguide-ref: destination handoff
 
     @abstractmethod
     def write_out(
@@ -422,16 +638,19 @@ class DestPlugin[C: Conn, D: Dest](ABC):
         ctx: DestContext,
         conn: C,
         dest: D,
-        tables: list[TableFileSpec],
+        tables: DestTablesSpec,
     ):
-        """Push the per-slot parquet files in `tables` to `dest`.
+        """Push the subscriber's outputs in `tables` to `dest`.
 
         Args:
             ctx: The `DestContext` for this trx.
             conn: The resolved connection.
             dest: The `Dest` config declared on the flow.
-            tables: One parquet file per target; the runtime guarantees
-                `len(tables)` equals `dest`'s declared target count.
+            tables: One table per target, in the format the override
+                declares: a `DestBus` variant, or a list of local
+                parquet files. Passed positionally, so any parameter
+                name works. The runtime guarantees as many tables as
+                `dest`'s declared target count.
         """
 
 
@@ -594,6 +813,68 @@ def check_plugin_param_type(
         )
 
 
+def _mentions_bus(annotation: Any) -> bool:
+    if isinstance(annotation, str):
+        return "DestBus" in annotation or "DestChannel" in annotation
+    if isinstance(annotation, type):
+        return issubclass(annotation, (DestBus, DestChannel))
+    origin = get_origin(annotation)
+    if origin is not None and _mentions_bus(origin):
+        return True
+    return any(_mentions_bus(argument) for argument in get_args(annotation))
+
+
+def dest_handoff(plugin: type[DestPlugin]) -> type[DestBus] | None:
+    """The `DestBus` variant `plugin.write_out` receives, or `None` when
+    it receives the legacy list of local parquet files.
+
+    :categories: spi
+
+    Reads the annotation of `write_out`'s fourth parameter, the data the
+    runtime passes after `ctx`, `conn` and `dest`. `list[TableFileSpec]`,
+    any other type unrelated to `DestBus`, or no annotation means the
+    legacy file list. Used by `DestDef` at registration and by the
+    runtime to choose the handoff.
+
+    Raises:
+        ValueError: The annotation names `DestBus` or `DestChannel` but
+            is not exactly one of the `DestBus` variants, or it does not
+            resolve at runtime.
+    """
+    method = plugin.write_out
+    if method is DestPlugin.write_out:
+        return None
+    parameters = list(inspect.signature(method).parameters.values())
+    if len(parameters) < 5 or parameters[4].kind not in (
+        inspect.Parameter.POSITIONAL_ONLY,
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+    ):
+        return None
+    parameter = parameters[4]
+    if parameter.annotation is inspect.Parameter.empty:
+        return None
+    try:
+        declared = get_type_hints(method).get(parameter.name)
+    except Exception as error:
+        if _mentions_bus(parameter.annotation):
+            raise ValueError(
+                f"{plugin.__qualname__}.write_out: the annotation of "
+                f"`{parameter.name}` does not resolve at runtime ({error}); "
+                f"import the DestBus variant at module level",
+            ) from error
+        return None
+    if declared in DEST_BUSES:
+        return declared
+    if _mentions_bus(declared):
+        raise ValueError(
+            f"{plugin.__qualname__}.write_out: `{parameter.name}` is typed as "
+            f"{declared!r}; a destination plugin declares one of "
+            f"{dest_bus_names()} (in order of preference), or the legacy "
+            f"list[TableFileSpec]",
+        )
+    return None
+
+
 # The `SrcDef` / `StreamSrcDef` / `DestDef` dataclasses carry
 # `Type[...]` fields whose argument types are abstract classes
 # (`SrcPlugin`, `Explorer`, ...), not pydantic types.
@@ -742,6 +1023,7 @@ class DestDef[D: Dest]:
     def _validate(self) -> "DestDef":
         check_plugin_param_type(self.plugin, "write_out", "conn", self.conn)
         check_plugin_param_type(self.plugin, "write_out", "dest", self.dest)
+        dest_handoff(self.plugin)
         if self.explorer is not None:
             check_plugin_param_type(self.explorer, "metadata", "conn", self.conn)
             check_plugin_param_type(self.explorer, "data", "conn", self.conn)

@@ -166,6 +166,34 @@ class _<Name>Explorer(Explorer[<Name>Conn]):
 )
 ```
 
+### Destination handoff
+
+The annotation of `write_out`'s fourth parameter decides how a
+destination plugin receives the subscriber's outputs:
+
+- a `DestBus` variant: one `DestChannel` per output position, by
+  position (`bus[0]`) or by name (`bus["out_0"]`); `channel.read()`
+  returns its table in the variant's format. Variants, in order of
+  preference: `DestBusOfLazyFrame` (`pl.LazyFrame`),
+  `DestBusOfDataFrame` (`pl.DataFrame`), `DestBusOfArrow`
+  (`pa.RecordBatchReader`), `DestBusOfFile` (a local parquet `Path`);
+- `list[TableFileSpec]`, or no annotation: the legacy form, one local
+  parquet file per position.
+
+```python
+from tabsdatak.spi import DestBusOfLazyFrame, DestPlugin
+
+class _<Name>DestPlugin(DestPlugin[<Name>Conn, <Name>Dest]):
+    def write_out(self, ctx, conn, dest, bus: DestBusOfLazyFrame) -> None:
+        for channel in bus:
+            frame = channel.read()  # pl.LazyFrame
+            ...
+```
+
+Declare exactly one variant and import it at module level: `DestDef`
+refuses a bare `DestBus`, a `DestChannel` type or a union of variants
+when the connector is imported (`tabsdatak.spi.dest_handoff`).
+
 ## `<name>/error.py` — error enum
 
 ```python
