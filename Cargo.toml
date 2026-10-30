@@ -300,14 +300,14 @@ default-features = false
 version = "0.6.0"
 
 [workspace.dependencies.arrow]
-version = "60.0.0"
+version = "60.1.0"
 features = ["csv", "json"]
 
 [workspace.dependencies.arrow-avro]
-version = "60.0.0"
+version = "60.1.0"
 
 [workspace.dependencies.parquet]
-version = "60.0.0"
+version = "60.1.0"
 features = ["async"]
 
 [workspace.dependencies.async-compression]
@@ -739,7 +739,7 @@ version = "0.3.23"
 features = ["env-filter"]
 
 [workspace.dependencies.unicode-width]
-version = "0.2.2"
+version = "0.2.3"
 
 [workspace.dependencies.url]
 version = "2.5.8"

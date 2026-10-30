@@ -2,6 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-opentelemetry-api==1.45.1
-opentelemetry-sdk==1.45.1
+opentelemetry-api==1.45.2
+opentelemetry-sdk==1.45.2
 snowflake-connector-python==4.8.0

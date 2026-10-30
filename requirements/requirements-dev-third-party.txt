@@ -7,10 +7,10 @@
 -r requirements-drivers-all.txt
 
 ansi2html==1.9.5
-archspec==0.2.6
-azure-storage-blob==12.31.0
+archspec==0.2.7
+azure-storage-blob==12.31.1
 black==26.10.1
-boto3==1.43.120
+boto3==1.43.123
 build==1.6.1
 colorama==0.4.6
 colorlog==6.12.0
@@ -29,20 +29,20 @@ kafka-python==3.0.12
 liccheck==0.9.2
 licensecheck==2026.0.8
 matplotlib==3.11.2
-maturin==1.15.0
+maturin==1.16.0
 mimesis==22.2.0
 mkdocs==1.6.1
-mypy==2.4.0
+mypy==2.4.1
 mypy-extensions==1.1.0
 pdoc==16.0.0
 pip-audit==2.10.1
 pip-tools==7.6.2
 pip-upgrader==2.4.13
-pipdeptree==4.2.9
+pipdeptree==4.2.13
 prompt-toolkit==3.0.53
 py-cpuinfo==9.0.0
 py-spy==0.4.2
-pydevd_pycharm==263.7307.50
+pydevd_pycharm==263.7307.101
 pygame==2.6.1
 pysentry-rs==0.5.0
 pytest-check==3.0.3
@@ -68,10 +68,10 @@ textual==8.2.8
 tomlkit==0.15.2
 tqdm==4.70.1
 twine==7.0.0
-types-PyYAML==6.0.12.20260906
+types-PyYAML==6.0.12.20261030
 tzlocal==5.4.5
 uvicorn==0.54.0
-virtualenv==21.15.0
+virtualenv==21.15.2
 wcwidth==0.9.4
 wheel-inspect==1.8.0
 wheel==0.48.0

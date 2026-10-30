@@ -3,15 +3,15 @@
 #
 
 accessify==0.3.1
-archspec==0.2.6
+archspec==0.2.7
 azure-identity==1.27.0
 azure-mgmt-authorization==4.0.0
 azure-mgmt-compute==39.0.0
 azure-mgmt-containerservice==41.8.0
 azure-mgmt-rdbms==10.1.1
 base32hex==1.0.2
-boto3==1.43.120
-boto3-stubs[glue]==1.43.120
+boto3==1.43.123
+boto3-stubs[glue]==1.43.123
 click==8.5.0
 click-repl==0.4.1
 clickhouse-connect==1.11.0
@@ -27,7 +27,7 @@ google-cloud-container==2.67.0
 google-cloud-resource-manager==1.19.0
 google-cloud-storage==3.17.1
 google-cloud-storage-control==1.17.0
-grpcio-tools==1.85.0
+grpcio-tools==1.85.1
 humanize==4.16.0
 hvac==2.4.0
 ibm_db==3.3.0; sys_platform == "darwin" or (platform_machine != "aarch64" and platform_machine != "ARM64")
@@ -45,7 +45,7 @@ pandas==3.1.0
 pg8000==1.31.6
 pillow==13.0.0
 pip-tools==7.6.2
-platformdirs==4.13.6
+platformdirs==4.14.0
 polars==2.1.0
 prompt-toolkit==3.0.53
 protobuf==7.36.2
@@ -54,7 +54,7 @@ pycountries==1.2.1
 pyyaml==6.0.3
 pyarrow==26.0.0
 py-cpuinfo==9.0.0
-pydantic==2.14.1
+pydantic==2.14.2
 pyiceberg[glue]==0.12.0
 pyopenssl==26.4.0
 pywin32==312; platform_system == "Windows"
@@ -63,7 +63,7 @@ rich==15.0.0
 rich-click==1.9.9
 ruamel-yaml==0.19.1
 sqlalchemy==2.0.55
-sqlglot==30.25.0
+sqlglot==30.27.0
 starlette==1.10.0
 tenacity==9.2.1
 textual==8.2.8

@@ -143,10 +143,10 @@ version = "0.28.0"
 features = ["derive"]
 
 [workspace.dependencies.pyo3-stub-gen]
-version = "0.23.1"
+version = "0.23.2"
 
 [workspace.dependencies.pyo3-stub-gen-derive]
-version = "0.23.1"
+version = "0.23.2"
 
 [workspace.dependencies.rand]
 version = "0.10.3"

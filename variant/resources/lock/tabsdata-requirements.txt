@@ -9,7 +9,7 @@ aiohttp-retry==2.9.1
 aiosignal==1.4.0
 annotated-types==0.8.0
 anyio==4.15.1
-archspec==0.2.6
+archspec==0.2.7
 asn1crypto==1.5.1
 attrs==26.1.0
 authlib==1.9.1
@@ -22,12 +22,12 @@ azure-mgmt-compute==39.0.0
 azure-mgmt-containerservice==41.8.0
 azure-mgmt-core==1.6.0
 azure-mgmt-rdbms==10.1.1
-azure-storage-blob==12.31.0
+azure-storage-blob==12.31.1
 backports-zstd==1.8.0 ; python_full_version < '3.14'
 base32hex==1.0.2
-boto3==1.43.120
-boto3-stubs==1.43.120
-botocore==1.43.122
+boto3==1.43.123
+boto3-stubs==1.43.123
+botocore==1.43.123
 botocore-stubs==1.43.122
 build==1.6.1
 cachetools==7.2.7
@@ -38,12 +38,12 @@ click==8.5.0
 click-repl==0.4.1
 clickhouse-connect==1.11.0
 colorama==0.4.6
-confluent-kafka==2.16.0
+confluent-kafka==2.16.1
 connectorx==0.4.6
 cramjam==2.14.0
 croniter==6.2.4
 cryptography==50.0.2
-databricks-sdk==0.157.0
+databricks-sdk==0.158.0
 databricks-sql-connector==4.8.0
 dnspython==2.9.1
 durationpy==0.11
@@ -55,7 +55,7 @@ frozenlist==1.8.0
 fsspec==2026.9.0
 google-api-core==2.43.2
 google-auth==2.62.0
-google-cloud-bigquery==3.46.2
+google-cloud-bigquery==3.47.0
 google-cloud-compute==1.56.0
 google-cloud-container==2.67.0
 google-cloud-core==2.8.0
@@ -67,9 +67,9 @@ google-resumable-media==2.11.0
 googleapis-common-protos==1.76.0
 greenlet==3.5.6 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
 grpc-google-iam-v1==0.14.6
-grpcio==1.85.0
-grpcio-status==1.85.0
-grpcio-tools==1.85.0
+grpcio==1.85.1
+grpcio-status==1.85.1
+grpcio-tools==1.85.1
 h11==0.16.0 ; sys_platform != 'emscripten'
 httpcore2==2.16.0 ; sys_platform != 'emscripten'
 httpx2==2.16.0
@@ -105,9 +105,9 @@ numpy==2.5.4
 oauthlib==4.0.0
 obstore==0.12.1
 openpyxl==3.1.5
-opentelemetry-api==1.45.1
-opentelemetry-sdk==1.45.1
-opentelemetry-semantic-conventions==0.66b1
+opentelemetry-api==1.45.2
+opentelemetry-sdk==1.45.2
+opentelemetry-semantic-conventions==0.66b2
 orjson==3.13.0
 packaging==26.3
 pandas==3.1.0
@@ -115,7 +115,7 @@ pg8000==1.31.6
 pillow==13.0.0
 pip==26.2.2
 pip-tools==7.6.2
-platformdirs==4.13.6
+platformdirs==4.14.0
 polars==2.1.0
 polars-runtime-32==2.1.0
 prompt-toolkit==3.0.53
@@ -130,8 +130,8 @@ pyasn1-modules==0.4.2
 pybreaker==1.4.1
 pycountries==1.2.1
 pycparser==3.12 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
-pydantic==2.14.1
-pydantic-core==2.50.1
+pydantic==2.14.2
+pydantic-core==2.50.2
 pygments==2.21.0
 pyiceberg==0.12.0
 pyjwt==2.15.1
@@ -164,7 +164,7 @@ snowflake-connector-python==4.8.0
 sortedcontainers==2.4.0
 sqlalchemy==2.0.55
 sqlalchemy-bigquery==1.17.3
-sqlglot==30.25.0
+sqlglot==30.27.0
 starlette==1.10.0
 strictyaml==1.7.3
 tenacity==9.2.1
@@ -172,7 +172,7 @@ textual==8.2.8
 thrift==0.25.0
 tomlkit==0.15.2
 truststore==0.10.5 ; sys_platform != 'emscripten'
-types-pyyaml==6.0.12.20260906
+types-pyyaml==6.0.12.20261030
 types-s3transfer==0.19.3
 typing-extensions==4.16.0
 typing-inspection==0.4.4

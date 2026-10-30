@@ -126,10 +126,10 @@ features = ["abi3-py312", "anyhow", "macros", "multiple-pymethods", "num-bigint"
 version = "0.13.4"
 
 [workspace.dependencies.pyo3-stub-gen]
-version = "0.23.1"
+version = "0.23.2"
 
 [workspace.dependencies.pyo3-stub-gen-derive]
-version = "0.23.1"
+version = "0.23.2"
 
 [workspace.dependencies.ratatui]
 version = "0.30.2"
