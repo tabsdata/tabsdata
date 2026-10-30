@@ -23,12 +23,27 @@ class Parser(argparse.ArgumentParser):
 
 def make_print_action(text: str) -> type[argparse.Action]:
     class PrintAction(argparse.Action):
-        def __init__(self, option_strings, dest, **options):
+        def __init__(
+            self,
+            option_strings,
+            dest,
+            **options,
+        ):
             options["nargs"] = 0
             options.setdefault("default", argparse.SUPPRESS)
-            super().__init__(option_strings, dest, **options)
+            super().__init__(
+                option_strings,
+                dest,
+                **options,
+            )
 
-        def __call__(self, parser, namespace, values, option_string=None):
+        def __call__(
+            self,
+            parser,
+            namespace,
+            values,
+            option_string=None,
+        ):
             print(text)
             parser.exit(0)
 
@@ -105,7 +120,11 @@ class Arguments:
         information: str = "",
         manual: str = "",
     ) -> ArgumentsParser:
-        parser = ArgumentsParser(cls, prog=program, description=description)
+        parser = ArgumentsParser(
+            cls,
+            prog=program,
+            description=description,
+        )
         add_print_options(
             parser,
             version=version,
@@ -165,7 +184,11 @@ class CommandArguments(Arguments):
 
 
 class ArgumentsParser(Parser):
-    def __init__(self, arguments: type[Arguments], **options: Any) -> None:
+    def __init__(
+        self,
+        arguments: type[Arguments],
+        **options: Any,
+    ) -> None:
         super().__init__(**options)
         self.arguments = arguments
 

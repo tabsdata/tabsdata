@@ -78,7 +78,11 @@ from tabsdatak.conn.kafka import KafkaStreamSrc as _KafkaStreamSrc  # noqa: E402
 
 
 @_stream_publisher_decorator(
-    source=_KafkaStreamSrc(data_format="json", schema="{}", topic="t"),
+    source=_KafkaStreamSrc(
+        data_format="json",
+        schema="{}",
+        topic="t",
+    ),
     batch_max_secs=60,
     output_tables=["t"],
 )
@@ -156,10 +160,18 @@ def fixture_publisher(user_project) -> PublisherInfo:
 
 
 @pytest.fixture
-def built_bundle(tmp_path, user_project, fixture_publisher) -> Path:
+def built_bundle(
+    tmp_path,
+    user_project,
+    fixture_publisher,
+) -> Path:
     """Build and extract the bundle. Returns the extracted directory."""
     bundle_path = tmp_path / "bundle.tar.zst"
-    build_bundle(fixture_publisher, user_project, bundle_path)
+    build_bundle(
+        fixture_publisher,
+        user_project,
+        bundle_path,
+    )
     extracted = tmp_path / "extracted"
     extract_bundle(bundle_path, extracted)
     return extracted
@@ -204,7 +216,8 @@ def write_request(path: Path, bundle_uri: str = "file:///bundle.tar.zst") -> Pat
                 "info": info_payload(bundle_uri=bundle_uri),
                 "output": [
                     output_table_payload(
-                        "my_table", location={"uri": "file:///out/my_table"}
+                        "my_table",
+                        location={"uri": "file:///out/my_table"},
                     )
                 ],
             }
@@ -452,9 +465,14 @@ def test_resolve_plugin_and_io_publisher_passthrough(tmp_path, fixture_publisher
     # function_stage is unused on the PublisherInfo path; pass a stub.
     stub_stage = Location(uri="file:///unused")
     connection_file = write_connection_file(
-        tmp_path / "connection.yaml", tmp_path / "srcdata"
+        tmp_path / "connection.yaml",
+        tmp_path / "srcdata",
     )
-    binding = bind_source(fixture_publisher, stub_stage, connection_file)
+    binding = bind_source(
+        fixture_publisher,
+        stub_stage,
+        connection_file,
+    )
     assert isinstance(binding.plugin, SrcPlugin)
     assert isinstance(binding.connection, LocalFileSrcConn)
     assert binding.source is fixture_publisher.source
@@ -462,7 +480,9 @@ def test_resolve_plugin_and_io_publisher_passthrough(tmp_path, fixture_publisher
 
 
 def test_resolve_plugin_and_io_unknown_source_raises_no_plugin(
-    tmp_path, fixture_publisher, monkeypatch
+    tmp_path,
+    fixture_publisher,
+    monkeypatch,
 ):
     """When `get_src` raises `KeyError`, the runner surfaces
     `NoPluginError`."""
@@ -555,7 +575,11 @@ def test_resolve_plugin_and_io_stream_publisher_substitutes_to_manifest_stage(
     from tabsdatak.spi import StreamStageSrc, StreamStageSrcPlugin
 
     @stream_publisher(
-        source=KafkaStreamSrc(data_format="json", schema="{}", topic="t"),
+        source=KafkaStreamSrc(
+            data_format="json",
+            schema="{}",
+            topic="t",
+        ),
         batch_max_secs=60,
         output_tables=["t"],
     )
@@ -565,7 +589,9 @@ def test_resolve_plugin_and_io_stream_publisher_substitutes_to_manifest_stage(
     # The stream-publisher path substitutes the conn from function_stage
     # and never reads the connection file, so a stub path is fine here.
     binding = bind_source(
-        my_stream_publisher, Location(uri="file:///stage/dir"), tmp_path / "unused.yaml"
+        my_stream_publisher,
+        Location(uri="file:///stage/dir"),
+        tmp_path / "unused.yaml",
     )
     # Plugin substituted to StreamStageSrcPlugin (which delegates to
     # ManifestStageSrcPlugin internally on read_in).
@@ -613,20 +639,46 @@ def test_load_function_def_accepts_stream_publisher_kind(tmp_path):
 
 def test_invoke_read_in_returns_plugin_result():
     class FakePlugin:
-        def read_in(self, context, connection, source):
+        def read_in(
+            self,
+            context,
+            connection,
+            source,
+        ):
             return [[TableFileInput(file=Path("/x.parquet"))]]
 
-    output = read_in(SourceBinding(FakePlugin(), object(), object(), 1), object())
+    output = read_in(
+        SourceBinding(
+            FakePlugin(),
+            object(),
+            object(),
+            1,
+        ),
+        object(),
+    )
     assert output == [[TableFileInput(file=Path("/x.parquet"))]]
 
 
 def test_invoke_read_in_wraps_exceptions_as_plugin_failed():
     class BrokenPlugin:
-        def read_in(self, context, connection, source):
+        def read_in(
+            self,
+            context,
+            connection,
+            source,
+        ):
             raise RuntimeError("boom")
 
     with pytest.raises(PluginFailedError):
-        read_in(SourceBinding(BrokenPlugin(), object(), object(), 1), object())
+        read_in(
+            SourceBinding(
+                BrokenPlugin(),
+                object(),
+                object(),
+                1,
+            ),
+            object(),
+        )
 
 
 # --- unit: write_inputs_manifest ----------------------------------------
@@ -647,7 +699,12 @@ def test_write_inputs_manifest_happy(tmp_path, fixture_publisher):
             TableFileInput(file=b),
         ]
     ]
-    write_inputs_manifest(fixture_publisher, produced, output, cardinality=1)
+    write_inputs_manifest(
+        fixture_publisher,
+        produced,
+        output,
+        cardinality=1,
+    )
     data = yaml.safe_load(output.read_text())
 
     def record(file, metadata=None):
@@ -685,7 +742,12 @@ def test_write_inputs_manifest_normalises_file_uris(tmp_path, fixture_publisher)
     absolute filesystem paths."""
     output = tmp_path / "manifest.yaml"
     produced = [[TableFileInput(file=Path("file:///tmp/uri-shaped.parquet"))]]
-    write_inputs_manifest(fixture_publisher, produced, output, cardinality=1)
+    write_inputs_manifest(
+        fixture_publisher,
+        produced,
+        output,
+        cardinality=1,
+    )
     data = yaml.safe_load(output.read_text())
     assert [tables["file"] for tables in data["inputs"][0]["tables"]] == [
         "/tmp/uri-shaped.parquet"
@@ -701,11 +763,17 @@ def test_write_inputs_manifest_cardinality_mismatch_raises(tmp_path, fixture_pub
         [TableFileInput(file=Path("/y.parquet"))],
     ]
     with pytest.raises(PluginFailedError):
-        write_inputs_manifest(fixture_publisher, produced, output, cardinality=1)
+        write_inputs_manifest(
+            fixture_publisher,
+            produced,
+            output,
+            cardinality=1,
+        )
 
 
 def test_write_inputs_manifest_negative_cardinality_pads_to_param_count(
-    tmp_path, fixture_publisher
+    tmp_path,
+    fixture_publisher,
 ):
     """``cardinality=-1`` (dynamic slot count -- e.g. a stream-stage
     manifest source) pads the manifest up to the function-declared
@@ -719,7 +787,12 @@ def test_write_inputs_manifest_negative_cardinality_pads_to_param_count(
     ``fixture_publisher`` has one input parameter (``in_1``), so 0
     produced slots → 1 padded entry whose ``tables`` is empty."""
     output = tmp_path / "manifest.yaml"
-    write_inputs_manifest(fixture_publisher, [], output, cardinality=-1)
+    write_inputs_manifest(
+        fixture_publisher,
+        [],
+        output,
+        cardinality=-1,
+    )
     data = yaml.safe_load(output.read_text())
     assert len(data["inputs"]) == 1
     assert data["inputs"][0]["name"] == "in_1"
@@ -727,7 +800,8 @@ def test_write_inputs_manifest_negative_cardinality_pads_to_param_count(
 
 
 def test_write_inputs_manifest_negative_cardinality_does_not_pad_when_matched(
-    tmp_path, fixture_publisher
+    tmp_path,
+    fixture_publisher,
 ):
     """When the dynamic source produced exactly the right number of
     slots, the manifest writes them verbatim — no padding needed."""
@@ -746,7 +820,8 @@ def test_write_inputs_manifest_negative_cardinality_does_not_pad_when_matched(
 
 
 def test_write_inputs_manifest_negative_cardinality_overproduction_raises(
-    tmp_path, fixture_publisher
+    tmp_path,
+    fixture_publisher,
 ):
     """Over-production (source returned more slots than the function
     declares) is still a contract violation even under dynamic
@@ -765,7 +840,8 @@ def test_write_inputs_manifest_negative_cardinality_overproduction_raises(
 
 
 def test_write_inputs_manifest_oserror_raises_manifest_write_failed(
-    tmp_path, fixture_publisher
+    tmp_path,
+    fixture_publisher,
 ):
     """Writing to a path that's actually a directory triggers
     `IsADirectoryError` (a subclass of `OSError`)."""
@@ -773,13 +849,22 @@ def test_write_inputs_manifest_oserror_raises_manifest_write_failed(
     a_folder.mkdir()
     produced = [[TableFileInput(file=Path("/x.parquet"))]]
     with pytest.raises(ManifestWriteFailedError):
-        write_inputs_manifest(fixture_publisher, produced, a_folder, cardinality=1)
+        write_inputs_manifest(
+            fixture_publisher,
+            produced,
+            a_folder,
+            cardinality=1,
+        )
 
 
 # --- main: error paths via argparse ---------------------------------------
 
 
-def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch, http_ok_url):
+def test_main_missing_request_returns_bad_request(
+    tmp_path,
+    monkeypatch,
+    http_ok_url,
+):
     set_arguments(
         monkeypatch,
         tmp_path / "no-such.yaml",
@@ -793,7 +878,11 @@ def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch, http_ok
     assert main() == BadRequestError.exit_code
 
 
-def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch, http_ok_url):
+def test_main_missing_bundle_returns_bad_bundle(
+    tmp_path,
+    monkeypatch,
+    http_ok_url,
+):
     request_path = write_request(tmp_path / "request.yaml")
     set_arguments(
         monkeypatch,
@@ -810,14 +899,23 @@ def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch, http_ok_u
 
 def test_main_invalid_options_returns_1(monkeypatch):
     """argparse missing-required-arg → rc 1."""
-    monkeypatch.setattr(sys, "argv", ["run-source-plugin", "--request", "x"])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["run-source-plugin", "--request", "x"],
+    )
     assert main() == 1
 
 
 # --- main: end-to-end happy path -----------------------------------------
 
 
-def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok_url):
+def test_main_end_to_end_happy_path(
+    tmp_path,
+    built_bundle,
+    monkeypatch,
+    http_ok_url,
+):
     """Real LocalFile publisher, real plugin, real td_transporter.
 
     Mirrors `donotmerge.py`. Requires `td_transporter` on PATH and
@@ -832,7 +930,8 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
     # The source connection's base_path is the srcdata dir the
     # `user_project` fixture wrote `rows.parquet` into.
     connection_file = write_connection_file(
-        tmp_path / "connection.yaml", tmp_path / "srcdata"
+        tmp_path / "connection.yaml",
+        tmp_path / "srcdata",
     )
 
     set_arguments(
@@ -881,15 +980,32 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
 
 
 def test_main_carries_tabsdata_command_metadata():
-    assert getattr(main, "tabsdata_command", False) is True
-    assert getattr(main, "tabsdata_command_name", None) == "td_run_source_plugin"
+    assert (
+        getattr(
+            main,
+            "tabsdata_command",
+            False,
+        )
+        is True
+    )
+    assert (
+        getattr(
+            main,
+            "tabsdata_command_name",
+            None,
+        )
+        == "td_run_source_plugin"
+    )
 
 
 # --- main: end-to-end with initial_values round-trip --------------------
 
 
 def test_main_hydrates_and_drains_initial_values(
-    tmp_path, built_bundle, monkeypatch, http_ok_url
+    tmp_path,
+    built_bundle,
+    monkeypatch,
+    http_ok_url,
 ):
     """Store a previous-run state at system_input[0]'s location, let
     main() run the plugin (which is unaware of state), and verify drain
@@ -909,12 +1025,14 @@ def test_main_hydrates_and_drains_initial_values(
                 "info": info_payload(),
                 "output": [
                     output_table_payload(
-                        "my_table", location={"uri": "file:///out/my_table"}
+                        "my_table",
+                        location={"uri": "file:///out/my_table"},
                     )
                 ],
                 "system_input": [
                     input_table_payload(
-                        "td.fn_state__F-1", location={"uri": previous.as_uri()}
+                        "td.fn_state__F-1",
+                        location={"uri": previous.as_uri()},
                     )
                 ],
                 "system_output": [
@@ -930,7 +1048,8 @@ def test_main_hydrates_and_drains_initial_values(
     liveness = tmp_path / "live"
     # base_path is the srcdata dir the `user_project` fixture populated.
     connection_file = write_connection_file(
-        tmp_path / "connection.yaml", tmp_path / "srcdata"
+        tmp_path / "connection.yaml",
+        tmp_path / "srcdata",
     )
     set_arguments(
         monkeypatch,

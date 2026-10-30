@@ -106,7 +106,8 @@ def build_manifest_stage_connection(function_stage: Location) -> StageConnection
         backend = stage_backend_from_location(function_stage)
     except UnsupportedSchemeError as error:
         raise RunSourcePluginErrorCode.RSP_11.exception(
-            uri=function_stage.uri, scheme=parsed.scheme
+            uri=function_stage.uri,
+            scheme=parsed.scheme,
         ) from error
     return StageConnection(stage_backend=backend)
 
@@ -161,10 +162,15 @@ def bind_source(
 
 
 def read_in(
-    binding: SourceBinding, context: SrcPluginCtx
+    binding: SourceBinding,
+    context: SrcPluginCtx,
 ) -> list[list[TableFileInput]]:
     try:
-        return binding.plugin.read_in(context, binding.connection, binding.source)
+        return binding.plugin.read_in(
+            context,
+            binding.connection,
+            binding.source,
+        )
     except Exception as error:
         raise RunSourcePluginErrorCode.RSP_6.exception(cause=error, detail=str(error))
 
@@ -193,13 +199,15 @@ def write_inputs_manifest(
         expected = len(parameters)
         if len(produced) > expected:
             raise RunSourcePluginErrorCode.RSP_7.exception(
-                returned=len(produced), expected=expected
+                returned=len(produced),
+                expected=expected,
             )
         produced = [*produced, *([] for _ in range(expected - len(produced)))]
         cardinality = expected
     elif len(produced) != cardinality:
         raise RunSourcePluginErrorCode.RSP_7.exception(
-            returned=len(produced), expected=cardinality
+            returned=len(produced),
+            expected=cardinality,
         )
     manifest = InputManifest(
         inputs=tuple(
@@ -221,7 +229,9 @@ def write_inputs_manifest(
         manifest.write(path)
     except OSError as error:
         raise RunSourcePluginErrorCode.RSP_8.exception(
-            cause=error, path=path, detail=str(error)
+            cause=error,
+            path=path,
+            detail=str(error),
         )
 
 
@@ -232,7 +242,9 @@ def run(arguments: RunSourcePluginArguments) -> int:
     request = Request.load(arguments.request, RunSourcePluginErrorCode.RSP_1)
     publisher = load_function_definition(arguments.bundle_folder)
     binding = bind_source(
-        publisher, request.info.function_stage, arguments.connection_file
+        publisher,
+        request.info.function_stage,
+        arguments.connection_file,
     )
     logger.debug(
         f"Source plugin {type(binding.plugin).__name__} "

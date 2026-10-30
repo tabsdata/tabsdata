@@ -73,22 +73,31 @@ def load_manifest(path: Path) -> OutputManifest:
         return OutputManifest.load(path)
     except ManifestError as error:
         raise RunDestinationPluginErrorCode.RDP_7.exception(
-            cause=error, path=path, detail=str(error)
+            cause=error,
+            path=path,
+            detail=str(error),
         )
 
 
 def read_tables(
-    handoff: DestinationHandoff, request: Request, manifest: OutputManifest
+    handoff: DestinationHandoff,
+    request: Request,
+    manifest: OutputManifest,
 ) -> list[Path]:
     try:
         return handoff.seed(request.info, manifest)
     except MissingOutputError as error:
         raise RunDestinationPluginErrorCode.RDP_8.exception(
-            cause=error, slot=error.slot, name=error.name
+            cause=error,
+            slot=error.slot,
+            name=error.name,
         )
     except OutputCopyError as error:
         raise RunDestinationPluginErrorCode.RDP_9.exception(
-            cause=error, slot=error.slot, path=error.path, detail=error.detail
+            cause=error,
+            slot=error.slot,
+            path=error.path,
+            detail=error.detail,
         )
 
 
@@ -101,10 +110,17 @@ def write_tables(
     tables: list[Path],
 ) -> None:
     try:
-        handoff.grow(plugin, context, connection, destination, tables)
+        handoff.grow(
+            plugin,
+            context,
+            connection,
+            destination,
+            tables,
+        )
     except Exception as error:
         raise RunDestinationPluginErrorCode.RDP_6.exception(
-            cause=error, detail=str(error)
+            cause=error,
+            detail=str(error),
         )
 
 
@@ -129,13 +145,22 @@ def run(arguments: RunDestinationPluginArguments) -> int:
     work_folder = arguments.work_folder or Path(tempfile.gettempdir())
     handoff = Handoff.of(plugin, work_folder)
     try:
-        tables = read_tables(handoff, request, manifest)
+        tables = read_tables(
+            handoff,
+            request,
+            manifest,
+        )
         logger.debug(f"Outputs {outputs} handed over as {tables}")
         context = DestinationContext.from_info(arguments.bundle_folder, request.info)
         notify_step_destination_write(arguments)
         logger.info(f"Writing {len(tables)} table(s) through {type(plugin).__name__}")
         write_tables(
-            handoff, plugin, context, connection, subscriber.destination, tables
+            handoff,
+            plugin,
+            context,
+            connection,
+            subscriber.destination,
+            tables,
         )
     finally:
         handoff.harvest()

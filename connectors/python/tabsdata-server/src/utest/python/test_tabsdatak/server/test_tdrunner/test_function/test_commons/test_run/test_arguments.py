@@ -161,7 +161,11 @@ def test_a_bare_arguments_class_has_no_common_options():
 
 
 def test_a_bare_arguments_class_prints_its_version(capsys):
-    parser = BareArguments.parser("bare", "Bare command.", version="1.2.3")
+    parser = BareArguments.parser(
+        "bare",
+        "Bare command.",
+        version="1.2.3",
+    )
     with pytest.raises(SystemExit) as exit_event:
         parser.parse(["--version"])
     assert exit_event.value.code == 0
