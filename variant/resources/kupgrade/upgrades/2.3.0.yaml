@@ -261,7 +261,7 @@ pods:
     cron-publisher_gke.yaml:
       action: replace
     cron-publisher_kminus.yaml:
-      action: retain
+      action: replace
   dbmanager.yaml:
     dbmanager_aks.yaml:
       action: replace
