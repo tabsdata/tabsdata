@@ -209,7 +209,7 @@ class FromRequestCtx(TransactionCtx, FromFlowRequestCtx):
     classes compose this with the role-specific abstract base via
     multiple inheritance:
 
-        class _SrcContext(FromRequestCtx, SrcPluginCtx): ...
+        class SourceContext(FromRequestCtx, SrcPluginCtx): ...
         class _DestContext(FromRequestCtx, DestContext): ...
         class _FunctionContext(FromRequestCtx, FunctionCtx): ...
 
@@ -220,7 +220,7 @@ class FromRequestCtx(TransactionCtx, FromFlowRequestCtx):
     :class:`TransactionCtx` before :class:`PluginCtx` (= ``FlowCtx``); listing
     ``FromFlowRequestCtx`` first here would put ``FlowCtx`` before
     ``TransactionCtx`` and break the MRO merge in ``_DestContext`` /
-    ``_SrcContext`` / ``_FunctionContext``. The streamer-pod context
+    ``SourceContext`` / ``_FunctionContext``. The streamer-pod context
     uses :class:`FromFlowRequestCtx` directly (no trx fields) and
     does not pass through this class.
     """

@@ -26,8 +26,8 @@ from tabsdatak.server._tdrunner.function._handlers.state import (
     write_state,
 )
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
-from tabsdatak.server._tdrunner.function.commands.runners.source_plugin import (
-    _SrcContext,
+from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.runner import (  # noqa: E501
+    SourceContext,
 )
 from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.error import (
     BadStateInError,
@@ -295,8 +295,8 @@ PREVIOUS = {"last-modified": "2026-05-27T00:00:00Z"}
 CURRENT = {"last-modified": "2026-05-28T00:00:00Z"}
 
 
-def _context() -> _SrcContext:
-    return _SrcContext(
+def _context() -> SourceContext:
+    return SourceContext(
         work_folder=Path("/work"),
         project_id="p-1",
         project="p",
@@ -435,7 +435,7 @@ def test_hydrate_a_malformed_previous_state_raises(tmp_path):
         _hydrated(_request(system_input=(_input(location),)), tmp_path / "state")
 
 
-def _drain(context: _SrcContext, request: Request, folder: Path) -> State:
+def _drain(context: SourceContext, request: Request, folder: Path) -> State:
     run_state = State(request, folder)
     run_state.drain(context, error_code=RunSourcePluginErrorCode.RSP_10)
     return run_state

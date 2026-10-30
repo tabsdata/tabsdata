@@ -146,7 +146,7 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
     / ``physical_function_run_id`` values live; the streamer pod
     itself has none. This is why the runtime
     mixin used here is :class:`FromFlowRequestCtx` rather than the
-    full :class:`FromRequestCtx` used by ``_SrcContext`` /
+    full :class:`FromRequestCtx` used by ``SourceContext`` /
     ``_DestContext`` / ``_FunctionContext`` -- those role-typed
     contexts inherit :class:`TransactionCtx`, so they get the trx fields too.
     """

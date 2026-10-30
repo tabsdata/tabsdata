@@ -2,159 +2,108 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Error model for the run-source-plugin command (exit codes 10..)."""
-
 from __future__ import annotations
 
 from tabsdatak.error import ErrorCode, ErrorDef
 from tabsdatak.server._tdrunner.function._lib.errors import (
-    BadBundleError as _BadBundleError,
-    BadRequestError as _BadRequestError,
-    BadStateInError as _BadStateInError,
-    BadStateOutError as _BadStateOutError,
-    BadUserCodeError as _BadUserCodeError,
+    BadBundleError as CommandBadBundleError,
+    BadRequestError as CommandBadRequestError,
+    BadStateInError as CommandBadStateInError,
+    BadStateOutError as CommandBadStateOutError,
+    BadUserCodeError as CommandBadUserCodeError,
     CommandRuntimeException,
-    ManifestWriteFailedError as _ManifestWriteFailedError,
-    NoPluginError as _NoPluginError,
-    PluginFailedError as _PluginFailedError,
-    WrongKindError as _WrongKindError,
+    ManifestWriteFailedError as CommandManifestWriteFailedError,
+    NoPluginError as CommandNoPluginError,
+    PluginFailedError as CommandPluginFailedError,
+    WrongKindError as CommandWrongKindError,
 )
 
 
-class BadRequestError(_BadRequestError):
+class BadRequestError(CommandBadRequestError):
     exit_code = 10
 
 
-class BadBundleError(_BadBundleError):
-    """``function_def.json`` missing, unreadable, or malformed."""
-
+class BadBundleError(CommandBadBundleError):
     exit_code = 11
 
 
-class BadUserCodeError(_BadUserCodeError):
+class BadUserCodeError(CommandBadUserCodeError):
     exit_code = 12
 
 
-class WrongKindError(_WrongKindError):
-    """Bundle's ``kind`` isn't ``publisherDef``."""
-
+class WrongKindError(CommandWrongKindError):
     exit_code = 13
 
 
-class NoPluginError(_NoPluginError):
-    """No ``SrcPlugin`` is registered for the resolved source class."""
-
+class NoPluginError(CommandNoPluginError):
     exit_code = 14
 
 
-class PluginFailedError(_PluginFailedError):
-    """The source plugin's ``read_in()`` raised, or it produced the
-    wrong number of slots."""
-
+class PluginFailedError(CommandPluginFailedError):
     exit_code = 15
 
 
-class ManifestWriteFailedError(_ManifestWriteFailedError):
-    """``--inputs-manifest`` could not be written."""
-
+class ManifestWriteFailedError(CommandManifestWriteFailedError):
     exit_code = 16
 
 
-class BadStateInError(_BadStateInError):
-    """``State.hydrate`` failure -- read side."""
-
+class BadStateInError(CommandBadStateInError):
     exit_code = 17
 
 
-class BadStateOutError(_BadStateOutError):
-    """``State.drain`` failure -- write side."""
-
+class BadStateOutError(CommandBadStateOutError):
     exit_code = 17
 
 
 class UnsupportedStageSchemeError(CommandRuntimeException):
-    """``info.function_stage.uri`` uses a scheme the stream-publisher
-    substitution does not yet support (today: only ``file://``).
-
-    Only relevant on the stream-publisher path -- a regular
-    ``@publisher`` uses the user-declared ``conn`` directly and never
-    looks at ``function_stage``.
-    """
-
     exit_code = 18
 
 
 class RunSourcePluginErrorCode(ErrorCode):
     RSP_1 = ErrorDef(
         BadRequestError,
-        "unreadable request.yaml {path}: {detail}",
+        "Cannot read the request {path}: {detail}",
     )
-    # ``Request.load``.
-
     RSP_2 = ErrorDef(
         BadBundleError,
-        "could not load function_def.json from {bundle_folder}: {detail}",
+        "Cannot load the function definition from {bundle_folder}: {detail}",
     )
-    # ``load_function_def_or_raise`` bundle-shape failure.
-
     RSP_3 = ErrorDef(
         BadUserCodeError,
-        "could not resolve user function from {bundle_folder}: {detail}",
+        "Cannot resolve the user function from {bundle_folder}: {detail}",
     )
-    # ``load_function_def_or_raise`` user-code failure.
-
     RSP_4 = ErrorDef(
         WrongKindError,
-        "unsupported function_def kind {kind!r} in {manifest}; expected {allowed}",
+        "Cannot run a function of kind {kind!r} from {manifest}; expected {allowed}",
     )
-    # ``load_function_def_or_raise`` wrong kind.
-
     RSP_5 = ErrorDef(
         NoPluginError,
-        "no source plugin registered for {src_type}: {detail}",
+        "Cannot find a source plugin for {source_type}: {detail}",
     )
-    # ``_resolve_plugin`` ``KeyError``.
-
     RSP_6 = ErrorDef(
         PluginFailedError,
-        "plugin read_in failed: {detail}",
+        "Cannot read the inputs through the source plugin: {detail}",
     )
-    # ``_invoke_read_in`` catch-all.
-
     RSP_7 = ErrorDef(
         PluginFailedError,
-        "plugin returned {returned} input slot(s); source cardinality is {expected}",
+        (
+            "Cannot use the {returned} input slot(s) the source plugin returned; "
+            "the source declares {expected}"
+        ),
     )
-    # ``_write_inputs_manifest`` cardinality mismatch. Same exit code
-    # as RSP_6 (both are "the source plugin behaved unexpectedly").
-
     RSP_8 = ErrorDef(
         ManifestWriteFailedError,
-        "failed to write inputs manifest {path}: {detail}",
+        "Cannot write the inputs manifest {path}: {detail}",
     )
-    # ``InputManifest.write`` ``OSError``.
-
     RSP_9 = ErrorDef(
         BadStateInError,
-        "unreadable state-in {state_file}: {detail}",
+        "Cannot read the previous state {state_file}: {detail}",
     )
-    # ``State.hydrate`` -- previous run's state parquet couldn't be
-    # read or decoded.
-
     RSP_10 = ErrorDef(
         BadStateOutError,
-        "unwritable state-out {state_file}: {detail}",
+        "Cannot write the state {state_file}: {detail}",
     )
-    # ``State.drain`` -- ctx scratch couldn't be
-    # persisted (typically a bad value injected past the
-    # ``set_attr`` validator).
-
     RSP_11 = ErrorDef(
         UnsupportedStageSchemeError,
-        "stream-publisher function_stage URI {uri} uses scheme {scheme!r} "
-        "which is not yet supported by run-source-plugin "
-        "(only file:// is supported today)",
+        ("Cannot read the stream stage {uri}: its scheme {scheme!r} is not supported"),
     )
-    # Raised on the stream-publisher path when ``info.function_stage.uri``
-    # is not a ``file://`` URI. Cloud schemes (``s3://`` / ``az://`` /
-    # ``gcs://``) will land once the streamer pod runtime handles them.
