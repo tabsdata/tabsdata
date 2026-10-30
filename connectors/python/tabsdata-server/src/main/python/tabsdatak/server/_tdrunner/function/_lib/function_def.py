@@ -31,6 +31,7 @@ from pydantic import ValidationError
 
 from tabsdatak._info import (
     PublisherInfo,
+    StreamPublisherInfo,
     SubscriberInfo,
     TransformerInfo,
 )
@@ -41,17 +42,17 @@ from tabsdatak.common._archive.bundle import (
 from tabsdatak.error import ErrorCode, TabsdataException
 
 # Union of every `*Info` shape a command might load.
-FunctionInfo = PublisherInfo | TransformerInfo | SubscriberInfo
+FunctionInfo = PublisherInfo | StreamPublisherInfo | TransformerInfo | SubscriberInfo
 
 
-def load_function_def_or_raise(
+def load_function_def_or_raise[Definition: FunctionInfo](
     bundle_folder: Path,
     *,
-    allowed_kinds: dict[str, type[FunctionInfo]],
+    allowed_kinds: dict[str, type[Definition]],
     bad_bundle_code: ErrorCode,
     bad_user_code_code: ErrorCode,
     wrong_kind_code: ErrorCode,
-) -> FunctionInfo:
+) -> Definition:
     """:func:`load_function_def` with per-command typed-error wraps.
 
     Typed counterpart of :func:`load_function_def`: instead of three

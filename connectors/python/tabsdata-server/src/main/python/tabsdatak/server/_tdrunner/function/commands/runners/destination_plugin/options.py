@@ -15,14 +15,9 @@ from tabsdatak.server._tdrunner.function._commons.run.arguments import (
 
 @dataclass(frozen=True, kw_only=True)
 class RunDestinationPluginArguments(CommandArguments):
-    request: Path = option(help="Path to request.yaml.")
-    bundle_folder: Path = option(help="Extracted bundle folder.")
+    request: Path = option(help="Path to the request file.")
+    bundle_folder: Path = option(help="Folder holding the extracted bundle.")
     outputs_manifest: Path = option(
-        help=(
-            "Path to the YAML outputs manifest produced by run-function. Entries "
-            "are consumed positionally — one parquet per slot in declaration "
-            "order. Entries without a `uri` are rejected (subscribers must return "
-            "concrete frames for every slot)."
-        ),
+        help="Path to the outputs manifest run-function wrote."
     )
     connection_file: Path = option(help="Path to the connection definition file.")

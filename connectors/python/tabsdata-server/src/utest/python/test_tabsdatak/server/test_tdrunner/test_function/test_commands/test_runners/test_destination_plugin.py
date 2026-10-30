@@ -2,15 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Tests for the run-destination-plugin command.
-
-Covers:
-  * Helper-function unit tests (`_load_function_def`,
-    `_resolve_plugin`, `_read_tables`, `_write_tables`, `_DestContext`).
-  * `main()` error paths and end-to-end happy path against the real
-    `tabsdata-conn-localfile` destination.
-"""
-
 from __future__ import annotations
 
 import importlib
@@ -35,11 +26,6 @@ from tabsdatak.server._tdrunner.function._handlers.columns import ColumnPolicy, 
 from tabsdatak.server._tdrunner.function._handlers.handoff import FileDestinationHandoff
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin import (
-    _write_tables,
-    _DestContext,
-    _load_function_def,
-    _read_tables,
-    _resolve_plugin,
     main,
     runner as runner_module,
 )
@@ -54,6 +40,13 @@ from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.err
     RunDestinationPluginErrorCode,
     WrongKindError,
 )
+from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.runner import (  # noqa: E501
+    DestinationContext,
+    load_function_definition,
+    read_tables,
+    resolve_plugin,
+    write_tables,
+)
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payload
@@ -61,13 +54,15 @@ from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payl
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
-_MOD = "tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.runner"
+RUNNER_MODULE = (
+    "tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.runner"
+)
 
 
 # --- shared fixtures ----------------------------------------------------
 
 
-_USER_SUBSCRIBER_SRC = """\
+USER_SUBSCRIBER_SOURCE = """\
 from __future__ import annotations
 
 from tabsdatak.api import TableFrameSpec, subscriber
@@ -90,14 +85,14 @@ def my_subscriber(in_1: TableFrameSpec) -> TableFrameSpec:
 @pytest.fixture
 def user_project(tmp_path, monkeypatch) -> Path:
     """User project carrying a @subscriber. The destination writes to
-    a sibling `dest_out/` dir under tmp_path."""
-    dest_out = tmp_path / "dest_out"
-    dest_out.mkdir()
+    a sibling `destination/` folder under tmp_path."""
+    destination_folder = tmp_path / "destination"
+    destination_folder.mkdir()
     project = tmp_path / "project"
-    pkg = project / "sub_pkg"
-    pkg.mkdir(parents=True)
-    (pkg / "__init__.py").write_text("")
-    (pkg / "subscriber.py").write_text(_USER_SUBSCRIBER_SRC)
+    package = project / "sub_pkg"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("")
+    (package / "subscriber.py").write_text(USER_SUBSCRIBER_SOURCE)
     monkeypatch.syspath_prepend(str(project))
     importlib.invalidate_caches()
     yield project
@@ -123,7 +118,7 @@ def built_bundle(tmp_path, user_project, fixture_subscriber) -> Path:
     return extracted
 
 
-def _write_request(path: Path, bundle_uri: str = "file:///bundle.tar.zst") -> Path:
+def write_request(path: Path, bundle_uri: str = "file:///bundle.tar.zst") -> Path:
     path.write_text(
         yaml.safe_dump({
             "Function": {
@@ -144,7 +139,7 @@ def _write_request(path: Path, bundle_uri: str = "file:///bundle.tar.zst") -> Pa
     return path
 
 
-def _land(request_path: Path, frame: pl.DataFrame) -> OutputEntry:
+def land(request_path: Path, frame: pl.DataFrame) -> OutputEntry:
     request = Request.load(request_path, RunDestinationPluginErrorCode.RDP_1)
     target = TableFile.stored(request.info.landing_file(0))
     value = TableFrame._build(frame.lazy(), CreationMode.MUT)
@@ -152,7 +147,7 @@ def _land(request_path: Path, frame: pl.DataFrame) -> OutputEntry:
     return OutputEntry(name="out_0", uri=target.uri)
 
 
-def _write_connection_file(path: Path, base_path: Path) -> Path:
+def write_connection_file(path: Path, base_path: Path) -> Path:
     """Write the connection.yaml the command loads via --connection-file.
 
     The connection is no longer carried on the function descriptor; the
@@ -165,10 +160,10 @@ def _write_connection_file(path: Path, base_path: Path) -> Path:
     return path
 
 
-def _set_argv(
+def set_arguments(
     monkeypatch,
     request_path: Path,
-    bundle_dir: Path,
+    bundle_folder: Path,
     outputs_manifest: Path,
     liveness: Path,
     *,
@@ -185,7 +180,7 @@ def _set_argv(
             "--request",
             str(request_path),
             "--bundle-folder",
-            str(bundle_dir),
+            str(bundle_folder),
             "--outputs-manifest",
             str(outputs_manifest),
             "--connection-file",
@@ -204,10 +199,10 @@ def _set_argv(
     )
 
 
-# --- unit: _DestContext --------------------------------------------------
+# --- unit: DestinationContext --------------------------------------------------
 
 
-def _dest_ctx(**kwargs) -> _DestContext:
+def destination_context(**overrides) -> DestinationContext:
     """Default-fill the new DestContext fields so each test only has to
     override what it's exercising."""
     defaults = dict(
@@ -226,56 +221,56 @@ def _dest_ctx(**kwargs) -> _DestContext:
         physical_function_run_id="pfr-1",
         triggered_on=datetime.fromisoformat("2026-06-04T07:14:28.376000+00:00"),
     )
-    defaults.update(kwargs)
-    return _DestContext(**defaults)
+    defaults.update(overrides)
+    return DestinationContext(**defaults)
 
 
 def test_dest_context_exposes_fields():
-    ctx = _dest_ctx()
-    assert ctx.work_dir == Path("/work")
-    assert ctx.execution_id == "exec1"
-    assert ctx.transaction_id == "tx1"
-    assert ctx.triggered_on == datetime.fromisoformat(
+    context = destination_context()
+    assert context.work_dir == Path("/work")
+    assert context.execution_id == "exec1"
+    assert context.transaction_id == "tx1"
+    assert context.triggered_on == datetime.fromisoformat(
         "2026-06-04T07:14:28.376000+00:00"
     )
-    assert ctx.collection_id == "c_id"
-    assert ctx.collection == "c_name"
-    assert ctx.function_id == "fn_run_42"
-    assert ctx.function == "publish_people"
+    assert context.collection_id == "c_id"
+    assert context.collection == "c_name"
+    assert context.function_id == "fn_run_42"
+    assert context.function == "publish_people"
 
 
 def test_dest_context_get_attr_returns_none_for_unset_key():
     """``get_attr`` honours the ``returns None if unset`` contract on
-    a fresh ctx."""
-    assert _dest_ctx().get_attr("k") is None
+    a fresh context."""
+    assert destination_context().get_attr("k") is None
 
 
 def test_dest_context_set_attr_round_trips_via_get_attr():
     """``set_attr`` writes through; a subsequent ``get_attr`` sees
     the value."""
-    c = _dest_ctx()
-    c.set_attr("k", "v")
-    assert c.get_attr("k") == "v"
+    context = destination_context()
+    context.set_attr("k", "v")
+    assert context.get_attr("k") == "v"
 
 
 def test_dest_context_add_metadata_is_noop():
     """No observability sink wired yet -- ``add_metadata`` is a no-op."""
-    assert _dest_ctx().add_metadata("k", "v") is None
+    assert destination_context().add_metadata("k", "v") is None
 
 
-# --- unit: _load_function_def -------------------------------------------
+# --- unit: load_function_definition -------------------------------------------
 
 
 def test_load_function_def_happy(built_bundle):
-    info = _load_function_def(built_bundle)
-    assert isinstance(info, SubscriberInfo)
+    subscriber = load_function_definition(built_bundle)
+    assert isinstance(subscriber, SubscriberInfo)
 
 
 def test_load_function_def_missing_manifest_raises_bad_bundle(tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()
     with pytest.raises(BadBundleError):
-        _load_function_def(empty)
+        load_function_definition(empty)
 
 
 def test_load_function_def_malformed_json_raises_bad_bundle(tmp_path):
@@ -283,7 +278,7 @@ def test_load_function_def_malformed_json_raises_bad_bundle(tmp_path):
     bad.mkdir()
     (bad / BUNDLE_MANIFEST_FILENAME).write_text("{ not json")
     with pytest.raises(BadBundleError):
-        _load_function_def(bad)
+        load_function_definition(bad)
 
 
 def test_load_function_def_wrong_kind_raises_wrong_kind(built_bundle):
@@ -294,7 +289,7 @@ def test_load_function_def_wrong_kind_raises_wrong_kind(built_bundle):
     data["kind"] = "publisherDef"
     manifest.write_text(json.dumps(data))
     with pytest.raises(WrongKindError):
-        _load_function_def(built_bundle)
+        load_function_definition(built_bundle)
 
 
 def test_load_function_def_unresolvable_func_raises_bad_user_code(built_bundle):
@@ -305,82 +300,84 @@ def test_load_function_def_unresolvable_func_raises_bad_user_code(built_bundle):
     data["spec"]["func"] = "nonexistent.module:nope"
     manifest.write_text(json.dumps(data))
     with pytest.raises(BadUserCodeError):
-        _load_function_def(built_bundle)
+        load_function_definition(built_bundle)
 
 
-# --- unit: _resolve_plugin ----------------------------------------------
+# --- unit: resolve_plugin ----------------------------------------------
 
 
 def test_resolve_plugin_happy(fixture_subscriber):
-    plugin = _resolve_plugin(fixture_subscriber)
+    plugin = resolve_plugin(fixture_subscriber)
     # LocalFileDestPlugin is what's registered for LocalFileDest.
     assert plugin.__class__.__name__ == "LocalFileDestPlugin"
 
 
 def test_resolve_plugin_unknown_dest_raises_no_plugin(fixture_subscriber, monkeypatch):
-    def _raise(_cls):
+    def _raise(_destination_class):
         raise KeyError("no DestDef registered")
 
-    monkeypatch.setattr(f"{_MOD}.get_dest", _raise)
+    monkeypatch.setattr(f"{RUNNER_MODULE}.get_dest", _raise)
     with pytest.raises(NoPluginError):
-        _resolve_plugin(fixture_subscriber)
+        resolve_plugin(fixture_subscriber)
 
 
-# --- unit: _read_tables -------------------------------------------------
+# --- unit: read_tables -------------------------------------------------
 
 
-def _handoff(tmp_path: Path) -> FileDestinationHandoff:
+def file_handoff(tmp_path: Path) -> FileDestinationHandoff:
     return FileDestinationHandoff(base_folder=tmp_path / "work")
 
 
 def test_read_tables_maps_an_output_without_data_to_bad_manifest(tmp_path):
     request = Request.load(
-        _write_request(tmp_path / "request.yaml"), RunDestinationPluginErrorCode.RDP_1
+        write_request(tmp_path / "request.yaml"), RunDestinationPluginErrorCode.RDP_1
     )
     manifest = OutputManifest(outputs=(OutputEntry(name="out_0"),))
     with pytest.raises(BadManifestError):
-        _read_tables(_handoff(tmp_path), request, manifest)
+        read_tables(file_handoff(tmp_path), request, manifest)
 
 
 def test_read_tables_maps_an_unreadable_landing_file_to_copy_failed(tmp_path):
     request = Request.load(
-        _write_request(tmp_path / "request.yaml"), RunDestinationPluginErrorCode.RDP_1
+        write_request(tmp_path / "request.yaml"), RunDestinationPluginErrorCode.RDP_1
     )
     entry = OutputEntry(name="out_0", uri=request.info.landing_file(0).uri)
     with pytest.raises(OutputCopyFailedError):
-        _read_tables(_handoff(tmp_path), request, OutputManifest(outputs=(entry,)))
+        read_tables(file_handoff(tmp_path), request, OutputManifest(outputs=(entry,)))
 
 
-# --- unit: _write_tables ------------------------------------------------
+# --- unit: write_tables ------------------------------------------------
 
 
 def test_write_tables_returns_normally(tmp_path):
     calls = []
 
-    class _Plugin:
-        def write_out(self, ctx, conn, dest, tables):
-            calls.append((ctx, conn, dest, tables))
+    class Plugin:
+        def write_out(self, context, connection, destination, tables):
+            calls.append((context, connection, destination, tables))
 
-    ctx = _dest_ctx(work_folder=tmp_path)
-    _write_tables(_handoff(tmp_path), _Plugin(), ctx, object(), object(), [Path("/x")])
+    context = destination_context(work_folder=tmp_path)
+    write_tables(
+        file_handoff(tmp_path), Plugin(), context, object(), object(), [Path("/x")]
+    )
     assert len(calls) == 1
 
 
 def test_write_tables_wraps_plugin_exception(tmp_path):
-    class _Plugin:
-        def write_out(self, ctx, conn, dest, tables):
+    class Plugin:
+        def write_out(self, context, connection, destination, tables):
             raise RuntimeError("boom")
 
-    ctx = _dest_ctx(work_folder=tmp_path)
+    context = destination_context(work_folder=tmp_path)
     with pytest.raises(PluginFailedError):
-        _write_tables(_handoff(tmp_path), _Plugin(), ctx, object(), object(), [])
+        write_tables(file_handoff(tmp_path), Plugin(), context, object(), object(), [])
 
 
 # --- main: error paths --------------------------------------------------
 
 
 def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch, http_ok_url):
-    _set_argv(
+    set_arguments(
         monkeypatch,
         tmp_path / "no.yaml",
         tmp_path / "bundle",
@@ -393,10 +390,10 @@ def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch, http_ok
 
 
 def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch, http_ok_url):
-    req = _write_request(tmp_path / "request.yaml")
-    _set_argv(
+    request_path = write_request(tmp_path / "request.yaml")
+    set_arguments(
         monkeypatch,
-        req,
+        request_path,
         tmp_path / "no-bundle",
         tmp_path / "outputs.yaml",
         tmp_path / "live",
@@ -414,17 +411,17 @@ def test_main_invalid_options_returns_1(monkeypatch):
 def test_main_missing_outputs_manifest_returns_bad_manifest(
     tmp_path, built_bundle, monkeypatch, http_ok_url
 ):
-    req = _write_request(tmp_path / "request.yaml")
-    conn_file = _write_connection_file(
-        tmp_path / "connection.yaml", tmp_path / "dest_out"
+    request_path = write_request(tmp_path / "request.yaml")
+    connection_file = write_connection_file(
+        tmp_path / "connection.yaml", tmp_path / "destination"
     )
-    _set_argv(
+    set_arguments(
         monkeypatch,
-        req,
+        request_path,
         built_bundle,
         tmp_path / "no-outputs.yaml",
         tmp_path / "live",
-        connection_file=conn_file,
+        connection_file=connection_file,
         responder_url=http_ok_url,
     )
     assert main() == BadManifestError.exit_code
@@ -435,19 +432,19 @@ def test_main_all_null_manifest_skips_write_out(
 ):
     # A subscriber that returns None for every output slot produced no new data
     # this run, so the destination plugin is skipped and main() succeeds.
-    req = _write_request(tmp_path / "request.yaml")
-    conn_file = _write_connection_file(
-        tmp_path / "connection.yaml", tmp_path / "dest_out"
+    request_path = write_request(tmp_path / "request.yaml")
+    connection_file = write_connection_file(
+        tmp_path / "connection.yaml", tmp_path / "destination"
     )
     outputs_manifest = tmp_path / "outputs.yaml"
     OutputManifest(outputs=(OutputEntry(name="out_0"),)).write(outputs_manifest)
-    _set_argv(
+    set_arguments(
         monkeypatch,
-        req,
+        request_path,
         built_bundle,
         outputs_manifest,
         tmp_path / "live",
-        connection_file=conn_file,
+        connection_file=connection_file,
         responder_url=http_ok_url,
     )
     assert main() == 0
@@ -461,73 +458,73 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
     framework column, point the outputs manifest at it, invoke main();
     verify the destination plugin shipped only the user's columns.
     """
-    request_path = _write_request(tmp_path / "request.yaml")
-    landed = _land(request_path, pl.DataFrame({"id": [1, 2, 3], "name": list("abc")}))
+    request_path = write_request(tmp_path / "request.yaml")
+    landed = land(request_path, pl.DataFrame({"id": [1, 2, 3], "name": list("abc")}))
 
     outputs_manifest = tmp_path / "outputs.yaml"
     OutputManifest(outputs=(landed,)).write(outputs_manifest)
 
-    # The connection (with the dest base_path) now comes from the
+    # The connection (with the destination base_path) now comes from the
     # connection file the runtime loads, not from the function descriptor.
-    conn_file = _write_connection_file(
-        tmp_path / "connection.yaml", tmp_path / "dest_out"
+    connection_file = write_connection_file(
+        tmp_path / "connection.yaml", tmp_path / "destination"
     )
 
     liveness = tmp_path / "live"
-    _set_argv(
+    set_arguments(
         monkeypatch,
         request_path,
         built_bundle,
         outputs_manifest,
         liveness,
-        connection_file=conn_file,
+        connection_file=connection_file,
         responder_url=http_ok_url,
     )
 
-    rc = main()
-    assert rc == 0, f"main() returned {rc}"
+    status = main()
+    assert status == 0, f"main() returned {status}"
 
-    # LocalFileDest wrote sink.parquet under tmp_path/dest_out (the
+    # LocalFileDest wrote sink.parquet under tmp_path/destination_folder (the
     # base_path baked into the user project's destination).
-    shipped = tmp_path / "dest_out" / "sink.parquet"
+    shipped = tmp_path / "destination" / "sink.parquet"
     assert shipped.is_file()
-    df = pl.read_parquet(shipped)
-    assert df.columns == ["id", "name"]
-    assert df["id"].to_list() == [1, 2, 3]
-    assert df["name"].to_list() == ["a", "b", "c"]
+    shipped_frame = pl.read_parquet(shipped)
+    assert shipped_frame.columns == ["id", "name"]
+    assert shipped_frame["id"].to_list() == [1, 2, 3]
+    assert shipped_frame["name"].to_list() == ["a", "b", "c"]
 
     assert liveness.exists()
 
 
-def _shipping_setup(tmp_path, built_bundle, monkeypatch, http_ok_url):
-    request_path = _write_request(tmp_path / "request.yaml")
-    landed = _land(request_path, pl.DataFrame({"id": [1], "name": ["a"]}))
+def shipping_setup(tmp_path, built_bundle, monkeypatch, http_ok_url):
+    request_path = write_request(tmp_path / "request.yaml")
+    landed = land(request_path, pl.DataFrame({"id": [1], "name": ["a"]}))
     outputs_manifest = tmp_path / "outputs.yaml"
     OutputManifest(outputs=(landed,)).write(outputs_manifest)
-    conn_file = _write_connection_file(
-        tmp_path / "connection.yaml", tmp_path / "dest_out"
+    connection_file = write_connection_file(
+        tmp_path / "connection.yaml", tmp_path / "destination"
     )
-    _set_argv(
+    set_arguments(
         monkeypatch,
         request_path,
         built_bundle,
         outputs_manifest,
         tmp_path / "live",
-        connection_file=conn_file,
+        connection_file=connection_file,
         responder_url=http_ok_url,
     )
-    return tmp_path / "dest_out" / "sink.parquet"
+    return tmp_path / "destination" / "sink.parquet"
 
 
 def test_main_tells_the_server_before_it_writes(
     tmp_path, built_bundle, monkeypatch, http_ok_url
 ):
-    shipped = _shipping_setup(tmp_path, built_bundle, monkeypatch, http_ok_url)
+    shipped = shipping_setup(tmp_path, built_bundle, monkeypatch, http_ok_url)
     seen: list[bool] = []
     monkeypatch.setattr(
         runner_module,
         "notify_step_destination_write",
-        lambda _args: seen.append(shipped.exists()),
+        lambda _arguments: seen.append(shipped.exists()),
     )
     assert main() == 0
     assert seen == [False]
@@ -537,9 +534,9 @@ def test_main_tells_the_server_before_it_writes(
 def test_main_writes_nothing_when_the_server_cannot_be_told(
     tmp_path, built_bundle, monkeypatch, http_ok_url
 ):
-    shipped = _shipping_setup(tmp_path, built_bundle, monkeypatch, http_ok_url)
+    shipped = shipping_setup(tmp_path, built_bundle, monkeypatch, http_ok_url)
 
-    def unreachable(_args):
+    def unreachable(_arguments):
         raise OSError("apiserver unreachable")
 
     monkeypatch.setattr(runner_module, "notify_step_destination_write", unreachable)

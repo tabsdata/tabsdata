@@ -2,129 +2,90 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Error model for the run-destination-plugin command (exit codes 10..)."""
-
 from __future__ import annotations
 
 from tabsdatak.error import ErrorCode, ErrorDef
 from tabsdatak.server._tdrunner.function._lib.errors import (
-    BadBundleError as _BadBundleError,
-    BadManifestError as _BadManifestError,
-    BadRequestError as _BadRequestError,
-    BadUserCodeError as _BadUserCodeError,
-    NoPluginError as _NoPluginError,
-    PluginFailedError as _PluginFailedError,
-    WriteFailedError as _WriteFailedError,
-    WrongKindError as _WrongKindError,
+    BadBundleError as CommandBadBundleError,
+    BadManifestError as CommandBadManifestError,
+    BadRequestError as CommandBadRequestError,
+    BadUserCodeError as CommandBadUserCodeError,
+    NoPluginError as CommandNoPluginError,
+    PluginFailedError as CommandPluginFailedError,
+    WriteFailedError as CommandWriteFailedError,
+    WrongKindError as CommandWrongKindError,
 )
 
 
-class BadRequestError(_BadRequestError):
+class BadRequestError(CommandBadRequestError):
     exit_code = 10
 
 
-class BadBundleError(_BadBundleError):
-    """``function_def.json`` missing, unreadable, or malformed."""
-
+class BadBundleError(CommandBadBundleError):
     exit_code = 11
 
 
-class BadUserCodeError(_BadUserCodeError):
+class BadUserCodeError(CommandBadUserCodeError):
     exit_code = 12
 
 
-class WrongKindError(_WrongKindError):
-    """Bundle's ``kind`` isn't ``subscriberDef``."""
-
+class WrongKindError(CommandWrongKindError):
     exit_code = 13
 
 
-class NoPluginError(_NoPluginError):
-    """No ``DestPlugin`` is registered for the resolved destination
-    class."""
-
+class NoPluginError(CommandNoPluginError):
     exit_code = 14
 
 
-class PluginFailedError(_PluginFailedError):
-    """The destination plugin's ``write_out()`` raised an exception."""
-
+class PluginFailedError(CommandPluginFailedError):
     exit_code = 15
 
 
-class BadManifestError(_BadManifestError):
-    """Outputs manifest missing, unreadable, malformed, or contains an
-    entry without a ``uri`` (subscribers must return concrete frames for
-    every slot)."""
-
+class BadManifestError(CommandBadManifestError):
     exit_code = 16
 
 
-class OutputCopyFailedError(_WriteFailedError):
-    """A landed output could not be read from storage or copied to the
-    local file handed to the plugin."""
-
+class OutputCopyFailedError(CommandWriteFailedError):
     exit_code = 17
 
 
 class RunDestinationPluginErrorCode(ErrorCode):
     RDP_1 = ErrorDef(
         BadRequestError,
-        "unreadable request.yaml {path}: {detail}",
+        "Cannot read the request {path}: {detail}",
     )
-    # ``Request.load``.
-
     RDP_2 = ErrorDef(
         BadBundleError,
-        "could not load function_def.json from {bundle_folder}: {detail}",
+        "Cannot load the function definition from {bundle_folder}: {detail}",
     )
-    # ``load_function_def_or_raise`` bundle-shape failure (manifest
-    # missing, unreadable, malformed JSON, unexpected error).
-
     RDP_3 = ErrorDef(
         BadUserCodeError,
-        "could not resolve user function from {bundle_folder}: {detail}",
+        "Cannot resolve the user function from {bundle_folder}: {detail}",
     )
-    # ``load_function_def_or_raise`` user-code failure (pydantic
-    # ``ValidationError``).
-
     RDP_4 = ErrorDef(
         WrongKindError,
-        "unsupported function_def kind {kind!r} in {manifest}; expected {allowed}",
+        "Cannot run a function of kind {kind!r} from {manifest}; expected {allowed}",
     )
-    # ``load_function_def_or_raise`` kind mismatch (bundle isn't a
-    # subscriberDef).
-
     RDP_5 = ErrorDef(
         NoPluginError,
-        "no destination plugin registered for {dest_type}: {detail}",
+        "Cannot find a destination plugin for {destination_type}: {detail}",
     )
-    # ``_resolve_plugin`` ``KeyError`` from the connector registry.
-
     RDP_6 = ErrorDef(
         PluginFailedError,
-        "plugin write_out failed: {detail}",
+        "Cannot write the outputs through the destination plugin: {detail}",
     )
-    # ``_write_tables`` catch-all for plugin exceptions.
-
     RDP_7 = ErrorDef(
         BadManifestError,
-        "could not load outputs manifest {path}: {detail}",
+        "Cannot read the outputs manifest {path}: {detail}",
     )
-    # ``OutputManifest.load`` ``ManifestError`` (missing / malformed).
-
     RDP_8 = ErrorDef(
         BadManifestError,
         (
-            "output slot {slot} ({name!r}) is null — subscribers must return "
-            "a concrete frame for every output slot"
+            "Cannot hand over output {slot} ({name!r}): the subscriber returned no "
+            "frame for it, and a destination needs one for every output"
         ),
     )
-    # ``DestinationHandoff.seed`` ``MissingOutputError``: an entry without a ``uri``.
-
     RDP_9 = ErrorDef(
         OutputCopyFailedError,
-        "failed to copy landed output {slot} from {path}: {detail}",
+        "Cannot copy the landed output {slot} from {path}: {detail}",
     )
-    # ``DestinationHandoff.seed`` ``OutputCopyError``: the landing file could not be
-    # read or copied.

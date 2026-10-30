@@ -2,14 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""run-destination-plugin runner.
-
-The command's logic, callable without argparse or the responder. The
-package ``__init__`` wraps :func:`run` in the ``@command`` entrypoint
-for the console script; the compound imports :func:`run` directly and
-supplies pre-built ``RunDestinationPluginArguments``.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -45,15 +37,16 @@ from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.err
 from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.options import (  # noqa: E501
     RunDestinationPluginArguments,
 )
-from tabsdatak.spi import DestContext
+from tabsdatak.spi import Conn, Dest, DestContext, DestPlugin
 
 logger = logging.getLogger(__name__)
 
 
-def _load_function_def(bundle_folder: Path) -> SubscriberInfo:
-    """Load the subscriber's ``function_def.json`` -- thin wrapper over
-    :func:`load_function_def_or_raise` pinning the accepted kind set
-    and the command's per-site error codes."""
+class DestinationContext(FromRequestCtx, DestContext):
+    pass
+
+
+def load_function_definition(bundle_folder: Path) -> SubscriberInfo:
     return load_function_def_or_raise(
         bundle_folder,
         allowed_kinds={KIND_SUBSCRIBER_DEF: SubscriberInfo},
@@ -63,28 +56,28 @@ def _load_function_def(bundle_folder: Path) -> SubscriberInfo:
     )
 
 
-class _DestContext(FromRequestCtx, DestContext):
-    """Concrete :class:`DestContext` for the run-destination-plugin command.
-
-    All behaviour comes from :class:`FromRequestCtx`; this class
-    only fixes the abstract base so ``isinstance(ctx, DestContext)``
-    holds at the call boundary.
-    """
-
-
-def _resolve_plugin(info: SubscriberInfo):
+def resolve_plugin(subscriber: SubscriberInfo) -> DestPlugin:
     try:
-        dest_def = get_dest(type(info.destination))
-    except KeyError as exc:
+        definition = get_dest(type(subscriber.destination))
+    except KeyError as error:
         raise RunDestinationPluginErrorCode.RDP_5.exception(
-            cause=exc,
-            dest_type=type(info.destination).__name__,
-            detail=str(exc),
+            cause=error,
+            destination_type=type(subscriber.destination).__name__,
+            detail=str(error),
         )
-    return dest_def.plugin()
+    return definition.plugin()
 
 
-def _read_tables(
+def load_manifest(path: Path) -> OutputManifest:
+    try:
+        return OutputManifest.load(path)
+    except ManifestError as error:
+        raise RunDestinationPluginErrorCode.RDP_7.exception(
+            cause=error, path=path, detail=str(error)
+        )
+
+
+def read_tables(
     handoff: DestinationHandoff, request: Request, manifest: OutputManifest
 ) -> list[Path]:
     try:
@@ -99,76 +92,54 @@ def _read_tables(
         )
 
 
-def _write_tables(
-    handoff: DestinationHandoff, plugin, ctx: DestContext, conn, dest, tables
+def write_tables(
+    handoff: DestinationHandoff,
+    plugin: DestPlugin,
+    context: DestContext,
+    connection: Conn,
+    destination: Dest,
+    tables: list[Path],
 ) -> None:
     try:
-        handoff.grow(plugin, ctx, conn, dest, tables)
-    except Exception as exc:
-        raise RunDestinationPluginErrorCode.RDP_6.exception(cause=exc, detail=str(exc))
+        handoff.grow(plugin, context, connection, destination, tables)
+    except Exception as error:
+        raise RunDestinationPluginErrorCode.RDP_6.exception(
+            cause=error, detail=str(error)
+        )
 
 
 def run(arguments: RunDestinationPluginArguments) -> int:
-    request_path = arguments.request
-    bundle_folder = arguments.bundle_folder
-    outputs_manifest_path = arguments.outputs_manifest
-    connection_file = arguments.connection_file
-
-    logger.info("Running destination plugin")
-    request = Request.load(request_path, RunDestinationPluginErrorCode.RDP_1)
-    info = _load_function_def(bundle_folder)
-    plugin = _resolve_plugin(info)
-    conn = load_connection(connection_file)
+    logger.info("Running the destination plugin")
+    request = Request.load(arguments.request, RunDestinationPluginErrorCode.RDP_1)
+    subscriber = load_function_definition(arguments.bundle_folder)
+    plugin = resolve_plugin(subscriber)
+    connection = load_connection(arguments.connection_file)
     logger.debug(
-        "Resolved Dest plugin %s for connector %s",
-        type(plugin).__name__,
-        type(conn).__name__,
+        f"Destination plugin {type(plugin).__name__} "
+        f"for connection {type(connection).__name__}"
     )
-
-    try:
-        manifest = OutputManifest.load(outputs_manifest_path)
-    except ManifestError as error:
-        raise RunDestinationPluginErrorCode.RDP_7.exception(
-            cause=error, path=outputs_manifest_path, detail=str(error)
-        )
-    entries = manifest.outputs
-    # Contract: a subscriber that returns None for every output slot produced no
-    # new data this run, so the destination plugin must NOT be invoked (skip the
-    # external write) rather than erroring on the null slots.
-    if entries and all(entry.uri is None for entry in entries):
+    manifest = load_manifest(arguments.outputs_manifest)
+    outputs = manifest.outputs
+    # A subscriber that returns None for every output produced no data this
+    # run: the destination is left untouched, rather than failing on them.
+    if outputs and all(output.uri is None for output in outputs):
         logger.info(
-            "Subscriber produced no data (all %d output slot(s) null); "
-            "skipping %s.write_out",
-            len(entries),
-            type(plugin).__name__,
+            f"The subscriber returned no data for its {len(outputs)} output(s); "
+            f"{type(plugin).__name__} is not called"
         )
         return 0
-    handoff = Handoff.of(plugin, Path(arguments.work_folder or tempfile.gettempdir()))
+    work_folder = arguments.work_folder or Path(tempfile.gettempdir())
+    handoff = Handoff.of(plugin, work_folder)
     try:
-        tables = _read_tables(handoff, request, manifest)
-        logger.debug(
-            "Outputs manifest has %d entries: %s; "
-            "passing %d table frame(s) to the plugin: %s",
-            len(entries),
-            entries,
-            len(tables),
-            tables,
-        )
-
-        ctx = _DestContext.from_info(bundle_folder, request.info)
+        tables = read_tables(handoff, request, manifest)
+        logger.debug(f"Outputs {outputs} handed over as {tables}")
+        context = DestinationContext.from_info(arguments.bundle_folder, request.info)
         notify_step_destination_write(arguments)
-        logger.info(
-            "Invoking %s.write_out: %d table frame(s) -> %s",
-            type(plugin).__name__,
-            len(tables),
-            type(conn).__name__,
+        logger.info(f"Writing {len(tables)} table(s) through {type(plugin).__name__}")
+        write_tables(
+            handoff, plugin, context, connection, subscriber.destination, tables
         )
-        _write_tables(handoff, plugin, ctx, conn, info.destination, tables)
     finally:
         handoff.harvest()
-    logger.info(
-        "Destination plugin completed: %d table frame(s) written to %s",
-        len(tables),
-        type(conn).__name__,
-    )
+    logger.info(f"Destination plugin wrote {len(tables)} table(s)")
     return 0

@@ -14,7 +14,7 @@ from tabsdatak.server._tdrunner.function._commons.run.version import version
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
-SECOND_GENERATION = {"get_bundle"}
+SECOND_GENERATION = {"get_bundle", "runners.destination_plugin"}
 
 
 def versioned() -> list[str]:
