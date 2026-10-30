@@ -1088,8 +1088,8 @@ class APIServer:
         input_idx: int,
         raise_for_status: bool = True,
     ):
-        # A publisher run stamps one landing-data file per input it ingested;
-        # `input_idx` selects among them. Returns the file as parquet bytes.
+        # A publisher run lands one file per table its source wrote; `input_idx`
+        # selects among them. Returns the file as parquet bytes.
         endpoint = self._scoped(
             f"/collections/{collection_name}/function-runs/{function_run_id}"
             f"/inputs/{input_idx}/landing-data"

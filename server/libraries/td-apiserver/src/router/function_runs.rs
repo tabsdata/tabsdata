@@ -80,7 +80,7 @@ pub async fn read_run(
     path = "/projects/{project}/collections/{collection}/function-runs/{function_run}/inputs/{input_idx}/landing-data",
     tag(FUNCTION_RUNS_TAG),
     content_type = "application/vnd.apache.parquet",
-    doc = "Download one stamped landing-data file a publisher run ingested"
+    doc = "Download one landing-data file a publisher run ingested"
 )]
 pub async fn landing_data(
     State(state): State<Services>,

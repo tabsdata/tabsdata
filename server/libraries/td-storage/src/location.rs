@@ -10,8 +10,8 @@ use td_objects::types::basic::{
     TableVersionId, TransactionId,
 };
 
-/// Extension of a stamped landing-data file. Mirrored by `LANDING_SUFFIX` in
-/// tabsdatak's runner, which writes the files this addresses.
+/// Extension of a landing-data file. Mirrored by `LANDING_SUFFIX` in tabsdatak's
+/// runner, which writes the files this addresses.
 const LANDING_FILE_SUFFIX: &str = ".t";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
@@ -38,7 +38,8 @@ pub enum StorageLocation {
     /// * `/LOCATION`
     /// * `/LOCATION/c/COLLECTION`
     /// * `/LOCATION/c/COLLECTION/x/TRANSACTION/f/FUNCTION_VERSION` (physical_function_run contents)
-    /// * `/LOCATION/c/COLLECTION/w/FUNCTION_RUN/r/INPUT_IDX.t` (a publisher run's landing data)
+    /// * `/LOCATION/c/COLLECTION/w/FUNCTION_RUN/r/POSITION.INDEX.t` and `.s` (a publisher run's landing data and its schema)
+    /// * `/LOCATION/c/COLLECTION/w/FUNCTION_RUN/r/INPUT_IDX.t` (a publisher run's landing data, as landed by 2.2.0)
     /// * `/LOCATION/c/COLLECTION/w/FUNCTION_RUN/s` (a run's scratch area)
     /// * `/LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION.t`
     /// * `/LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION/p/PARTITION.p`
@@ -468,14 +469,15 @@ impl FunctionRunBuilder {
     }
 
     /// Address the run's landing-data directory: what a publisher's source plugin
-    /// ingested, stamped with system columns, before the user function saw it.
+    /// ingested, before the user function saw it.
     pub fn landing(&mut self) -> &mut Self {
         self.info.is_landing = true;
         self
     }
 
-    /// Address one landing-data file, named by the input index the runner stamped
-    /// it with — a counter over every ingested file, not a parameter position.
+    /// Address one landing-data file as landed by 2.2.0, named by the input index the
+    /// runner stamped it with — a counter over every ingested file, not a parameter
+    /// position.
     pub fn landing_input(&mut self, input_idx: &InputIdx) -> &mut Self {
         self.info.is_landing = true;
         self.info.landing_input = Some(input_idx.to_string());

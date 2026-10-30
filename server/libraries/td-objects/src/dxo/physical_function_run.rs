@@ -251,8 +251,8 @@ pub struct FunctionRunParam {
     pub function_run: PhysicalFunctionRunId,
 }
 
-/// Names one stamped landing-data file of a run. The runner assigns the index as a
-/// counter over every file it ingested, so it is not a parameter position.
+/// Names one landing-data file of a run. The index numbers every file the run
+/// ingested in (position, index) order, so it is not a parameter position.
 #[ta_objects::UrlParam]
 pub struct InputIdxParam {
     pub input_idx: InputIdx,

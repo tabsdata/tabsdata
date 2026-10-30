@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::function_run::landing::{landing_file, read_landing_data};
+use crate::function_run::landing::{find_landing_file, read_landing_data};
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -60,17 +60,16 @@ async fn function_run_landing_data(
         ));
     }
 
-    let path = landing_file(&run, &input_idx.input_idx)?;
     // The index set lives in the runner, not the database: the only honest
     // existence check is against storage.
-    if !storage.exists(&path).await? {
+    let Some(path) = find_landing_file(&storage, &run, &input_idx.input_idx).await? else {
         return Err(api_error!(
             ApiError::NotFound,
             "function run {} has no landing data at input index {}",
             run_id,
             input_idx.input_idx
         ));
-    }
+    };
     read_landing_data(&storage, &path).await
 }
 
@@ -156,7 +155,7 @@ mod tests {
         Ok((collection, run))
     }
 
-    /// Writes `LANDING` where the runner would have uploaded it: the run's stamped
+    /// Writes `LANDING` where a 2.2.0 runner uploaded it: the run's landing
     /// prefix, under the physical run that ingested it, named by the index.
     async fn write_landing(
         context: &Services,
@@ -171,6 +170,28 @@ mod tests {
             .landing_input(input_idx)
             .build()?;
         context.storage.write(&path, LANDING.to_vec()).await?;
+        Ok(())
+    }
+
+    /// Writes `data` under the run's landing directory as `name`, the way the
+    /// source runner lands a `POSITION.INDEX.t` file and its `.s` schema.
+    async fn write_landed(
+        context: &Services,
+        collection: &CollectionDB,
+        run: &PhysicalFunctionRunDB,
+        name: &str,
+        data: &[u8],
+    ) -> Result<(), TdError> {
+        let (directory, _) = StorageLocation::from(&StorageVersion::default())
+            .builder(&run.base_path)
+            .collection(&collection.collection_id)
+            .function_run(&run.id)
+            .landing()
+            .build()?;
+        context
+            .storage
+            .write(&directory.child(name)?, data.to_vec())
+            .await?;
         Ok(())
     }
 
@@ -274,6 +295,52 @@ mod tests {
         let err = get_landing_data(&context, &p, "c0", &other_run, &idx)
             .await
             .expect_err("the run belongs to c1");
+        assert_eq!(err.api_error(), ApiError::NotFound);
+        Ok(())
+    }
+
+    /// The input index numbers the landed files in (position, index) order, the
+    /// order serving numbers them in, whatever order they were written in.
+    #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
+    async fn test_landing_data_numbers_landed_files_in_position_order(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let context = Services::with_defaults(db.clone());
+        let (collection, run) = seed_run(&db, &p, "c0", Decorator::Publisher).await?;
+        for name in ["10.0", "2.0", "0.1", "0.0"] {
+            write_landed(
+                &context,
+                &collection,
+                &run,
+                &format!("{name}.t"),
+                name.as_bytes(),
+            )
+            .await?;
+            write_landed(&context, &collection, &run, &format!("{name}.s"), b"schema").await?;
+        }
+
+        for (idx, name) in ["0.0", "0.1", "2.0", "10.0"].into_iter().enumerate() {
+            let idx = InputIdx::try_from(i32::try_from(idx).unwrap())?;
+            let bytes = get_landing_data(&context, &p, "c0", &run, &idx).await?;
+            assert_eq!(bytes, Bytes::from(name.as_bytes().to_vec()));
+        }
+        let err = get_landing_data(&context, &p, "c0", &run, &InputIdx::try_from(4)?)
+            .await
+            .expect_err("only four files were landed");
+        assert_eq!(err.api_error(), ApiError::NotFound);
+        Ok(())
+    }
+
+    #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
+    async fn test_landing_data_run_without_landing_not_found(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let context = Services::with_defaults(db.clone());
+        let (_, run) = seed_run(&db, &p, "c0", Decorator::Publisher).await?;
+
+        let err = get_landing_data(&context, &p, "c0", &run, &InputIdx::try_from(0)?)
+            .await
+            .expect_err("the run landed nothing");
         assert_eq!(err.api_error(), ApiError::NotFound);
         Ok(())
     }

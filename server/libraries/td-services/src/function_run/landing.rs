@@ -3,9 +3,15 @@
 //
 
 //! Storage addressing for a publisher run's landing data: what its source plugin
-//! ingested, stamped with the framework's system columns, before the user
-//! function saw it. Dispatch hands the directory to the worker and the read
-//! path addresses a single file in it, both from here so they cannot drift.
+//! ingested, before the user function saw it. Dispatch hands the directory to the
+//! worker and the read path addresses a single file in it, both from here so they
+//! cannot drift.
+//!
+//! A run lands one `POSITION.INDEX.t` file per table its source plugin wrote, the
+//! INDEX-th written for the function input at POSITION, next to its `.s` schema.
+//! The input index serving gives a file, and that provenance records, numbers
+//! the landed files in (POSITION, INDEX) order. Runs landed by 2.2.0 hold one
+//! stamped `INPUT_IDX.t` file per input index instead.
 
 use futures_util::TryStreamExt;
 use sync_wrapper::SyncStream;
@@ -37,6 +43,34 @@ pub fn landing_file(
         .landing_input(input_idx)
         .build()?;
     Ok(path)
+}
+
+pub async fn find_landing_file(
+    storage: &Storage,
+    run: &PhysicalFunctionRunDBWithNames,
+    input_idx: &InputIdx,
+) -> Result<Option<SPath>, TdError> {
+    let stamped = landing_file(run, input_idx)?;
+    if storage.exists(&stamped).await? {
+        return Ok(Some(stamped));
+    }
+    let Ok(nth) = usize::try_from(**input_idx) else {
+        return Ok(None);
+    };
+    let mut landed: Vec<((u64, u64), SPath)> = storage
+        .list(&landing_dir(run)?)
+        .await?
+        .into_iter()
+        .filter_map(|path| landed_order(&path).map(|order| (order, path)))
+        .collect();
+    landed.sort_by_key(|(order, _)| *order);
+    Ok(landed.into_iter().nth(nth).map(|(_, path)| path))
+}
+
+fn landed_order(path: &SPath) -> Option<(u64, u64)> {
+    let name = path.last_element()?.strip_suffix(".t")?;
+    let (position, index) = name.split_once('.')?;
+    Some((position.parse().ok()?, index.parse().ok()?))
 }
 
 pub async fn read_landing_data(
