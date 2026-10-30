@@ -80,19 +80,19 @@ class RunStreamerErrorCode(ErrorCode):
         BadBundleError,
         "could not load function_def.json from {bundle_folder}: {detail}",
     )
-    # ``load_function_def_or_raise`` bundle-shape failure.
+    # ``load_definition`` ``FunctionDefinitionError``: bundle-shape failure.
 
     RS_3 = ErrorDef(
         BadUserCodeError,
         "could not resolve user function from {bundle_folder}: {detail}",
     )
-    # ``load_function_def_or_raise`` user-code failure.
+    # ``load_definition`` ``InvalidDefinitionError``: user-code failure.
 
     RS_4 = ErrorDef(
         WrongKindError,
         "unsupported function_def kind {kind!r} in {manifest}; expected {allowed}",
     )
-    # ``load_function_def_or_raise`` wrong kind -- streamer pod only
+    # ``load_definition`` ``UnexpectedKindError`` -- streamer pod only
     # runs ``streamPublisherDef`` functions.
 
     RS_5 = ErrorDef(

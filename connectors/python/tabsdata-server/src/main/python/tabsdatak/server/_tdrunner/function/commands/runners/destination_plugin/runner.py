@@ -20,6 +20,12 @@ from tabsdatak.server._tdrunner.function._commons.manifests.output import (
 from tabsdatak.server._tdrunner.function._commons.run.command import (
     notify_step_destination_write,
 )
+from tabsdatak.server._tdrunner.function._commons.symbols.function import (
+    FunctionDefinitionError,
+    InvalidDefinitionError,
+    UnexpectedKindError,
+    load_definition,
+)
 from tabsdatak.server._tdrunner.function._handlers.handoff import (
     DestinationHandoff,
     Handoff,
@@ -27,9 +33,6 @@ from tabsdatak.server._tdrunner.function._handlers.handoff import (
     OutputCopyError,
 )
 from tabsdatak.server._tdrunner.function._lib.connection import load_connection
-from tabsdatak.server._tdrunner.function._lib.function_def import (
-    load_function_def_or_raise,
-)
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
 from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.error import (  # noqa: E501
     RunDestinationPluginErrorCode,
@@ -47,13 +50,27 @@ class DestinationContext(FromRequestCtx, DestContext):
 
 
 def load_function_definition(bundle_folder: Path) -> SubscriberInfo:
-    return load_function_def_or_raise(
-        bundle_folder,
-        allowed_kinds={KIND_SUBSCRIBER_DEF: SubscriberInfo},
-        bad_bundle_code=RunDestinationPluginErrorCode.RDP_2,
-        bad_user_code_code=RunDestinationPluginErrorCode.RDP_3,
-        wrong_kind_code=RunDestinationPluginErrorCode.RDP_4,
-    )
+    try:
+        return load_definition(bundle_folder, {KIND_SUBSCRIBER_DEF: SubscriberInfo})
+    except UnexpectedKindError as error:
+        raise RunDestinationPluginErrorCode.RDP_4.exception(
+            cause=error,
+            kind=error.kind,
+            manifest=error.manifest,
+            allowed=error.allowed,
+        )
+    except InvalidDefinitionError as error:
+        raise RunDestinationPluginErrorCode.RDP_3.exception(
+            cause=error,
+            bundle_folder=bundle_folder,
+            detail=error.detail,
+        )
+    except FunctionDefinitionError as error:
+        raise RunDestinationPluginErrorCode.RDP_2.exception(
+            cause=error,
+            bundle_folder=bundle_folder,
+            detail=error.detail,
+        )
 
 
 def resolve_plugin(subscriber: SubscriberInfo) -> DestPlugin:

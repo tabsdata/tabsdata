@@ -47,13 +47,16 @@ from tabsdatak.server._tdrunner.function._commons.solver.secrets import (
     StorageSecrets,
     take_project_secret,
 )
+from tabsdatak.server._tdrunner.function._commons.symbols.function import (
+    FunctionDefinitionError,
+    FunctionInfo,
+    InvalidDefinitionError,
+    UnexpectedKindError,
+    load_definition,
+)
 from tabsdatak.server._tdrunner.function._handlers.columns import ColumnPolicy, Zone
 from tabsdatak.server._tdrunner.function._handlers.state import State, StateOutput
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
-from tabsdatak.server._tdrunner.function._lib.function_def import (
-    FunctionInfo,
-    load_function_def_or_raise,
-)
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
 from tabsdatak.server._tdrunner.function.commands.runners.function.error import (
     RunFunctionErrorCode,
@@ -103,13 +106,27 @@ class FunctionContext(FromRequestCtx, FunctionCtx):
 
 
 def load_function_definition(bundle_folder: Path) -> FunctionInfo:
-    return load_function_def_or_raise(
-        bundle_folder,
-        allowed_kinds=DEFINITION_BY_KIND,
-        bad_bundle_code=RunFunctionErrorCode.RF_2,
-        bad_user_code_code=RunFunctionErrorCode.RF_3,
-        wrong_kind_code=RunFunctionErrorCode.RF_4,
-    )
+    try:
+        return load_definition(bundle_folder, DEFINITION_BY_KIND)
+    except UnexpectedKindError as error:
+        raise RunFunctionErrorCode.RF_4.exception(
+            cause=error,
+            kind=error.kind,
+            manifest=error.manifest,
+            allowed=error.allowed,
+        )
+    except InvalidDefinitionError as error:
+        raise RunFunctionErrorCode.RF_3.exception(
+            cause=error,
+            bundle_folder=bundle_folder,
+            detail=error.detail,
+        )
+    except FunctionDefinitionError as error:
+        raise RunFunctionErrorCode.RF_2.exception(
+            cause=error,
+            bundle_folder=bundle_folder,
+            detail=error.detail,
+        )
 
 
 def load_inputs(path: Path) -> tuple[InputEntry, ...]:
@@ -178,8 +195,6 @@ def build_input(record: InputRecord, *, definition: FunctionInfo) -> Input:
     if source is None:
         return None
     frame = scan_input(source)
-    # Publisher inputs were already stamped with their system columns, which
-    # they keep; stored tables get them regenerated for this function.
     if is_publisher(definition):
         return TableFrame._build(frame, CreationMode.TAB)
     return TableFrame._build(
@@ -210,8 +225,6 @@ def materialize_input_slot(
             return None
         if len(records) == 1:
             return build_input(records[0], definition=definition)
-        # Several files in one single-table slot are the chunks a source plugin
-        # wrote for one publisher input; for stored tables they are an error.
         if is_publisher(definition):
             return build_chunked_input(records)
         raise RunFunctionErrorCode.RF_11.exception(count=len(records))
@@ -257,8 +270,6 @@ def output_targets(
     definition: FunctionInfo,
     output_tables: list[str],
 ) -> list[TableFile]:
-    # Subscriber outputs land in the run's landing area for the destination
-    # plugin step; the others are stored tables, written where the request says.
     if isinstance(definition, SubscriberInfo):
         return [
             TableFile.stored(request.info.landing_file(position))
@@ -294,8 +305,6 @@ def sink_outputs(
     checks: list[Check] | None = None,
     state: StateOutput | None = None,
 ) -> OutputManifest:
-    # Every output and the state are written, and every check is evaluated, in
-    # one streaming pass, so the plan they share runs once.
     plans: list[pl.LazyFrame] = []
     written: list[tuple[str, TableFile]] = []
     for table_name, value, target in zip(

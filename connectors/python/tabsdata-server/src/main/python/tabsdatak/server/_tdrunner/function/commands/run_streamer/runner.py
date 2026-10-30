@@ -29,12 +29,15 @@ from tabsdatak.server._tdrunner.function._commons.run.shutdown import (
     is_shutdown_requested,
     request_shutdown,
 )
+from tabsdatak.server._tdrunner.function._commons.symbols.function import (
+    FunctionDefinitionError,
+    InvalidDefinitionError,
+    UnexpectedKindError,
+    load_definition,
+)
 from tabsdatak.server._tdrunner.function._lib.connection import load_connection
 from tabsdatak.server._tdrunner.function._lib.endpoint import (
     UnsupportedSchemeError as _StageUnsupportedSchemeError,
-)
-from tabsdatak.server._tdrunner.function._lib.function_def import (
-    load_function_def_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.journal import Journal
 from tabsdatak.server._tdrunner.function._lib.stream_src_ctx import (
@@ -54,13 +57,30 @@ def _load_function_def(bundle_folder: Path) -> StreamPublisherInfo:
     """Streamer-pod-only loader: accepts only ``streamPublisherDef``.
     A regular ``@publisher`` would surface as RS_4 here -- the streamer
     pod is meaningful for stream publishers only."""
-    return load_function_def_or_raise(
-        bundle_folder,
-        allowed_kinds={KIND_STREAM_PUBLISHER_DEF: StreamPublisherInfo},
-        bad_bundle_code=RunStreamerErrorCode.RS_2,
-        bad_user_code_code=RunStreamerErrorCode.RS_3,
-        wrong_kind_code=RunStreamerErrorCode.RS_4,
-    )
+    try:
+        return load_definition(
+            bundle_folder,
+            {KIND_STREAM_PUBLISHER_DEF: StreamPublisherInfo},
+        )
+    except UnexpectedKindError as error:
+        raise RunStreamerErrorCode.RS_4.exception(
+            cause=error,
+            kind=error.kind,
+            manifest=error.manifest,
+            allowed=error.allowed,
+        )
+    except InvalidDefinitionError as error:
+        raise RunStreamerErrorCode.RS_3.exception(
+            cause=error,
+            bundle_folder=bundle_folder,
+            detail=error.detail,
+        )
+    except FunctionDefinitionError as error:
+        raise RunStreamerErrorCode.RS_2.exception(
+            cause=error,
+            bundle_folder=bundle_folder,
+            detail=error.detail,
+        )
 
 
 def _resolve_plugin(info: StreamPublisherInfo):

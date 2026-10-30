@@ -30,12 +30,15 @@ from tabsdatak.server._tdrunner.function._commons.manifests.input import (
     InputManifest,
     InputRecord,
 )
+from tabsdatak.server._tdrunner.function._commons.symbols.function import (
+    FunctionDefinitionError,
+    InvalidDefinitionError,
+    UnexpectedKindError,
+    load_definition,
+)
 from tabsdatak.server._tdrunner.function._handlers.state import State
 from tabsdatak.server._tdrunner.function._lib.connection import load_connection
 from tabsdatak.server._tdrunner.function._lib.endpoint import UnsupportedSchemeError
-from tabsdatak.server._tdrunner.function._lib.function_def import (
-    load_function_def_or_raise,
-)
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
 from tabsdatak.server._tdrunner.function._lib.stage_backend import (
     stage_backend_from_location,
@@ -83,16 +86,33 @@ class SourceBinding:
 
 
 def load_function_definition(bundle_folder: Path) -> Publisher:
-    return load_function_def_or_raise(
-        bundle_folder,
-        allowed_kinds={
-            KIND_PUBLISHER_DEF: PublisherInfo,
-            KIND_STREAM_PUBLISHER_DEF: StreamPublisherInfo,
-        },
-        bad_bundle_code=RunSourcePluginErrorCode.RSP_2,
-        bad_user_code_code=RunSourcePluginErrorCode.RSP_3,
-        wrong_kind_code=RunSourcePluginErrorCode.RSP_4,
-    )
+    try:
+        return load_definition(
+            bundle_folder,
+            {
+                KIND_PUBLISHER_DEF: PublisherInfo,
+                KIND_STREAM_PUBLISHER_DEF: StreamPublisherInfo,
+            },
+        )
+    except UnexpectedKindError as error:
+        raise RunSourcePluginErrorCode.RSP_4.exception(
+            cause=error,
+            kind=error.kind,
+            manifest=error.manifest,
+            allowed=error.allowed,
+        )
+    except InvalidDefinitionError as error:
+        raise RunSourcePluginErrorCode.RSP_3.exception(
+            cause=error,
+            bundle_folder=bundle_folder,
+            detail=error.detail,
+        )
+    except FunctionDefinitionError as error:
+        raise RunSourcePluginErrorCode.RSP_2.exception(
+            cause=error,
+            bundle_folder=bundle_folder,
+            detail=error.detail,
+        )
 
 
 def build_manifest_stage_connection(function_stage: Location) -> StageConnection:
@@ -117,9 +137,6 @@ def bind_source(
     function_stage: Location,
     connection_file: Path,
 ) -> SourceBinding:
-    # A stream publisher's own source and connection are for the streamer pod;
-    # here its staged manifests are read instead, through the publisher-side
-    # source the stream source names and a connection to the stage.
     if isinstance(publisher, StreamPublisherInfo):
         try:
             stream_definition = get_stream_src(type(publisher.source))
@@ -176,8 +193,6 @@ def read_in(
 
 
 def table_file_path(file: Path) -> str:
-    # Some plugins hand back a file URI wrapped in a Path; the manifest always
-    # holds an absolute posix path.
     text = str(file)
     if text[: len(FILE_PREFIX)].lower() == FILE_PREFIX:
         return Path(url2pathname(urlparse(text).path)).as_posix()
@@ -192,9 +207,6 @@ def write_inputs_manifest(
     cardinality: int,
 ) -> None:
     parameters = list(inspect.signature(_unwrap_info(publisher.func)).parameters)
-    # A negative cardinality means the source decides its slot count at read
-    # time: missing slots are padded empty, so the function always gets its
-    # declared parameters.
     if cardinality < 0:
         expected = len(parameters)
         if len(produced) > expected:
