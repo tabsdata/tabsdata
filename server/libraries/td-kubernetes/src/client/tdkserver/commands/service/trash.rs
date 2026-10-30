@@ -27,7 +27,7 @@ use crate::cwarn;
 use crate::runtime::instance::verify_instance_version;
 use crate::runtime::provider::provider_for_instance_any_state;
 
-const TRASH_TIMESTAMP_FORMAT: &str = "%Y.%m.%d.%H.%M.%S%.3f";
+const TRASH_TIMESTAMP_FORMAT: &str = "%Y%m%d%H%M%S%3f";
 
 const TRASH_RENAME_BACKOFF: Duration = Duration::from_millis(250);
 #[cfg(not(windows))]

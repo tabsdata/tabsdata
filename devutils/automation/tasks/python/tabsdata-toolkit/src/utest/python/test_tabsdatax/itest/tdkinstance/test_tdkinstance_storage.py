@@ -3,6 +3,7 @@
 #
 
 import json
+import re
 import subprocess
 
 import pytest
@@ -29,13 +30,11 @@ OPTIONS = {"aws_access_key_id": "key", "aws_endpoint_url": "http://127.0.0.1:900
 
 
 def export_listing(options: dict) -> str:
-    return "\n".join(
-        [
-            "export TD_STORAGE__URI='s3://bucket/d_user_0_instances_awse/'",
-            f"export TD_STORAGE__STORAGE_OPTIONS='{json.dumps(options)}'",
-            "export TD_STORAGE__PASSWORD='never-forwarded'",
-        ]
-    )
+    return "\n".join([
+        "export TD_STORAGE__URI='s3://bucket/d_user_0_instances_awse/'",
+        f"export TD_STORAGE__STORAGE_OPTIONS='{json.dumps(options)}'",
+        "export TD_STORAGE__PASSWORD='never-forwarded'",
+    ])
 
 
 @pytest.fixture
@@ -82,6 +81,11 @@ def test_a_name_carries_the_storage_after_the_role():
 def test_a_name_defaults_to_the_file_storage():
     result = CliRunner().invoke(main, ["name", "tdtest"])
     assert result.output.startswith("tdtest-file-")
+
+
+def test_a_name_ends_in_a_stamp_down_to_the_millisecond_with_no_separators():
+    result = CliRunner().invoke(main, ["name", "tdtest"])
+    assert re.fullmatch(r"tdtest-file-\d{17}", result.output.strip())
 
 
 def test_an_unknown_storage_is_rejected():
