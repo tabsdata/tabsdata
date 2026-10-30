@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Error model for the run-streamer command (exit codes 70..)."""
+"""Error model for the streamer command (exit codes 70..)."""
 
 from __future__ import annotations
 
@@ -110,7 +110,7 @@ class RunStreamerErrorCode(ErrorCode):
     RS_7 = ErrorDef(
         UnsupportedStageSchemeError,
         "stream-publisher function_stage URI {uri} uses scheme {scheme!r} "
-        "which is not yet supported by run-streamer "
+        "which is not yet supported by streamer "
         "(only file:// is supported today)",
     )
     # Cloud schemes (``s3://`` / ``az://`` / ``gcs://``) will land once

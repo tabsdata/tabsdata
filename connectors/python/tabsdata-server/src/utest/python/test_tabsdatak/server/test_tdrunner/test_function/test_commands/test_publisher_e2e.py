@@ -16,18 +16,18 @@ The chain executed (matches `donotmerge.py`):
   1.  get-bundle   — pulls + extracts the bundle.
   2.  prep-localize-state  — emits an empty transporter request
                              (no input / system_input).
-  3.  run-transporter      — no-op.
-  4.  run-source-plugin    — produces raw parquets + inputs manifest.
+  3.  transporter      — no-op.
+  4.  source-plugin    — produces raw parquets + inputs manifest.
   5.  stamp-inputs         — adds $td.* system columns; rewrites manifest.
-  6.  run-function         — invokes the user function; writes one parquet
+  6.  function         — invokes the user function; writes one parquet
                              (other slot returned None → file: null in
                              the outputs manifest).
   7.  prep-upload-tables   — builds the upload transporter request,
                              skipping the file: null slot.
-  8.  run-transporter      — uploads the modified table to its
+  8.  transporter      — uploads the modified table to its
                              apiserver-allocated file:// location.
   9.  prep-upload-state    — empty pairs (no system_output).
-  10. run-transporter      — no-op.
+  10. transporter      — no-op.
   11. report-completion    — POSTs the response.yaml to a local HTTP
                              server; the response distinguishes the
                              modified table (Data) from the unmodified
@@ -63,16 +63,16 @@ from tabsdatak.common._archive.bundle import build_bundle
 #     fields), read and written through `InputManifest` / `InputRecord`; the
 #     outputs manifest through `OutputManifest` / `OutputEntry`, whose entries
 #     carry the written table's `uri` and footer `stats` instead of a `file`;
-#   * prep-upload-tables and its transporter step are gone: run-function sinks
+#   * prep-upload-tables and its transporter step are gone: function sinks
 #     publisher and transformer outputs straight to the request's output
 #     locations, so the `out_dir/slot*` parquets and the tables-upload request
 #     no longer exist; report-completion takes the output stats from the
 #     outputs manifest.
 #   * state is no longer transported: prep-localize-state takes only
 #     `--request` and `--inputs-manifest` (no `--state-folder`, `--transporter-request`,
-#     `--state-manifest`, `--storage-configuration`); run-source-plugin and
-#     run-function read the previous state where it is stored and hand this
-#     run's state over in `<state-folder>/state.parquet`; run-function writes it
+#     `--state-manifest`, `--storage-configuration`); source-plugin and
+#     function read the previous state where it is stored and hand this
+#     run's state over in `<state-folder>/state.parquet`; function writes it
 #     to `system_output[0]` and records it as the outputs manifest's `state`
 #     entry; prep-upload-state, its transporter step and report-completion's
 #     `--state-folder` are gone.
@@ -483,7 +483,7 @@ def test_publisher_full_chain(
     assert yaml.safe_load(prep_loc_inputs_manifest.read_text()) == {"inputs": []}
     assert yaml.safe_load(prep_loc_state_manifest.read_text()) == {"state": []}
 
-    # --- 3. run-transporter (localize-state, empty) --------------------
+    # --- 3. transporter (localize-state, empty) --------------------
     from tabsdatak.server._tdrunner.function.commands.run_transporter import (
         main as run_transporter_main,
     )
@@ -492,7 +492,7 @@ def test_publisher_full_chain(
         monkeypatch,
         run_transporter_main,
         [
-            "run-transporter",
+            "transporter",
             "--request",
             str(localize_state_req),
             "--report",
@@ -509,7 +509,7 @@ def test_publisher_full_chain(
     )
     assert rc == 0
 
-    # --- 4. run-source-plugin ------------------------------------------
+    # --- 4. source-plugin ------------------------------------------
     from tabsdatak.conn.localfile import LocalFileSrcConn
     from tabsdatak.server._tdrunner.function.commands.runners.source_plugin import (
         main as rsp_main,
@@ -528,7 +528,7 @@ def test_publisher_full_chain(
         monkeypatch,
         rsp_main,
         [
-            "run-source-plugin",
+            "source-plugin",
             "--request",
             str(request_yaml),
             "--bundle-folder",
@@ -601,7 +601,7 @@ def test_publisher_full_chain(
     ):
         assert sys_col in enriched_cols, (sys_col, enriched_cols)
 
-    # --- 6. run-function -----------------------------------------------
+    # --- 6. function -----------------------------------------------
     from tabsdatak.server._tdrunner.function.commands.runners.function import (
         main as rf_main,
     )
@@ -610,7 +610,7 @@ def test_publisher_full_chain(
         monkeypatch,
         rf_main,
         [
-            "run-function",
+            "function",
             "--request",
             str(request_yaml),
             "--bundle-folder",
@@ -687,12 +687,12 @@ def test_publisher_full_chain(
     # my_table2 must NOT have a pair (file: null in manifest).
     assert "my_table2.parquet" not in upload_text
 
-    # --- 8. run-transporter (upload-tables) ----------------------------
+    # --- 8. transporter (upload-tables) ----------------------------
     rc = _invoke(
         monkeypatch,
         run_transporter_main,
         [
-            "run-transporter",
+            "transporter",
             "--request",
             str(upload_tables_req),
             "--report",
@@ -712,7 +712,7 @@ def test_publisher_full_chain(
     assert uploaded.is_file()
     # my_table2 must NOT have been uploaded.
     assert not (uploaded_dir / "my_table2.parquet").exists()
-    # The uploaded parquet is byte-identical to what run-function emitted.
+    # The uploaded parquet is byte-identical to what function emitted.
     assert uploaded.read_bytes() == fn_parquets[0].read_bytes()
 
     # --- 9. prep-upload-state ------------------------------------------
@@ -744,12 +744,12 @@ def test_publisher_full_chain(
     assert rc == 0
     assert "pairs: []" in upload_state_req.read_text()
 
-    # --- 10. run-transporter (upload-state, empty) ---------------------
+    # --- 10. transporter (upload-state, empty) ---------------------
     rc = _invoke(
         monkeypatch,
         run_transporter_main,
         [
-            "run-transporter",
+            "transporter",
             "--request",
             str(upload_state_req),
             "--report",
@@ -923,7 +923,7 @@ def test_publisher_full_chain_multi_input_path(
     )
     assert rc == 0
 
-    # --- 3. run-transporter (localize, empty) --------------------------
+    # --- 3. transporter (localize, empty) --------------------------
     from tabsdatak.server._tdrunner.function.commands.run_transporter import (
         main as run_transporter_main,
     )
@@ -932,7 +932,7 @@ def test_publisher_full_chain_multi_input_path(
         monkeypatch,
         run_transporter_main,
         [
-            "run-transporter",
+            "transporter",
             "--request",
             str(localize_state_req),
             "--report",
@@ -949,7 +949,7 @@ def test_publisher_full_chain_multi_input_path(
     )
     assert rc == 0
 
-    # --- 4. run-source-plugin ------------------------------------------
+    # --- 4. source-plugin ------------------------------------------
     from tabsdatak.conn.localfile import LocalFileSrcConn
     from tabsdatak.server._tdrunner.function.commands.runners.source_plugin import (
         main as rsp_main,
@@ -968,7 +968,7 @@ def test_publisher_full_chain_multi_input_path(
         monkeypatch,
         rsp_main,
         [
-            "run-source-plugin",
+            "source-plugin",
             "--request",
             str(request_yaml),
             "--bundle-folder",
@@ -1026,7 +1026,7 @@ def test_publisher_full_chain_multi_input_path(
     )
     assert rc == 0
 
-    # --- 6. run-function -----------------------------------------------
+    # --- 6. function -----------------------------------------------
     from tabsdatak.server._tdrunner.function.commands.runners.function import (
         main as rf_main,
     )
@@ -1035,7 +1035,7 @@ def test_publisher_full_chain_multi_input_path(
         monkeypatch,
         rf_main,
         [
-            "run-function",
+            "function",
             "--request",
             str(request_yaml),
             "--bundle-folder",
@@ -1118,12 +1118,12 @@ def test_publisher_full_chain_multi_input_path(
     assert "first_only.parquet" in upload_text
     assert "skipped.parquet" not in upload_text
 
-    # --- 8. run-transporter (upload-tables) ----------------------------
+    # --- 8. transporter (upload-tables) ----------------------------
     rc = _invoke(
         monkeypatch,
         run_transporter_main,
         [
-            "run-transporter",
+            "transporter",
             "--request",
             str(upload_tables_req),
             "--report",
@@ -1171,12 +1171,12 @@ def test_publisher_full_chain_multi_input_path(
     )
     assert rc == 0
 
-    # --- 10. run-transporter (upload-state, empty) ---------------------
+    # --- 10. transporter (upload-state, empty) ---------------------
     rc = _invoke(
         monkeypatch,
         run_transporter_main,
         [
-            "run-transporter",
+            "transporter",
             "--request",
             str(upload_state_req),
             "--report",

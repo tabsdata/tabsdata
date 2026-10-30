@@ -342,7 +342,7 @@ mod tests_worker_log_files {
         let workspace = temp.to_string_lossy().to_string();
         let worker_id = "worker0003";
         let folder = logs_folder(&temp, WorkerName::Function, worker_id, 1);
-        let step_folder = folder.join("2050-run-function");
+        let step_folder = folder.join("2050-function");
         std::fs::create_dir_all(&step_folder).unwrap();
         std::fs::write(folder.join("err.log"), "flat").unwrap();
         std::fs::write(step_folder.join("0.log"), "step").unwrap();
@@ -362,7 +362,7 @@ mod tests_worker_log_files {
 
         assert_eq!(paths.len(), 2);
         assert!(paths.iter().any(|p| p.ends_with("err.log")));
-        assert!(paths.iter().any(|p| p.ends_with("2050-run-function/0.log")));
+        assert!(paths.iter().any(|p| p.ends_with("2050-function/0.log")));
     }
 
     #[tokio::test]

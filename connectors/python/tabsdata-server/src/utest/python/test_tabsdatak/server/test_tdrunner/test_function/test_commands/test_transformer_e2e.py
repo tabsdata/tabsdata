@@ -15,16 +15,16 @@ The chain executed:
   1.  get-bundle   — pulls + extracts the bundle.
   2.  prep-localize-state  — emits transporter YAML (pulls input
                              tables from cloud) + inputs manifest.
-  3.  run-transporter      — copies pre-staged input parquets to in_dir.
+  3.  transporter      — copies pre-staged input parquets to in_dir.
                              [NO run_source_plugin]
-  4.  run-function         — invokes the user transformer; writes one
+  4.  function         — invokes the user transformer; writes one
                              parquet per non-None output slot.
   5.  prep-upload-tables   — builds the upload transporter request,
                              skipping any `file: null` slot.
-  6.  run-transporter      — uploads the modified table to its
+  6.  transporter      — uploads the modified table to its
                              apiserver-allocated file:// location.
   7.  prep-upload-state    — empty pairs (no system_output).
-  8.  run-transporter      — no-op.
+  8.  transporter      — no-op.
   9.  report-completion    — POSTs the response.yaml to a local HTTP
                              server.
 
@@ -56,21 +56,21 @@ from tabsdatak.common._archive.bundle import build_bundle
 # refactors; reviving this module needs at least:
 #   * prep-localize-state no longer takes `--in-dir`; input tables are no
 #     longer copied to a local folder: their records carry the storage
-#     `location` and run-function scans it;
+#     `location` and function scans it;
 #   * the inputs manifest holds `tables` records (`file`, `location`, version
 #     fields), read and written through `InputManifest` / `InputRecord`; the
 #     outputs manifest through `OutputManifest` / `OutputEntry`, whose entries
 #     carry the written table's `uri` and footer `stats` instead of a `file`;
-#   * prep-upload-tables and its transporter step are gone: run-function sinks
+#   * prep-upload-tables and its transporter step are gone: function sinks
 #     publisher and transformer outputs straight to the request's output
 #     locations, so the `out_dir/slot*` parquets and the tables-upload request
 #     no longer exist; report-completion takes the output stats from the
 #     outputs manifest.
 #   * state is no longer transported: prep-localize-state takes only
 #     `--request` and `--inputs-manifest` (no `--state-folder`, `--transporter-request`,
-#     `--state-manifest`, `--storage-configuration`); run-source-plugin and
-#     run-function read the previous state where it is stored and hand this
-#     run's state over in `<state-folder>/state.parquet`; run-function writes it
+#     `--state-manifest`, `--storage-configuration`); source-plugin and
+#     function read the previous state where it is stored and hand this
+#     run's state over in `<state-folder>/state.parquet`; function writes it
 #     to `system_output[0]` and records it as the outputs manifest's `state`
 #     entry; prep-upload-state, its transporter step and report-completion's
 #     `--state-folder` are gone.
@@ -455,7 +455,7 @@ def test_transformer_full_chain(
     # State manifest is empty (request.system_input is empty for this run).
     assert yaml.safe_load(state_manifest.read_text()) == {"state": []}
 
-    # --- 3. run-transporter (localize) ---------------------------------
+    # --- 3. transporter (localize) ---------------------------------
     from tabsdatak.server._tdrunner.function.commands.run_transporter import (
         main as run_transporter_main,
     )
@@ -464,7 +464,7 @@ def test_transformer_full_chain(
         monkeypatch,
         run_transporter_main,
         [
-            "run-transporter",
+            "transporter",
             "--request",
             str(localize_state_req),
             "--report",
@@ -484,7 +484,7 @@ def test_transformer_full_chain(
     assert (in_dir / "t_a.parquet").is_file()
     assert (in_dir / "t_b.parquet").is_file()
 
-    # --- 4. run-function -----------------------------------------------
+    # --- 4. function -----------------------------------------------
     from tabsdatak.server._tdrunner.function.commands.runners.function import (
         main as rf_main,
     )
@@ -493,7 +493,7 @@ def test_transformer_full_chain(
         monkeypatch,
         rf_main,
         [
-            "run-function",
+            "function",
             "--request",
             str(request_yaml),
             "--bundle-folder",
@@ -567,12 +567,12 @@ def test_transformer_full_chain(
     assert "merged.parquet" in upload_text
     assert "untouched.parquet" not in upload_text
 
-    # --- 6. run-transporter (upload-tables) ----------------------------
+    # --- 6. transporter (upload-tables) ----------------------------
     rc = _invoke(
         monkeypatch,
         run_transporter_main,
         [
-            "run-transporter",
+            "transporter",
             "--request",
             str(upload_tables_req),
             "--report",
@@ -622,12 +622,12 @@ def test_transformer_full_chain(
     assert rc == 0
     assert "pairs: []" in upload_state_req.read_text()
 
-    # --- 8. run-transporter (upload-state, empty) ----------------------
+    # --- 8. transporter (upload-state, empty) ----------------------
     rc = _invoke(
         monkeypatch,
         run_transporter_main,
         [
-            "run-transporter",
+            "transporter",
             "--request",
             str(upload_state_req),
             "--report",
@@ -849,7 +849,7 @@ def test_transformer_full_chain_different_cardinalities(
         "t_c",
     ]
 
-    # --- 3. run-transporter (localize) ---------------------------------
+    # --- 3. transporter (localize) ---------------------------------
     from tabsdatak.server._tdrunner.function.commands.run_transporter import (
         main as run_transporter_main,
     )
@@ -858,7 +858,7 @@ def test_transformer_full_chain_different_cardinalities(
         monkeypatch,
         run_transporter_main,
         [
-            "run-transporter",
+            "transporter",
             "--request",
             str(localize_state_req),
             "--report",
@@ -878,7 +878,7 @@ def test_transformer_full_chain_different_cardinalities(
     assert (in_dir / "t_b.parquet").is_file()
     assert (in_dir / "t_c.parquet").is_file()
 
-    # --- 4. run-function -----------------------------------------------
+    # --- 4. function -----------------------------------------------
     from tabsdatak.server._tdrunner.function.commands.runners.function import (
         main as rf_main,
     )
@@ -887,7 +887,7 @@ def test_transformer_full_chain_different_cardinalities(
         monkeypatch,
         rf_main,
         [
-            "run-function",
+            "function",
             "--request",
             str(request_yaml),
             "--bundle-folder",
@@ -956,12 +956,12 @@ def test_transformer_full_chain_different_cardinalities(
     # Exactly one CopyPair — single output.
     assert upload_tables_req.read_text().count("- - !LocalFile") == 1
 
-    # --- 6. run-transporter (upload-tables) ----------------------------
+    # --- 6. transporter (upload-tables) ----------------------------
     rc = _invoke(
         monkeypatch,
         run_transporter_main,
         [
-            "run-transporter",
+            "transporter",
             "--request",
             str(upload_tables_req),
             "--report",
@@ -1007,12 +1007,12 @@ def test_transformer_full_chain_different_cardinalities(
     )
     assert rc == 0
 
-    # --- 8. run-transporter (upload-state, empty) ----------------------
+    # --- 8. transporter (upload-state, empty) ----------------------
     rc = _invoke(
         monkeypatch,
         run_transporter_main,
         [
-            "run-transporter",
+            "transporter",
             "--request",
             str(upload_state_req),
             "--report",

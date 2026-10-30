@@ -233,7 +233,7 @@ def subscriber_bundle(tmp_path, monkeypatch) -> Path:
 
 # A trivial @stream_publisher-decorated function used to verify kind
 # dispatch routes correctly to StreamPublisherInfo. By the time
-# run-function executes the function-publisher chain has already landed
+# function executes the function-publisher chain has already landed
 # its inputs (via run_source_plugin's stream-publisher substitution) so the
 # call shape here is identical to a regular publisher's.
 @pytest.fixture
@@ -456,7 +456,7 @@ def set_arguments(
         sys,
         "argv",
         [
-            "run-function",
+            "function",
             "--request",
             str(request_path),
             "--bundle-folder",
@@ -569,8 +569,8 @@ def test_load_function_def_stream_publisher_kind_loads_stream_publisher_info(
     """A streamPublisherDef bundle deserialises as StreamPublisherInfo.
 
     Without this, `tdk fn trigger` on a `@stream_publisher` fails at
-    `0080-run-function` with WrongKindError (RF_4) — even though
-    upstream steps (`run-source-plugin`'s substitution) have done their
+    `0080-function` with WrongKindError (RF_4) — even though
+    upstream steps (`source-plugin`'s substitution) have done their
     job materialising the staged inputs."""
     from tabsdatak._info import StreamPublisherInfo
 
@@ -1348,7 +1348,7 @@ def test_main_invalid_options_returns_1(monkeypatch):
     monkeypatch.setattr(
         sys,
         "argv",
-        ["run-function", "--request", "x"],
+        ["function", "--request", "x"],
     )
     assert main() == 1
 
@@ -1771,7 +1771,7 @@ def test_main_carries_tabsdata_command_metadata():
             "tabsdata_command_name",
             None,
         )
-        == "td_run_function"
+        == "td_function"
     )
 
 
@@ -1996,7 +1996,7 @@ def test_main_ctx_aware_function_first_run_writes_its_state(
     http_ok_url,
 ):
     """First run for the flow: no previous state. The user function
-    sees ``None`` for ``get_attr``, sets a value, and run-function writes
+    sees ``None`` for ``get_attr``, sets a value, and function writes
     the drained state to system_output[0] with its stats."""
     request_path = request_with_state_slots(tmp_path / "request.yaml")
     manifest = run_with_state(
@@ -2024,7 +2024,7 @@ def test_main_ctx_aware_function_prefers_this_run_state(
     monkeypatch,
     http_ok_url,
 ):
-    """When run-source-plugin already drained this run's state, the user
+    """When source-plugin already drained this run's state, the user
     function reads it, not the previous run's."""
     request_path = request_with_state_slots(
         tmp_path / "request.yaml",
@@ -2070,7 +2070,7 @@ def test_main_function_without_ctx_writes_no_state(
     http_ok_url,
 ):
     """A function with no ctx drains nothing; without a state drained by
-    run-source-plugin there is no state to write."""
+    source-plugin there is no state to write."""
     request_path = request_with_state_slots(
         tmp_path / "request.yaml",
         outputs=("my_table", "untouched"),
@@ -2093,7 +2093,7 @@ def test_main_function_without_ctx_writes_the_source_plugin_state(
     monkeypatch,
     http_ok_url,
 ):
-    """The state run-source-plugin drained is written even when the user
+    """The state source-plugin drained is written even when the user
     function has no ctx."""
     request_path = request_with_state_slots(
         tmp_path / "request.yaml",
@@ -2113,7 +2113,7 @@ def test_main_function_without_ctx_writes_the_source_plugin_state(
 
 def seed_input_parquet(tmp_path: Path) -> Path:
     """Write a simple parquet so the inputs manifest references a real
-    file (run-function won't fail materialising the slot). Mirrors the
+    file (function won't fail materialising the slot). Mirrors the
     fixture publisher's expected input shape."""
     import pyarrow as pa
     import pyarrow.parquet as pq
@@ -2132,7 +2132,7 @@ def test_main_creates_out_dir_before_invoking_user_function(
     http_ok_url,
 ):
     """A ctx-aware user function may surface ``ctx.work_dir`` (==
-    ``out_dir`` for run-function) and try to write a sidecar there;
+    ``out_dir`` for function) and try to write a sidecar there;
     the runtime must create the directory before the call, not after.
     Builds a publisher whose body asserts the directory exists
     immediately on entry."""
@@ -2235,7 +2235,7 @@ def test_main_ctx_aware_transformer_hydrates_and_drains(
     )
 
     # Only the previous state: transformers run in chains without
-    # run-source-plugin, so the stored-state path is the one exercised.
+    # source-plugin, so the stored-state path is the one exercised.
     request_path = request_with_state_slots(
         tmp_path / "request.yaml",
         outputs=("t_out",),

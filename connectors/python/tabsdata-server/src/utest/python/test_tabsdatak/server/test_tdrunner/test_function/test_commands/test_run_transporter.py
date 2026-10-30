@@ -36,7 +36,7 @@ def _set_argv(
         sys,
         "argv",
         [
-            "run-transporter",
+            "transporter",
             "--request",
             str(request_path),
             "--report",
@@ -106,10 +106,10 @@ def test_main_missing_binary_returns_command_specific(monkeypatch, tmp_path, htt
 
 
 def test_main_invalid_options_returns_1(monkeypatch):
-    monkeypatch.setattr(sys, "argv", ["run-transporter"])
+    monkeypatch.setattr(sys, "argv", ["transporter"])
     assert main() == 1
 
 
 def test_main_carries_tabsdata_command_metadata():
     assert getattr(main, "tabsdata_command", False) is True
-    assert getattr(main, "tabsdata_command_name", None) == "td_run_transporter"
+    assert getattr(main, "tabsdata_command_name", None) == "td_transporter"

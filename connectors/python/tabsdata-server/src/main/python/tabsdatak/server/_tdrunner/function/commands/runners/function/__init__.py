@@ -19,11 +19,11 @@ from tabsdatak.server._tdrunner.function.commands.runners.function.runner import
 VERSION = version()
 GENERATION = 2
 INFORMATION = (
-    "run-function — call the user function on its inputs and write the tables "
+    "function — call the user function on its inputs and write the tables "
     "it returns"
 )
 MANUAL = (
-    "run-function --request <PATH> --bundle-folder <PATH> "
+    "function --request <PATH> --bundle-folder <PATH> "
     "--inputs-manifest <PATH> --output-folder <PATH> "
     "--outputs-manifest <PATH> --state-folder <PATH> --liveness <PATH>\n\n"
     "Loads the function definition from --bundle-folder (publisher, stream "
@@ -32,7 +32,7 @@ MANUAL = (
     "slot a list), calls the user function, and writes every returned table "
     "in one streaming pass: publisher and transformer outputs where the "
     "request stores them, subscriber outputs to the run's landing area for "
-    "run-destination-plugin. The run's state is written along with them. "
+    "destination-plugin. The run's state is written along with them. "
     "--outputs-manifest gets each written table's location and stats; a "
     "table the function returned as None gets neither."
 )
@@ -40,7 +40,7 @@ MANUAL = (
 
 def build_command_parser() -> ArgumentsParser:
     return RunFunctionArguments.parser(
-        program="run-function",
+        program="function",
         description="Call the user function and write the tables it returns.",
         version=VERSION,
         information=INFORMATION,
@@ -48,7 +48,7 @@ def build_command_parser() -> ArgumentsParser:
     )
 
 
-@command(name="td_run_function", parser=build_command_parser)
+@command(name="td_function", parser=build_command_parser)
 def main(arguments: RunFunctionArguments) -> int:
     return run(arguments)
 

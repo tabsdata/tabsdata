@@ -23,13 +23,13 @@ class RunSourcePluginArguments(CommandArguments):
     inputs_manifest: Path = option(
         help=(
             "Path where the manifest mapping each function input to the parquet "
-            "files the source plugin produced is written, for run-function."
+            "files the source plugin produced is written, for the function step."
         ),
     )
     state_folder: Path = option(
         help=(
             "Folder where the plugin context's state is drained to state.parquet, "
-            "for run-function."
+            "for the function step."
         ),
     )
     connection_file: Path = option(help="Path to the connection definition file.")

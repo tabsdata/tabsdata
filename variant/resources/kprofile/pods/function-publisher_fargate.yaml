@@ -495,10 +495,10 @@ spec:
               mountPath: /tabsdata/shared
             - name: work
               mountPath: /tabsdata/work
-        - name: 0090-run-source-plugin
+        - name: 0090-source-plugin
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_run_source_plugin"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_source_plugin"]
           args:
             - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -563,7 +563,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-            - name: config-run-source-plugin
+            - name: config-source-plugin
               mountPath: /tabsdata/config
               readOnly: true
             - name: connection
@@ -580,10 +580,10 @@ spec:
               mountPath: /tabsdata/shared
             - name: work
               mountPath: /tabsdata/work
-        - name: 0130-run-function
+        - name: 0130-function
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_run_function"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_function"]
           args:
             - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -649,7 +649,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-            - name: config-run-function
+            - name: config-function
               mountPath: /tabsdata/config
               readOnly: true
             - name: dataflow
@@ -806,14 +806,14 @@ spec:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-        - name: config-run-function
+        - name: config-function
           projected:
             sources:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-        - name: config-run-source-plugin
+        - name: config-source-plugin
           projected:
             sources:
               - configMap:

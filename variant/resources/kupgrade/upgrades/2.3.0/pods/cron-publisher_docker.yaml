@@ -116,7 +116,7 @@ spec:
             - name: 1000-cron-publisher
               image: ubuntu:24.04
               imagePullPolicy: IfNotPresent
-              command: ["${{system:tdk_pyenv_fn_root}}/bin/td_run_cron_trigger"]
+              command: ["${{system:tdk_pyenv_fn_root}}/bin/td_cron_trigger"]
               args:
                 - --shared-folder
                 - $(CONTAINER_ROOT)/tabsdata/shared

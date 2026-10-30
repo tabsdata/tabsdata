@@ -322,7 +322,7 @@ fn global_envs_do_not_need_the_config_mounted() {
 
 #[test]
 fn global_envs_apply_to_a_function_pod_spec() {
-    let mut spec = build_pod_spec_mounting(&["run-function", "upload"], &[]);
+    let mut spec = build_pod_spec_mounting(&["function", "upload"], &[]);
     apply_global_envs(
         indoc! {"
             pods:
@@ -333,7 +333,7 @@ fn global_envs_apply_to_a_function_pod_spec() {
         &mut spec,
     )
     .expect("ok");
-    for container in ["run-function", "upload"] {
+    for container in ["function", "upload"] {
         assert!(
             names(&spec, container).contains(&"TYPESAFE_API_KEY".to_owned()),
             "{container}"
@@ -555,9 +555,9 @@ fn value(spec: &PodSpec, container: &str, name: &str) -> Option<String> {
 
 #[test]
 fn dataflow_envs_reach_every_container_of_a_function_pod() {
-    let mut spec = build_pod_spec_with(&["run-function", "report-completion"]);
+    let mut spec = build_pod_spec_with(&["function", "report-completion"]);
     apply_dataflow_envs(DATAFLOW_CONFIG, &function_placement(), &mut spec).expect("ok");
-    for container in ["run-function", "report-completion"] {
+    for container in ["function", "report-completion"] {
         for (name, expected) in [
             (
                 ENV_TD_DATAFLOW__TEMPORARY_FOLDER,
@@ -591,7 +591,7 @@ fn dataflow_envs_stay_out_of_service_pods() {
 
 #[test]
 fn unset_dataflow_keys_inject_nothing() {
-    let mut spec = build_pod_spec_with(&["run-function"]);
+    let mut spec = build_pod_spec_with(&["function"]);
     apply_dataflow_envs(
         indoc! {"
             pods:
@@ -604,10 +604,7 @@ fn unset_dataflow_keys_inject_nothing() {
         &mut spec,
     )
     .expect("ok");
-    assert_eq!(
-        names(&spec, "run-function"),
-        [ENV_TD_DATAFLOW__SPILL__ENABLED]
-    );
+    assert_eq!(names(&spec, "function"), [ENV_TD_DATAFLOW__SPILL__ENABLED]);
 }
 
 #[test]
@@ -622,13 +619,13 @@ fn a_global_env_overrides_a_dataflow_env() {
               abort:
                 memory_threshold_percent: 95
     "};
-    let mut spec = build_pod_spec_with(&["run-function"]);
+    let mut spec = build_pod_spec_with(&["function"]);
     apply_dataflow_envs(config, &function_placement(), &mut spec).expect("ok");
     apply_global_envs(config, &mut spec).expect("ok");
     assert_eq!(
         value(
             &spec,
-            "run-function",
+            "function",
             ENV_TD_DATAFLOW__ABORT__MEMORY_THRESHOLD_PERCENT
         )
         .as_deref(),

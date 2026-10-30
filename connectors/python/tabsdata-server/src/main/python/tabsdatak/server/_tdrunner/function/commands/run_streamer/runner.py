@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""run-streamer runner.
+"""streamer runner.
 
 The command's logic, callable without argparse or the responder. The
 package ``__init__`` wraps :func:`run` in the ``@command`` entrypoint
@@ -201,7 +201,7 @@ def run(arguments: RunStreamerArguments) -> int:
         raise RunStreamerErrorCode.RS_8.exception(
             cause=exc, path=journal_path, detail=str(exc)
         )
-    logger.info("run-streamer: recorded end=%s", end)
+    logger.info("streamer: recorded end=%s", end)
 
     report_completion(arguments)
     return 0

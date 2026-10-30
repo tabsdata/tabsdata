@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Tests for the run-manifest-trigger sidecar (cursor-based, backend-routed).
+"""Tests for the manifest-trigger sidecar (cursor-based, backend-routed).
 
 Covers:
   * `_build_trigger_request`: env:/val: resolution, headers built

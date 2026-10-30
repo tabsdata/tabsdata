@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Error model for the run-manifest-trigger sidecar (exit codes 80..)."""
+"""Error model for the manifest-trigger sidecar (exit codes 80..)."""
 
 from __future__ import annotations
 

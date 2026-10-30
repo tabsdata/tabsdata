@@ -18,9 +18,9 @@ from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.runner i
 
 VERSION = version()
 GENERATION = 2
-INFORMATION = "run-source-plugin — read a publisher's inputs through its source plugin"
+INFORMATION = "source-plugin — read a publisher's inputs through its source plugin"
 MANUAL = (
-    "run-source-plugin --request <PATH> --bundle-folder <PATH> "
+    "source-plugin --request <PATH> --bundle-folder <PATH> "
     "--output-folder <PATH> --inputs-manifest <PATH> --state-folder <PATH> "
     "--connection-file <PATH> --liveness <PATH>\n\n"
     "Loads the publisher definition from --bundle-folder and its source plugin "
@@ -35,7 +35,7 @@ MANUAL = (
 
 def build_command_parser() -> ArgumentsParser:
     return RunSourcePluginArguments.parser(
-        program="run-source-plugin",
+        program="source-plugin",
         description="Read the publisher's inputs through its source plugin.",
         version=VERSION,
         information=INFORMATION,
@@ -43,7 +43,7 @@ def build_command_parser() -> ArgumentsParser:
     )
 
 
-@command(name="td_run_source_plugin", parser=build_command_parser)
+@command(name="td_source_plugin", parser=build_command_parser)
 def main(arguments: RunSourcePluginArguments) -> int:
     return run(arguments)
 

@@ -18,6 +18,6 @@ class RunDestinationPluginArguments(CommandArguments):
     request: Path = option(help="Path to the request file.")
     bundle_folder: Path = option(help="Folder holding the extracted bundle.")
     outputs_manifest: Path = option(
-        help="Path to the outputs manifest run-function wrote."
+        help="Path to the outputs manifest the function step wrote."
     )
     connection_file: Path = option(help="Path to the connection definition file.")

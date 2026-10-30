@@ -2,8 +2,6 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use std::collections::HashMap;
-
 use crate::launcher::arg::MarkerKey::{TdAttempt, TdCollection, TdFunction, TdWorker};
 use crate::monitor::memory::{physical_memory, virtual_memory};
 
@@ -25,15 +23,6 @@ pub type ProcessDistilled = (
     String,
     String,
 );
-
-const PYTHON_MODULE_ALIASES: &[(&str, &str)] = &[(
-    "tabsdata._tabsserver.function.execute_function_bootstrap",
-    "td_function",
-)];
-
-fn python_module_aliases() -> HashMap<&'static str, &'static str> {
-    PYTHON_MODULE_ALIASES.iter().cloned().collect()
-}
 
 /// Function to get the process tree starting from a given PID.
 pub fn get_process_tree(pid: i32) -> Vec<ProcessDistilled> {
@@ -92,15 +81,9 @@ fn process_tree(
     let mut name = if is_python_exec {
         // If running python, we try to infer the actual module being run.
         if let Some(idx) = cmd.iter().position(|arg| arg == "-m") {
-            // If running a module, we extract its name, and alias it if existing in the aliases map.
-            let alias_map = python_module_aliases();
+            // If running a module, we extract its name.
             cmd.get(idx + 1)
-                .map(|modname| {
-                    alias_map
-                        .get(modname.as_str())
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| modname.to_string())
-                })
+                .map(|modname| modname.to_string())
                 .unwrap_or_else(|| base_name.clone())
         } else {
             // Fallback: try to infer from script/binary, only if not a flag

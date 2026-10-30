@@ -273,7 +273,7 @@ def set_arguments(
         sys,
         "argv",
         [
-            "run-source-plugin",
+            "source-plugin",
             "--request",
             str(request_path),
             "--bundle-folder",
@@ -803,7 +803,7 @@ def test_main_invalid_options_returns_1(monkeypatch):
     monkeypatch.setattr(
         sys,
         "argv",
-        ["run-source-plugin", "--request", "x"],
+        ["source-plugin", "--request", "x"],
     )
     assert main() == 1
 
@@ -921,7 +921,7 @@ def test_main_carries_tabsdata_command_metadata():
             "tabsdata_command_name",
             None,
         )
-        == "td_run_source_plugin"
+        == "td_source_plugin"
     )
 
 

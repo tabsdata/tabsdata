@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Tests for the run-streamer command.
+"""Tests for the streamer command.
 
 The command's main wiring (load request -> resolve plugin -> build
 ctx -> run plugin -> notify) is covered with hand-built fixtures and

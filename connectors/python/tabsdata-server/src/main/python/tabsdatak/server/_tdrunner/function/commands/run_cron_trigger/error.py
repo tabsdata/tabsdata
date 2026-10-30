@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Error model for the run-cron-trigger command (exit codes 82..)."""
+"""Error model for the cron-trigger command (exit codes 82..)."""
 
 from __future__ import annotations
 

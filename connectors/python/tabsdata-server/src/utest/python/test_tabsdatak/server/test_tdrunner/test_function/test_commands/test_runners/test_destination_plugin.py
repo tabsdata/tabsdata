@@ -185,7 +185,7 @@ def set_arguments(
         sys,
         "argv",
         [
-            "run-destination-plugin",
+            "destination-plugin",
             "--request",
             str(request_path),
             "--bundle-folder",
@@ -462,7 +462,7 @@ def test_main_invalid_options_returns_1(monkeypatch):
     monkeypatch.setattr(
         sys,
         "argv",
-        ["run-destination-plugin"],
+        ["destination-plugin"],
     )
     assert main() == 1
 
@@ -682,5 +682,5 @@ def test_main_carries_tabsdata_command_metadata():
             "tabsdata_command_name",
             None,
         )
-        == "td_run_destination_plugin"
+        == "td_destination_plugin"
     )

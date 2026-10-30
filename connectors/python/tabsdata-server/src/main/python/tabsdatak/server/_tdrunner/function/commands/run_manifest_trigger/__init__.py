@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""run-manifest-trigger command.
+"""manifest-trigger command.
 
 Long-running sidecar entrypoint of the streamer pod. Walks
 ``<stage>/manifests/`` oldest-first with an in-memory cursor, POSTs
@@ -100,11 +100,11 @@ __all__ = [
 VERSION = version()
 GENERATION = 1
 INFORMATION = (
-    "run-manifest-trigger — long-running sidecar; scans manifests/ and "
+    "manifest-trigger — long-running sidecar; scans manifests/ and "
     "POSTs fn_trigger; cleans up between polls"
 )
 MANUAL = (
-    "run-manifest-trigger\n"
+    "manifest-trigger\n"
     "    --request <PATH>\n"
     "    --trigger-url <URL | env:VAR | val:LITERAL>\n"
     "    --trigger-method <METHOD | env:VAR | val:LITERAL>\n"
@@ -123,7 +123,7 @@ MANUAL = (
 
 def build_command_parser() -> ArgumentsParser:
     return RunManifestTriggerArguments.parser(
-        program="run-manifest-trigger",
+        program="manifest-trigger",
         description="Long-running sidecar that drives fn_trigger from manifests.",
         version=VERSION,
         information=INFORMATION,
@@ -131,7 +131,7 @@ def build_command_parser() -> ArgumentsParser:
     )
 
 
-@command(name="td_run_manifest_trigger", parser=build_command_parser)
+@command(name="td_manifest_trigger", parser=build_command_parser)
 def main(arguments: RunManifestTriggerArguments) -> int:
     return run(arguments)
 

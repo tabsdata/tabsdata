@@ -6,7 +6,7 @@
 
 Reads request.yaml and writes ``--inputs-manifest``: one entry per
 ``request.input`` table, each record carrying the table's storage
-``location``. The transformer and subscriber paths of `run-function`
+``location``. The transformer and subscriber paths of `function`
 consume it and scan the tables where they are stored; the publisher path
 overwrites it with the source-plugin-produced manifest. Nothing is copied
 locally: state is read where it is stored too (see the state handler).

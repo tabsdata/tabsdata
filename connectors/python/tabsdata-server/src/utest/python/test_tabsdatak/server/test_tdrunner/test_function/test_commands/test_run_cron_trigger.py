@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Unit tests for the run-cron-trigger one-shot command."""
+"""Unit tests for the cron-trigger one-shot command."""
 
 from __future__ import annotations
 
@@ -70,7 +70,7 @@ def test_execution_request_body_is_cron_trigger_shape():
 
 def test_main_carries_tabsdata_command_metadata():
     assert getattr(main, "tabsdata_command", False) is True
-    assert getattr(main, "tabsdata_command_name", None) == "td_run_cron_trigger"
+    assert getattr(main, "tabsdata_command_name", None) == "td_cron_trigger"
 
 
 def test_build_command_parser_accepts_trigger_triplet():

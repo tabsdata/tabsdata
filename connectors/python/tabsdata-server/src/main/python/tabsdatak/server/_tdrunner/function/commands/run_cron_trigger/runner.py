@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""run-cron-trigger runner.
+"""cron-trigger runner.
 
 The command's logic, callable without argparse or the responder. The
 package ``__init__`` wraps :func:`run` in the ``@command`` entrypoint
@@ -67,7 +67,7 @@ def _fire(url: str, method: str, authorization: str) -> None:
     )
     external_uid = f"cron-{uuid.uuid4()}"
     logger.info(
-        "run-cron-trigger: firing execute %s %s (%s)", method, url, external_uid
+        "cron-trigger: firing execute %s %s (%s)", method, url, external_uid
     )
     try:
         response = call_with_retry(
@@ -78,7 +78,7 @@ def _fire(url: str, method: str, authorization: str) -> None:
 
     if response.ok:
         logger.info(
-            "run-cron-trigger: execution scheduled (status=%d)", response.status
+            "cron-trigger: execution scheduled (status=%d)", response.status
         )
         return
 

@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""run-transporter runner.
+"""transporter runner.
 
 The command's logic, callable without argparse or the responder. The
 package ``__init__`` wraps :func:`run` in the ``@command`` entrypoint

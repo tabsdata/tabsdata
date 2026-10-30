@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""run-streamer command.
+"""streamer command.
 
 Long-running entrypoint of the streamer pod's main container. Loads
 the ``StreamPublisherInfo`` from the extracted bundle, builds a
@@ -25,7 +25,7 @@ Pod chain (see ``stream-publisher_kminus.yaml``):
   * ``0030-get-bundle`` -- download + extract the user bundle
   * ``0900-manifest-trigger`` -- sidecar (NU7); scans
     ``<stage>/manifests/`` and POSTs ``fn_trigger`` per manifest
-  * ``1000-run-streamer`` (this command) -- long-running, exits 0 on
+  * ``1000-streamer`` (this command) -- long-running, exits 0 on
     clean shutdown via SIGTERM
 
 The logic lives in :mod:`.runner`; this module is the thin ``@command``
@@ -54,11 +54,11 @@ __all__ = ["_load_function_def", "_resolve_plugin", "run", "main"]
 VERSION = version()
 GENERATION = 1
 INFORMATION = (
-    "run-streamer — long-running streamer pod entrypoint; runs the "
+    "streamer — long-running streamer pod entrypoint; runs the "
     "@stream_publisher's StreamSrcPlugin until SIGTERM"
 )
 MANUAL = (
-    "run-streamer\n"
+    "streamer\n"
     "    --request <PATH>\n"
     "    --bundle-folder <PATH>\n"
     "    --output-folder <PATH>\n"
@@ -81,7 +81,7 @@ MANUAL = (
 
 def build_command_parser() -> ArgumentsParser:
     return RunStreamerArguments.parser(
-        program="run-streamer",
+        program="streamer",
         description="Long-running streamer pod entrypoint.",
         version=VERSION,
         information=INFORMATION,
@@ -89,7 +89,7 @@ def build_command_parser() -> ArgumentsParser:
     )
 
 
-@command(name="td_run_streamer", parser=build_command_parser)
+@command(name="td_streamer", parser=build_command_parser)
 def main(arguments: RunStreamerArguments) -> int:
     return run(arguments)
 

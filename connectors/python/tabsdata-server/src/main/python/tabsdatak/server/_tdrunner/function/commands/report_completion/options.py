@@ -17,6 +17,6 @@ from tabsdatak.server._tdrunner.function._commons.run.arguments import (
 class ReportCompletionArguments(CommandArguments):
     request: Path = option(help="Path to request.yaml.")
     outputs_manifest: Path = option(
-        help="Path to the outputs manifest YAML produced by run-function.",
+        help="Path to the outputs manifest YAML produced by the function step.",
     )
     response: Path = option(help="Path to write response.yaml.")

@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""run-manifest-trigger runner.
+"""manifest-trigger runner.
 
 The command's logic, callable without argparse or the responder. The
 package ``__init__`` wraps :func:`run` in the ``@command`` entrypoint
@@ -114,7 +114,7 @@ def _enqueue_for_deletion(
         slots = load_stage_manifest(manifest_path)
     except (FileNotFoundError, InvalidStageManifestError) as exc:
         logger.warning(
-            "run-manifest-trigger: could not read %s for deletion enqueue "
+            "manifest-trigger: could not read %s for deletion enqueue "
             "(%s); queuing manifest only",
             manifest_path,
             exc,
@@ -222,7 +222,7 @@ def _trigger_one(
         external_uid = external_uid_from_filename(manifest_path.name)
     except InvalidStageManifestError as exc:
         logger.warning(
-            "run-manifest-trigger: skipping malformed manifest filename %s: %s",
+            "manifest-trigger: skipping malformed manifest filename %s: %s",
             manifest_path.name,
             exc,
         )
@@ -251,7 +251,7 @@ def _trigger_one(
         response = invoke(json_request, body=body)
     except HttpRequestError as exc:
         logger.warning(
-            "run-manifest-trigger: fn_trigger connection failure for %s; "
+            "manifest-trigger: fn_trigger connection failure for %s; "
             "leaving in place: %s",
             manifest_path.name,
             exc,
@@ -264,7 +264,7 @@ def _trigger_one(
         # operator notices.
         body_preview = response.body[:256] if response.body else b""
         logger.warning(
-            "run-manifest-trigger: manifest %s got unexpected response "
+            "manifest-trigger: manifest %s got unexpected response "
             "(status=%d); leaving in place for retry. Body: %r",
             manifest_path.name,
             response.status,
@@ -275,14 +275,14 @@ def _trigger_one(
     match trigger_outcome:
         case TriggerOutcome.SCHEDULED:
             logger.info(
-                "run-manifest-trigger: triggered manifest %s; "
+                "manifest-trigger: triggered manifest %s; "
                 "deferring deletion until its execution commits",
                 manifest_path.name,
             )
             return _ManifestOutcome.TRIGGERED
         case TriggerOutcome.CONSUMED:
             logger.info(
-                "run-manifest-trigger: manifest %s consumed; "
+                "manifest-trigger: manifest %s consumed; "
                 "its execution committed, queueing for deletion",
                 manifest_path.name,
             )
@@ -290,14 +290,14 @@ def _trigger_one(
             return _ManifestOutcome.DEDUP_DELETED
         case TriggerOutcome.HELD:
             logger.info(
-                "run-manifest-trigger: manifest %s held by an execution that "
+                "manifest-trigger: manifest %s held by an execution that "
                 "has not committed; keeping it, retrying next poll",
                 manifest_path.name,
             )
             return _ManifestOutcome.HELD
         case TriggerOutcome.BUSY:
             logger.info(
-                "run-manifest-trigger: manifest %s: function busy; retrying next poll",
+                "manifest-trigger: manifest %s: function busy; retrying next poll",
                 manifest_path.name,
             )
             return _ManifestOutcome.TRANSIENT
@@ -381,10 +381,10 @@ def _drain_until(
             rel = deletion_queue.popleft()
             try:
                 backend.delete([rel])
-                logger.debug("run-manifest-trigger: deleted %s", rel)
+                logger.debug("manifest-trigger: deleted %s", rel)
             except (OSError, NotImplementedError) as exc:
                 logger.warning(
-                    "run-manifest-trigger: could not delete %s: %s",
+                    "manifest-trigger: could not delete %s: %s",
                     rel,
                     exc,
                 )
@@ -411,7 +411,7 @@ def run(arguments: RunManifestTriggerArguments) -> int:
         ) from exc
     trigger_request = _build_trigger_request(arguments)
     logger.info(
-        "run-manifest-trigger: scanning %s; trigger=%s %s",
+        "manifest-trigger: scanning %s; trigger=%s %s",
         function_stage.uri,
         trigger_request.method,
         trigger_request.url,
@@ -423,7 +423,7 @@ def run(arguments: RunManifestTriggerArguments) -> int:
 
     def _shutdown(signum, _frame):
         logger.info(
-            "run-manifest-trigger: received signal %d; will exit at next "
+            "manifest-trigger: received signal %d; will exit at next "
             "active-flag check",
             signum,
         )
@@ -437,7 +437,7 @@ def run(arguments: RunManifestTriggerArguments) -> int:
         # Off the main thread (test contexts): signal install isn't
         # supported. Tests drive the active flag manually.
         logger.debug(
-            "run-manifest-trigger: not on main thread; skipping signal install"
+            "manifest-trigger: not on main thread; skipping signal install"
         )
 
     is_active = lambda: active_flag["on"]  # noqa: E731
@@ -452,7 +452,7 @@ def run(arguments: RunManifestTriggerArguments) -> int:
         _drain_until(deadline, backend, deletion_queue, is_active)
 
     logger.info(
-        "run-manifest-trigger: shutting down; %d item(s) left in deletion queue",
+        "manifest-trigger: shutting down; %d item(s) left in deletion queue",
         len(deletion_queue),
     )
     return 0

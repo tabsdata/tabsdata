@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""run-cron-trigger command.
+"""cron-trigger command.
 
 One-shot entrypoint of the cron-publisher CronJob's main container.
 Kubernetes owns the ticking -- the gateway stamps ``spec.schedule`` from
@@ -53,11 +53,11 @@ __all__ = ["_execution_request_body", "_fire", "run", "main"]
 VERSION = version()
 GENERATION = 1
 INFORMATION = (
-    "run-cron-trigger — one-shot; POSTs the function execute endpoint once "
+    "cron-trigger — one-shot; POSTs the function execute endpoint once "
     "per CronJob fire and exits"
 )
 MANUAL = (
-    "run-cron-trigger\n"
+    "cron-trigger\n"
     "    --trigger-url <URL | env:VAR | val:LITERAL>\n"
     "    --trigger-method <METHOD | env:VAR | val:LITERAL>\n"
     "    --trigger-authorization <AUTH | env:VAR | val:LITERAL>\n"
@@ -73,7 +73,7 @@ MANUAL = (
 
 def build_command_parser() -> ArgumentsParser:
     return RunCronTriggerArguments.parser(
-        program="run-cron-trigger",
+        program="cron-trigger",
         description="One-shot cron trigger: POST the function execute endpoint once.",
         version=VERSION,
         information=INFORMATION,
@@ -81,7 +81,7 @@ def build_command_parser() -> ArgumentsParser:
     )
 
 
-@command(name="td_run_cron_trigger", parser=build_command_parser)
+@command(name="td_cron_trigger", parser=build_command_parser)
 def main(arguments: RunCronTriggerArguments) -> int:
     return run(arguments)
 

@@ -52,10 +52,6 @@ PROCESS_COLORS = [
 
 END_COLOR = Color.END
 
-PYTHON_MODULE_ALIASES = {
-    "tabsdata._tabsserver.function.execute_function_bootstrap": "td_function",
-}
-
 
 # noinspection DuplicatedCode
 def load(module_name) -> ModuleType:
@@ -131,8 +127,7 @@ def ps():  # noqa: C901
             if "-m" in p_cmdline:
                 try:
                     idx = p_cmdline.index("-m")
-                    p_module = p_cmdline[idx + 1]
-                    return PYTHON_MODULE_ALIASES.get(p_module, p_module)
+                    return p_cmdline[idx + 1]
                 except (ValueError, IndexError):
                     return p_binary
             else:

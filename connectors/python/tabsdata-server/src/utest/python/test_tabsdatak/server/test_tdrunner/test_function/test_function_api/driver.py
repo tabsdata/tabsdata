@@ -208,7 +208,7 @@ class Driver:
     def run_function(self, inputs_manifest: str) -> None:
         self.step(
             run_function,
-            "run-function",
+            "function",
             request=self.request,
             bundle_folder=self.path("bundle"),
             inputs_manifest=self.path(inputs_manifest),
@@ -229,7 +229,7 @@ class Driver:
     def publisher(self, connection: Path) -> None:
         self.step(
             run_source_plugin,
-            "run-source-plugin",
+            "source-plugin",
             request=self.request,
             bundle_folder=self.path("bundle"),
             output_folder=self.path("in"),
@@ -246,7 +246,7 @@ class Driver:
         self.run_function("fn/in/inputs-manifest.yaml")
         self.step(
             run_destination_plugin,
-            "run-destination-plugin",
+            "destination-plugin",
             request=self.request,
             bundle_folder=self.path("bundle"),
             outputs_manifest=self.path("fn/out/outputs-manifest.yaml"),

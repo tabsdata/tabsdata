@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Error model for the run-transporter command (exit codes 10..).
+"""Error model for the transporter command (exit codes 10..).
 
 Same shape as :mod:`tabsdatak.server._tdruntime.python.error`: per-site
 :class:`CommandRuntimeException` subclasses pin their own ``exit_code``,

@@ -17,7 +17,7 @@ from tabsdatak.server._tdrunner.function.commands.run_trigger_plugin.options imp
 
 def build_command_parser() -> ArgumentsParser:
     return RunTriggerPluginArguments.parser(
-        program="run-trigger-plugin",
+        program="trigger-plugin",
         description="Run a trigger plugin (not yet implemented).",
     )
 
@@ -28,6 +28,6 @@ def _run() -> int:
     raise NotImplementedError
 
 
-@tabsdata_command(name="td_run_trigger_plugin")
+@tabsdata_command(name="td_trigger_plugin")
 def main() -> int:
     return run_command(_run)

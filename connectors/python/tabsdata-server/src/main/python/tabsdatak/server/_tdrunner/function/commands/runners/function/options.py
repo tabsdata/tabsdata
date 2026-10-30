@@ -25,7 +25,7 @@ class RunFunctionArguments(CommandArguments):
         help=(
             "Path where the outputs manifest is written, with the location and "
             "stats of each written table, for report-completion and "
-            "run-destination-plugin."
+            "destination-plugin."
         ),
     )
     state_folder: Path = option(

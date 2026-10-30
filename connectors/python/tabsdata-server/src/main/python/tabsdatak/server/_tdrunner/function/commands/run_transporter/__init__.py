@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""run-transporter command.
+"""transporter command.
 
 Steps 4b and 7b of the publisher init-container chain. Thin wrapper that
 exec's `td_transporter --request <PATH>` while running a liveness ticker.
@@ -26,9 +26,9 @@ __all__ = ["run", "main"]
 
 VERSION = version()
 GENERATION = 1
-INFORMATION = "run-transporter — exec td_transporter with the given request YAML"
+INFORMATION = "transporter — exec td_transporter with the given request YAML"
 MANUAL = (
-    "run-transporter --request <PATH> --report <PATH> --liveness <PATH>\n\n"
+    "transporter --request <PATH> --report <PATH> --liveness <PATH>\n\n"
     "Exec's `td_transporter --request <PATH> --report <PATH>` with "
     "stdout/stderr inherited; returns whatever exit code the binary "
     "returned. The report file must not already exist; the binary "
@@ -38,7 +38,7 @@ MANUAL = (
 
 def build_command_parser() -> ArgumentsParser:
     return RunTransporterArguments.parser(
-        program="run-transporter",
+        program="transporter",
         description="Exec td_transporter with a transporter request YAML.",
         version=VERSION,
         information=INFORMATION,
@@ -46,7 +46,7 @@ def build_command_parser() -> ArgumentsParser:
     )
 
 
-@command(name="td_run_transporter", parser=build_command_parser)
+@command(name="td_transporter", parser=build_command_parser)
 def main(arguments: RunTransporterArguments) -> int:
     return run(arguments)
 

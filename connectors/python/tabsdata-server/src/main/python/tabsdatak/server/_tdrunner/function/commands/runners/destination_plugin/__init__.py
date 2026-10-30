@@ -19,11 +19,11 @@ from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.run
 VERSION = version()
 GENERATION = 2
 INFORMATION = (
-    "run-destination-plugin — hand the outputs the subscriber landed to its "
+    "destination-plugin — hand the outputs the subscriber landed to its "
     "destination plugin"
 )
 MANUAL = (
-    "run-destination-plugin --request <PATH> --bundle-folder <PATH> "
+    "destination-plugin --request <PATH> --bundle-folder <PATH> "
     "--outputs-manifest <PATH> --connection-file <PATH> --liveness <PATH>\n\n"
     "Loads the subscriber definition from --bundle-folder, its destination "
     "plugin from the connectors registry and the connection from "
@@ -36,7 +36,7 @@ MANUAL = (
 
 def build_command_parser() -> ArgumentsParser:
     return RunDestinationPluginArguments.parser(
-        program="run-destination-plugin",
+        program="destination-plugin",
         description="Hand the landed outputs to the destination plugin.",
         version=VERSION,
         information=INFORMATION,
@@ -44,7 +44,7 @@ def build_command_parser() -> ArgumentsParser:
     )
 
 
-@command(name="td_run_destination_plugin", parser=build_command_parser)
+@command(name="td_destination_plugin", parser=build_command_parser)
 def main(arguments: RunDestinationPluginArguments) -> int:
     return run(arguments)
 

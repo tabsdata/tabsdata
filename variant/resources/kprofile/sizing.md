@@ -11,7 +11,7 @@ three; `ephemeral-storage` is disk — the writable container layer plus any
 | apiserver / aiagent | 2 / 4Gi / 4Gi | 2 / 4Gi / 4Gi | 2 / 6Gi / 16Gi | 4 / 8Gi / 16Gi | I/O-bound: HTTP + 50-conn pool. aiagent's only local model is bge-small (~500MB resident); LLMs are remote APIs |
 | aiembeddings / aimetadata | 1 / 2Gi / 4Gi | 1 / 2Gi / 4Gi | 2 / 4Gi / 16Gi | 2 / 4Gi / 16Gi | batch embedding with the same small model |
 | index-build / index-sync | 1 / 2Gi / 4Gi | 1 / 2Gi / 4Gi | 1 / 2Gi / 16Gi | 2 / 4Gi / 16Gi | sidecars of the aiagent, so they add to its pod total |
-| run-function / run-source-plugin / run-destination-plugin steps | 2 / 4Gi / 8Gi | 2 / 4Gi / 8Gi | 4 / 16Gi / 16Gi | 4 / 16Gi / 16Gi | the steps running user code — deserve the headroom |
+| function / source-plugin / destination-plugin steps | 2 / 4Gi / 8Gi | 2 / 4Gi / 8Gi | 4 / 16Gi / 16Gi | 4 / 16Gi / 16Gi | the steps running user code — deserve the headroom |
 | other function steps | 500m / 1Gi / 2Gi | 500m / 1Gi / 2Gi | 1 / 2Gi / 8Gi | 1 / 2Gi / 8Gi | fetch/stamp/report orchestration |
 | venv create/download | 1 / 2Gi / 4Gi | 1 / 2Gi / 4Gi | 2 / 4Gi / 16Gi | 2 / 4Gi / 16Gi | 2cpu off kminus: extraction is the bottleneck |
 | dbmanager / tdmanager | 1 / 2Gi / 4Gi | 1 / 2Gi / 4Gi | 1 / 4Gi / 16Gi | 1 / 4Gi / 16Gi | schema build or upgrade rules + venv download |

@@ -16,7 +16,7 @@ _SRC = LocalFileSrc(
 def my_publisher(in_1: TableFramesSpec, ctx: TransactionCtx) -> TableFrameSpec:
     import os
 
-    # ctx.work_dir == --out-dir for run-function. Must already exist
+    # ctx.work_dir == --out-dir for function. Must already exist
     # by the time the user function runs, so a body that writes a
     # sidecar / probes the directory doesn't crash.
     assert os.path.isdir(ctx.work_dir), (

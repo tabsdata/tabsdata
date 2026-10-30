@@ -5,19 +5,19 @@
 """report-completion command.
 
 Step 8 (final) of the publisher init-container chain. Builds the
-response.yaml from the outputs manifest produced by `run-function`,
+response.yaml from the outputs manifest produced by `function`,
 writes a copy to `--response`, stamps the run's
 end time into the journal, and posts a `Done` callback to the responder
 carrying the response as the function `output`.
 
 For each declared `request.output` table the response includes a
-`Data` entry with the stats run-function read from the written table's
+`Data` entry with the stats function read from the written table's
 footer (column_count / row_count / schema_hash / data_bytes), or a
 `NoData` entry (table name only) when the outputs-manifest entry has no
 stats (the user function returned `None` for that slot).
 
 For each declared `request.system_output` table the response includes
-a `Data` entry with the stats of the state run-function wrote (the
+a `Data` entry with the stats of the state function wrote (the
 manifest's `state` entry), or `NoData` when it wrote none.
 
 A `request.output` table that has no entry in the outputs manifest is
