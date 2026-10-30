@@ -25,11 +25,11 @@ from tabsdatak.server._tdrunner.function._commons.manifests.output import (
 )
 from tabsdatak.server._tdrunner.function._commons.run.command import notify_status_done
 from tabsdatak.server._tdrunner.function._lib.journal import Journal
-from tabsdatak.server._tdrunner.function.commands.report_completion.arguments import (
-    ReportCompletionArguments,
-)
 from tabsdatak.server._tdrunner.function.commands.report_completion.error import (
     ReportCompletionErrorCode,
+)
+from tabsdatak.server._tdrunner.function.commands.report_completion.options import (
+    ReportCompletionArguments,
 )
 
 logger = logging.getLogger(__name__)

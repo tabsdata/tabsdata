@@ -40,7 +40,7 @@ from tabsdatak.server._tdrunner.function._commons.run.arguments import (
 )
 from tabsdatak.server._tdrunner.function._commons.run.command import command
 from tabsdatak.server._tdrunner.function._commons.run.version import version
-from tabsdatak.server._tdrunner.function.commands.run_streamer.arguments import (
+from tabsdatak.server._tdrunner.function.commands.run_streamer.options import (
     RunStreamerArguments,
 )
 from tabsdatak.server._tdrunner.function.commands.run_streamer.runner import (

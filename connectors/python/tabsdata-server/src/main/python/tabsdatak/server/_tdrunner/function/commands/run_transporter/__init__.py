@@ -15,7 +15,7 @@ from tabsdatak.server._tdrunner.function._commons.run.arguments import (
 )
 from tabsdatak.server._tdrunner.function._commons.run.command import command
 from tabsdatak.server._tdrunner.function._commons.run.version import version
-from tabsdatak.server._tdrunner.function.commands.run_transporter.arguments import (
+from tabsdatak.server._tdrunner.function.commands.run_transporter.options import (
     RunTransporterArguments,
 )
 from tabsdatak.server._tdrunner.function.commands.run_transporter.runner import (

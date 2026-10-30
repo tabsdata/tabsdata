@@ -22,7 +22,7 @@ from tabsdatak.server._tdrunner.function._commons.run.arguments import (
 )
 from tabsdatak.server._tdrunner.function._commons.run.command import command
 from tabsdatak.server._tdrunner.function._commons.run.version import version
-from tabsdatak.server._tdrunner.function.commands.fetch_request.arguments import (
+from tabsdatak.server._tdrunner.function.commands.fetch_request.options import (
     FetchRequestArguments,
 )
 from tabsdatak.server._tdrunner.function.commands.fetch_request.runner import (

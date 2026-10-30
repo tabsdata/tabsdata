@@ -55,7 +55,7 @@ from tabsdatak.server._tdrunner.function.commands.run_manifest_trigger import (
     _trigger_one,
     _trigger_pending,
 )
-from tabsdatak.server._tdrunner.function.commands.run_manifest_trigger.arguments import (  # noqa: E501
+from tabsdatak.server._tdrunner.function.commands.run_manifest_trigger.options import (  # noqa: E501
     RunManifestTriggerArguments,
 )
 from tabsdatak.server._tdrunner.function.commands.run_manifest_trigger.error import (

@@ -23,11 +23,11 @@ from tabsdatak.server._tdrunner.function._commons.manifests.input import (
     InputManifest,
     InputRecord,
 )
-from tabsdatak.server._tdrunner.function.commands.prep_localize_state.arguments import (
-    PrepLocalizeStateArguments,
-)
 from tabsdatak.server._tdrunner.function.commands.prep_localize_state.error import (
     PrepLocalizeStateErrorCode,
+)
+from tabsdatak.server._tdrunner.function.commands.prep_localize_state.options import (
+    PrepLocalizeStateArguments,
 )
 
 logger = logging.getLogger(__name__)

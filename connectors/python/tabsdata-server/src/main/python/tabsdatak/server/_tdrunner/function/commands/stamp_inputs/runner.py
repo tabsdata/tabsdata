@@ -27,11 +27,11 @@ from tabsdatak.server._tdrunner.function._commons.manifests.input import (
 from tabsdatak.server._tdrunner.function._commons.manifests.manifest import (
     ManifestError,
 )
-from tabsdatak.server._tdrunner.function.commands.stamp_inputs.arguments import (
-    StampInputsArguments,
-)
 from tabsdatak.server._tdrunner.function.commands.stamp_inputs.error import (
     StampInputsErrorCode,
+)
+from tabsdatak.server._tdrunner.function.commands.stamp_inputs.options import (
+    StampInputsArguments,
 )
 from tabsdatak.spi import MetadataSpec
 from tabsdatak.tableframe import TableFrame

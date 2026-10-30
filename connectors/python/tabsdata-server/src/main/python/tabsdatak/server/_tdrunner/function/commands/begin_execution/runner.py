@@ -19,11 +19,11 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
     notify_status_running,
 )
 from tabsdatak.server._tdrunner.function._lib.journal import Journal
-from tabsdatak.server._tdrunner.function.commands.begin_execution.arguments import (
-    BeginExecutionArguments,
-)
 from tabsdatak.server._tdrunner.function.commands.begin_execution.error import (
     BeginExecutionErrorCode,
+)
+from tabsdatak.server._tdrunner.function.commands.begin_execution.options import (
+    BeginExecutionArguments,
 )
 
 logger = logging.getLogger(__name__)

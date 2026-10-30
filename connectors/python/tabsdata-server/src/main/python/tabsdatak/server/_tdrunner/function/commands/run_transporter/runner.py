@@ -20,11 +20,11 @@ from tabsdatak.common._transporter.invoker.transporter1 import (
 from tabsdatak.server._tdrunner.function._lib.transporter import (
     run_transporter,
 )
-from tabsdatak.server._tdrunner.function.commands.run_transporter.arguments import (
-    RunTransporterArguments,
-)
 from tabsdatak.server._tdrunner.function.commands.run_transporter.error import (
     RunTransporterErrorCode,
+)
+from tabsdatak.server._tdrunner.function.commands.run_transporter.options import (
+    RunTransporterArguments,
 )
 
 logger = logging.getLogger(__name__)

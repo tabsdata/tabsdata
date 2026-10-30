@@ -24,11 +24,11 @@ from tabsdatak.server._tdrunner.function._commons.http.request import (
 )
 from tabsdatak.server._tdrunner.function._commons.http.retry import call_with_retry
 from tabsdatak.server._tdrunner.function._commons.solver.arguments import resolve_value
-from tabsdatak.server._tdrunner.function.commands.fetch_request.arguments import (
-    FetchRequestArguments,
-)
 from tabsdatak.server._tdrunner.function.commands.fetch_request.error import (
     FetchRequestErrorCode,
+)
+from tabsdatak.server._tdrunner.function.commands.fetch_request.options import (
+    FetchRequestArguments,
 )
 
 logger = logging.getLogger(__name__)

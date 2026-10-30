@@ -31,7 +31,7 @@ from tabsdatak.server._tdrunner.function._commons.run.arguments import (
 )
 from tabsdatak.server._tdrunner.function._commons.run.command import command
 from tabsdatak.server._tdrunner.function._commons.run.version import version
-from tabsdatak.server._tdrunner.function.commands.stamp_inputs.arguments import (
+from tabsdatak.server._tdrunner.function.commands.stamp_inputs.options import (
     StampInputsArguments,
 )
 from tabsdatak.server._tdrunner.function.commands.stamp_inputs.runner import (

@@ -16,7 +16,7 @@ from tabsdatak.server._tdrunner.function._commons.http.request import (
     HttpResponse,
 )
 from tabsdatak.server._tdrunner.function.commands.run_cron_trigger import runner
-from tabsdatak.server._tdrunner.function.commands.run_cron_trigger.arguments import (
+from tabsdatak.server._tdrunner.function.commands.run_cron_trigger.options import (
     RunCronTriggerArguments,
 )
 

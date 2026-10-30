@@ -19,11 +19,11 @@ from tabsdatak.server._tdrunner.function._commons.document.request import (
     Location,
 )
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
-from tabsdatak.server._tdrunner.function.commands.get_bundle.arguments import (
-    GetBundleArguments,
-)
 from tabsdatak.server._tdrunner.function.commands.get_bundle.error import (
     GetBundleErrorCode,
+)
+from tabsdatak.server._tdrunner.function.commands.get_bundle.options import (
+    GetBundleArguments,
 )
 
 logger = logging.getLogger(__name__)

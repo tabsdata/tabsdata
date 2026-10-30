@@ -53,11 +53,11 @@ from tabsdatak.server._tdrunner.function._lib.stage_manifest import (
     external_uid_from_filename,
     load_stage_manifest,
 )
-from tabsdatak.server._tdrunner.function.commands.run_manifest_trigger.arguments import (  # noqa: E501
-    RunManifestTriggerArguments,
-)
 from tabsdatak.server._tdrunner.function.commands.run_manifest_trigger.error import (
     RunManifestTriggerErrorCode,
+)
+from tabsdatak.server._tdrunner.function.commands.run_manifest_trigger.options import (  # noqa: E501
+    RunManifestTriggerArguments,
 )
 
 # Glob (relative to the stage root) for the streamer's manifests. The cursor-

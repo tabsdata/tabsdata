@@ -39,11 +39,11 @@ from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
-from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.arguments import (  # noqa: E501
-    RunDestinationPluginArguments,
-)
 from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.error import (  # noqa: E501
     RunDestinationPluginErrorCode,
+)
+from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.options import (  # noqa: E501
+    RunDestinationPluginArguments,
 )
 from tabsdatak.spi import DestContext
 

@@ -19,7 +19,7 @@ from tabsdatak.server._tdrunner.function._commons.run.arguments import (
 )
 from tabsdatak.server._tdrunner.function._commons.run.command import command
 from tabsdatak.server._tdrunner.function._commons.run.version import version
-from tabsdatak.server._tdrunner.function.commands.prep_localize_state.arguments import (
+from tabsdatak.server._tdrunner.function.commands.prep_localize_state.options import (
     PrepLocalizeStateArguments,
 )
 from tabsdatak.server._tdrunner.function.commands.prep_localize_state.runner import (

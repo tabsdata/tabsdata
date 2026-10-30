@@ -10,7 +10,7 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
     run_command,
     tabsdata_command,
 )
-from tabsdatak.server._tdrunner.function.commands.prepare_py_env.arguments import (
+from tabsdatak.server._tdrunner.function.commands.prepare_py_env.options import (
     PreparePyEnvArguments,
 )
 

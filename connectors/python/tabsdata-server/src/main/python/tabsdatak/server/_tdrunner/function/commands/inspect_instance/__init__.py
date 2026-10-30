@@ -11,7 +11,7 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
     tabsdata_command,
 )
 from tabsdatak.server._tdrunner.function._commons.run.version import version
-from tabsdatak.server._tdrunner.function.commands.inspect_instance.arguments import (
+from tabsdatak.server._tdrunner.function.commands.inspect_instance.options import (
     InspectInstanceArguments,
 )
 from tabsdatak.server._tdrunner.function.commands.inspect_instance.runner import run

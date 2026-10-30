@@ -23,11 +23,11 @@ from tabsdatak.server._tdrunner.function._commons.http.request import (
 )
 from tabsdatak.server._tdrunner.function._commons.http.retry import call_with_retry
 from tabsdatak.server._tdrunner.function._commons.solver.arguments import resolve_value
-from tabsdatak.server._tdrunner.function.commands.run_cron_trigger.arguments import (
-    RunCronTriggerArguments,
-)
 from tabsdatak.server._tdrunner.function.commands.run_cron_trigger.error import (
     RunCronTriggerErrorCode,
+)
+from tabsdatak.server._tdrunner.function.commands.run_cron_trigger.options import (
+    RunCronTriggerArguments,
 )
 
 logger = logging.getLogger(__name__)

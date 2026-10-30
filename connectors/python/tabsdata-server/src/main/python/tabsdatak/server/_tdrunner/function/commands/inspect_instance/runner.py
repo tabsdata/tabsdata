@@ -8,7 +8,7 @@ import logging
 import os
 
 from tabsdatak.server._tdrunner.function._lib.system_info import report_system
-from tabsdatak.server._tdrunner.function.commands.inspect_instance.arguments import (
+from tabsdatak.server._tdrunner.function.commands.inspect_instance.options import (
     InspectInstanceArguments,
 )
 

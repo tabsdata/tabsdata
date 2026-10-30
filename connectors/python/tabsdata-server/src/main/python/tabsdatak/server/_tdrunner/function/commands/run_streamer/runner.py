@@ -40,11 +40,11 @@ from tabsdatak.server._tdrunner.function._lib.journal import Journal
 from tabsdatak.server._tdrunner.function._lib.stream_src_ctx import (
     StreamerPluginCtx,
 )
-from tabsdatak.server._tdrunner.function.commands.run_streamer.arguments import (
-    RunStreamerArguments,
-)
 from tabsdatak.server._tdrunner.function.commands.run_streamer.error import (
     RunStreamerErrorCode,
+)
+from tabsdatak.server._tdrunner.function.commands.run_streamer.options import (
+    RunStreamerArguments,
 )
 
 logger = logging.getLogger(__name__)

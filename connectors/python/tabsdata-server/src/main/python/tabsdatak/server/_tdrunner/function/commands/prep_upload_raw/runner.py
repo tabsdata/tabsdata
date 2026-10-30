@@ -26,11 +26,11 @@ from tabsdatak.server._tdrunner.function._lib.transporter import (
     build_upload_landing_request,
     write_transporter_request,
 )
-from tabsdatak.server._tdrunner.function.commands.prep_upload_raw.arguments import (
-    PrepUploadRawArguments,
-)
 from tabsdatak.server._tdrunner.function.commands.prep_upload_raw.error import (
     PrepUploadRawErrorCode,
+)
+from tabsdatak.server._tdrunner.function.commands.prep_upload_raw.options import (
+    PrepUploadRawArguments,
 )
 
 logger = logging.getLogger(__name__)
