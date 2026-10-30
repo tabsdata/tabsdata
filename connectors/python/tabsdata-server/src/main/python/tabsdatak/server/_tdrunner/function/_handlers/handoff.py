@@ -9,16 +9,21 @@ import tempfile
 from abc import ABC
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import overload
 
 import polars as pl
 import pyarrow as pa
 
-from tabsdatak._handoff import dest_handoff
+from tabsdatak._handoff import dest_handoff, lend_bus, src_handoff
 from tabsdatak.server._tdrunner.function._commons.document.request import Info
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputManifest,
 )
 from tabsdatak.server._tdrunner.function._handlers.columns import ColumnPolicy, Zone
+from tabsdatak.server._tdrunner.function._handlers.landing import (
+    LandedFile,
+    Landing,
+)
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.spi import (
     Conn,
@@ -34,7 +39,19 @@ from tabsdatak.spi import (
     DestChannelOfLazyFrame,
     DestContext,
     DestPlugin,
+    MetadataSpec,
+    Src,
+    SrcBus,
+    SrcBusOfArrow,
+    SrcBusOfDataFrame,
+    SrcBusOfFile,
+    SrcBusOfLazyFrame,
+    SrcChannelOfArrow,
+    SrcChannelOfDataFrame,
+    SrcChannelOfFile,
+    SrcChannelOfLazyFrame,
     SrcPlugin,
+    SrcPluginCtx,
 )
 from tabsdatak.tableframe import TableFrame
 
@@ -73,9 +90,34 @@ class UnsupportedPluginError(HandoffError):
         self.plugin = plugin
 
 
+class ForeignBusError(HandoffError):
+    def __init__(
+        self,
+        plugin: SrcPlugin,
+        returned: object,
+    ) -> None:
+        super().__init__(
+            f"{type(plugin).__name__}.read_in returned {returned!r}, not the bus "
+            f"it was given",
+        )
+        self.plugin = plugin
+        self.returned = returned
+
+
 class Handoff(ABC):
+    @overload
     @staticmethod
-    def of(plugin: SrcPlugin | DestPlugin, base_folder: Path) -> DestinationHandoff:
+    def of(plugin: DestPlugin, base_folder: Path) -> DestinationHandoff: ...
+
+    @overload
+    @staticmethod
+    def of(plugin: SrcPlugin, base_folder: Path) -> SourceHandoff: ...
+
+    @staticmethod
+    def of(
+        plugin: SrcPlugin | DestPlugin,
+        base_folder: Path,
+    ) -> DestinationHandoff | SourceHandoff:
         if isinstance(plugin, DestPlugin):
             bus = dest_handoff(type(plugin))
             return DestinationHandoff(
@@ -83,10 +125,13 @@ class Handoff(ABC):
                 bus=DestBusOfFile if bus is None else bus,
                 legacy=bus is None,
             )
-        raise UnsupportedPluginError(plugin)
+        variant = src_handoff(type(plugin))
+        if variant is None:
+            raise UnsupportedPluginError(plugin)
+        return SourceHandoff(bus=variant)
 
 
-class LandedChannel:
+class NamedChannel:
     def __init__(
         self,
         name: str,
@@ -104,7 +149,7 @@ class LandedChannel:
         return self._position
 
 
-class FrameChannel(LandedChannel):
+class FrameChannel(NamedChannel):
     def __init__(
         self,
         name: str,
@@ -135,7 +180,7 @@ class ArrowChannel(FrameChannel, DestChannelOfArrow):
         )
 
 
-class FileChannel(LandedChannel, DestChannelOfFile):
+class FileChannel(NamedChannel, DestChannelOfFile):
     def __init__(
         self,
         name: str,
@@ -261,3 +306,126 @@ class DestinationHandoff(Handoff):
         if self.tables_folder is not None:
             shutil.rmtree(self.tables_folder, ignore_errors=True)
             self.tables_folder = None
+
+
+class LandingChannel(NamedChannel):
+    def __init__(
+        self,
+        name: str,
+        position: int,
+        landing: Landing,
+    ) -> None:
+        super().__init__(name, position)
+        self.landing = landing
+        self.landed: list[LandedFile] = []
+
+    def land(
+        self,
+        frame: pl.LazyFrame,
+        schema: pl.Schema | None,
+        metadata: MetadataSpec | None,
+    ) -> None:
+        self.landed.append(
+            self.landing.land(
+                self.position,
+                len(self.landed),
+                frame,
+                schema=schema,
+                metadata=metadata,
+            ),
+        )
+
+
+class LazyFrameLandingChannel(LandingChannel, SrcChannelOfLazyFrame):
+    def write(
+        self,
+        data: pl.LazyFrame,
+        *,
+        schema: pl.Schema | None = None,
+        metadata: MetadataSpec | None = None,
+    ) -> None:
+        self.land(data, schema, metadata)
+
+
+class DataFrameLandingChannel(LandingChannel, SrcChannelOfDataFrame):
+    def write(
+        self,
+        data: pl.DataFrame,
+        *,
+        schema: pl.Schema | None = None,
+        metadata: MetadataSpec | None = None,
+    ) -> None:
+        self.land(data.lazy(), schema, metadata)
+
+
+class ArrowLandingChannel(LandingChannel, SrcChannelOfArrow):
+    def write(
+        self,
+        data: pa.RecordBatchReader,
+        *,
+        schema: pl.Schema | None = None,
+        metadata: MetadataSpec | None = None,
+    ) -> None:
+        self.land(pl.scan_arrow_c_stream(data), schema, metadata)
+
+
+class FileLandingChannel(LandingChannel, SrcChannelOfFile):
+    def write(
+        self,
+        data: Path,
+        *,
+        schema: pl.Schema | None = None,
+        metadata: MetadataSpec | None = None,
+    ) -> None:
+        self.land(pl.scan_parquet(data), schema, metadata)
+
+
+LANDING_CHANNELS: dict[type[SrcBus], type[LandingChannel]] = {
+    SrcBusOfLazyFrame: LazyFrameLandingChannel,
+    SrcBusOfDataFrame: DataFrameLandingChannel,
+    SrcBusOfArrow: ArrowLandingChannel,
+    SrcBusOfFile: FileLandingChannel,
+}
+
+
+@dataclass(kw_only=True)
+class SourceHandoff(Handoff):
+    bus: type[SrcBus]
+    channels: list[LandingChannel] = field(default_factory=list, init=False)
+
+    def seed(
+        self,
+        info: Info,
+        names: list[str],
+    ) -> SrcBus:
+        landing = Landing(info.function_landing)
+        channel = LANDING_CHANNELS[self.bus]
+        self.channels = [
+            channel(
+                name,
+                position,
+                landing,
+            )
+            for position, name in enumerate(names)
+        ]
+        return self.bus(self.channels)
+
+    def grow(
+        self,
+        plugin: SrcPlugin,
+        context: SrcPluginCtx,
+        connection: Conn,
+        source: Src,
+        bus: SrcBus,
+    ) -> None:
+        with lend_bus(plugin, bus):
+            returned = plugin.read_in(
+                context,
+                connection,
+                source,
+            )
+        if returned is not bus:
+            raise ForeignBusError(plugin, returned)
+
+    def reap(self) -> list[list[LandedFile]]:
+        return [channel.landed for channel in self.channels]

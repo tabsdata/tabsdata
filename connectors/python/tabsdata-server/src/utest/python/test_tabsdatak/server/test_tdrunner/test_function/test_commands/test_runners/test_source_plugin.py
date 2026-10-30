@@ -26,6 +26,10 @@ from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
 from tabsdatak.server._tdrunner.function._commons.document.request import (
     Location,
 )
+from tabsdatak.server._tdrunner.function._commons.manifests.input import (
+    InputManifest,
+)
+from tabsdatak.server._tdrunner.function._handlers.landing import LandedFile, Origin
 from tabsdatak.server._tdrunner.function._handlers.state import (
     STATE_FILE,
     read_state,
@@ -48,10 +52,12 @@ from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.runner i
     SourceContext,
     bind_source,
     build_manifest_stage_connection,
+    input_names,
     load_function_definition,
     read_in,
     table_file_path,
     write_inputs_manifest,
+    write_landed_manifest,
 )
 from tabsdatak.spi import TableFileInput
 from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payload
@@ -681,6 +687,45 @@ def test_invoke_read_in_wraps_exceptions_as_plugin_failed():
         )
 
 
+# --- unit: landed inputs ------------------------------------------------
+
+
+def test_inputs_are_named_after_the_publisher_parameters(fixture_publisher):
+    assert input_names(fixture_publisher, 1) == ["in_1"]
+    assert input_names(fixture_publisher, -1) == ["in_1"]
+    assert input_names(fixture_publisher, 0) == []
+
+
+def test_write_landed_manifest_records_each_landed_file(tmp_path):
+    def landed(position: int, index: int) -> LandedFile:
+        return LandedFile(
+            position=position,
+            index=index,
+            data=Location(uri=f"file:///r/{position}.{index}.t", env_prefix="ROOT"),
+            schema=Location(uri=f"file:///r/{position}.{index}.s", env_prefix="ROOT"),
+            rows=1,
+            origin=Origin.DECLARED,
+        )
+
+    path = tmp_path / "manifest.yaml"
+    write_landed_manifest(
+        ["orders", "customers"],
+        [[landed(0, 0), landed(0, 1)], []],
+        path,
+    )
+    orders, customers = InputManifest.load(path).inputs
+    assert (orders.name, orders.table_pos, customers.tables) == ("orders", 0, ())
+    assert [record.location.uri for record in orders.tables] == [
+        "file:///r/0.0.t",
+        "file:///r/0.1.t",
+    ]
+    assert orders.tables[1].schema == Location(
+        uri="file:///r/0.1.s",
+        env_prefix="ROOT",
+    )
+    assert all(record.file is None for record in orders.tables)
+
+
 # --- unit: write_inputs_manifest ----------------------------------------
 
 
@@ -711,6 +756,7 @@ def test_write_inputs_manifest_happy(tmp_path, fixture_publisher):
         return {
             "file": file,
             "location": None,
+            "schema": None,
             "metadata": metadata,
             "input_idx": None,
             "version_pos": -1,

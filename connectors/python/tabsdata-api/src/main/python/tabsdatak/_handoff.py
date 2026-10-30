@@ -5,7 +5,8 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any, get_args, get_origin, get_type_hints
+from contextlib import contextmanager
+from typing import Any, Iterator, get_args, get_origin, get_type_hints
 
 from tabsdatak.spi import (
     DestBus,
@@ -129,6 +130,18 @@ def src_handoff(plugin: type[SrcPlugin]) -> type[SrcBus] | None:
             f"argument of SrcPlugin",
         )
     return None
+
+
+@contextmanager
+def lend_bus(
+    plugin: SrcPlugin,
+    bus: SrcBus,
+) -> Iterator[None]:
+    plugin._bus = bus
+    try:
+        yield
+    finally:
+        plugin._bus = None
 
 
 def deprecated_src(plugin: type[SrcPlugin]) -> bool:

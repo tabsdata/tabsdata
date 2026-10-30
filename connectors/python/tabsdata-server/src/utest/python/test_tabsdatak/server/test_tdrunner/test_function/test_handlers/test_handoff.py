@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 import pyarrow as pa
@@ -18,11 +19,14 @@ from tabsdatak.server._tdrunner.function._commons.manifests.output import (
 from tabsdatak.server._tdrunner.function._handlers.columns import ColumnPolicy, Zone
 from tabsdatak.server._tdrunner.function._handlers.handoff import (
     DestinationHandoff,
+    ForeignBusError,
     Handoff,
     MissingOutputError,
     OutputCopyError,
+    SourceHandoff,
     UnsupportedPluginError,
 )
+from tabsdatak.server._tdrunner.function._handlers.landing import Origin
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.spi import (
     DestBus,
@@ -32,6 +36,11 @@ from tabsdatak.spi import (
     DestBusOfLazyFrame,
     DestContext,
     DestPlugin,
+    SrcBus,
+    SrcBusOfArrow,
+    SrcBusOfDataFrame,
+    SrcBusOfFile,
+    SrcBusOfLazyFrame,
     SrcPlugin,
     TableFileSpec,
 )
@@ -110,7 +119,7 @@ class LazyFrameDestination(DestPlugin):
         self.received = bus
 
 
-class Source(SrcPlugin):
+class LegacySource(SrcPlugin):
     def read_in(
         self,
         ctx,
@@ -140,9 +149,9 @@ def test_a_bus_destination_gets_the_bus_it_declares(tmp_path):
     assert (chosen.bus, chosen.legacy) == (DestBusOfLazyFrame, False)
 
 
-def test_a_source_plugin_has_no_handoff_yet(tmp_path):
-    with pytest.raises(UnsupportedPluginError, match="Source"):
-        Handoff.of(Source(), tmp_path)
+def test_a_legacy_source_plugin_has_no_handoff_yet(tmp_path):
+    with pytest.raises(UnsupportedPluginError, match="LegacySource"):
+        Handoff.of(LegacySource(), tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -257,3 +266,178 @@ def test_reap_removes_what_seed_copied(tmp_path):
 def test_reap_without_seed_does_nothing(tmp_path):
     handoff(tmp_path, DestBusOfFile).reap()
     assert not (tmp_path / "work").exists()
+
+
+# --- source handoff -----------------------------------------------------------
+
+ORDERS = pl.DataFrame({"id": [1, 2]})
+NOTHING: Any = None
+
+
+def write_all(
+    bus: SrcBus,
+    writes: tuple[list[Any], ...],
+) -> SrcBus:
+    for position, items in enumerate(writes):
+        for item in items:
+            bus[position].write(item)
+    return bus
+
+
+class LazyFrameSource(SrcPlugin[Any, Any, SrcBusOfLazyFrame]):
+    def __init__(self, *writes: list[Any]) -> None:
+        self.writes = writes
+
+    def read_in(self, ctx, conn, src) -> SrcBusOfLazyFrame:
+        return write_all(self.bus, self.writes)
+
+
+class DataFrameSource(SrcPlugin[Any, Any, SrcBusOfDataFrame]):
+    def __init__(self, *writes: list[Any]) -> None:
+        self.writes = writes
+
+    def read_in(self, ctx, conn, src) -> SrcBusOfDataFrame:
+        return write_all(self.bus, self.writes)
+
+
+class ArrowSource(SrcPlugin[Any, Any, SrcBusOfArrow]):
+    def __init__(self, *writes: list[Any]) -> None:
+        self.writes = writes
+
+    def read_in(self, ctx, conn, src) -> SrcBusOfArrow:
+        return write_all(self.bus, self.writes)
+
+
+class FileSource(SrcPlugin[Any, Any, SrcBusOfFile]):
+    def __init__(self, *writes: list[Any]) -> None:
+        self.writes = writes
+
+    def read_in(self, ctx, conn, src) -> SrcBusOfFile:
+        return write_all(self.bus, self.writes)
+
+
+class ForeignSource(SrcPlugin[Any, Any, SrcBusOfLazyFrame]):
+    def read_in(self, ctx, conn, src) -> SrcBusOfLazyFrame:
+        return SrcBusOfLazyFrame([])
+
+
+def orders_as(
+    bus: type[SrcBus],
+    folder: Path,
+) -> Any:
+    if bus is SrcBusOfLazyFrame:
+        return ORDERS.lazy()
+    if bus is SrcBusOfDataFrame:
+        return ORDERS
+    if bus is SrcBusOfArrow:
+        table = ORDERS.to_arrow()
+        return pa.RecordBatchReader.from_batches(table.schema, table.to_batches())
+    file = folder / "orders.parquet"
+    ORDERS.write_parquet(file)
+    return file
+
+
+def run_source(
+    root: Path,
+    plugin: SrcPlugin,
+    names: list[str],
+) -> tuple[SourceHandoff, SrcBus]:
+    chosen = Handoff.of(plugin, root)
+    bus = chosen.seed(landing_info(root), names)
+    chosen.grow(
+        plugin,
+        NOTHING,
+        NOTHING,
+        NOTHING,
+        bus,
+    )
+    return chosen, bus
+
+
+def landed_values(location) -> dict:
+    return pl.read_parquet(TableFile.stored(location).locator().uri).to_dict(
+        as_series=False,
+    )
+
+
+def test_a_bus_source_gets_the_bus_it_declares(tmp_path):
+    chosen = Handoff.of(LazyFrameSource(), tmp_path)
+    assert isinstance(chosen, SourceHandoff)
+    assert chosen.bus is SrcBusOfLazyFrame
+
+
+@pytest.mark.parametrize(
+    "source, bus",
+    [
+        (LazyFrameSource, SrcBusOfLazyFrame),
+        (DataFrameSource, SrcBusOfDataFrame),
+        (ArrowSource, SrcBusOfArrow),
+        (FileSource, SrcBusOfFile),
+    ],
+)
+def test_every_source_bus_lands_what_the_plugin_writes(tmp_path, source, bus):
+    plugin = source([orders_as(bus, tmp_path)])
+    chosen, _ = run_source(tmp_path, plugin, ["orders"])
+    [[landed]] = chosen.reap()
+    assert (landed.position, landed.index, landed.rows) == (0, 0, 2)
+    assert landed.origin is Origin.DECLARED
+    assert landed.data.uri.endswith("/landing/0.0.t")
+    assert landed_values(landed.data) == {"id": [1, 2]}
+
+
+def test_source_channels_are_named_after_the_inputs(tmp_path):
+    chosen = Handoff.of(LazyFrameSource(), tmp_path)
+    bus = chosen.seed(landing_info(tmp_path), ["orders", "customers"])
+    assert [(channel.name, channel.position) for channel in bus] == [
+        ("orders", 0),
+        ("customers", 1),
+    ]
+
+
+def test_each_write_to_a_channel_lands_a_file_of_its_own(tmp_path):
+    strings = pl.LazyFrame({"id": ["7"]})
+    plugin = LazyFrameSource(
+        [ORDERS.lazy(), strings],
+        [],
+    )
+    chosen = Handoff.of(plugin, tmp_path)
+    bus = chosen.seed(landing_info(tmp_path), ["orders", "customers"])
+    chosen.grow(
+        plugin,
+        NOTHING,
+        NOTHING,
+        NOTHING,
+        bus,
+    )
+    [first, second], none = chosen.reap()
+    assert (first.index, second.index, none) == (0, 1, [])
+    assert second.data.uri.endswith("/landing/0.1.t")
+    assert landed_values(second.data) == {"id": ["7"]}
+
+
+def test_a_write_lands_its_schema_and_metadata(tmp_path):
+    class Untyped(SrcPlugin[Any, Any, SrcBusOfLazyFrame]):
+        def read_in(self, ctx, conn, src) -> SrcBusOfLazyFrame:
+            self.bus["orders"].write(
+                pl.LazyFrame({"id": ["7"]}),
+                schema=pl.Schema({"id": pl.Int64}),
+                metadata={"@path": "/data/a.csv"},
+            )
+            return self.bus
+
+    chosen, _ = run_source(tmp_path, Untyped(), ["orders"])
+    [[landed]] = chosen.reap()
+    assert landed.origin is Origin.INFERRED
+    assert landed.metadata == {"@path": "/data/a.csv"}
+
+
+def test_a_source_must_return_the_bus_it_was_given(tmp_path):
+    with pytest.raises(ForeignBusError, match="ForeignSource.read_in returned"):
+        run_source(tmp_path, ForeignSource(), ["orders"])
+
+
+def test_the_bus_is_withdrawn_after_read_in(tmp_path):
+    plugin = LazyFrameSource([ORDERS.lazy()])
+    run_source(tmp_path, plugin, ["orders"])
+    with pytest.raises(RuntimeError, match="has no bus"):
+        plugin.bus

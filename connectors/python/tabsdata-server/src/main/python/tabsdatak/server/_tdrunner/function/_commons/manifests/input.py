@@ -17,6 +17,7 @@ SINGLE_VERSION_POS = -1
 class InputRecord:
     file: str | None = None
     location: Location | None = None
+    schema: Location | None = None
     metadata: MetadataSpec | None = None
     input_idx: int | None = None
     version_pos: int = SINGLE_VERSION_POS
