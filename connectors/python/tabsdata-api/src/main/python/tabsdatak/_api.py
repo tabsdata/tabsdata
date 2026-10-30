@@ -1601,3 +1601,25 @@ def warn_legacy_dest(plugin: type) -> str:
     )
     warnings.warn(message, category=LegacyDestTablesWarning, stacklevel=2)
     return message
+
+
+# Warning category of a source plugin still returning the legacy list of local
+# parquet files.
+LegacySrcTablesWarning = deprecated_category(
+    reason=(
+        "read_in returns list[list[TableFileInput]], so the plugin materialises "
+        "every table as local parquet files"
+    ),
+    replacement="declare a SrcBus variant as SrcPlugin's third type argument",
+    since="2.3.0",
+)
+
+
+def warn_legacy_src(plugin: type) -> str:
+    message = (
+        f"{plugin.__module__}.{plugin.__qualname__}.read_in returns the "
+        f"deprecated list[list[TableFileInput]]; declare a SrcBus variant "
+        f"instead"
+    )
+    warnings.warn(message, category=LegacySrcTablesWarning, stacklevel=2)
+    return message

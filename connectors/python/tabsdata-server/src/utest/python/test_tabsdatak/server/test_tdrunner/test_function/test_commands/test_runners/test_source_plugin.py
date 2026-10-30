@@ -26,13 +26,13 @@ from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
 from tabsdatak.server._tdrunner.function._commons.document.request import (
     Location,
 )
-from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function._handlers.state import (
     STATE_FILE,
     read_state,
     write_state,
 )
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
+from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function.commands.runners.source_plugin import main
 from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.error import (
     BadBundleError,
@@ -974,6 +974,34 @@ def test_main_end_to_end_happy_path(
 
     # Liveness file was created by the context manager.
     assert liveness.exists()
+
+
+def test_main_logs_that_a_legacy_plugin_is_deprecated(
+    tmp_path,
+    built_bundle,
+    monkeypatch,
+    http_ok_url,
+    capfd,
+):
+    set_arguments(
+        monkeypatch,
+        write_request(tmp_path / "request.yaml"),
+        built_bundle,
+        tmp_path / "out",
+        tmp_path / "manifest.yaml",
+        tmp_path / "live",
+        connection_file=write_connection_file(
+            tmp_path / "connection.yaml",
+            tmp_path / "srcdata",
+        ),
+        responder_url=http_ok_url,
+    )
+    assert main() == 0
+    output = capfd.readouterr()
+    assert (
+        "LocalFileSrcPlugin.read_in returns the deprecated "
+        "list[list[TableFileInput]]" in output.out + output.err
+    )
 
 
 # --- decorator metadata -------------------------------------------------

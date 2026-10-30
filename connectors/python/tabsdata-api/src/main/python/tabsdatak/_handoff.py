@@ -23,6 +23,7 @@ from tabsdatak.spi import (
     SrcChannel,
     SrcPlugin,
     SrcTablesSpec,
+    StreamStageSrcPlugin,
 )
 
 # The `SrcBus` variants a plugin may declare, in order of preference.
@@ -128,6 +129,15 @@ def src_handoff(plugin: type[SrcPlugin]) -> type[SrcBus] | None:
             f"argument of SrcPlugin",
         )
     return None
+
+
+def deprecated_src(plugin: type[SrcPlugin]) -> bool:
+    # A stream stage plugin's read_in is framework code its subclasses must
+    # not override, so they could not act on the warning.
+    return src_handoff(plugin) is None and not issubclass(
+        plugin,
+        StreamStageSrcPlugin,
+    )
 
 
 def dest_handoff(plugin: type[DestPlugin]) -> type[DestBus] | None:

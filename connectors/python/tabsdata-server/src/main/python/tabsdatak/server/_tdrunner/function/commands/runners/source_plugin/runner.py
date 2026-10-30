@@ -11,7 +11,9 @@ from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 
+from tabsdatak._api import warn_legacy_src
 from tabsdatak._connectors import get_src, get_stream_src
+from tabsdatak._handoff import deprecated_src
 from tabsdatak._info import (
     KIND_PUBLISHER_DEF,
     KIND_STREAM_PUBLISHER_DEF,
@@ -258,6 +260,8 @@ def run(arguments: RunSourcePluginArguments) -> int:
         request.info.function_stage,
         arguments.connection_file,
     )
+    if deprecated_src(type(binding.plugin)):
+        logger.warning(warn_legacy_src(type(binding.plugin)))
     logger.debug(
         f"Source plugin {type(binding.plugin).__name__} "
         f"for connection {type(binding.connection).__name__} "

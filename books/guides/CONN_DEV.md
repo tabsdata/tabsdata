@@ -182,7 +182,11 @@ hands its data to the runtime:
   (`pl.DataFrame`), `SrcBusOfArrow` (`pa.RecordBatchReader`),
   `SrcBusOfFile` (a local parquet `Path`);
 - no third argument: the legacy form, `read_in` returns one list of
-  `TableFileInput` per input.
+  `TableFileInput` per input. Deprecated since 2.3.0: registering such
+  a plugin raises a `TabsdataDeprecatedWarning` (ignored by default
+  like every Tabsdata deprecation), and each run logs a warning in the
+  source step. Stream stage plugins (`StreamStageSrcPlugin`) are
+  exempt: their `read_in` is framework code.
 
 `SrcDef.table_mode` says how the writes to one input are served:
 `TableMode.SINGLE` concatenates them as chunks of one table,

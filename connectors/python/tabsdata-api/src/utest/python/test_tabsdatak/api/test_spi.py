@@ -12,10 +12,16 @@ import pytest
 
 # noinspection PyProtectedMember
 from tabsdatak import _api
-from tabsdatak._api import LegacyDestTablesWarning, warn_legacy_dest
+from tabsdatak._api import (
+    LegacyDestTablesWarning,
+    LegacySrcTablesWarning,
+    warn_legacy_dest,
+    warn_legacy_src,
+)
 from tabsdatak._handoff import (
     DEST_BUSES,
     SRC_BUSES,
+    deprecated_src,
     dest_bus_names,
     dest_handoff,
     src_bus_names,
@@ -61,6 +67,7 @@ from tabsdatak.spi import (
     StreamSrcPlugin,
     StreamSrcPluginCtx,
     StreamStageSrc,
+    StreamStageSrcPlugin,
     StreamStateSpec,
     TableFileInput,
     TableFileSpec,
@@ -1151,3 +1158,33 @@ def test_the_base_source_bus_cannot_be_built():
 def test_a_source_bus_refuses_channels_of_another_variant():
     with pytest.raises(TypeError, match="holds SrcChannelOfLazyFrame"):
         SrcBusOfLazyFrame([FileSrcChannel("orders", 0)])
+
+
+def test_registering_a_legacy_source_plugin_warns_it_is_deprecated():
+    with pytest.warns(LegacySrcTablesWarning, match="_GoodSrcPlugin.read_in"):
+        register_source(_GoodSrcPlugin)
+
+
+def test_registering_a_bus_source_plugin_warns_nothing(recwarn):
+    register_source(LazyFrameSrcPlugin)
+    assert not [
+        warning
+        for warning in recwarn
+        if issubclass(warning.category, LegacySrcTablesWarning)
+    ]
+
+
+def test_a_stream_stage_source_plugin_is_not_deprecated():
+    class Stage(StreamStageSrcPlugin):
+        pass
+
+    assert src_handoff(Stage) is None
+    assert not deprecated_src(Stage)
+    assert deprecated_src(_GoodSrcPlugin)
+
+
+def test_the_legacy_source_warning_names_the_replacement():
+    with pytest.warns(LegacySrcTablesWarning) as raised:
+        message = warn_legacy_src(_GoodSrcPlugin)
+    assert "_GoodSrcPlugin.read_in" in message
+    assert "SrcBus variant" in str(raised[0].message)

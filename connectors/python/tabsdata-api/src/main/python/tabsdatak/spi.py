@@ -1058,11 +1058,12 @@ class SrcDef[S: Src]:
 
     @model_validator(mode="after")
     def _validate(self) -> "SrcDef":
-        from tabsdatak._handoff import src_handoff
+        from tabsdatak._handoff import deprecated_src
 
         check_plugin_param_type(self.plugin, "read_in", "conn", self.conn)
         check_plugin_param_type(self.plugin, "read_in", "src", self.src)
-        src_handoff(self.plugin)
+        if deprecated_src(self.plugin):
+            _api.warn_legacy_src(self.plugin)
         if self.explorer is not None:
             check_plugin_param_type(self.explorer, "metadata", "conn", self.conn)
             check_plugin_param_type(self.explorer, "data", "conn", self.conn)
