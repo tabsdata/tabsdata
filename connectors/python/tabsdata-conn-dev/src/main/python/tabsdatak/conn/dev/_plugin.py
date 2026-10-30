@@ -4,14 +4,22 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+import polars as pl
+
 from tabsdatak.conn.dev import (
     DataGenSrc,
     DataGenSrcConn,
+    ProbeDest,
+    ProbeDestConn,
     TrashDest,
     TrashDestConn,
 )
 from tabsdatak.conn.dev.error import DevErrorCode
 from tabsdatak.spi import (
+    DestBusOfLazyFrame,
     DestContext,
     DestDef,
     DestPlugin,
@@ -70,6 +78,37 @@ class TrashDestPlugin(DestPlugin[TrashDestConn, TrashDest]):
         pass
 
 
+class ProbeDestPlugin(DestPlugin[ProbeDestConn, ProbeDest]):
+    def write_out(  # type: ignore[override]
+        self,
+        ctx: DestContext,
+        conn: ProbeDestConn,
+        dest: ProbeDest,
+        bus: DestBusOfLazyFrame,
+    ) -> None:
+        report = {
+            "bus": type(bus).__name__,
+            "channels": [
+                {
+                    "name": channel.name,
+                    "position": channel.position,
+                    "rows": channel.read().select(pl.len()).collect().item(),
+                    "columns": channel.read().collect_schema().names(),
+                }
+                for channel in bus
+            ],
+        }
+        path = Path(conn.folder) / f"{ctx.transaction_id}.json"
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(report, indent=2))
+        except OSError as error:
+            raise DevErrorCode.DEV_12.exception(
+                cause=error,
+                path=path,
+            )
+
+
 # --- Bindings ----------------------------------------------------
 
 
@@ -95,6 +134,19 @@ TRASH_DEST = DestDef(
     dest=TrashDest,
     cardinality=lambda dest: 1,
     plugin=TrashDestPlugin,
+    explorer=None,
+    icon=None,
+)
+
+
+PROBE_DEST = DestDef(
+    conn=ProbeDestConn,
+    type_="dev-probe-out",
+    system="Development",
+    dest_version="v1",
+    dest=ProbeDest,
+    cardinality=lambda dest: dest.outputs,
+    plugin=ProbeDestPlugin,
     explorer=None,
     icon=None,
 )

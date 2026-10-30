@@ -70,3 +70,19 @@ class DevErrorCode(ErrorCode):
         DevRuntimeException,
         "DataGenSrc read failed (slot={slot})",
     )  # DataGenSrcPlugin.read_in
+    DEV_9 = ErrorDef(
+        ConnInitException,
+        "ProbeDestConn validation failed",
+    )  # ProbeDestConn
+    DEV_10 = ErrorDef(
+        ConnInitException,
+        "ProbeDest validation failed",
+    )  # ProbeDest
+    DEV_11 = ErrorDef(
+        DevValidateException,
+        "ProbeDest.outputs must be a positive integer (got {value})",
+    )  # ProbeDest.validate()
+    DEV_12 = ErrorDef(
+        DevRuntimeException,
+        "ProbeDest could not write its report to {path}",
+    )  # ProbeDestPlugin.write_out

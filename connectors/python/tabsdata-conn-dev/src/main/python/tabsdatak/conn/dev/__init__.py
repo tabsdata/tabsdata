@@ -12,6 +12,10 @@ system. Imported from `tabsdatak.conn.dev`:
   slot per `Data`.
 * `TrashDestConn` / `TrashDest` -- a `@subscriber` sink to
   nowhere; the frame is discarded.
+* `ProbeDestConn` / `ProbeDest` -- a `@subscriber` destination that
+  writes no data: it reports, per run, what it received through its
+  `DestBusOfLazyFrame` (each output's name, position, rows and
+  columns) as a JSON file in the connection's folder.
 
 Each `Data` carries its dataframe as base64-encoded parquet on the
 wire; the combined encoded size of all dataframes may not exceed 10 MB.
@@ -179,6 +183,20 @@ class DataGenSrcConn(Conn):
     """
 
 
+@_api.dataclass(DevErrorCode.DEV_9, kw_only=True)
+class ProbeDestConn(Conn):
+    """Connection for `ProbeDest` -- the folder its reports go to.
+
+    :categories: destination
+
+    Args:
+        folder: Folder where each run writes its report,
+            `<transaction id>.json`.
+    """
+
+    folder: str
+
+
 @_api.dataclass(DevErrorCode.DEV_3, kw_only=True)
 class TrashDestConn(Conn):
     """Connection for `TrashDest` -- no configuration.
@@ -255,3 +273,37 @@ class TrashDest(Dest):
     Carries no configuration; the subscriber returns a single frame,
     which is dropped.
     """
+
+
+@_api.dataclass(DevErrorCode.DEV_10, kw_only=True)
+class ProbeDest(Dest):
+    """Destination reporting what a `@subscriber` hands it -- it writes
+    no data.
+
+    :categories: destination
+
+    Each run writes one JSON report to its connection's folder: the
+    `DestBus` variant it received and, per output, the name, position,
+    row count and column names. Useful to check what a destination
+    receives without an external system.
+
+    Args:
+        outputs: How many outputs the subscriber returns.
+
+    Examples:
+        .. code-block:: python
+
+            @subscriber(destination=ProbeDest(outputs=2), input_tables=["a", "b"])
+            def probe(a: TableFrameSpec, b: TableFrameSpec):
+                return a, b
+    """
+
+    outputs: int = 1
+
+    def validate(self) -> None:
+        """Validate `outputs` is a positive integer.
+
+        Called by the framework; raises `DevValidateException`.
+        """
+        if self.outputs <= 0:
+            raise DevErrorCode.DEV_11.exception(value=repr(self.outputs))

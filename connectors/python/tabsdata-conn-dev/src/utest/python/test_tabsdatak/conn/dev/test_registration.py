@@ -21,13 +21,14 @@ from pathlib import Path
 from typing import cast
 
 from tabsdatak import _connectors
-from tabsdatak.conn.dev import DataGenSrc, TrashDest
+from tabsdatak.conn.dev import DataGenSrc, ProbeDest, TrashDest
 from tabsdatak.spi import DestDef, SrcDef
 
 _GROUP = "tabsdatak.connectors"
 
 _SRC_TYPE = "dev-datagen-in"
 _DEST_TYPE = "dev-trash-out"
+_PROBE_TYPE = "dev-probe-out"
 
 
 def _declared_entry_points() -> dict[str, str]:
@@ -58,8 +59,15 @@ def test_dest_def():
     assert dd.dest == TrashDest
 
 
+def test_probe_dest_def():
+    d = _connectors._registry()[_PROBE_TYPE]
+    assert isinstance(d, DestDef)
+    dd = cast(DestDef, d)
+    assert dd.dest == ProbeDest
+
+
 def test_declared_entry_points_are_the_registered_defs():
-    assert len(_ENTRY_POINTS) == 2
+    assert len(_ENTRY_POINTS) == 3
     registry = _connectors._registry()
     for name, value in sorted(_ENTRY_POINTS.items()):
         module, _, attr = value.partition(":")
@@ -68,7 +76,7 @@ def test_declared_entry_points_are_the_registered_defs():
 
 
 def test_scan_does_not_warn_about_this_connector():
-    tokens = {*_ENTRY_POINTS, _SRC_TYPE, _DEST_TYPE}
+    tokens = {*_ENTRY_POINTS, _SRC_TYPE, _DEST_TYPE, _PROBE_TYPE}
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", RuntimeWarning)
         _connectors.reload_connectors()

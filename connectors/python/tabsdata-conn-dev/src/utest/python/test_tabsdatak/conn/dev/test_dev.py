@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -18,10 +19,13 @@ from tabsdatak.conn.dev import (
     Data,
     DataGenSrc,
     DataGenSrcConn,
+    ProbeDest,
+    ProbeDestConn,
     TrashDest,
     TrashDestConn,
 )
-from tabsdatak.conn.dev.error import DevValidateException
+from tabsdatak.conn.dev.error import DevRuntimeException, DevValidateException
+from tabsdatak.spi import DestBusOfLazyFrame, DestChannelOfLazyFrame, dest_handoff
 
 pytestmark = pytest.mark.conn_dev
 
@@ -203,3 +207,80 @@ def test_trash_dest_write_out_discards_and_returns_none(tmp_path):
 def test_conns_share_kind_but_are_distinct_classes():
     assert DataGenSrcConn is not TrashDestConn
     assert DataGenSrcConn.__kind__ == TrashDestConn.__kind__ == "connectionDef"
+
+
+# ---------------------------------------------------------------------------
+# ProbeDest
+# ---------------------------------------------------------------------------
+
+
+class LazyFrameChannel(DestChannelOfLazyFrame):
+    def __init__(self, name: str, position: int, frame: pl.LazyFrame) -> None:
+        self._name = name
+        self._position = position
+        self._frame = frame
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def position(self) -> int:
+        return self._position
+
+    def read(self) -> pl.LazyFrame:
+        return self._frame
+
+
+class TransactionContext:
+    transaction_id = "trx-1"
+
+
+def test_probe_dest_round_trips_and_defaults_to_one_output():
+    dest = ProbeDest()
+    assert dest.outputs == 1
+    assert ProbeDest.from_json(ProbeDest(outputs=2).to_json()) == ProbeDest(outputs=2)
+
+
+@pytest.mark.parametrize("bad", [0, -1])
+def test_probe_dest_rejects_a_non_positive_output_count(bad):
+    with pytest.raises(DevValidateException):
+        ProbeDest(outputs=bad).validate()
+
+
+def test_probe_dest_receives_a_lazy_frame_bus():
+    assert dest_handoff(plugin.ProbeDestPlugin) is DestBusOfLazyFrame
+
+
+def test_probe_dest_reports_what_each_channel_holds(tmp_path):
+    bus = DestBusOfLazyFrame(
+        [
+            LazyFrameChannel("out_0", 0, pl.LazyFrame({"a": [1, 2], "b": ["x", "y"]})),
+            LazyFrameChannel("out_1", 1, pl.LazyFrame({"c": [3]})),
+        ],
+    )
+    plugin.ProbeDestPlugin().write_out(
+        TransactionContext(),
+        ProbeDestConn(folder=str(tmp_path)),
+        ProbeDest(outputs=2),
+        bus,
+    )
+    assert json.loads((tmp_path / "trx-1.json").read_text()) == {
+        "bus": "DestBusOfLazyFrame",
+        "channels": [
+            {"name": "out_0", "position": 0, "rows": 2, "columns": ["a", "b"]},
+            {"name": "out_1", "position": 1, "rows": 1, "columns": ["c"]},
+        ],
+    }
+
+
+def test_probe_dest_reports_an_unwritable_folder(tmp_path):
+    blocked = tmp_path / "file"
+    blocked.write_text("")
+    with pytest.raises(DevRuntimeException):
+        plugin.ProbeDestPlugin().write_out(
+            TransactionContext(),
+            ProbeDestConn(folder=str(blocked)),
+            ProbeDest(),
+            DestBusOfLazyFrame([]),
+        )

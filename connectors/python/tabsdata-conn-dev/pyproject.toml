@@ -47,6 +47,7 @@ Source = "https://github.com/tabsdata/tabsdata"
 [project.entry-points."tabsdatak.connectors"]
 src_dev_datagen = "tabsdatak.conn.dev._plugin:DATAGEN_SRC"
 dest_dev_trash = "tabsdatak.conn.dev._plugin:TRASH_DEST"
+dest_dev_probe = "tabsdatak.conn.dev._plugin:PROBE_DEST"
 
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib"
