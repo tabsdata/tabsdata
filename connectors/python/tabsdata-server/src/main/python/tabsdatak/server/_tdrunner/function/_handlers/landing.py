@@ -221,7 +221,8 @@ def stamp(
 
 
 # Serves a run's landed inputs in manifest order, numbering every landed file
-# from one sequence, as stamp-inputs numbers the files it stamps.
+# from one sequence: the input index the landing-data route resolves in
+# (position, index) order.
 class LandedInputs:
     def __init__(self, info: Info) -> None:
         self.version = raw_version(info)

@@ -19,7 +19,7 @@ The chain executed:
                                 manifests.
   3.  run-transporter         — copies pre-staged input parquets
                                 into in_dir.
-                                [NO run_source_plugin, NO stamp_inputs]
+                                [NO run_source_plugin]
   4.  run-function            — invokes the user subscriber; writes one
                                 parquet per non-None output slot.
   5.  run-destination-plugin  — hands the parquets to the LocalFileDest

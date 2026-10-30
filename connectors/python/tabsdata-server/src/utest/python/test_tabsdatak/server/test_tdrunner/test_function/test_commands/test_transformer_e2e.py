@@ -16,7 +16,7 @@ The chain executed:
   2.  prep-localize-state  — emits transporter YAML (pulls input
                              tables from cloud) + inputs manifest.
   3.  run-transporter      — copies pre-staged input parquets to in_dir.
-                             [NO run_source_plugin, NO stamp_inputs]
+                             [NO run_source_plugin]
   4.  run-function         — invokes the user transformer; writes one
                              parquet per non-None output slot.
   5.  prep-upload-tables   — builds the upload transporter request,

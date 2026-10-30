@@ -20,10 +20,7 @@ from tabsdatak.server._tdrunner.function.commands import (
     begin_execution,
     get_bundle,
     prep_localize_state,
-    prep_upload_raw,
     report_completion,
-    run_transporter,
-    stamp_inputs,
 )
 from tabsdatak.server._tdrunner.function.commands.runners import (
     destination_plugin as run_destination_plugin,
@@ -83,16 +80,6 @@ class Driver:
         self.shared = root / "shared"
         for folder in SHARED_FOLDERS:
             (self.shared / folder).mkdir(parents=True, exist_ok=True)
-        self.storage = root / "storage.yaml"
-        self.storage.write_text(
-            yaml.safe_dump({
-                "storage": {
-                    "mounts": [
-                        {"id": STORAGE_MOUNT, "uri": root.as_uri(), "options": {}},
-                    ],
-                },
-            })
-        )
         self.store = root / "store"
         self.store.mkdir()
 
@@ -124,14 +111,6 @@ class Driver:
         assert exit_code in (0, None), (
             f"Command {name} exited with code {exit_code}; "
             f"last callback: {self.posts[-1:]}"
-        )
-
-    def transport(self, request: str, report: str) -> None:
-        self.step(
-            run_transporter,
-            "run-transporter",
-            request=self.path(request),
-            report=self.path(report),
         )
 
     def write_request(self, bundle: Path, body: dict) -> None:
@@ -258,24 +237,7 @@ class Driver:
             state_folder=self.path("state"),
             connection_file=connection,
         )
-        self.step(
-            stamp_inputs,
-            "stamp-inputs",
-            request=self.request,
-            inputs_manifest=self.path("fn/in/inputs-manifest.yaml"),
-            enriched_folder=self.path("rich"),
-            enriched_inputs_manifest=self.path("fn/in/enriched-inputs-manifest.yaml"),
-        )
-        self.step(
-            prep_upload_raw,
-            "prep-upload-raw",
-            request=self.request,
-            inputs_manifest=self.path("fn/in/enriched-inputs-manifest.yaml"),
-            transporter_request=self.path("shuttle/landing-request.yaml"),
-            storage_configuration=self.storage,
-        )
-        self.transport("shuttle/landing-request.yaml", "shuttle/landing-report.yaml")
-        self.run_function("fn/in/enriched-inputs-manifest.yaml")
+        self.run_function("fn/in/inputs-manifest.yaml")
 
     def transformer(self) -> None:
         self.run_function("fn/in/inputs-manifest.yaml")

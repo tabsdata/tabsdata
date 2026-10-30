@@ -236,7 +236,7 @@ def landed_record(
     return InputRecord(location=landed.data, schema=landed.schema)
 
 
-def test_landed_inputs_are_stamped_as_stamp_inputs_stamps_them(tmp_path):
+def test_landed_inputs_get_their_metadata_and_system_columns(tmp_path):
     info = Info.model_validate(info_payload())
     record = landed_record(tmp_path, 0, 0, [1, 2])
     served = LandedInputs(info).scan(record).collect()

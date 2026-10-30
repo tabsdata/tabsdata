@@ -233,10 +233,9 @@ def subscriber_bundle(tmp_path, monkeypatch) -> Path:
 
 # A trivial @stream_publisher-decorated function used to verify kind
 # dispatch routes correctly to StreamPublisherInfo. By the time
-# run-function executes the function-publisher chain has already
-# materialised inputs on disk (via run_source_plugin's stream-publisher
-# substitution + stamp-inputs) so the call shape here is identical to a
-# regular publisher's.
+# run-function executes the function-publisher chain has already landed
+# its inputs (via run_source_plugin's stream-publisher substitution) so the
+# call shape here is identical to a regular publisher's.
 @pytest.fixture
 def stream_publisher_bundle(tmp_path, monkeypatch) -> Path:
     """Materialise a tiny @stream_publisher-decorated function in a
