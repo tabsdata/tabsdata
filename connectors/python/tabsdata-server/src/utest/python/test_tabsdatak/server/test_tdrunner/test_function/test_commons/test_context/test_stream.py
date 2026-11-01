@@ -596,3 +596,20 @@ def test_a_load_is_deduplicated_against_its_window_on_the_stage(tmp_path):
     stage = tmp_path / "stage"
     rows = pl.concat(pl.scan_parquet(stage / name) for name in published(manifest)[0])
     assert sorted(ids(rows)) == [1, 2, 3, 4]
+
+
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
+def test_a_staged_file_that_cannot_be_deleted_is_still_staged(
+    tmp_path, monkeypatch, caplog
+):
+    context = make_context(tmp_path)
+    file = work_file(tmp_path, "people.parquet")
+
+    def stuck(self, missing_ok=False) -> None:
+        raise PermissionError("read-only work folder")
+
+    monkeypatch.setattr(Path, "unlink", stuck)
+    context.stage([[file]], {"offset": 1})
+    (manifest,) = manifests(tmp_path)
+    assert published(manifest) == [[f"{FILES_FOLDER}/{batch(manifest)}/people.parquet"]]
+    assert "Cannot delete" in caplog.text

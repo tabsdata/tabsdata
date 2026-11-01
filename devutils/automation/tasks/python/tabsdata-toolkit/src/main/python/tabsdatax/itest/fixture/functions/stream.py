@@ -11,6 +11,7 @@ what a batch holds the way the batch run would.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +19,8 @@ from pathlib import Path
 import polars as pl
 import pyarrow.parquet as pq
 from tabsdatak.spi import LazyFrameInput, StageFileStats, StreamStateSpec
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -108,4 +111,7 @@ class LocalStage:
         for staged in self.files:
             staged[:] = [file for file in staged if file not in dropped]
         for file in dropped:
-            file.path.unlink(missing_ok=True)
+            try:
+                file.path.unlink(missing_ok=True)
+            except OSError as error:
+                logger.warning(f"Cannot delete {file.path}: {error}")

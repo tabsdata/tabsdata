@@ -319,3 +319,14 @@ def test_a_failed_plugin_still_unstages_what_it_sent(tmp_path):
         command.stream()
     assert raised.value.api_error is RunStreamSourcePluginErrorCode.RSSP_6
     assert command.context.pending == [[]]
+
+
+def test_a_failed_unstage_is_only_a_warning(tmp_path, caplog):
+    command = streaming(tmp_path, SendingPlugin())
+
+    def unreachable() -> None:
+        raise PermissionError("stage not mounted")
+
+    command.context.unstage = unreachable
+    command.stream()
+    assert "Cannot unstage" in caplog.text

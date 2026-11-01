@@ -97,7 +97,10 @@ class State:
             state.frame().write_parquet(temporary)
             os.replace(temporary, path)
         except BaseException:
-            temporary.unlink(missing_ok=True)
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError as error:
+                logger.warning(f"Cannot delete {temporary}: {error}")
             raise
 
     def hydrate(

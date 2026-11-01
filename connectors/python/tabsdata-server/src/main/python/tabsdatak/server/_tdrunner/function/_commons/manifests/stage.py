@@ -56,12 +56,14 @@ class StageManifest:
                 f"Stage manifest filename {filename!r} lacks the suffix "
                 f"{MANIFEST_SUFFIX!r}"
             )
-        stem = filename[len(MANIFEST_PREFIX) : -len(MANIFEST_SUFFIX)]
-        match = TIMESTAMP_PATTERN.match(stem)
+        return cls.of_batch(filename[len(MANIFEST_PREFIX) : -len(MANIFEST_SUFFIX)])
+
+    @classmethod
+    def of_batch(cls, batch: str) -> StageManifest:
+        match = TIMESTAMP_PATTERN.match(batch)
         if match is None:
             raise InvalidManifestError(
-                f"Stage manifest filename {filename!r} is not in the format "
-                f"{MANIFEST_PREFIX}2026-06-16T10-30-12.345678{MANIFEST_SUFFIX}"
+                f"Stage batch {batch!r} is not in the format 2026-06-16T10-30-12.345678"
             )
         iso = (
             f"{match.group('date')}T{match.group('hours')}:"
@@ -71,8 +73,7 @@ class StageManifest:
             return cls(datetime.fromisoformat(iso))
         except ValueError as error:
             raise InvalidManifestError(
-                f"Stage manifest filename {filename!r} is not a valid timestamp: "
-                f"{error}"
+                f"Stage batch {batch!r} is not a valid timestamp: {error}"
             ) from error
 
     @classmethod

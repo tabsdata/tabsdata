@@ -9,7 +9,6 @@ import time
 from collections import deque
 from typing import Callable
 
-from tabsdatak.common._storage.landed import LandedPair
 from tabsdatak.server._tdrunner.function._commons.manifests.stage import (
     InvalidManifestError,
     StageManifest,
@@ -26,31 +25,38 @@ IDLE_SECONDS = 0.5
 class Sweeper:
     stage: Stage
     queue: deque[str]
+    folders: set[str]
 
     def __init__(self, stage: Stage) -> None:
         self.stage = stage
         self.queue = deque()
+        self.folders = set()
 
     def __len__(self) -> int:
         return len(self.queue)
 
     def enqueue(self, path: str) -> None:
         try:
-            manifest = StageManifest.read(self.stage, path)
+            manifest = StageManifest.parse(path)
         except InvalidManifestError as error:
             logger.warning(
-                f"Cannot list the files of {path} ({error}); queuing it only"
+                f"Cannot tell the batch of {path} ({error}); queuing it only"
             )
             self.queue.append(path)
             return
-        if manifest is None:
-            logger.warning(f"Manifest {path} is gone; queuing it only")
-            self.queue.append(path)
-            return
-        for files in manifest.tables:
-            for name in files:
-                self.queue.extend(LandedPair.of(name).names)
+        self.enqueue_folder(manifest.folder)
         self.queue.append(path)
+
+    def enqueue_folder(self, folder: str) -> None:
+        if folder in self.folders:
+            return
+        try:
+            names = self.stage.names(folder)
+        except Exception as error:
+            logger.warning(f"Cannot list {folder} ({error}); leaving it for later")
+            return
+        self.folders.add(folder)
+        self.queue.extend(names)
 
     def sweep_until(self, deadline: float, active: Callable[[], bool]) -> None:
         while active() and time.monotonic() < deadline:

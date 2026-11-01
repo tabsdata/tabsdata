@@ -30,7 +30,9 @@ from tabsdatak.server._tdrunner.function._commons.run.shutdown import (
     request_shutdown,
 )
 from tabsdatak.server._tdrunner.function._commons.storage.stage import (
+    FILES_FOLDER,
     MANIFESTS_FOLDER,
+    PATH_SEPARATOR,
     Stage,
 )
 from tabsdatak.server._tdrunner.function._handlers.sweeper import Sweeper
@@ -52,9 +54,9 @@ from tabsdatak.server._tdrunner.function.commands.runners.manifest_trigger.optio
 
 logger = logging.getLogger(__name__)
 
+SWEEP_ABANDONED_BATCHES = False
 
-# Only CONSUMED and SKIPPED free the manifest's turn.
-# The others keep the scan parked on it, as the function runs one execution at a time.
+
 class ManifestOutcome(Enum):
     CONSUMED = auto()
     SKIPPED = auto()
@@ -68,6 +70,7 @@ class ManifestTrigger(Command[RunManifestTriggerArguments]):
     trigger: ExecutionTrigger
     back_off_seconds: int
     offset: str | None
+    newest: StageManifest | None
     active: bool
     request: AnyRequest
     stage: Stage
@@ -83,6 +86,7 @@ class ManifestTrigger(Command[RunManifestTriggerArguments]):
         )
         self.back_off_seconds = arguments.back_off_seconds
         self.offset = None
+        self.newest = None
         self.active = True
 
     def run(self) -> int:
@@ -95,10 +99,15 @@ class ManifestTrigger(Command[RunManifestTriggerArguments]):
             self.trigger_pending()
             if not self.active:
                 break
-            deadline = time.monotonic() + self.back_off_seconds
-            self.sweeper.sweep_until(deadline, self.is_active)
+            self.sweep()
         logger.info(f"Stopping with {len(self.sweeper)} item(s) left to delete")
         return 0
+
+    def sweep(self) -> None:
+        if SWEEP_ABANDONED_BATCHES:
+            self.sweep_abandoned()
+        deadline = time.monotonic() + self.back_off_seconds
+        self.sweeper.sweep_until(deadline, self.is_active)
 
     def load(self) -> None:
         self.request = AnyRequest.load(
@@ -135,8 +144,6 @@ class ManifestTrigger(Command[RunManifestTriggerArguments]):
     def is_active(self) -> bool:
         return self.active
 
-    # The offset advances only past a consumed or unusable manifest, so each
-    # manifest is triggered again on every poll until its execution commits.
     def trigger_pending(self) -> None:
         while self.active:
             path = self.stage.next(MANIFESTS_FOLDER, self.offset)
@@ -155,9 +162,6 @@ class ManifestTrigger(Command[RunManifestTriggerArguments]):
                 case _:
                     assert_never(outcome)
 
-    # Only Consumed deletes: a 4xx from a misconfigured token, or a Held batch
-    # whose run has not read its files yet, must never lose a batch the source
-    # has already moved past.
     def trigger_manifest(self, path: str) -> ManifestOutcome:
         try:
             manifest = StageManifest.parse(path)
@@ -206,6 +210,39 @@ class ManifestTrigger(Command[RunManifestTriggerArguments]):
                 return ManifestOutcome.TRANSIENT
             case _:
                 assert_never(outcome)
+
+    def sweep_abandoned(self) -> None:
+        try:
+            manifests = self.manifests()
+            folders = self.stage.folders(FILES_FOLDER)
+        except Exception as error:
+            logger.warning(f"Cannot list the stage for abandoned batches: {error}")
+            return
+        for manifest in manifests:
+            if self.newest is None or manifest.timestamp > self.newest.timestamp:
+                self.newest = manifest
+        if self.newest is None:
+            return
+        published = {manifest.batch for manifest in manifests}
+        for folder in folders:
+            try:
+                batch = StageManifest.of_batch(folder.rpartition(PATH_SEPARATOR)[2])
+            except InvalidManifestError:
+                continue
+            if batch.batch in published or batch.timestamp >= self.newest.timestamp:
+                continue
+            if batch.folder not in self.sweeper.folders:
+                logger.info(f"Sweeping the abandoned batch {batch.batch}")
+            self.sweeper.enqueue_folder(batch.folder)
+
+    def manifests(self) -> list[StageManifest]:
+        manifests = []
+        for name in self.stage.names(MANIFESTS_FOLDER):
+            try:
+                manifests.append(StageManifest.parse(name))
+            except InvalidManifestError:
+                continue
+        return manifests
 
     def outcome(self, response: HttpResponse) -> TriggerOutcome:
         try:

@@ -174,8 +174,11 @@ class StageBatch:
             for file in files:
                 path = manifest.file(file.path.name)
                 self.storage.upload(file.path, path)
-                file.path.unlink()
                 self.files[position].append(StagedFile(path, file.stats))
+                try:
+                    file.path.unlink(missing_ok=True)
+                except OSError as error:
+                    logger.warning(f"Cannot delete {file.path}: {error}")
 
     def publish(self) -> StageManifest:
         tables = [[file.path for file in files] for files in self.files]

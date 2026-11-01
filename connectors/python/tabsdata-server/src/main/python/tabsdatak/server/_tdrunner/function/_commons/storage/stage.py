@@ -58,12 +58,21 @@ class Stage:
         except FileNotFoundError:
             return
 
-    def next(self, folder: str, offset: str | None) -> str | None:
-        names = sorted(
+    def names(self, folder: str) -> list[str]:
+        return sorted(
             item["path"]
-            for batch in obstore.list(self.store, prefix=folder)
+            for batch in obstore.list(self.store, prefix=f"{folder}{PATH_SEPARATOR}")
             for item in batch
         )
+
+    def folders(self, folder: str) -> list[str]:
+        listing = obstore.list_with_delimiter(self.store, prefix=folder)
+        return sorted(
+            prefix.rstrip(PATH_SEPARATOR) for prefix in listing["common_prefixes"]
+        )
+
+    def next(self, folder: str, offset: str | None) -> str | None:
+        names = self.names(folder)
         following = [name for name in names if offset is None or name > offset]
         if following:
             return following[0]

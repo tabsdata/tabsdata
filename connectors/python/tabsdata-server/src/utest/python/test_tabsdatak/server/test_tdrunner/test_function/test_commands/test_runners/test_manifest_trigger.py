@@ -25,6 +25,9 @@ from tabsdatak.server._tdrunner.function._commons.run import shutdown
 from tabsdatak.server._tdrunner.function._commons.storage.stage import Stage
 from tabsdatak.server._tdrunner.function._handlers import trigger
 from tabsdatak.server._tdrunner.function._handlers.sweeper import Sweeper
+from tabsdatak.server._tdrunner.function.commands.runners.manifest_trigger import (
+    runner,
+)
 from tabsdatak.server._tdrunner.function.commands.runners.manifest_trigger.error import (  # noqa: E501
     BadRequestError,
     MalformedTriggerAnswerError,
@@ -498,3 +501,76 @@ def test_consume_cycle_triggers_then_drains(tmp_path):
     assert not (tmp_path / m1).exists() and not (tmp_path / m2).exists()
     assert not (tmp_path / "files" / _uid(m1)).exists()
     assert not (tmp_path / "files" / _uid(m2)).exists()
+
+
+def batch_at(minute: int) -> StageManifest:
+    return StageManifest(datetime(2026, 6, 16, 10, minute, 0))
+
+
+def plant_batch(stage: Path, batch: StageManifest, *, published: bool) -> str:
+    file = stage / batch.file("0.0.t")
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.write_text("stub")
+    if published:
+        (stage / batch.path).parent.mkdir(parents=True, exist_ok=True)
+        (stage / batch.path).write_text(json.dumps([[batch.file("0.0.t")]]))
+    return batch.file("0.0.t")
+
+
+def sweeping(tmp_path: Path) -> tuple[ManifestTrigger, Path]:
+    command = manifest_trigger(tmp_path)
+    stage = tmp_path / "stage"
+    stage.mkdir(exist_ok=True)
+    command.stage = Stage(Location(uri=stage.as_uri()))
+    command.sweeper = Sweeper(command.stage)
+    return command, stage
+
+
+def test_a_batch_older_than_the_newest_published_one_without_a_manifest_is_swept(
+    tmp_path,
+):
+    command, stage = sweeping(tmp_path)
+    abandoned = plant_batch(stage, batch_at(1), published=False)
+    published = plant_batch(stage, batch_at(2), published=True)
+    open_batch = plant_batch(stage, batch_at(3), published=False)
+    command.sweep_abandoned()
+    assert queued(command) == [abandoned]
+    assert published not in queued(command)
+    assert open_batch not in queued(command)
+
+
+def test_nothing_is_swept_before_a_batch_is_published(tmp_path):
+    command, stage = sweeping(tmp_path)
+    plant_batch(stage, batch_at(1), published=False)
+    command.sweep_abandoned()
+    assert queued(command) == []
+
+
+def test_the_newest_published_batch_is_remembered_once_consumed(tmp_path):
+    command, stage = sweeping(tmp_path)
+    plant_batch(stage, batch_at(2), published=True)
+    command.sweep_abandoned()
+    (stage / batch_at(2).path).unlink()
+    abandoned = plant_batch(stage, batch_at(1), published=False)
+    command.sweep_abandoned()
+    assert abandoned in queued(command)
+
+
+def test_an_abandoned_batch_is_queued_once(tmp_path):
+    command, stage = sweeping(tmp_path)
+    abandoned = plant_batch(stage, batch_at(1), published=False)
+    plant_batch(stage, batch_at(2), published=True)
+    command.sweep_abandoned()
+    command.sweep_abandoned()
+    assert queued(command) == [abandoned]
+
+
+@pytest.mark.parametrize("enabled", [False, True], ids=["off", "on"])
+def test_abandoned_batches_are_swept_only_when_enabled(tmp_path, monkeypatch, enabled):
+    monkeypatch.setattr(runner, "SWEEP_ABANDONED_BATCHES", enabled)
+    command, stage = sweeping(tmp_path)
+    command.back_off_seconds = 0
+    abandoned = plant_batch(stage, batch_at(1), published=False)
+    plant_batch(stage, batch_at(2), published=True)
+    command.sweep()
+    assert queued(command) == ([abandoned] if enabled else [])

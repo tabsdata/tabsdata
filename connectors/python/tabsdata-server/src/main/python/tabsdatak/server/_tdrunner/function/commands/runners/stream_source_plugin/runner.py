@@ -201,7 +201,10 @@ class StreamSourcePlugin(Command[RunStreamSourcePluginArguments]):
             f"The plugin left {pending} table file(s) sent and not published; "
             f"unstaging them"
         )
-        self.context.unstage()
+        try:
+            self.context.unstage()
+        except Exception as error:
+            logger.warning(f"Cannot unstage what the plugin left: {error}")
 
     def record_end(self) -> None:
         end = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
