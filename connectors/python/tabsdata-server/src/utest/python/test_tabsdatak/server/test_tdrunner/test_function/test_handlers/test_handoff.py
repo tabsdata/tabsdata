@@ -204,7 +204,6 @@ def test_a_plugin_grows_with_the_list_of_its_tables(tmp_path, plugin, legacy):
         "context",
         "connection",
         "destination",
-        slots,
     )
     assert destination.received == [slot.table for slot in slots]
 

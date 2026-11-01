@@ -390,7 +390,6 @@ def test_write_tables_returns_normally(tmp_path):
         context,
         object(),
         object(),
-        [],
     )
     assert len(calls) == 1
 
@@ -414,7 +413,6 @@ def test_write_tables_wraps_plugin_exception(tmp_path):
             context,
             object(),
             object(),
-            [],
         )
 
 

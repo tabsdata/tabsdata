@@ -132,7 +132,6 @@ def write_tables(
     context: DestContext,
     connection: Conn,
     destination: Dest,
-    slots: list[DestinationSlot],
 ) -> None:
     try:
         handoff.grow(
@@ -140,7 +139,6 @@ def write_tables(
             context,
             connection,
             destination,
-            slots,
         )
     except Exception as error:
         raise RunDestinationPluginErrorCode.RDP_6.exception(
@@ -187,7 +185,6 @@ def run(arguments: RunDestinationPluginArguments) -> int:
             context,
             connection,
             subscriber.destination,
-            slots,
         )
     finally:
         handoff.reap()

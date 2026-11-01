@@ -9,7 +9,7 @@ import tempfile
 from abc import ABC
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import overload
+from typing import Any, overload
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 
@@ -148,6 +148,7 @@ class DestinationHandoff(Handoff):
     source: ColumnPolicy = ColumnPolicy(Zone.LAND)
     target: ColumnPolicy = ColumnPolicy(Zone.EGRESS)
     tables_folder: Path | None = field(default=None, init=False)
+    slots: list[DestinationSlot] = field(default_factory=list, init=False)
 
     def seed(
         self,
@@ -169,19 +170,21 @@ class DestinationHandoff(Handoff):
                 ) from error
         names = [entry.name for entry in manifest.outputs]
         if self.legacy:
-            return self.copy(
+            self.slots = self.copy(
                 info,
                 names,
                 frames,
             )
-        return [
-            DestinationSlot(
-                name,
-                position,
-                self.target.extract(frame),
-            )
-            for position, (name, frame) in enumerate(zip(names, frames))
-        ]
+        else:
+            self.slots = [
+                DestinationSlot(
+                    name,
+                    position,
+                    self.target.extract(frame),
+                )
+                for position, (name, frame) in enumerate(zip(names, frames))
+            ]
+        return self.slots
 
     def copy(
         self,
@@ -190,11 +193,12 @@ class DestinationHandoff(Handoff):
         frames: list[TableFrame],
     ) -> list[DestinationSlot]:
         self.base_folder.mkdir(parents=True, exist_ok=True)
-        self.tables_folder = Path(tempfile.mkdtemp(dir=self.base_folder))
+        tables_folder = Path(tempfile.mkdtemp(dir=self.base_folder))
+        self.tables_folder = tables_folder
         slots: list[DestinationSlot] = []
         plans: list[pl.LazyFrame] = []
         for position, (name, frame) in enumerate(zip(names, frames)):
-            table = self.tables_folder / f"{position}.parquet"
+            table = tables_folder / f"{position}.parquet"
             try:
                 plans.append(self.target.sink(frame, TableFile.local(table)))
             except Exception as error:
@@ -222,17 +226,16 @@ class DestinationHandoff(Handoff):
 
     def grow(
         self,
-        plugin: DestPlugin,
+        plugin: DestPlugin[Any, Any, Any],
         context: DestContext,
         connection: Conn,
         destination: Dest,
-        slots: list[DestinationSlot],
     ) -> None:
         plugin.write_out(
             context,
             connection,
             destination,
-            [slot.table for slot in slots],
+            [slot.table for slot in self.slots],
         )
 
     def reap(self) -> None:
@@ -290,12 +293,10 @@ class SourceHandoff(Handoff):
         connection: Conn,
         source: Src,
     ) -> None:
-        produced = list(
-            plugin.read_in(
-                context,
-                connection,
-                source,
-            ),
+        produced = plugin.read_in(
+            context,
+            connection,
+            source,
         )
         expected = len(self.slots)
         if len(produced) > expected or (
