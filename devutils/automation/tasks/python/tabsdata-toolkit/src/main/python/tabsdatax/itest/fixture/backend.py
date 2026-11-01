@@ -220,25 +220,7 @@ def load(name: str, cls: type):
     if not system_type:
         pytest.fail(f"{cls.__name__} must define a `system_type`")
     backend_type = _kind_of(cls)
-
-    # A backend the developer asked to skip is skipped whether or not it is
-    # reachable at all.
-    if name in _skip_names(backend_type):
-        pytest.skip(
-            f"Requested {backend_type} {name!r} is listed in "
-            f"${SKIP_ENV[backend_type]}, so this test is skipped."
-        )
-
-    # A backend the run's manifest does not list is not offered on this
-    # platform. One it lists but the store lacks is broken provisioning, and
-    # goes on to the on-missing policy below.
-    offered = _offered_names(backend_type)
-    if offered is not None and name not in offered:
-        pytest.skip(
-            f"Requested {backend_type} {name!r} is not in "
-            f"${MANIFEST_ENV[backend_type]}, so this run does not offer it and "
-            f"this test is skipped."
-        )
+    _skip_unoffered(backend_type, name)
 
     key = (backend_type, os.environ.get(_tdd.ENV_STORE_DIR[backend_type]), name, cls)
     if key in _CACHE:
@@ -266,6 +248,27 @@ def load(name: str, cls: type):
     return _CACHE[key]
 
 
+def _skip_unoffered(backend_type: str, name: str) -> None:
+    # A backend the developer asked to skip is skipped whether or not it is
+    # reachable at all.
+    if name in _skip_names(backend_type):
+        pytest.skip(
+            f"Requested {backend_type} {name!r} is listed in "
+            f"${SKIP_ENV[backend_type]}, so this test is skipped."
+        )
+
+    # A backend the run's manifest does not list is not offered on this
+    # platform. One it lists but the store lacks is broken provisioning, and
+    # goes on to the on-missing policy.
+    offered = _offered_names(backend_type)
+    if offered is not None and name not in offered:
+        pytest.skip(
+            f"Requested {backend_type} {name!r} is not in "
+            f"${MANIFEST_ENV[backend_type]}, so this run does not offer it and "
+            f"this test is skipped."
+        )
+
+
 def _unavailable(backend_type: str, name: str, exc: TddError):
     """Skip or fail a backend tdd could not read: per the missing policy when the
     store has no such name, else with tdd's own message (never skipped, since
@@ -276,6 +279,10 @@ def _unavailable(backend_type: str, name: str, exc: TddError):
         missing = False
     if not missing:
         pytest.fail(f"{backend_type} {name!r}: {exc}", pytrace=False)
+    _missing(backend_type, name)
+
+
+def _missing(backend_type: str, name: str):
     if _on_missing(backend_type) == "skip":
         pytest.skip(
             f"Provisioned {backend_type} {name!r} is not in the tdd store, so this "
@@ -487,10 +494,15 @@ for stored_domain_name in _stored_names(DOMAIN):
     globals()[f"domain_{stored_domain_name}"] = domain_fixture(stored_domain_name)
 
 
+def _has_fixture(item, kind: str, name: str) -> bool:
+    info = getattr(item, "_fixtureinfo", None)
+    return f"{_kind_prefix(kind)}{name}" in getattr(info, "name2fixturedefs", {})
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item):
     # Ahead of fixture setup, which would only say the fixture does not exist.
-    if not LISTING_ERRORS or not hasattr(item, "iter_markers"):
+    if not hasattr(item, "iter_markers"):
         return
     for kind, name in sorted(marker_backends(item)):
         if kind in LISTING_ERRORS:
@@ -499,6 +511,11 @@ def pytest_runtest_setup(item):
                 f"listed: {LISTING_ERRORS[kind]}",
                 pytrace=False,
             )
+        # A backend the store did not list at import has no fixture, so its
+        # skip and missing policies must run here.
+        if not _has_fixture(item, kind, name):
+            _skip_unoffered(kind, name)
+            _missing(kind, name)
 
 
 def pytest_configure(config):
