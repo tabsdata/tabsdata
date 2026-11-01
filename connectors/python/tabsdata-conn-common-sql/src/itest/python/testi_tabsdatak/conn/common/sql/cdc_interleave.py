@@ -24,7 +24,7 @@ from sqlalchemy import Engine, text
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql.cdc._stage_plugin import CdcStageSrcPlugin
-from tabsdatak.spi import TableFileInput
+from tabsdatak.spi import LazyFrameInput
 from testi_tabsdatak.conn.common.sql.plugin_ctx import WatermarkSrcCtx
 
 INTERLEAVED_IDS = list(range(1, 8))
@@ -132,9 +132,14 @@ def publish_in_order(
     for manifest in manifests:
         outputs = plugin.process_files(
             ctx,
-            [[TableFileInput(file=Path(path)) for path in files] for files in manifest],
+            [
+                [LazyFrameInput(pl.scan_parquet(Path(path))) for path in files]
+                for files in manifest
+            ],
         )
         for slot in outputs:
             for output in slot:
-                published |= _ids(Path(output.file), id_column)
+                frame = output.frame.collect()
+                if id_column in frame.columns:
+                    published |= set(frame[id_column].drop_nulls().to_list())
     return published
