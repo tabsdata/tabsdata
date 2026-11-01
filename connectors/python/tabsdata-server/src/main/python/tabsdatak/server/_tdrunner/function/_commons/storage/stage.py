@@ -23,13 +23,21 @@ STREAM_STATE_FILE = "stream-state.json"
 
 
 class Stage:
+    location: Location
     uri: str
     store: ObjectStore
 
     def __init__(self, location: Location) -> None:
+        self.location = location
         self.uri = location.uri.rstrip(PATH_SEPARATOR)
         options = location.mount_declaration().storage_options(self.uri)
         self.store = OBJECT_STORES.store(self.uri, options)
+
+    def locate(self, name: str) -> Location:
+        return Location(
+            uri=f"{self.uri}{PATH_SEPARATOR}{name}",
+            env_prefix=self.location.env_prefix,
+        )
 
     def write(self, name: str, text: str) -> None:
         obstore.put(self.store, name, text.encode(ENCODING))

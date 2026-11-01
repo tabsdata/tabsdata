@@ -37,13 +37,14 @@ from tabsdatak.server._tdrunner.function._commons.symbols.function import (
     DefinitionErrors,
     FunctionBundle,
 )
+from tabsdatak.server._tdrunner.function._handlers.batch import StageBatch
 from tabsdatak.server._tdrunner.function.commands.runners.stream_source_plugin.error import (  # noqa: E501
     RunStreamSourcePluginErrorCode,
 )
 from tabsdatak.server._tdrunner.function.commands.runners.stream_source_plugin.options import (  # noqa: E501
     RunStreamSourcePluginArguments,
 )
-from tabsdatak.spi import Conn, StreamSrcPlugin
+from tabsdatak.spi import Conn, StreamSrcDef, StreamSrcPlugin
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,7 @@ class StreamSourcePlugin(Command[RunStreamSourcePluginArguments]):
     journal_file: Path
     request: StreamerRequest
     publisher: StreamPublisherInfo
+    definition: StreamSrcDef
     plugin: StreamSrcPlugin
     connection: Conn
     context: StreamSourceContext
@@ -94,17 +96,23 @@ class StreamSourcePlugin(Command[RunStreamSourcePluginArguments]):
             KINDS,
             DEFINITION_ERRORS,
         )
-        self.plugin = self.resolve_plugin()
+        self.definition = self.resolve_definition()
+        self.plugin = self.definition.plugin()
         self.connection = self.load_connection()
         logger.debug(
             f"Stream publisher {self.function_name} reads "
             f"{type(self.publisher.source).__name__} through "
             f"{type(self.plugin).__name__}"
         )
+        staging = self.open_stage()
         self.context = StreamSourceContext.from_info(
             self.output_folder,
             self.request.info,
-            staging=self.open_stage(),
+            staging=staging,
+            batch=StageBatch(
+                staging, self.definition.cardinality(self.publisher.source)
+            ),
+            plugin=type(self.plugin),
             thresholds=self.publisher.thresholds,
             tabsdata_version=tabsdata_version(),
         )
@@ -114,17 +122,16 @@ class StreamSourcePlugin(Command[RunStreamSourcePluginArguments]):
         function = _unwrap_info(self.publisher.func)
         return getattr(function, "__name__", repr(function))
 
-    def resolve_plugin(self) -> StreamSrcPlugin:
+    def resolve_definition(self) -> StreamSrcDef:
         source_type = type(self.publisher.source)
         try:
-            definition = get_stream_src(source_type)
+            return get_stream_src(source_type)
         except KeyError as error:
             raise RunStreamSourcePluginErrorCode.RSSP_5.exception(
                 cause=error,
                 src_type=source_type.__name__,
                 detail=str(error),
             )
-        return definition.plugin()
 
     def load_connection(self) -> Conn:
         try:
@@ -182,7 +189,19 @@ class StreamSourcePlugin(Command[RunStreamSourcePluginArguments]):
             raise RunStreamSourcePluginErrorCode.RSSP_6.exception(
                 cause=error, detail=str(error)
             )
+        finally:
+            self.unstage()
         logger.info("The stream source plugin returned")
+
+    def unstage(self) -> None:
+        pending = sum(len(files) for files in self.context.pending)
+        if pending == 0:
+            return
+        logger.warning(
+            f"The plugin left {pending} table file(s) sent and not published; "
+            f"unstaging them"
+        )
+        self.context.unstage()
 
     def record_end(self) -> None:
         end = int(datetime.now(tz=timezone.utc).timestamp() * 1000)

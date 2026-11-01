@@ -45,6 +45,7 @@ from typing import (
     Union,
     cast,
     get_type_hints,
+    overload,
 )
 
 from pydantic import ConfigDict, model_validator
@@ -292,6 +293,23 @@ CommitStateFn: TypeAlias = Callable[[], None]
 StreamStateSpec: TypeAlias = Union[BasicDictSpec, CommitStateFn]
 
 
+@dataclass(frozen=True)
+class StageFileStats:
+    """One table file `StreamSrcPluginCtx.stage` wrote to the stage.
+
+    :categories: spi
+
+    Args:
+        name: The file's name in its batch, not its full location.
+        rows: The rows it holds.
+        bytes: Its size on the stage.
+    """
+
+    name: str
+    rows: int
+    bytes: int
+
+
 class StreamSrcPluginCtx(PluginCtx, ABC):
     """Context handed to `StreamSrcPlugin.run` -- the plugin's
     long-lived control surface.
@@ -302,13 +320,16 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
     * `first_stage` -- whether nothing has been staged yet, so the
       plugin seeds from config rather than from `stream_state`.
     * `stream_state` -- the per-flow resume state persisted by the
-      last `BasicDictSpec` handed to `stage`.
+      last `BasicDictSpec` handed to `stage` or `checkpoint`.
     * `thresholds` -- the `StreamThresholds` of the function's definition:
       the `batch` level bounding what the plugin stages (how far apart
       batches are at least, how long data may wait at most, how long the
       stream may go without a batch, and the rows and bytes that stage
       one); the `buffer` and `poll` levels when the definition names them.
-    * `stage` -- publish a batch and commit its new resume state.
+    * `stage` -- send tables to the stage, publish them as a batch and
+      commit its new resume state, together or apart.
+    * `unstage` -- drop what was sent and not yet published.
+    * `pending` -- what was sent and not yet published.
     * `checkpoint` -- commit a new resume state with no batch.
     """
 
@@ -347,23 +368,79 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
         """The `StreamThresholds` of the function's definition: the batch
         bounds the plugin stages by, the same for every stream source."""
 
-    @abstractmethod
+    @overload
     def stage(
         self,
         tables_files: list[list[Path]],
         new_state: StreamStateSpec,
-    ) -> None:
-        """Publish a batch and commit its new resume state in one step.
+    ) -> None: ...
+
+    @overload
+    def stage(
+        self,
+        tables_files: list[Iterable[LazyFrameInput] | None],
+        new_state: StreamStateSpec | None = None,
+    ) -> list[list[StageFileStats]]: ...
+
+    @overload
+    def stage(
+        self,
+        tables_files: None,
+        new_state: StreamStateSpec,
+    ) -> None: ...
+
+    @abstractmethod
+    def stage(
+        self,
+        tables_files: list[list[Path]] | list[Iterable[LazyFrameInput] | None] | None,
+        new_state: StreamStateSpec | None = None,
+    ) -> list[list[StageFileStats]] | None:
+        """Send tables to the stage, publish them as a batch, and commit
+        the batch's new resume state.
+
+        Tables sent and not yet published are pending, per output table.
+        The arguments say what one call does:
+
+        * `stage(tables, new_state)` sends `tables`, then publishes
+          everything pending as one batch and commits `new_state`.
+        * `stage(tables)` (or `stage(tables, None)`) only sends `tables`;
+          send as often as memory demands, and publish them later.
+        * `stage(None, new_state)` publishes everything pending (an empty
+          batch when nothing is) and commits `new_state`.
+        * `stage(files, new_state)`, with lists of local parquet files, is
+          the legacy form: it uploads the files and publishes them with
+          anything pending. It is deprecated in favour of sending
+          `LazyFrameInput` tables.
 
         Args:
-            tables_files: Per-output-table parquet files, positional by
-                index (entry `i` -> table `i`; an empty inner list
-                means no files for that table). Files must live under
-                `work_dir`.
+            tables_files: Per-output-table entries, positional by index
+                (entry `i` -> table `i`), one for every output table. Each
+                is the tables to send for it -- `LazyFrameInput`\\ s, a
+                list or any iterable, taken and sunk one at a time -- or
+                `None` (or an empty list) for no table. In the legacy form,
+                each is a list of parquet files under `work_dir`. `None`
+                to send nothing.
             new_state: The new resume state -- a `BasicDictSpec` the
                 runtime persists, or a `CommitStateFn` it invokes for
-                its side effect (external system owns the offset).
+                its side effect (external system owns the offset). `None`
+                to send without publishing.
+
+        Returns:
+            When it sends `LazyFrameInput` tables, the `StageFileStats` of the
+            files this call wrote, per output table; otherwise `None`.
         """
+
+    @abstractmethod
+    def unstage(self) -> None:
+        """Drop every table sent and not yet published, deleting its
+        files as far as it can. The resume state does not change; use it
+        to start over from `stream_state`."""
+
+    @property
+    @abstractmethod
+    def pending(self) -> list[list[StageFileStats]]:
+        """The `StageFileStats` of every table sent and not yet published,
+        per output table."""
 
     @abstractmethod
     def checkpoint(self, new_state: BasicDictSpec) -> None:

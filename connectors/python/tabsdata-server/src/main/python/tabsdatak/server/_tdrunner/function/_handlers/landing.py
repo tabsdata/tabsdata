@@ -69,6 +69,7 @@ class LandedFile:
     data: Location
     schema: Location
     rows: int
+    bytes: int
     origin: SchemaOrigin
     metadata: MetadataSpec | None = None
 
@@ -78,6 +79,24 @@ class LandedFile:
 
     def record(self) -> InputRecord:
         return InputRecord(location=self.data, schema=self.schema)
+
+
+@dataclass(frozen=True)
+class LandedPair:
+    data: str
+    schema: str | None
+
+    @classmethod
+    def of(cls, name: str) -> LandedPair:
+        if name.endswith(LANDING_SUFFIX):
+            return cls(name, f"{name.removesuffix(LANDING_SUFFIX)}{SCHEMA_SUFFIX}")
+        return cls(name, None)
+
+    @property
+    def names(self) -> list[str]:
+        if self.schema is None:
+            return [self.data]
+        return [self.data, self.schema]
 
 
 class LandingError(Exception):
@@ -164,7 +183,8 @@ class Landing:
         data = self.location(position, index, LANDING_SUFFIX)
         landed = TableFile.stored(data)
         landed.sink(frame).collect(engine="streaming")
-        rows = landed.stats().row_count
+        stats = landed.stats()
+        rows = stats.row_count
         facts = LandingFacts(rows=rows, origin=origin, metadata=metadata)
         description = self.location(position, index, SCHEMA_SUFFIX)
         TableFile.stored(description).sink(
@@ -177,6 +197,7 @@ class Landing:
             data=data,
             schema=description,
             rows=rows,
+            bytes=stats.data_bytes,
             origin=origin,
             metadata=metadata,
         )

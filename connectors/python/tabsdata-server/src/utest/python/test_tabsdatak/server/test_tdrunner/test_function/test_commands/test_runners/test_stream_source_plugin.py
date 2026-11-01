@@ -132,17 +132,16 @@ def test_load_function_def_missing_bundle_raises_bad_bundle(tmp_path):
 # --- resolve_plugin --------------------------------------------------
 
 
-def test_resolve_plugin_returns_registered_stream_plugin(tmp_path):
-    """For a registered KafkaStreamSrc, the resolver returns an
-    instantiated KafkaStreamSrcPlugin."""
+def test_resolve_definition_returns_the_registered_stream_source(tmp_path):
     from tabsdatak.conn.kafka._stream_plugin import KafkaStreamSrcPlugin
 
     command = stream_source_plugin(tmp_path, publisher=_module_level_stream_pub)
-    plugin = command.resolve_plugin()
-    assert isinstance(plugin, KafkaStreamSrcPlugin)
+    definition = command.resolve_definition()
+    assert definition.plugin is KafkaStreamSrcPlugin
+    assert definition.cardinality(_module_level_stream_pub.source) == 1
 
 
-def test_resolve_plugin_unknown_stream_src_raises_no_plugin(tmp_path, monkeypatch):
+def test_resolve_definition_unknown_stream_src_raises_no_plugin(tmp_path, monkeypatch):
     """If ``get_stream_src`` raises KeyError, we surface NoPluginError
     (RSSP_5) with a clear src_type message."""
 
@@ -152,7 +151,7 @@ def test_resolve_plugin_unknown_stream_src_raises_no_plugin(tmp_path, monkeypatc
     monkeypatch.setattr(runner, "get_stream_src", _raise)
     command = stream_source_plugin(tmp_path, publisher=_module_level_stream_pub)
     with pytest.raises(NoPluginError):
-        command.resolve_plugin()
+        command.resolve_definition()
 
 
 def test_a_stage_no_store_supports_is_refused(tmp_path):
@@ -278,3 +277,45 @@ def test_a_connection_that_cannot_be_loaded_is_reported(tmp_path):
     with pytest.raises(BadConnectionError) as raised:
         command.load_connection()
     assert raised.value.api_error is RunStreamSourcePluginErrorCode.RSSP_9
+
+
+class SendingPlugin:
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+
+    def run(self, ctx, conn, src) -> None:
+        ctx.pending = [["0.0.t", "0.1.t"]]
+        if self.error is not None:
+            raise self.error
+
+
+def streaming(tmp_path: Path, plugin: SendingPlugin) -> StreamSourcePlugin:
+    context = SimpleNamespace(pending=[[]], staging=SimpleNamespace(uri="file:///s"))
+    context.unstage = lambda: setattr(context, "pending", [[]])
+    publisher = SimpleNamespace(
+        func=_module_level_stream_pub,
+        source=None,
+        thresholds=None,
+        flush_interval_mins=None,
+    )
+    return stream_source_plugin(
+        tmp_path,
+        context=context,
+        plugin=plugin,
+        publisher=publisher,
+        connection=None,
+    )
+
+
+def test_what_the_plugin_left_unpublished_is_unstaged(tmp_path):
+    command = streaming(tmp_path, SendingPlugin())
+    command.stream()
+    assert command.context.pending == [[]]
+
+
+def test_a_failed_plugin_still_unstages_what_it_sent(tmp_path):
+    command = streaming(tmp_path, SendingPlugin(RuntimeError("broker gone")))
+    with pytest.raises(Exception) as raised:
+        command.stream()
+    assert raised.value.api_error is RunStreamSourcePluginErrorCode.RSSP_6
+    assert command.context.pending == [[]]

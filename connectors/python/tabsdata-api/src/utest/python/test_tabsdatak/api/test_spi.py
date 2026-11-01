@@ -17,8 +17,10 @@ from tabsdatak import _api
 from tabsdatak._api import (
     LegacyDestTablesWarning,
     LegacySrcTablesWarning,
+    LegacyStreamStageWarning,
     warn_legacy_dest,
     warn_legacy_src,
+    warn_legacy_stage,
 )
 from tabsdatak._handoff import DestinationContract, SourceContract
 from tabsdatak.api import (
@@ -46,6 +48,7 @@ from tabsdatak.spi import (
     SrcPlugin,
     SrcPluginCtx,
     SrcTablesSpec,
+    StageFileStats,
     StreamSrcDef,
     StreamSrcPlugin,
     StreamSrcPluginCtx,
@@ -640,6 +643,13 @@ class _RecordingStreamCtx(StreamSrcPluginCtx):
     def checkpoint(self, new_state: BasicDictSpec) -> None:
         self._stream_state = dict(new_state)
 
+    def unstage(self) -> None:
+        pass
+
+    @property
+    def pending(self) -> list[list[StageFileStats]]:
+        return []
+
 
 def test_stream_src_plugin_ctx_is_abstract():
     with pytest.raises(TypeError, match="abstract"):
@@ -1097,3 +1107,19 @@ def test_the_legacy_source_warning_names_the_replacement():
         message = warn_legacy_src(_GoodSrcPlugin)
     assert "_GoodSrcPlugin.read_in" in message
     assert "return LazyFrameInputs" in str(raised[0].message)
+
+
+def test_the_legacy_stage_warning_names_the_replacement():
+    with pytest.warns(LegacyStreamStageWarning) as raised:
+        message = warn_legacy_stage(_GoodSrcPlugin)
+    assert "_GoodSrcPlugin stages" in message
+    assert "LazyFrameInput" in str(raised[0].message)
+
+
+def test_a_stream_context_without_unstage_and_pending_stays_abstract():
+    class Partial(_RecordingStreamCtx):
+        unstage = StreamSrcPluginCtx.unstage
+        pending = StreamSrcPluginCtx.pending
+
+    with pytest.raises(TypeError, match="abstract"):
+        Partial()  # type: ignore[abstract]

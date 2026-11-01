@@ -5,9 +5,12 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
+from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
+from tabsdatak._api import warn_legacy_stage
 from tabsdatak.api import BasicDictSpec, StreamThresholds
 from tabsdatak.server._tdrunner.function._commons.context.request import (
     FromFlowRequestCtx,
@@ -22,16 +25,59 @@ from tabsdatak.server._tdrunner.function._commons.manifests.stage import (
     StageManifest,
 )
 from tabsdatak.server._tdrunner.function._commons.storage.stage import Stage
-from tabsdatak.spi import StreamSrcPluginCtx, StreamStateSpec
+from tabsdatak.spi import (
+    LazyFrameInput,
+    StageFileStats,
+    StreamSrcPlugin,
+    StreamSrcPluginCtx,
+    StreamStateSpec,
+)
 
 logger = logging.getLogger(__name__)
 
 
+class StageForm(Enum):
+    FILES = "local Parquet Files"
+    FRAMES = "LazyFrameInputs"
+
+
+class StageFormError(TypeError):
+    locked: StageForm
+    attempted: StageForm
+
+    def __init__(self, locked: StageForm, attempted: StageForm) -> None:
+        super().__init__(
+            f"Cannot stage {attempted.value} after staging {locked.value}; a "
+            f"plugin stages either {StageForm.FILES.value} or {StageForm.FRAMES.value}"
+        )
+        self.locked = locked
+        self.attempted = attempted
+
+
+class Batch(Protocol):
+    @property
+    def pending(self) -> list[list[StageFileStats]]: ...
+
+    def upload(self, tables_files: list[list[Path]]) -> None: ...
+
+    def stage(
+        self,
+        tables_files: list[Iterable[LazyFrameInput] | None],
+    ) -> list[list[StageFileStats]]: ...
+
+    def unstage(self) -> None: ...
+
+    def publish(self) -> StageManifest: ...
+
+
 class StreamSourceContext(FromFlowRequestCtx, StreamSrcPluginCtx):
     staging: Stage
+    batch: Batch
+    plugin: type[StreamSrcPlugin]
     stream_thresholds: StreamThresholds
     tabsdata_version: str
     running: bool
+    form: StageForm | None
     view: StreamState | None
 
     def __init__(
@@ -46,6 +92,8 @@ class StreamSourceContext(FromFlowRequestCtx, StreamSrcPluginCtx):
         function: str,
         function_version_id: str,
         staging: Stage,
+        batch: Batch,
+        plugin: type[StreamSrcPlugin],
         thresholds: StreamThresholds,
         tabsdata_version: str,
     ) -> None:
@@ -60,9 +108,12 @@ class StreamSourceContext(FromFlowRequestCtx, StreamSrcPluginCtx):
             function_version_id=function_version_id,
         )
         self.staging = staging
+        self.batch = batch
+        self.plugin = plugin
         self.stream_thresholds = thresholds
         self.tabsdata_version = tabsdata_version
         self.running = True
+        self.form = None
         self.view = StreamState.load(staging)
 
     @classmethod
@@ -72,6 +123,8 @@ class StreamSourceContext(FromFlowRequestCtx, StreamSrcPluginCtx):
         info: StreamerInfo,
         *,
         staging: Stage,
+        batch: Batch,
+        plugin: type[StreamSrcPlugin],
         thresholds: StreamThresholds,
         tabsdata_version: str,
     ) -> StreamSourceContext:
@@ -85,6 +138,8 @@ class StreamSourceContext(FromFlowRequestCtx, StreamSrcPluginCtx):
             function=info.function,
             function_version_id=str(info.function_version_id),
             staging=staging,
+            batch=batch,
+            plugin=plugin,
             thresholds=thresholds,
             tabsdata_version=tabsdata_version,
         )
@@ -107,31 +162,62 @@ class StreamSourceContext(FromFlowRequestCtx, StreamSrcPluginCtx):
     def thresholds(self) -> StreamThresholds:
         return self.stream_thresholds
 
+    @property
+    def pending(self) -> list[list[StageFileStats]]:
+        return self.batch.pending
+
     def stage(
         self,
-        tables_files: list[list[Path]],
-        new_state: StreamStateSpec,
-    ) -> None:
-        manifest = StageManifest.now()
-        staged: list[list[str]] = []
-        for position, files in enumerate(tables_files):
-            names: list[str] = []
-            for index, file in enumerate(files):
-                if not file.is_file():
-                    raise FileNotFoundError(
-                        f"File {index} of table {position} ({file}) does not exist"
-                    )
-                name = manifest.file(file.name)
-                self.staging.upload(file, name)
-                file.unlink()
-                names.append(name)
-            staged.append(names)
-        # Written after its files, so a visible manifest never names data not
-        # yet staged.
-        manifest.with_tables(staged).write(self.staging)
+        tables_files: list[list[Path]] | list[Iterable[LazyFrameInput] | None] | None,
+        new_state: StreamStateSpec | None = None,
+    ) -> list[list[StageFileStats]] | None:
+        if new_state is not None and not isinstance(new_state, dict):
+            if not callable(new_state):
+                raise TypeError(
+                    f"Cannot commit a {type(new_state).__name__} as the new "
+                    f"state; commit a dict, or a callable when the external "
+                    f"system owns the offset"
+                )
+        if tables_files is None:
+            if new_state is None:
+                raise TypeError(
+                    "Cannot stage without tables to send or a new state to "
+                    "publish them with"
+                )
+            self.lock(StageForm.FRAMES)
+            self.publish(new_state)
+            return None
+        if legacy(tables_files):
+            if new_state is None:
+                raise TypeError(
+                    "Cannot stage parquet files without a new state; send "
+                    "LazyFrameInputs to send without publishing"
+                )
+            self.lock(StageForm.FILES)
+            self.batch.upload(tables_files)
+            self.publish(new_state)
+            return None
+        self.lock(StageForm.FRAMES)
+        sent = self.batch.stage(tables_files)
+        if new_state is not None:
+            self.publish(new_state)
+        return sent
+
+    def lock(self, form: StageForm) -> None:
+        locked = self.form
+        if locked is None:
+            self.form = form
+            if form is StageForm.FILES:
+                logger.warning(warn_legacy_stage(self.plugin))
+            return
+        if locked is not form:
+            raise StageFormError(locked, form)
+
+    def publish(self, new_state: StreamStateSpec) -> None:
+        manifest = self.batch.publish()
         logger.info(
             f"Staged manifest {manifest.filename} with files per table "
-            f"{[len(names) for names in staged]}"
+            f"{[len(files) for files in manifest.tables]}"
         )
         if isinstance(new_state, dict):
             self.save(dict(new_state), manifest.batch)
@@ -140,6 +226,9 @@ class StreamSourceContext(FromFlowRequestCtx, StreamSrcPluginCtx):
             # saved and the next start seeds again (at least once).
             new_state()
             self.save({}, manifest.batch)
+
+    def unstage(self) -> None:
+        self.batch.unstage()
 
     def checkpoint(self, new_state: BasicDictSpec) -> None:
         if self.view is None:
@@ -160,3 +249,10 @@ class StreamSourceContext(FromFlowRequestCtx, StreamSrcPluginCtx):
         view.save(self.staging)
         self.view = view
         logger.debug(f"Saved the stream state with {len(state)} key(s)")
+
+
+def legacy(tables_files: list[Any]) -> bool:
+    if not all(isinstance(files, list) for files in tables_files):
+        return False
+    files = [file for entry in tables_files for file in entry]
+    return bool(files) and all(isinstance(file, Path) for file in files)

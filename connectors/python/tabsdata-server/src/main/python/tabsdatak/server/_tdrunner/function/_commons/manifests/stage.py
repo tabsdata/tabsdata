@@ -109,8 +109,12 @@ class StageManifest:
     def path(self) -> str:
         return f"{MANIFESTS_FOLDER}{PATH_SEPARATOR}{self.filename}"
 
+    @property
+    def folder(self) -> str:
+        return f"{FILES_FOLDER}{PATH_SEPARATOR}{self.batch}"
+
     def file(self, name: str) -> str:
-        return f"{FILES_FOLDER}{PATH_SEPARATOR}{self.batch}{PATH_SEPARATOR}{name}"
+        return f"{self.folder}{PATH_SEPARATOR}{name}"
 
     def with_tables(self, tables: list[list[str]]) -> StageManifest:
         return replace(self, tables=tables)

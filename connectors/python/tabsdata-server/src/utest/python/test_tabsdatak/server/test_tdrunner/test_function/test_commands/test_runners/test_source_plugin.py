@@ -701,6 +701,7 @@ def test_the_inputs_manifest_records_each_landed_file(tmp_path):
             data=Location(uri=f"file:///r/{position}.{index}.t", env_prefix="ROOT"),
             schema=Location(uri=f"file:///r/{position}.{index}.s", env_prefix="ROOT"),
             rows=1,
+            bytes=1,
             origin=SchemaOrigin.DECLARED,
         )
 

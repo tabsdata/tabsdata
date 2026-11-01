@@ -182,6 +182,13 @@ class _CdcCtx(StreamSrcPluginCtx):
             else:
                 new_state()
 
+    def unstage(self):
+        pass
+
+    @property
+    def pending(self):
+        return []
+
     def checkpoint(self, new_state):
         with self._lock:
             self._state = dict(new_state)

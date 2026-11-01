@@ -55,6 +55,15 @@ def test_a_consumed_batch_queues_its_files_then_its_manifest(tmp_path):
     assert list(queue.queue) == [*first, *second, path]
 
 
+def test_a_landed_file_is_queued_with_its_schema(tmp_path):
+    (data,) = batch_files("0.0.t")
+    (schema,) = batch_files("0.0.s")
+    path = plant(tmp_path, [[data]])
+    queue = sweeper(tmp_path)
+    queue.enqueue(path)
+    assert list(queue.queue) == [data, schema, path]
+
+
 def test_a_batch_without_files_queues_its_manifest_only(tmp_path):
     path = plant(tmp_path, [[], []])
     queue = sweeper(tmp_path)

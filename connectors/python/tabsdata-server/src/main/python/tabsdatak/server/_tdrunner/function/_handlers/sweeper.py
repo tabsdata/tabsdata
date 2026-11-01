@@ -14,6 +14,7 @@ from tabsdatak.server._tdrunner.function._commons.manifests.stage import (
     StageManifest,
 )
 from tabsdatak.server._tdrunner.function._commons.storage.stage import Stage
+from tabsdatak.server._tdrunner.function._handlers.landing import LandedPair
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,8 @@ class Sweeper:
             self.queue.append(path)
             return
         for files in manifest.tables:
-            self.queue.extend(files)
+            for name in files:
+                self.queue.extend(LandedPair.of(name).names)
         self.queue.append(path)
 
     def sweep_until(self, deadline: float, active: Callable[[], bool]) -> None:
