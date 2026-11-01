@@ -240,7 +240,46 @@ def build_chunked_input(
     ]
     if not scans:
         return None
-    return TableFrame._build(pl.concat(scans, how="vertical_relaxed"), CreationMode.TAB)
+    return TableFrame._build(concat_chunks(scans), CreationMode.TAB)
+
+
+def concat_chunks(scans: list[pl.LazyFrame]) -> pl.LazyFrame:
+    schemas = [scan.collect_schema() for scan in scans]
+    unmerged = [
+        name
+        for name in schemas[0]
+        if not merges(name, [schema[name] for schema in schemas if name in schema])
+    ]
+    if unmerged:
+        scans = [
+            scan.with_columns(
+                as_string(name, schema[name]) for name in unmerged if name in schema
+            )
+            for scan, schema in zip(scans, schemas)
+        ]
+    return pl.concat(scans, how="vertical_relaxed")
+
+
+def merges(name: str, dtypes: list[pl.DataType]) -> bool:
+    try:
+        pl.concat(
+            [pl.LazyFrame(schema={name: dtype}) for dtype in dtypes],
+            how="vertical_relaxed",
+        ).collect_schema()
+    except pl.exceptions.SchemaError:
+        return False
+    return True
+
+
+def as_string(name: str, dtype: pl.DataType) -> pl.Expr:
+    column = pl.col(name)
+    if not dtype.is_nested():
+        return column.cast(pl.String)
+    # polars JSON-encodes structs only: wrap the value in {"v": ...} and unwrap.
+    encoded = (
+        pl.struct(column.alias("v")).struct.json_encode().str.slice(5).str.head(-1)
+    )
+    return pl.when(column.is_null()).then(None).otherwise(encoded).alias(name)
 
 
 def materialize_input_slot(

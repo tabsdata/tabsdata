@@ -9,7 +9,7 @@ import json
 import os
 import shutil
 import sys
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import polars as pl
@@ -793,6 +793,39 @@ def test_materialise_single_chunked_publisher_input_is_one_table_frame(
     assert frame["name"].to_list() == ["a", "b", "c", "d"]
     assert frame["id"].to_list() == [1, 2, None, None]
     assert frame["id"].dtype == pl.Int64
+
+
+def test_materialise_single_chunks_of_unmergeable_types_are_strings(
+    tmp_path,
+    fixture_publisher,
+):
+    first, second = tmp_path / "a.parquet", tmp_path / "b.parquet"
+    pl.DataFrame(
+        {"flag": [True], "tags": [[1, 2]], "score": [1]},
+    ).write_parquet(first)
+    pl.DataFrame(
+        {"flag": [date(2026, 1, 2)], "tags": [None], "score": [2.5]},
+        schema_overrides={"tags": pl.Int64},
+    ).write_parquet(second)
+
+    output = materialize_input_slot(
+        slot_entry(
+            "in_1",
+            0,
+            [str(first), str(second)],
+        ),
+        table_mode=TableMode.SINGLE,
+        definition=fixture_publisher,
+        landed=no_landing(),
+    )
+
+    frame = output._to_polars_lf().collect()
+    assert frame.schema == pl.Schema(
+        {"flag": pl.String, "tags": pl.String, "score": pl.Float64},
+    )
+    assert frame["flag"].to_list() == ["true", "2026-01-02"]
+    assert frame["tags"].to_list() == ["[1,2]", None]
+    assert frame["score"].to_list() == [1.0, 2.5]
 
 
 def test_materialise_array_returns_list_of_table_frames(tmp_path):
