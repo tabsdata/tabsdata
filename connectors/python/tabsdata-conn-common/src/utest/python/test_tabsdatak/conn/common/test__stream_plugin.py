@@ -79,10 +79,16 @@ class FakeCtx:
 
 
 class FakeDisk:
+    """Stands in for both the ledger and the disk sentinel: publishing hands
+    the context the files it holds, so ``FakeCtx.staged`` records each batch
+    with its state."""
+
     def __init__(self, *, manifest, due_force=False, due_normal=False, heartbeat=False):
         self._manifest = manifest
         self._heartbeat = heartbeat
         self.has_data = bool(manifest and any(manifest))
+        self.has_files = self.has_data
+        self.ctx: FakeCtx | None = None
         self._force = due_force
         self._normal = due_normal
         self.cleared = 0
@@ -101,8 +107,9 @@ class FakeDisk:
     def idle_due(self) -> bool:
         return self._heartbeat
 
-    def manifest(self):
-        return self._manifest
+    def publish(self, new_state) -> None:
+        self.ctx.stage(self._manifest, new_state)
+        self.clear()
 
     def clear(self) -> None:
         self.cleared += 1
@@ -236,8 +243,13 @@ def cfg() -> StreamRunConfig:
     return StreamRunConfig(poll=PollThresholds(max_secs=1, idle_secs=0))
 
 
+def bound(disk: FakeDisk, ctx: FakeCtx) -> FakeDisk:
+    disk.ctx = ctx
+    return disk
+
+
 def patch_sentinels(monkeypatch, disk, buffer):
-    monkeypatch.setattr(_plugin, "FileLedger", lambda **kw: disk)
+    monkeypatch.setattr(_plugin, "StageLedger", lambda **kw: bound(disk, kw["ctx"]))
     monkeypatch.setattr(_plugin, "DiskSentinel", lambda **kw: disk)
     monkeypatch.setattr(_plugin, "BufferSentinel", lambda **kw: buffer)
 
@@ -259,7 +271,7 @@ def run_of(ctx, ingester) -> StreamRun:
 
 
 def publish(ctx, disk, buffer, ingester) -> bool:
-    return Plugin().publish(run_of(ctx, ingester), disk, disk, buffer)
+    return Plugin().publish(run_of(ctx, ingester), bound(disk, ctx), disk, buffer)
 
 
 def test_publish_empty_manifest_does_not_stage():
@@ -481,9 +493,9 @@ def test_stream_hands_the_disk_sentinel_its_thresholds(monkeypatch):
 
 def test_a_due_manifest_writes_the_buffer_out_before_it_stages(monkeypatch):
     class OrderedDisk(FakeDisk):
-        def manifest(self):
-            order.append("manifest")
-            return super().manifest()
+        def publish(self, new_state) -> None:
+            order.append("publish")
+            super().publish(new_state)
 
     class OrderedBuffer(FakeBuffer):
         def flush(self) -> None:
@@ -497,7 +509,7 @@ def test_a_due_manifest_writes_the_buffer_out_before_it_stages(monkeypatch):
 
     stream(ctx, FakeIngester())
 
-    assert order[:2] == ["flush", "manifest"]
+    assert order[:2] == ["flush", "publish"]
     assert len(ctx.staged) >= 1
 
 
@@ -618,7 +630,7 @@ def test_a_stage_resets_the_restart_count_and_the_staged_offset():
     run = run_of(ctx, FakeIngester())
     run.restarts = 2
 
-    assert Plugin().publish(run, disk, disk, buffer) is True
+    assert Plugin().publish(run, bound(disk, run.ctx), disk, buffer) is True
     assert run.restarts == 0
     assert run.staged.mark == "staged"
 
@@ -694,7 +706,7 @@ def test_a_checkpoint_waits_for_the_stage_of_the_data_read_before_it():
     assert ctx.checkpoints == []
 
     buffer.flush()
-    assert Plugin().publish(run, disk, disk, buffer) is True
+    assert Plugin().publish(run, bound(disk, run.ctx), disk, buffer) is True
     assert ctx.staged[0][1]["offset"].applied == ["read", "moved"]
 
 
@@ -718,7 +730,7 @@ def test_a_checkpoint_before_a_first_stage_is_carried_into_it():
     assert ctx.checkpoints == []
 
     buffer.flush()
-    Plugin().publish(run, disk, disk, buffer)
+    Plugin().publish(run, bound(disk, run.ctx), disk, buffer)
     assert ctx.staged[0][1]["offset"].applied == ["moved"]
 
 
@@ -743,7 +755,7 @@ def test_a_checkpoint_before_the_run_is_armed_is_carried_into_its_first_stage():
     lifecycle.arm(disk, disk, buffer)
     buffer.add("read")
     buffer.flush()
-    Plugin().publish(run, disk, disk, buffer)
+    Plugin().publish(run, bound(disk, run.ctx), disk, buffer)
 
     assert ctx.staged[0][1]["offset"].applied == ["early", "read"]
 
@@ -862,7 +874,9 @@ def test_the_stop_signal_off_the_main_thread_is_a_plain_unset_signal():
 
 @pytest.fixture
 def restored_signal_handlers():
-    saved = {signum: signal.getsignal(signum) for signum in (signal.SIGINT, signal.SIGTERM)}
+    saved = {
+        signum: signal.getsignal(signum) for signum in (signal.SIGINT, signal.SIGTERM)
+    }
     yield
     for signum, handler in saved.items():
         signal.signal(signum, handler)

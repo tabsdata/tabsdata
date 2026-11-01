@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Self
 
 import pyarrow as pa
-import pyarrow.parquet as pq
 import pytest
+from tabsdatax.itest.fixture.functions.stream import LocalStage
 
 from tabsdatak._api import BATCH_FLOOR_SECS
 
@@ -19,7 +19,7 @@ from tabsdatak._api import BATCH_FLOOR_SECS
 from tabsdatak.conn.common._stream._encoder import StreamEncoder
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream._ledger import FileLedger
+from tabsdatak.conn.common._stream._ledger import StageLedger
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._offset import StreamOffset
@@ -45,20 +45,25 @@ def table(*values: int) -> pa.Table:
     return pa.table({"id": list(values)})
 
 
-def ids(ledger: FileLedger) -> list[list[list[int]]]:
+def ids(stage: LocalStage, ledger: StageLedger) -> list[list[list[int]]]:
     return [
-        [pq.read_table(path).column("id").to_pylist() for path in files]
+        [stage.scan(stats).collect()["id"].to_list() for stats in files]
         for files in ledger.manifest()
     ]
 
 
 @pytest.fixture
-def ledger(tmp_path: Path) -> FileLedger:
-    return FileLedger(landing=tmp_path, slots=["s.a", "s.b"])
+def stage(tmp_path: Path) -> LocalStage:
+    return LocalStage(tmp_path)
+
+
+@pytest.fixture
+def ledger(stage: LocalStage) -> StageLedger:
+    return StageLedger(ctx=stage, slots=["s.a", "s.b"])
 
 
 def disk(
-    ledger: FileLedger,
+    ledger: StageLedger,
     clock: Clock,
     *,
     max_rows: int | None = None,
@@ -80,19 +85,19 @@ def disk(
     )
 
 
-def test_an_empty_ledger_is_never_due_even_when_forced(ledger: FileLedger):
+def test_an_empty_ledger_is_never_due_even_when_forced(ledger: StageLedger):
     sentinel = disk(ledger, Clock(), max_rows=0, max_bytes=0, max_secs=0)
     assert sentinel.due(force=True) is False
 
 
-def test_the_disk_is_due_when_forced_with_data(ledger: FileLedger):
+def test_the_disk_is_due_when_forced_with_data(ledger: StageLedger):
     sentinel = disk(ledger, Clock())
     ledger.write("s.a", table(1))
     assert sentinel.due() is False
     assert sentinel.due(force=True) is True
 
 
-def test_the_disk_is_due_on_the_row_threshold(ledger: FileLedger):
+def test_the_disk_is_due_on_the_row_threshold(ledger: StageLedger):
     sentinel = disk(ledger, Clock(), max_rows=3)
     ledger.write("s.a", table(1, 2))
     assert sentinel.due() is False
@@ -100,7 +105,7 @@ def test_the_disk_is_due_on_the_row_threshold(ledger: FileLedger):
     assert sentinel.due() is True
 
 
-def test_the_disk_is_due_on_the_byte_threshold(ledger: FileLedger):
+def test_the_disk_is_due_on_the_byte_threshold(ledger: StageLedger):
     ledger.write("s.a", table(1))
     sentinel = disk(ledger, Clock(), max_bytes=ledger.bytes + 1)
     assert sentinel.due() is False
@@ -108,7 +113,7 @@ def test_the_disk_is_due_on_the_byte_threshold(ledger: FileLedger):
     assert sentinel.due() is True
 
 
-def test_the_disk_is_due_once_the_time_threshold_elapses(ledger: FileLedger):
+def test_the_disk_is_due_once_the_time_threshold_elapses(ledger: StageLedger):
     clock = Clock()
     sentinel = disk(ledger, clock, max_secs=60)
     ledger.write("s.a", table(1))
@@ -118,7 +123,7 @@ def test_the_disk_is_due_once_the_time_threshold_elapses(ledger: FileLedger):
     assert sentinel.due() is True
 
 
-def test_resetting_the_disk_timer_restarts_the_time_threshold(ledger: FileLedger):
+def test_resetting_the_disk_timer_restarts_the_time_threshold(ledger: StageLedger):
     clock = Clock()
     sentinel = disk(ledger, clock, max_secs=60)
     ledger.write("s.a", table(1))
@@ -129,14 +134,14 @@ def test_resetting_the_disk_timer_restarts_the_time_threshold(ledger: FileLedger
     assert sentinel.due() is True
 
 
-def test_the_disk_is_not_due_after_the_ledger_is_cleared(ledger: FileLedger):
+def test_the_disk_is_not_due_after_the_ledger_is_cleared(ledger: StageLedger):
     sentinel = disk(ledger, Clock(), max_rows=1)
     ledger.write("s.a", table(1))
     ledger.clear()
     assert sentinel.due() is False
 
 
-def test_nothing_is_due_before_the_floor_even_past_a_threshold(ledger: FileLedger):
+def test_nothing_is_due_before_the_floor_even_past_a_threshold(ledger: StageLedger):
     clock = Clock()
     sentinel = disk(ledger, clock, max_rows=1, max_secs=600, min_secs=60)
     ledger.write("s.a", table(1, 2, 3))
@@ -146,7 +151,7 @@ def test_nothing_is_due_before_the_floor_even_past_a_threshold(ledger: FileLedge
     assert sentinel.due() is True
 
 
-def test_a_threshold_hit_before_the_floor_stages_at_the_floor(ledger: FileLedger):
+def test_a_threshold_hit_before_the_floor_stages_at_the_floor(ledger: StageLedger):
     clock = Clock()
     sentinel = disk(ledger, clock, max_bytes=1, max_secs=600, min_secs=60)
     ledger.write("s.a", table(1))
@@ -155,7 +160,7 @@ def test_a_threshold_hit_before_the_floor_stages_at_the_floor(ledger: FileLedger
     assert sentinel.due() is True
 
 
-def test_past_the_floor_the_time_threshold_still_waits(ledger: FileLedger):
+def test_past_the_floor_the_time_threshold_still_waits(ledger: StageLedger):
     clock = Clock()
     sentinel = disk(ledger, clock, max_rows=100, max_secs=600, min_secs=60)
     ledger.write("s.a", table(1))
@@ -165,14 +170,14 @@ def test_past_the_floor_the_time_threshold_still_waits(ledger: FileLedger):
     assert sentinel.due() is True
 
 
-def test_forcing_bypasses_the_floor(ledger: FileLedger):
+def test_forcing_bypasses_the_floor(ledger: StageLedger):
     sentinel = disk(ledger, Clock(), max_secs=600, min_secs=60)
     ledger.write("s.a", table(1))
     assert sentinel.due() is False
     assert sentinel.due(force=True) is True
 
 
-def test_the_default_floor_is_the_batch_floor(ledger: FileLedger):
+def test_the_default_floor_is_the_batch_floor(ledger: StageLedger):
     clock = Clock()
     sentinel = DiskSentinel(
         ledger=ledger, max_rows=1, max_bytes=None, max_secs=600, clock=clock
@@ -184,7 +189,7 @@ def test_the_default_floor_is_the_batch_floor(ledger: FileLedger):
     assert sentinel.due() is True
 
 
-def test_without_a_time_ceiling_data_waits_for_a_size_threshold(ledger: FileLedger):
+def test_without_a_time_ceiling_data_waits_for_a_size_threshold(ledger: StageLedger):
     clock = Clock()
     sentinel = disk(ledger, clock, max_rows=3, min_secs=60)
     ledger.write("s.a", table(1))
@@ -194,7 +199,7 @@ def test_without_a_time_ceiling_data_waits_for_a_size_threshold(ledger: FileLedg
     assert sentinel.due() is True
 
 
-def test_without_an_idle_bound_an_empty_disk_is_never_due(ledger: FileLedger):
+def test_without_an_idle_bound_an_empty_disk_is_never_due(ledger: StageLedger):
     clock = Clock()
     sentinel = disk(ledger, clock, max_secs=5)
     clock.now += 100_000
@@ -202,7 +207,7 @@ def test_without_an_idle_bound_an_empty_disk_is_never_due(ledger: FileLedger):
     assert sentinel.idle_due() is False
 
 
-def test_an_empty_disk_is_due_once_the_idle_bound_elapses(ledger: FileLedger):
+def test_an_empty_disk_is_due_once_the_idle_bound_elapses(ledger: StageLedger):
     clock = Clock()
     sentinel = disk(ledger, clock, max_secs=60, idle_secs=600)
     clock.now += 599.9
@@ -214,7 +219,7 @@ def test_an_empty_disk_is_due_once_the_idle_bound_elapses(ledger: FileLedger):
 
 
 def test_the_idle_bound_is_not_due_while_data_waits_its_own_threshold(
-    ledger: FileLedger,
+    ledger: StageLedger,
 ):
     clock = Clock()
     sentinel = disk(ledger, clock, max_secs=60, idle_secs=600)
@@ -224,7 +229,7 @@ def test_the_idle_bound_is_not_due_while_data_waits_its_own_threshold(
     assert sentinel.due() is True
 
 
-def test_the_disk_counts_what_the_buffer_still_holds(ledger: FileLedger):
+def test_the_disk_counts_what_the_buffer_still_holds(ledger: StageLedger):
     clock = Clock()
     held = buffer(ledger, clock, measure_bytes=True)
     sentinel = disk(ledger, clock, buffer=held, max_rows=3)
@@ -235,7 +240,7 @@ def test_the_disk_counts_what_the_buffer_still_holds(ledger: FileLedger):
     assert sentinel.due() is True
 
 
-def test_the_disk_has_data_when_only_the_buffer_holds_it(ledger: FileLedger):
+def test_the_disk_has_data_when_only_the_buffer_holds_it(ledger: StageLedger):
     clock = Clock()
     held = buffer(ledger, clock)
     sentinel = disk(ledger, clock, buffer=held)
@@ -244,7 +249,7 @@ def test_the_disk_has_data_when_only_the_buffer_holds_it(ledger: FileLedger):
     assert sentinel.due(force=True) is True
 
 
-def chunks(ledger: FileLedger, **limits) -> ChunkSentinel:
+def chunks(ledger: StageLedger, **limits) -> ChunkSentinel:
     return ChunkSentinel(
         ledger=ledger,
         max_rows=limits.get("max_rows"),
@@ -252,65 +257,75 @@ def chunks(ledger: FileLedger, **limits) -> ChunkSentinel:
     )
 
 
-def test_chunks_merge_into_one_file_until_the_row_threshold(ledger: FileLedger):
+def test_chunks_merge_into_one_file_until_the_row_threshold(
+    stage: LocalStage, ledger: StageLedger
+):
     sentinel = chunks(ledger, max_rows=3)
     sentinel.add("s.a", "v1", table(1))
     sentinel.add("s.a", "v1", table(2))
-    assert ids(ledger) == [[], []]
+    assert ids(stage, ledger) == [[], []]
     sentinel.add("s.a", "v1", table(3))
-    assert ids(ledger) == [[[1, 2, 3]], []]
+    assert ids(stage, ledger) == [[[1, 2, 3]], []]
 
 
-def test_chunks_merge_into_one_file_until_the_byte_threshold(ledger: FileLedger):
+def test_chunks_merge_into_one_file_until_the_byte_threshold(
+    stage: LocalStage, ledger: StageLedger
+):
     sentinel = chunks(ledger, max_bytes=table(1).nbytes * 2)
     sentinel.add("s.a", "v1", table(1))
-    assert ids(ledger) == [[], []]
+    assert ids(stage, ledger) == [[], []]
     sentinel.add("s.a", "v1", table(2))
-    assert ids(ledger) == [[[1, 2]], []]
+    assert ids(stage, ledger) == [[[1, 2]], []]
 
 
-def test_a_new_key_writes_out_the_chunks_of_the_previous_one(ledger: FileLedger):
+def test_a_new_key_writes_out_the_chunks_of_the_previous_one(
+    stage: LocalStage, ledger: StageLedger
+):
     sentinel = chunks(ledger)
     sentinel.add("s.a", "v1", table(1))
     sentinel.add("s.a", "v1", table(2))
     sentinel.add("s.a", "v2", table(3))
-    assert ids(ledger) == [[[1, 2]], []]
+    assert ids(stage, ledger) == [[[1, 2]], []]
     sentinel.flush("s.a")
-    assert ids(ledger) == [[[1, 2], [3]], []]
+    assert ids(stage, ledger) == [[[1, 2], [3]], []]
 
 
-def test_slots_merge_their_chunks_apart(ledger: FileLedger):
+def test_slots_merge_their_chunks_apart(stage: LocalStage, ledger: StageLedger):
     sentinel = chunks(ledger, max_rows=2)
     sentinel.add("s.a", "v1", table(1))
     sentinel.add("s.b", "v1", table(2))
-    assert ids(ledger) == [[], []]
+    assert ids(stage, ledger) == [[], []]
     sentinel.add("s.b", "v1", table(3))
-    assert ids(ledger) == [[], [[2, 3]]]
+    assert ids(stage, ledger) == [[], [[2, 3]]]
 
 
-def test_flushing_one_slot_leaves_the_others(ledger: FileLedger):
+def test_flushing_one_slot_leaves_the_others(stage: LocalStage, ledger: StageLedger):
     sentinel = chunks(ledger)
     sentinel.add("s.a", "v1", table(1))
     sentinel.add("s.b", "v1", table(2))
     sentinel.flush("s.b")
-    assert ids(ledger) == [[], [[2]]]
+    assert ids(stage, ledger) == [[], [[2]]]
 
 
-def test_flushing_every_slot_writes_what_each_holds(ledger: FileLedger):
+def test_flushing_every_slot_writes_what_each_holds(
+    stage: LocalStage, ledger: StageLedger
+):
     sentinel = chunks(ledger)
     sentinel.add("s.a", "v1", table(1))
     sentinel.add("s.b", "v1", table(2))
     sentinel.flush()
-    assert ids(ledger) == [[[1]], [[2]]]
+    assert ids(stage, ledger) == [[[1]], [[2]]]
 
 
-def test_flushing_with_nothing_held_writes_nothing(ledger: FileLedger):
+def test_flushing_with_nothing_held_writes_nothing(
+    stage: LocalStage, ledger: StageLedger
+):
     sentinel = chunks(ledger)
     sentinel.flush()
     sentinel.add("s.a", "v1", table(1))
     sentinel.flush("s.a")
     sentinel.flush("s.a")
-    assert ids(ledger) == [[[1]], []]
+    assert ids(stage, ledger) == [[[1]], []]
 
 
 @dataclass
@@ -360,7 +375,7 @@ class RecordEncoder(StreamEncoder[Record, Trail]):
 
 
 def buffer(
-    ledger: FileLedger,
+    ledger: StageLedger,
     clock: Clock,
     *,
     encoder: RecordEncoder | None = None,
@@ -383,30 +398,32 @@ def buffer(
     )
 
 
-def test_a_record_without_a_slot_keeps_only_its_offset(ledger: FileLedger):
+def test_a_record_without_a_slot_keeps_only_its_offset(
+    stage: LocalStage, ledger: StageLedger
+):
     sentinel = buffer(ledger, Clock(), max_rows=1)
     sentinel.add(Record(None, 1))
     assert sentinel.has_data is False
     assert sentinel.due() is False
     sentinel.flush()
-    assert ids(ledger) == [[], []]
+    assert ids(stage, ledger) == [[], []]
     assert sentinel.offset.values == [1]
 
 
-def test_pending_offsets_alone_flush_on_time(ledger: FileLedger):
+def test_pending_offsets_alone_flush_on_time(stage: LocalStage, ledger: StageLedger):
     clock = Clock()
     sentinel = buffer(ledger, clock, max_secs=5)
     sentinel.add(Record(None, 1))
     clock.now += 5
     assert sentinel.due() is True
     sentinel.flush()
-    assert ids(ledger) == [[], []]
+    assert ids(stage, ledger) == [[], []]
     assert sentinel.offset.values == [1]
     assert sentinel.due() is False
 
 
 def test_discarding_drops_the_pending_work_and_takes_the_offset_given(
-    ledger: FileLedger,
+    ledger: StageLedger,
 ):
     sentinel = buffer(ledger, Clock(), offset=Trail([1]))
     sentinel.add_all([Record("s.a", 2), Record(None, 3)])
@@ -418,26 +435,32 @@ def test_discarding_drops_the_pending_work_and_takes_the_offset_given(
     assert sentinel.due() is False
     assert sentinel.offset is staged
     sentinel.flush()
-    assert ids(ledger) == [[], []]
+    assert ids(stage, ledger) == [[], []]
     assert staged.values == [1]
 
 
-def test_records_stay_in_memory_below_every_threshold(ledger: FileLedger):
+def test_records_stay_in_memory_below_every_threshold(
+    stage: LocalStage, ledger: StageLedger
+):
     sentinel = buffer(ledger, Clock(), max_rows=3)
     sentinel.add_all([Record("s.a", 1), Record("s.b", 2)])
     assert sentinel.has_data is True
     assert sentinel.due() is False
-    assert ids(ledger) == [[], []]
+    assert ids(stage, ledger) == [[], []]
 
 
-def test_the_row_threshold_writes_every_slot_out(ledger: FileLedger):
+def test_the_row_threshold_writes_every_slot_out(
+    stage: LocalStage, ledger: StageLedger
+):
     sentinel = buffer(ledger, Clock(), max_rows=3)
     sentinel.add_all([Record("s.a", 1), Record("s.b", 2), Record("s.a", 3)])
     assert sentinel.has_data is False
-    assert ids(ledger) == [[[1, 3]], [[2]]]
+    assert ids(stage, ledger) == [[[1, 3]], [[2]]]
 
 
-def test_a_record_counts_the_rows_its_encoder_says_it_holds(ledger: FileLedger):
+def test_a_record_counts_the_rows_its_encoder_says_it_holds(
+    stage: LocalStage, ledger: StageLedger
+):
     class Batches(RecordEncoder):
         def rows(self, record: Record) -> int:
             return 2
@@ -447,18 +470,20 @@ def test_a_record_counts_the_rows_its_encoder_says_it_holds(ledger: FileLedger):
     assert (sentinel.rows, sentinel.has_data) == (2, True)
     sentinel.add(Record("s.a", 2))
     assert sentinel.has_data is False
-    assert ids(ledger) == [[[1, 2]], []]
+    assert ids(stage, ledger) == [[[1, 2]], []]
 
 
-def test_the_byte_threshold_writes_the_records_out(ledger: FileLedger):
+def test_the_byte_threshold_writes_the_records_out(
+    stage: LocalStage, ledger: StageLedger
+):
     sentinel = buffer(ledger, Clock(), max_bytes=10)
     sentinel.add(Record("s.a", 1, size=6))
-    assert ids(ledger) == [[], []]
+    assert ids(stage, ledger) == [[], []]
     sentinel.add(Record("s.a", 2, size=4))
-    assert ids(ledger) == [[[1, 2]], []]
+    assert ids(stage, ledger) == [[[1, 2]], []]
 
 
-def test_sizes_are_measured_only_under_a_byte_threshold(ledger: FileLedger):
+def test_sizes_are_measured_only_under_a_byte_threshold(ledger: StageLedger):
     encoder = RecordEncoder()
     sentinel = buffer(ledger, Clock(), encoder=encoder, max_rows=10)
     sentinel.add(Record("s.a", 1))
@@ -466,14 +491,16 @@ def test_sizes_are_measured_only_under_a_byte_threshold(ledger: FileLedger):
     assert sentinel.bytes == 0
 
 
-def test_sizes_are_measured_when_asked_for(ledger: FileLedger):
+def test_sizes_are_measured_when_asked_for(ledger: StageLedger):
     encoder = RecordEncoder()
     sentinel = buffer(ledger, Clock(), encoder=encoder, measure_bytes=True)
     sentinel.add(Record("s.a", 1, size=7))
     assert (encoder.sized, sentinel.bytes, sentinel.rows) == (1, 7, 1)
 
 
-def test_the_buffer_is_due_once_the_time_threshold_elapses(ledger: FileLedger):
+def test_the_buffer_is_due_once_the_time_threshold_elapses(
+    stage: LocalStage, ledger: StageLedger
+):
     clock = Clock()
     sentinel = buffer(ledger, clock, max_secs=60)
     sentinel.add(Record("s.a", 1))
@@ -481,19 +508,21 @@ def test_the_buffer_is_due_once_the_time_threshold_elapses(ledger: FileLedger):
     assert sentinel.due() is False
     clock.now += 0.1
     assert sentinel.due() is True
-    assert ids(ledger) == [[], []]
+    assert ids(stage, ledger) == [[], []]
 
 
-def test_a_record_arriving_past_the_time_threshold_writes_out(ledger: FileLedger):
+def test_a_record_arriving_past_the_time_threshold_writes_out(
+    stage: LocalStage, ledger: StageLedger
+):
     clock = Clock()
     sentinel = buffer(ledger, clock, max_secs=60)
     sentinel.add(Record("s.a", 1))
     clock.now += 60
     sentinel.add(Record("s.a", 2))
-    assert ids(ledger) == [[[1, 2]], []]
+    assert ids(stage, ledger) == [[[1, 2]], []]
 
 
-def test_an_empty_buffer_is_never_due(ledger: FileLedger):
+def test_an_empty_buffer_is_never_due(ledger: StageLedger):
     clock = Clock()
     sentinel = buffer(ledger, clock, max_rows=0, max_bytes=0, max_secs=0)
     clock.now += 1_000
@@ -501,7 +530,7 @@ def test_an_empty_buffer_is_never_due(ledger: FileLedger):
 
 
 def test_resetting_the_buffer_timer_restarts_the_time_threshold(
-    ledger: FileLedger,
+    ledger: StageLedger,
 ):
     clock = Clock()
     sentinel = buffer(ledger, clock, max_secs=60)
@@ -511,7 +540,7 @@ def test_resetting_the_buffer_timer_restarts_the_time_threshold(
     assert sentinel.due() is False
 
 
-def test_a_flush_restarts_the_time_threshold(ledger: FileLedger):
+def test_a_flush_restarts_the_time_threshold(ledger: StageLedger):
     clock = Clock()
     sentinel = buffer(ledger, clock, max_secs=60)
     sentinel.add(Record("s.a", 1))
@@ -522,20 +551,24 @@ def test_a_flush_restarts_the_time_threshold(ledger: FileLedger):
     assert sentinel.due() is False
 
 
-def test_every_table_an_encoding_yields_lands_as_its_own_file(ledger: FileLedger):
+def test_every_table_an_encoding_yields_lands_as_its_own_file(
+    stage: LocalStage, ledger: StageLedger
+):
     sentinel = buffer(ledger, Clock(), encoder=RecordEncoder(split=True))
     sentinel.add_all([Record("s.a", 1), Record("s.a", 2)])
     sentinel.flush()
-    assert ids(ledger) == [[[1], [2]], []]
+    assert ids(stage, ledger) == [[[1], [2]], []]
 
 
-def test_flushing_an_empty_buffer_writes_nothing(ledger: FileLedger):
+def test_flushing_an_empty_buffer_writes_nothing(
+    stage: LocalStage, ledger: StageLedger
+):
     sentinel = buffer(ledger, Clock())
     sentinel.flush()
-    assert ids(ledger) == [[], []]
+    assert ids(stage, ledger) == [[], []]
 
 
-def test_the_offset_moves_only_when_its_records_reach_disk(ledger: FileLedger):
+def test_the_offset_moves_only_when_its_records_reach_disk(ledger: StageLedger):
     offset = Trail()
     sentinel = buffer(ledger, Clock(), offset=offset)
     sentinel.add(Record("s.a", 1))
@@ -545,7 +578,7 @@ def test_the_offset_moves_only_when_its_records_reach_disk(ledger: FileLedger):
     assert sentinel.offset is offset
 
 
-def test_offsets_are_applied_in_the_order_their_records_arrived(ledger: FileLedger):
+def test_offsets_are_applied_in_the_order_their_records_arrived(ledger: StageLedger):
     offset = Trail()
     sentinel = buffer(ledger, Clock(), offset=offset)
     sentinel.add_all([Record("s.b", 1), Record("s.a", 2), Record("s.b", 3)])
@@ -553,7 +586,7 @@ def test_offsets_are_applied_in_the_order_their_records_arrived(ledger: FileLedg
     assert offset.values == [1, 2, 3]
 
 
-def test_a_record_without_a_slot_still_moves_the_offset(ledger: FileLedger):
+def test_a_record_without_a_slot_still_moves_the_offset(ledger: StageLedger):
     offset = Trail()
     sentinel = buffer(ledger, Clock(), offset=offset)
     sentinel.add(Record(None, 1))
@@ -561,7 +594,7 @@ def test_a_record_without_a_slot_still_moves_the_offset(ledger: FileLedger):
     assert offset.values == [1]
 
 
-def test_a_buffer_without_a_base_offset_rejects_its_first_record(ledger: FileLedger):
+def test_a_buffer_without_a_base_offset_rejects_its_first_record(ledger: StageLedger):
     sentinel = BufferSentinel(
         ledger=ledger,
         encoder=RecordEncoder(),

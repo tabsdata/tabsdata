@@ -32,11 +32,9 @@ from __future__ import annotations
 
 import logging
 import math
-import shutil
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from tabsdatak.api import StreamSrc
 
@@ -44,7 +42,7 @@ from tabsdatak.api import StreamSrc
 from tabsdatak.conn.common._stream._config import StreamRunConfig
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream._ledger import FileLedger
+from tabsdatak.conn.common._stream._ledger import StageLedger
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._plugin import PipelineStreamSrcPlugin, StreamRun
@@ -58,7 +56,7 @@ from tabsdatak.conn.common._stream._sentinels import BufferSentinel, ChunkSentin
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._signal import StopSignal
 from tabsdatak.conn.common.sql.cdc._deduplicator import (
-    deduplicate_initial_load_files,
+    deduplicate_initial_load_frames,
 )
 from tabsdatak.conn.common.sql.cdc._encoder import CdcEncoder
 from tabsdatak.conn.common.sql.cdc._ingester import (
@@ -76,15 +74,7 @@ from tabsdatak.conn.common.sql.cdc.constants import (
 )
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
-from tabsdatak.spi import Conn, StreamSrcPluginCtx, StreamStateSpec
-
-# Work-dir subdirectories the initial load's parquet files land in: the
-# load's rows, the changes committed while it read them, and those of the
-# changes deduplication keeps. Wiped at the start of a load so a previous
-# attempt leaves nothing behind.
-_INITIAL_LOAD_DIR = "_cdc_initial_load"
-_INITIAL_LOAD_WINDOW_DIR = "_cdc_initial_load_window"
-_INITIAL_LOAD_KEPT_DIR = "_cdc_initial_load_kept"
+from tabsdatak.spi import Conn, StageFileStats, StreamSrcPluginCtx, StreamStateSpec
 
 NO_TIME_LIMIT = math.inf
 
@@ -127,18 +117,11 @@ def _initial_load_pending(ctx: StreamSrcPluginCtx, cfg: CdcRunConfig) -> bool:
 
 @dataclass(frozen=True)
 class _PendingLoad:
-    """A load read but not staged yet: its files, and where the changes
-    committed while it ran end."""
+    """A load sent but not published yet: its tables, per output slot, and
+    where the changes committed while it ran end."""
 
-    manifest: list[list[Path]]
+    manifest: list[list[StageFileStats]]
     window_end: CdcOffset
-
-
-def _fresh(folder: Path) -> Path:
-    if folder.exists():
-        shutil.rmtree(folder)
-    folder.mkdir(parents=True)
-    return folder
 
 
 def _load_initially(
@@ -154,19 +137,18 @@ def _load_initially(
     Returns the offset change capture resumes from and, for a load whose
     session reports a window, the load left unstaged: the run loop reads
     the window's changes and stages both together
-    (:func:`_stage_initial_load`). Either way the load is one ``ctx.stage``
-    call, so it is all-or-nothing: an error anywhere leaves no manifest and
-    no state, and the next run redoes it.
+    (:func:`_stage_initial_load`). Either way the load is published by one
+    ``ctx.stage`` call, so it is all-or-nothing: an error anywhere leaves no
+    manifest and no state, what was sent is unstaged, and the next run
+    redoes it.
     """
-    landing = _fresh(ctx.work_dir / _INITIAL_LOAD_DIR)
-
     session = ingester.open_initial_load()
     try:
         tracked_tables = ingester.collect_tables(
             session=session.engine,
             cdc_format=cfg.cdc_format,
         )
-        ledger = FileLedger(landing=landing, slots=tracked_tables)
+        ledger = StageLedger(ctx=ctx, slots=tracked_tables)
         chunk_sentinel = ChunkSentinel(
             ledger=ledger,
             max_rows=cfg.buffer.max_rows,
@@ -187,21 +169,20 @@ def _load_initially(
 
     if window_end is not None:
         return offset, _PendingLoad(manifest=ledger.manifest(), window_end=window_end)
-    _stage_load_manifest(ctx, ingester, ledger.manifest(), offset)
+    _publish_load(ctx, ingester, offset)
     logger.info("Initial load staged")
     return offset, None
 
 
-def _stage_load_manifest(
+def _publish_load(
     ctx: StreamSrcPluginCtx,
     ingester: CdcIngester,
-    manifest: list[list[Path]],
     offset: CdcOffset,
 ) -> None:
     state = ingester.stage_state(offset)
     if not isinstance(state, dict):
         raise SqlCdcErrorCode.CDC_21.exception(ingester=type(ingester).__name__)
-    ctx.stage(manifest, {**state, CDC_INITIAL_LOAD_STATE_KEY: False})
+    ctx.stage(None, {**state, CDC_INITIAL_LOAD_STATE_KEY: False})
     ingester.acknowledge_offset(offset)
 
 
@@ -215,14 +196,11 @@ def _read_window(
     large_column_policy: LargeColumnPolicy,
     window_end: CdcOffset,
     stop_signal: StopSignal,
-) -> list[list[Path]] | None:
-    """The changes committed while the load read the tables, as a manifest:
-    read by the ingester's own poll, bounded at `window_end`, and written as
-    the stream writes them. ``None`` when a signal stops the read."""
-    ledger = FileLedger(
-        landing=_fresh(ctx.work_dir / _INITIAL_LOAD_WINDOW_DIR),
-        slots=tracked_tables,
-    )
+) -> list[list[StageFileStats]] | None:
+    """The changes committed while the load read the tables, per output
+    slot: read by the ingester's own poll, bounded at `window_end`, and sent
+    as the stream sends them. ``None`` when a signal stops the read."""
+    ledger = StageLedger(ctx=ctx, slots=tracked_tables)
     buffer_sentinel = BufferSentinel(
         ledger=ledger,
         encoder=CdcEncoder(cfg.cdc_format, tracked_tables),
@@ -257,29 +235,39 @@ def _stage_initial_load(
     tracked_tables: dict,
     cfg: CdcRunConfig,
     pending: _PendingLoad,
-    window: list[list[Path]],
+    window: list[list[StageFileStats]],
 ) -> None:
-    """Stage the load with the window's changes that still apply to it, at
-    the window's end, as one batch."""
+    """Publish the load with the window's changes that still apply to it, at
+    the window's end, as one batch. The window is read back from the stage to
+    deduplicate it: a table it drops nothing from keeps its window as sent,
+    and for every other one the kept changes are sent and its window is
+    unstaged."""
     registry = ingester.schema_registry
-    kept = deduplicate_initial_load_files(
-        loaded=pending.manifest,
-        changes=window,
+    reduced = deduplicate_initial_load_frames(
+        loaded=[[ctx.scan(stats) for stats in files] for files in pending.manifest],
+        changes=[[ctx.scan(stats) for stats in files] for files in window],
         tables=tracked_tables,
         schemas={table: registry.version(table, 0) for table in tracked_tables},
         cdc_format=cfg.cdc_format,
-        landing=_fresh(ctx.work_dir / _INITIAL_LOAD_KEPT_DIR),
     )
-    manifest = [
-        loaded + changes for loaded, changes in zip(pending.manifest, kept, strict=True)
-    ]
+    ledger = StageLedger(ctx=ctx, slots=tracked_tables)
+    replaced: list[StageFileStats] = []
+    for table, files in zip(tracked_tables, window, strict=True):
+        deduplicated = reduced.get(table)
+        if deduplicated is None:
+            continue
+        if deduplicated.dropped < sum(stats.rows for stats in files):
+            ledger.stage(table, deduplicated.changes)
+        replaced.extend(files)
+    # Only once the kept changes are sent: they are read from these.
+    ctx.unstage(replaced)
     # Where the window's read left the stream, not the window's end itself:
     # an end that is no resumable offset (a binlog position) bounds the read,
     # and the offset is what the read reached up to it.
-    _stage_load_manifest(ctx, ingester, manifest, ingester.base_offset())
+    _publish_load(ctx, ingester, ingester.base_offset())
     logger.info(
-        "Initial load staged with %d deduplicated change file(s)",
-        sum(len(files) for files in kept),
+        "Initial load staged, with the changes of %d table(s) deduplicated",
+        len(reduced),
     )
 
 

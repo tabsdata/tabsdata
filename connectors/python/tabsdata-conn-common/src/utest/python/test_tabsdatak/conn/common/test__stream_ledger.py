@@ -6,82 +6,114 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import polars as pl
 import pyarrow as pa
-import pyarrow.parquet as pq
+import pytest
+from tabsdatax.itest.fixture.functions.stream import LocalStage
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream._ledger import FileLedger
+from tabsdatak.conn.common._stream._ledger import StageLedger
+from tabsdatak.spi import LazyFrameInput
 
 
 def table(*values: int) -> pa.Table:
     return pa.table({"id": list(values)})
 
 
-def test_a_new_ledger_holds_no_data(tmp_path: Path):
-    ledger = FileLedger(landing=tmp_path, slots=["s.a", "s.b"])
-    assert (ledger.has_data, ledger.rows, ledger.bytes) == (False, 0, 0)
+@pytest.fixture
+def stage(tmp_path: Path) -> LocalStage:
+    return LocalStage(tmp_path)
+
+
+def ids(stage: LocalStage, ledger: StageLedger) -> list[list[list[int]]]:
+    return [
+        [stage.scan(stats).collect()["id"].to_list() for stats in files]
+        for files in ledger.manifest()
+    ]
+
+
+def test_a_new_ledger_holds_no_data(stage):
+    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b"])
+    assert (ledger.has_data, ledger.has_files, ledger.rows, ledger.bytes) == (
+        False,
+        False,
+        0,
+        0,
+    )
     assert ledger.manifest() == [[], []]
 
 
-def test_a_written_table_lands_as_a_parquet_file_of_its_slot(tmp_path: Path):
-    ledger = FileLedger(landing=tmp_path, slots=["s.a"])
-    path = ledger.write("s.a", table(1, 2, 3))
-    assert path.parent == tmp_path
-    assert path.name.startswith("s.a_")
-    assert path.suffix == ".parquet"
-    assert pq.read_table(path).column("id").to_pylist() == [1, 2, 3]
+def test_a_written_table_is_sent_to_its_slot(stage):
+    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b"])
+    ledger.write("s.b", table(1, 2, 3))
+    assert ids(stage, ledger) == [[], [[1, 2, 3]]]
+    assert ledger.has_files
 
 
-def test_a_slot_name_is_sanitized_into_the_file_name(tmp_path: Path):
-    ledger = FileLedger(landing=tmp_path, slots=["db/s a"])
-    assert ledger.write("db/s a", table(1)).name.startswith("db-s-a_")
+def test_a_lazy_frame_is_staged_as_it_is(stage):
+    ledger = StageLedger(ctx=stage, slots=["s.a"])
+    ledger.stage("s.a", pl.LazyFrame({"id": [4, 5]}))
+    assert ids(stage, ledger) == [[[4, 5]]]
 
 
-def test_rows_and_bytes_count_every_written_file(tmp_path: Path):
-    ledger = FileLedger(landing=tmp_path, slots=["s.a", "s.b"])
-    first = ledger.write("s.a", table(1, 2))
-    second = ledger.write("s.b", table(3))
+def test_rows_and_bytes_count_what_the_stage_wrote(stage):
+    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b"])
+    ledger.write("s.a", table(1, 2))
+    ledger.write("s.b", table(3))
     assert ledger.has_data
     assert ledger.rows == 3
-    assert ledger.bytes == first.stat().st_size + second.stat().st_size
+    assert ledger.bytes == sum(
+        stats.bytes for files in stage.pending for stats in files
+    )
 
 
-def test_the_manifest_is_positional_by_slot_with_empty_slots(tmp_path: Path):
-    ledger = FileLedger(landing=tmp_path, slots=["s.a", "s.b", "s.c"])
-    first = ledger.write("s.c", table(1))
-    second = ledger.write("s.a", table(2))
-    third = ledger.write("s.c", table(3))
-    assert ledger.manifest() == [[second], [], [first, third]]
+def test_the_manifest_is_positional_by_slot_with_empty_slots(stage):
+    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b", "s.c"])
+    ledger.write("s.c", table(1))
+    ledger.write("s.a", table(2))
+    ledger.write("s.c", table(3))
+    assert ids(stage, ledger) == [[[2]], [], [[1], [3]]]
 
 
-def test_the_manifest_is_a_copy(tmp_path: Path):
-    ledger = FileLedger(landing=tmp_path, slots=["s.a"])
+def test_the_manifest_is_a_copy(stage):
+    ledger = StageLedger(ctx=stage, slots=["s.a"])
     ledger.write("s.a", table(1))
     ledger.manifest()[0].clear()
     assert len(ledger.manifest()[0]) == 1
 
 
-def test_clearing_forgets_the_files_and_the_counts(tmp_path: Path):
-    ledger = FileLedger(landing=tmp_path, slots=["s.a", "s.b"])
+def test_publishing_stages_what_was_sent_with_the_state_and_forgets_it(stage):
+    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b"])
+    ledger.write("s.a", table(1, 2))
+    ledger.publish({"offset": 7})
+    ((batch),) = stage.published
+    assert [len(files) for files in batch.tables] == [1, 0]
+    assert batch.state == {"offset": 7}
+    assert ledger.manifest() == [[], []]
+    assert (ledger.has_data, ledger.rows, ledger.bytes) == (False, 0, 0)
+
+
+def test_clearing_forgets_the_tables_and_the_counts(stage):
+    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b"])
     ledger.write("s.a", table(1, 2))
     ledger.clear()
     assert ledger.manifest() == [[], []]
     assert (ledger.has_data, ledger.rows, ledger.bytes) == (False, 0, 0)
 
 
-def test_file_names_sort_in_the_order_they_were_written(tmp_path: Path):
-    ledger = FileLedger(landing=tmp_path, slots=["s.a"])
-    paths = [ledger.write("s.a", table(value)) for value in range(5)]
-    assert sorted(paths, key=lambda path: path.name) == paths
-
-
-def test_discarding_deletes_the_files_and_forgets_them(tmp_path):
-    ledger = FileLedger(landing=tmp_path, slots=["s.a"])
-    path = ledger.write("s.a", pa.table({"id": [1]}))
-    assert path.exists()
-
+def test_discarding_unstages_what_the_ledger_sent_and_forgets_it(stage, tmp_path):
+    ledger = StageLedger(ctx=stage, slots=["s.a"])
+    ledger.write("s.a", table(1))
     ledger.discard()
-
-    assert not path.exists()
+    assert stage.pending == [[]]
+    assert list(tmp_path.glob("*.parquet")) == []
     assert ledger.manifest() == [[]]
     assert ledger.has_data is False
+
+
+def test_discarding_leaves_what_others_sent(stage):
+    ledger = StageLedger(ctx=stage, slots=["s.a"])
+    other = stage.send([[LazyFrameInput(pl.LazyFrame({"id": [9]}))]])
+    ledger.write("s.a", table(1))
+    ledger.discard()
+    assert stage.pending == other

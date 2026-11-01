@@ -20,6 +20,7 @@ import pyarrow.parquet as pq
 import pytest
 from sqlalchemy import create_engine
 from tabsdatax.itest.fixture.backends.mysqlcdc import MysqlcdcDomain, mysqlcdc_domain
+from tabsdatax.itest.fixture.functions.stream import LocalStage
 from testi_tabsdatak.conn.common.sql.cdc_interleave import (
     INTERLEAVED_IDS,
     OpenTransaction,
@@ -71,6 +72,7 @@ class _CdcCtx(StreamSrcPluginCtx):
 
     def __init__(self, work: Path, *, initial_state: dict | None = None) -> None:
         self._work_dir = work
+        self._local = LocalStage(work / "stage")
         self._stop = threading.Event()
         self._state: dict[str, Any] = dict(initial_state) if initial_state else {}
         self._tabsdata_owns_state = initial_state is not None
@@ -165,8 +167,12 @@ class _CdcCtx(StreamSrcPluginCtx):
             batch=BatchThresholds(min_secs=1, max_secs=1, max_rows=1)
         )
 
-    def stage(self, tables_files, new_state):
+    def stage(self, tables_files=None, new_state=None):
         with self._lock:
+            sent = self._local.stage(tables_files, new_state)
+            if new_state is None:
+                return sent
+            tables_files = self._local.published[-1].tables
             self._staged.append([list(files) for files in tables_files])
             if isinstance(new_state, dict):
                 self._state = dict(new_state)
@@ -174,16 +180,18 @@ class _CdcCtx(StreamSrcPluginCtx):
             else:
                 self._tabsdata_owns_state = False
                 new_state()
+            return sent
 
     def scan(self, file):
-        raise NotImplementedError("this context stages local files only")
+        return self._local.scan(file)
 
     def unstage(self, files=None):
-        pass
+        with self._lock:
+            self._local.unstage(files)
 
     @property
     def pending(self):
-        return []
+        return self._local.pending
 
     def checkpoint(self, new_state):
         with self._lock:

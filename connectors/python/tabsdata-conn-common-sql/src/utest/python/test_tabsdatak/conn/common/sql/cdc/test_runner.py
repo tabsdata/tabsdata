@@ -5,14 +5,18 @@
 """Unit tests for the CDC hooks of the shared stream run loop
 (:mod:`tabsdatak.conn.common.sql.cdc._runner`): the initial load and its
 window, the initial-load flag kept in the stream state and in checkpoints,
-and the ``CdcRunConfig`` defaults. The sentinels are faked out so the
-hooks are tested in isolation, without a database or parquet."""
+and the ``CdcRunConfig`` defaults. The sentinels of the run loop are faked
+out so the hooks are tested in isolation, without a database; what a hook
+stages lands on a local stand-in for the function stage."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
+import polars as pl
+import pyarrow as pa
 import pytest
+from tabsdatax.itest.fixture.functions.stream import LocalStage
 
 # noinspection PyProtectedMember
 from tabsdatak.api import BatchThresholds, PollThresholds, StreamThresholds
@@ -29,6 +33,7 @@ from tabsdatak.conn.common._stream.constants import (
     DEFAULT_POLL_IDLE_SECS,
 )
 from tabsdatak.conn.common.sql.cdc import _runner
+from tabsdatak.conn.common.sql.cdc._deduplicator import Deduplicated
 from tabsdatak.conn.common.sql.cdc._ingester import CDC_INITIAL_LOAD_STATE_KEY
 from tabsdatak.conn.common.sql.cdc._runner import (
     CdcPlugin,
@@ -40,13 +45,16 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_MAX_LARGE_TEXT_LENGTH,
 )
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcException
+from tabsdatak.spi import LazyFrameInput
 
 # --- fakes --------------------------------------------------------------
 
 
 class FakeCtx:
     """Duck-typed :class:`StreamSrcPluginCtx`. ``active`` is driven by a
-    scripted sequence so the loop runs a controlled number of times."""
+    scripted sequence so the loop runs a controlled number of times; what is
+    staged lands on a :class:`LocalStage` under ``work_dir``, and ``staged``
+    lists each published batch with its state."""
 
     def __init__(
         self,
@@ -63,9 +71,9 @@ class FakeCtx:
         self.first_stage = first_stage
         self.stream_state = stream_state
         self.work_dir = Path("/tmp")
-        self.staged: list[tuple] = []
         self.checkpoints: list = []
         self.stage_raises = False
+        self._local: LocalStage | None = None
 
     @property
     def active(self) -> bool:
@@ -74,22 +82,65 @@ class FakeCtx:
         except StopIteration:
             return False
 
-    def stage(self, tables_files, new_state) -> None:
+    @property
+    def local(self) -> LocalStage:
+        if self._local is None:
+            self._local = LocalStage(self.work_dir / "stage")
+        return self._local
+
+    @property
+    def staged(self) -> list[tuple]:
+        return [(batch.tables, batch.state) for batch in self.local.published]
+
+    @property
+    def pending(self):
+        return self.local.pending
+
+    def stage(self, tables_files=None, new_state=None):
         if self.stage_raises:
             raise RuntimeError("boom-stage")
-        self.staged.append((tables_files, new_state))
+        return self.local.stage(tables_files, new_state)
+
+    def scan(self, file) -> pl.LazyFrame:
+        return self.local.scan(file)
+
+    def unstage(self, files=None) -> None:
+        self.local.unstage(files)
 
     def checkpoint(self, new_state) -> None:
         self.checkpoints.append(new_state)
 
 
+def ids(files: list[list[Path]]) -> list[list[list[int]]]:
+    return [[pl.read_parquet(file)["id"].to_list() for file in slot] for slot in files]
+
+
+def collected(frames: list[list[pl.LazyFrame]]) -> list[list[list[int]]]:
+    return [[frame.collect()["id"].to_list() for frame in slot] for slot in frames]
+
+
+def sent(ctx: FakeCtx, *values: list[int]):
+    return ctx.stage([[LazyFrameInput(pl.LazyFrame({"id": row})) for row in values]])
+
+
 class FakeDisk:
+    """Stands in for both the stream's ledger and its disk sentinel."""
+
     def __init__(self, *, manifest, due_force=False, due_normal=False):
         self._manifest = manifest
         self.has_data = bool(manifest and any(manifest))
+        self.has_files = self.has_data
         self._force = due_force
         self._normal = due_normal
         self.cleared = 0
+        self.ctx: FakeCtx | None = None
+
+    def publish(self, new_state) -> None:
+        self.ctx.stage(None, new_state)
+        self.clear()
+
+    def discard(self) -> None:
+        self.clear()
 
     def reset_timer(self) -> None:
         pass
@@ -219,9 +270,14 @@ class FakeIngester:
         self.acknowledged_offsets.append(offset)
 
 
+def bound(disk: FakeDisk, ctx: FakeCtx) -> FakeDisk:
+    disk.ctx = ctx
+    return disk
+
+
 def _patch_sentinels(monkeypatch, disk, buffer):
+    monkeypatch.setattr(_plugin, "StageLedger", lambda **kw: bound(disk, kw["ctx"]))
     for module in (_plugin, _runner):
-        monkeypatch.setattr(module, "FileLedger", lambda **kw: disk)
         monkeypatch.setattr(module, "BufferSentinel", lambda **kw: buffer)
     monkeypatch.setattr(_plugin, "DiskSentinel", lambda **kw: disk)
 
@@ -318,12 +374,8 @@ def test_initial_load_pending_decision(initial_load, stream_state, pending):
 
 
 def _loaded(monkeypatch, tmp_path, *, ctx, loader_raises=False, window_end=None):
-    """Run ``_load_initially`` with the loader and sentinel faked out, so
-    only the runner's own orchestration is under test."""
-    manifest = [[tmp_path / "t0.parquet"], []]
-    disk = FakeDisk(manifest=manifest)
-    monkeypatch.setattr(_runner, "FileLedger", lambda **kw: disk)
-
+    """Run ``_load_initially`` with the loader faked out to read rows 1 and 2,
+    so only the runner's own orchestration is under test."""
     offset = _Offset()
 
     class FakeLoader:
@@ -333,6 +385,9 @@ def _loaded(monkeypatch, tmp_path, *, ctx, loader_raises=False, window_end=None)
         def load(self, session):
             if loader_raises:
                 raise RuntimeError("boom-load")
+            chunks = self.kw["chunk_sentinel"]
+            chunks.add("s.t", "k", pa.table({"id": [1, 2]}))
+            chunks.flush()
             return offset
 
     monkeypatch.setattr(_runner, "InitialLoader", FakeLoader)
@@ -344,21 +399,20 @@ def _loaded(monkeypatch, tmp_path, *, ctx, loader_raises=False, window_end=None)
         cfg=_cfg(initial_load=True),
         large_column_policy=object(),
     )
-    return result, offset, ingester, manifest
+    return result, offset, ingester
 
 
 def test_initial_load_stages_once_with_offset_and_flag(monkeypatch, tmp_path):
     ctx = FakeCtx(active_values=[])
     ctx.work_dir = tmp_path
-    result, offset, ingester, manifest = _loaded(monkeypatch, tmp_path, ctx=ctx)
+    result, offset, ingester = _loaded(monkeypatch, tmp_path, ctx=ctx)
 
     assert result == (offset, None)
-    assert len(ctx.staged) == 1
-    staged_files, staged_state = ctx.staged[0]
-    assert staged_files == manifest
+    ((tables, state),) = ctx.staged
+    assert ids(tables) == [[[1, 2]]]
     # The resume offset and the "load done" flag are persisted together,
     # so a crash cannot leave one without the other.
-    assert staged_state == {"cdc.offset": "o", CDC_INITIAL_LOAD_STATE_KEY: False}
+    assert state == {"cdc.offset": "o", CDC_INITIAL_LOAD_STATE_KEY: False}
     assert ingester.acknowledged_offsets == [offset]
 
 
@@ -373,7 +427,7 @@ def test_initial_load_failure_stages_nothing(monkeypatch, tmp_path):
 def test_initial_load_closes_the_snapshot_session(monkeypatch, tmp_path):
     ctx = FakeCtx(active_values=[])
     ctx.work_dir = tmp_path
-    _, _, ingester, _ = _loaded(monkeypatch, tmp_path, ctx=ctx)
+    _, _, ingester = _loaded(monkeypatch, tmp_path, ctx=ctx)
     assert ingester.initial_load_session.closed is True
 
 
@@ -383,8 +437,6 @@ def test_initial_load_requires_a_tabsdata_owned_offset(monkeypatch, tmp_path):
     runner refuses rather than repeating the snapshot on every restart."""
     ctx = FakeCtx(active_values=[])
     ctx.work_dir = tmp_path
-    disk = FakeDisk(manifest=[[tmp_path / "t0.parquet"]])
-    monkeypatch.setattr(_runner, "FileLedger", lambda **kw: disk)
     monkeypatch.setattr(
         _runner,
         "InitialLoader",
@@ -403,18 +455,17 @@ def test_initial_load_requires_a_tabsdata_owned_offset(monkeypatch, tmp_path):
     assert ctx.staged == []
 
 
-def test_a_load_with_a_window_is_left_unstaged(monkeypatch, tmp_path):
-    """The load is staged with the window's changes, once they are read and
-    deduplicated, so the load alone stages nothing."""
+def test_a_load_with_a_window_is_sent_but_not_published(monkeypatch, tmp_path):
+    """The load is published with the window's changes, once they are read
+    and deduplicated, so the load alone publishes nothing."""
     ctx = FakeCtx(active_values=[])
     ctx.work_dir = tmp_path
     end = object()
-    result, offset, ingester, manifest = _loaded(
-        monkeypatch, tmp_path, ctx=ctx, window_end=end
-    )
+    result, offset, ingester = _loaded(monkeypatch, tmp_path, ctx=ctx, window_end=end)
     start, pending = result
     assert start is offset
-    assert pending.manifest == manifest
+    assert pending.manifest == ctx.pending
+    assert [len(files) for files in pending.manifest] == [1]
     assert pending.window_end is end
     assert ctx.staged == []
     assert ingester.acknowledged_offsets == []
@@ -425,58 +476,79 @@ class _FakeRegistry:
         return ("version", table, ordinal)
 
 
-def _with_window(monkeypatch, tmp_path, *, window):
-    """Run the loop over a pending load, with the window read and the
-    deduplication faked out."""
+def _with_window(monkeypatch, tmp_path, *, window, reduced=None):
+    """Run the loop over a load of row 1 sent and pending, with the window
+    read (its rows sent as one table) and the deduplication faked out."""
     disk = FakeDisk(manifest=[[]])
     buffer = FakeBuffer()
     _patch_sentinels(monkeypatch, disk, buffer)
-    start, end = object(), object()
-    load_file = tmp_path / "load.parquet"
-    kept_file = tmp_path / "kept.parquet"
-    pending = _runner._PendingLoad(manifest=[[load_file]], window_end=end)
-    monkeypatch.setattr(_runner, "_load_initially", lambda **kw: (start, pending))
-    monkeypatch.setattr(_runner, "_read_window", lambda **kw: window)
+    ctx = FakeCtx(active_values=[False], stream_state=None)
+    ctx.work_dir = tmp_path
+    end = object()
+    pending = _runner._PendingLoad(manifest=sent(ctx, [1]), window_end=end)
+    window_sent = None if window is None else sent(ctx, window)
+    monkeypatch.setattr(_runner, "_load_initially", lambda **kw: (object(), pending))
+    monkeypatch.setattr(_runner, "_read_window", lambda **kw: window_sent)
     deduplicated: list = []
-    monkeypatch.setattr(
-        _runner,
-        "deduplicate_initial_load_files",
-        lambda **kw: deduplicated.append(kw) or [[kept_file]],
-    )
+
+    def deduplicate(**kw):
+        # Read now: the window's tables are unstaged once deduplicated.
+        deduplicated.append(
+            kw
+            | {"loaded": collected(kw["loaded"]), "changes": collected(kw["changes"])}
+        )
+        return reduced or {}
+
+    monkeypatch.setattr(_runner, "deduplicate_initial_load_frames", deduplicate)
     ingester = FakeIngester()
     ingester.schema_registry = _FakeRegistry()
     ingester.stage_state_marker = {"cdc.offset": "end"}
     reached = object()
     ingester.base_offset = lambda: reached
-    ctx = FakeCtx(active_values=[False], stream_state=None)
-    ctx.work_dir = tmp_path
     _stream(ctx, ingester, _cfg(initial_load=True))
-    return ctx, ingester, deduplicated, reached, load_file, kept_file
+    return ctx, ingester, deduplicated, reached
 
 
 def test_the_load_is_staged_with_what_deduplication_keeps(monkeypatch, tmp_path):
-    window_file = tmp_path / "window.parquet"
-    ctx, ingester, deduplicated, reached, load_file, kept_file = _with_window(
-        monkeypatch, tmp_path, window=[[window_file]]
+    kept = Deduplicated(pl.LazyFrame({"id": [2]}), dropped=1)
+    ctx, ingester, deduplicated, reached = _with_window(
+        monkeypatch, tmp_path, window=[2, 1], reduced={"s.t": kept}
     )
-    assert ctx.staged == [
-        (
-            [[load_file, kept_file]],
-            {"cdc.offset": "end", CDC_INITIAL_LOAD_STATE_KEY: False},
-        )
-    ]
+    ((tables, state),) = ctx.staged
+    assert ids(tables) == [[[1], [2]]]
+    assert state == {"cdc.offset": "end", CDC_INITIAL_LOAD_STATE_KEY: False}
     # Where the window's read left the stream, which a window ending at a
     # binlog position, no resumable offset, needs.
     assert ingester.stage_state_arg is reached
     assert ingester.acknowledged_offsets == [reached]
     (call,) = deduplicated
-    assert call["loaded"] == [[load_file]]
-    assert call["changes"] == [[window_file]]
+    assert call["loaded"] == [[[1]]]
+    assert call["changes"] == [[[2, 1]]]
     assert call["schemas"] == {"s.t": ("version", "s.t", 0)}
+    assert len(list((tmp_path / "stage").glob("*.parquet"))) == 2
+
+
+def test_a_window_deduplication_drops_nothing_from_is_published_as_sent(
+    monkeypatch, tmp_path
+):
+    ctx, *_ = _with_window(monkeypatch, tmp_path, window=[2, 3])
+    ((tables, _),) = ctx.staged
+    assert ids(tables) == [[[1], [2, 3]]]
+
+
+def test_a_window_whose_changes_all_drop_publishes_the_load_alone(
+    monkeypatch, tmp_path
+):
+    dropped = Deduplicated(pl.LazyFrame({"id": []}, schema={"id": pl.Int64}), 2)
+    ctx, *_ = _with_window(
+        monkeypatch, tmp_path, window=[1, 1], reduced={"s.t": dropped}
+    )
+    ((tables, _),) = ctx.staged
+    assert ids(tables) == [[[1]]]
 
 
 def test_an_interrupted_window_read_stages_nothing(monkeypatch, tmp_path):
-    ctx, ingester, deduplicated, *_ = _with_window(monkeypatch, tmp_path, window=None)
+    ctx, ingester, deduplicated, _ = _with_window(monkeypatch, tmp_path, window=None)
     assert ctx.staged == []
     assert deduplicated == []
     assert ingester.closed is True
@@ -509,6 +581,7 @@ def _read(monkeypatch, tmp_path, ingester, limit):
     disk = FakeDisk(manifest=[["window.parquet"]])
     buffer = FakeBuffer()
     _patch_sentinels(monkeypatch, disk, buffer)
+    monkeypatch.setattr(_runner, "StageLedger", lambda **kw: disk)
     ctx = FakeCtx(active_values=[])
     ctx.work_dir = tmp_path
     end = object()

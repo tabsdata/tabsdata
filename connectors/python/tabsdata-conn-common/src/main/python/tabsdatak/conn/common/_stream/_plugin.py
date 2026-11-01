@@ -15,7 +15,7 @@ from tabsdatak.api import StreamSrc, StreamThresholds
 from tabsdatak.conn.common._stream._config import StreamRunConfig
 from tabsdatak.conn.common._stream._encoder import StreamEncoder
 from tabsdatak.conn.common._stream._ingester import StreamIngester
-from tabsdatak.conn.common._stream._ledger import FileLedger
+from tabsdatak.conn.common._stream._ledger import StageLedger
 from tabsdatak.conn.common._stream._lifecycle import StreamLifecycle
 from tabsdatak.conn.common._stream._offset import StreamOffset
 from tabsdatak.conn.common._stream._poll import SourcePoll
@@ -52,14 +52,14 @@ class RunLifecycle[R, O: StreamOffset](StreamLifecycle[O]):
     def __init__(self, plugin: PipelineStreamSrcPlugin, run: StreamRun[R, O]):
         self.plugin = plugin
         self.run = run
-        self.ledger: FileLedger | None = None
+        self.ledger: StageLedger | None = None
         self.disk: DiskSentinel | None = None
         self.buffer: BufferSentinel[R, O] | None = None
         self.advances: list[O] = []
 
     def arm(
         self,
-        ledger: FileLedger,
+        ledger: StageLedger,
         disk: DiskSentinel,
         buffer: BufferSentinel[R, O],
     ) -> None:
@@ -194,7 +194,7 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
         ingester: StreamIngester[R, O],
         cfg: StreamRunConfig,
     ) -> None:
-        ledger: FileLedger | None = None
+        ledger: StageLedger | None = None
         buffer_sentinel: BufferSentinel[R, O] | None = None
         disk_sentinel: DiskSentinel | None = None
         interrupted = False
@@ -214,7 +214,7 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
             if not self.before_stream(run):
                 interrupted = True
                 return
-            ledger = FileLedger(landing=ctx.work_dir, slots=run.slots)
+            ledger = StageLedger(ctx=ctx, slots=run.slots)
             encoder = self.build_encoder(run)
             thresholds = run.thresholds
             buffer_sentinel = BufferSentinel(
@@ -287,19 +287,17 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
     def publish(
         self,
         run: StreamRun[R, O],
-        ledger: FileLedger,
+        ledger: StageLedger,
         disk_sentinel: DiskSentinel,
         buffer_sentinel: BufferSentinel[R, O],
     ) -> bool:
-        tables_files = ledger.manifest()
-        if not any(tables_files) and not disk_sentinel.idle_due():
+        if not ledger.has_files and not disk_sentinel.idle_due():
             return False
         offset = buffer_sentinel.offset
-        run.ctx.stage(tables_files, self.stage_state(run, offset))
+        ledger.publish(self.stage_state(run, offset))
         run.ingester.acknowledge_offset(offset)
         run.staged = snapshot(offset)
         run.restarts = 0
-        ledger.clear()
         disk_sentinel.reset_timer()
         return True
 
@@ -307,7 +305,7 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
         self,
         run: StreamRun[R, O],
         restart: StreamRestart,
-        ledger: FileLedger,
+        ledger: StageLedger,
         disk_sentinel: DiskSentinel,
         buffer_sentinel: BufferSentinel[R, O],
     ) -> None:
@@ -333,7 +331,7 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
     def record(
         self,
         run: StreamRun[R, O],
-        ledger: FileLedger,
+        ledger: StageLedger,
         buffer_sentinel: BufferSentinel[R, O],
     ) -> None:
         if ledger.has_data:

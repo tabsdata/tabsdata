@@ -20,19 +20,17 @@ only if it applies at its turn. Only a kept change moves the state.
 The last change before the load read a key leaves the state equal to the
 loaded row, so every change after it applies as it did at the source.
 
-:func:`deduplicate_initial_load_files` runs it over the files the stream
-wrote, one output slot per table, and writes the kept changes as the stream
-does.
+:func:`deduplicate_initial_load_frames` runs it over the tables the stream
+sent, one output slot per table, and returns the kept changes of the tables
+it drops changes from, lazily, in the layout the stream sends them in.
 """
 
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-# noinspection PyProtectedMember
-from tabsdatak.conn.common._stream._ledger import FileLedger
 from tabsdatak.conn.common.sql.cdc._dictionary import SchemaVersion
 from tabsdatak.conn.common.sql.cdc._model import TrackedTable
 from tabsdatak.conn.common.sql.cdc.constants import (
@@ -59,7 +57,11 @@ if TYPE_CHECKING:
 
     import polars as pl
 
-__all__ = ["deduplicate_initial_load", "deduplicate_initial_load_files"]
+__all__ = [
+    "Deduplicated",
+    "deduplicate_initial_load",
+    "deduplicate_initial_load_frames",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -77,58 +79,64 @@ ROW_OPERATIONS = {
 Values = tuple[Any, ...]
 
 
-def deduplicate_initial_load_files(
+@dataclass(frozen=True)
+class Deduplicated:
+    changes: pl.LazyFrame
+    dropped: int
+
+
+def deduplicate_initial_load_frames(
     *,
-    loaded: list[list[Path]],
-    changes: list[list[Path]],
+    loaded: list[list[pl.LazyFrame]],
+    changes: list[list[pl.LazyFrame]],
     tables: dict[str, TrackedTable],
     schemas: dict[str, SchemaVersion],
     cdc_format: CdcFormat,
-    landing: Path,
-) -> list[list[Path]]:
-    """The kept changes of every table, written to `landing` as the stream
-    writes its files, as a manifest: one list of files per output slot, in
-    the order of `tables`.
+) -> dict[str, Deduplicated]:
+    """The kept changes of every table deduplication drops changes from,
+    lazily, cast to the layout the stream sends them in. A table it drops
+    nothing from is left out: its changes are good as they are.
 
-    `loaded` and `changes` are manifests in that same order: the initial
-    load's files, and the files of the changes committed while it ran.
-    `schemas` holds each table's schema version as the load registered it.
-    Every table is checked and deduplicated before anything is written, so a
-    failure leaves no file behind.
+    `loaded` and `changes` hold one list of frames per output slot, in the
+    order of `tables`: the initial load's tables, and those of the changes
+    committed while it ran. `schemas` holds each table's schema version as
+    the load registered it. Every table is checked and deduplicated before
+    any is returned, so a failure leaves nothing to send.
     """
+    import polars as pl
 
-    kept: dict[str, pl.DataFrame] = {}
-    for (table, _), load_files, change_files in zip(
+    reduced: dict[str, Deduplicated] = {}
+    for (table, _), load_frames, change_frames in zip(
         tables.items(), loaded, changes, strict=True
     ):
-        if not change_files:
+        if not change_frames:
             continue
         schema = schemas[table]
-        kept[table] = deduplicate_initial_load(
-            scan(load_files, schema),
-            scan(change_files, schema),
+        deduplicated = deduplicate_initial_load(
+            combine(load_frames, schema),
+            combine(change_frames, schema),
             table=table,
             schema=schema,
             cdc_format=cdc_format,
-        ).collect()
+        )
+        if deduplicated.dropped == 0:
+            continue
+        layout = pl.DataFrame(schema.pa_schema.empty_table()).schema
+        reduced[table] = Deduplicated(
+            deduplicated.changes.select(layout.names()).cast(dict(layout)),
+            deduplicated.dropped,
+        )
+    return reduced
 
-    ledger = FileLedger(landing=landing, slots=tables)
-    for table, frame in kept.items():
-        if frame.height:
-            pa_schema = schemas[table].pa_schema
-            arrow = frame.to_arrow().select(pa_schema.names).cast(pa_schema)
-            ledger.write(table, arrow)
-    return ledger.manifest()
 
-
-def scan(files: list[Path], schema: SchemaVersion) -> pl.LazyFrame:
-    """One frame over `files`, whose columns may differ, or an empty frame
+def combine(frames: list[pl.LazyFrame], schema: SchemaVersion) -> pl.LazyFrame:
+    """One frame over `frames`, whose columns may differ, or an empty frame
     of `schema` when there are none."""
     import polars as pl
 
-    if not files:
+    if not frames:
         return pl.from_arrow(schema.pa_schema.empty_table()).lazy()
-    return pl.concat([pl.scan_parquet(file) for file in files], how="diagonal_relaxed")
+    return pl.concat(frames, how="diagonal_relaxed")
 
 
 def deduplicate_initial_load(
@@ -138,9 +146,10 @@ def deduplicate_initial_load(
     table: str,
     schema: SchemaVersion,
     cdc_format: CdcFormat,
-) -> pl.LazyFrame:
+) -> Deduplicated:
     """The `changes` committed during the initial load of `table` that apply
-    to what it `loaded`, in their original order.
+    to what it `loaded`, lazily and in their original order, with how many it
+    dropped.
 
     One table per call: the stream writes every tracked table, its loaded
     rows and its changes alike, to files of its own (one output slot per
@@ -176,7 +185,7 @@ def deduplicate_initial_load(
                 table,
                 window.height,
             )
-        return changes
+        return Deduplicated(changes, 0)
     if cdc_format.columns_format == "map":
         raise SqlCdcErrorCode.CDC_26.exception()
     names = [column.name for column in schema.columns]
@@ -196,7 +205,7 @@ def deduplicate_initial_load(
         contents_struct(names, cdc_format).alias(CONTENTS),
     ).collect()
     if window.height == 0:
-        return changes
+        return Deduplicated(changes, 0)
     check_window(window, schema, table)
     check_order(window, table)
 
@@ -213,8 +222,11 @@ def deduplicate_initial_load(
     state = loaded_state(loaded, touched, key, names, cdc_format, table)
     dropped = apply_changes(window, state, table)
     if not dropped:
-        return changes
-    return positioned.filter(~pl.col(POSITION).is_in(dropped)).drop(POSITION)
+        return Deduplicated(changes, 0)
+    return Deduplicated(
+        positioned.filter(~pl.col(POSITION).is_in(dropped)).drop(POSITION),
+        len(dropped),
+    )
 
 
 def apply_changes(

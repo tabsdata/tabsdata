@@ -25,6 +25,7 @@ import pyarrow.parquet as pq
 import pytest
 from sqlalchemy import text
 from tabsdatax.itest.fixture.backends.db2cdc import Db2CdcDomain, db2cdc_domain
+from tabsdatax.itest.fixture.functions.stream import LocalStage
 from testi_tabsdatak.conn.db2.backend import (
     cdc_delete,
     cdc_engine,
@@ -93,6 +94,7 @@ class _CdcCtx(StreamSrcPluginCtx):
         fail_on_stage: bool = False,
     ) -> None:
         self._work_dir = work_dir
+        self._local = LocalStage(work_dir / "stage")
         self._until = until
         self._grace_left = GRACE_POLLS
         self._stop = threading.Event()
@@ -199,10 +201,14 @@ class _CdcCtx(StreamSrcPluginCtx):
             batch=BatchThresholds(min_secs=1, max_secs=1, max_rows=1)
         )
 
-    def stage(self, tables_files, new_state):
+    def stage(self, tables_files=None, new_state=None):
         with self._lock:
             if self._fail_on_stage:
                 raise _StageFailed("staging refused by the test")
+            sent = self._local.stage(tables_files, new_state)
+            if new_state is None:
+                return sent
+            tables_files = self._local.published[-1].tables
             self.staged.append(
                 _StagedManifest(manifest=list(tables_files), committed=True)
             )
@@ -212,16 +218,18 @@ class _CdcCtx(StreamSrcPluginCtx):
             else:
                 self._tabsdata_owns_state = False
                 new_state()
+            return sent
 
     def scan(self, file):
-        raise NotImplementedError("this context stages local files only")
+        return self._local.scan(file)
 
     def unstage(self, files=None):
-        pass
+        with self._lock:
+            self._local.unstage(files)
 
     @property
     def pending(self):
-        return []
+        return self._local.pending
 
     def checkpoint(self, new_state):
         with self._lock:

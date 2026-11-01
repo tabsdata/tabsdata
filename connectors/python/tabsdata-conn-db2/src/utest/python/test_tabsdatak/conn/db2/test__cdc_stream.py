@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 
 import pyarrow as pa
 import pytest
+from tabsdatax.itest.fixture.functions.stream import LocalStage
 
 from tabsdatak.api import BatchThresholds, PollThresholds, StreamThresholds
 
@@ -140,14 +141,28 @@ class _Ctx:
         self.stream_state = stream_state
         self.first_stage = stream_state is None
         self._active = iter([True, False])
+        self.local = LocalStage(work_dir / "stage")
 
     @property
     def active(self) -> bool:
         return next(self._active, False)
 
-    def stage(self, tables_files, new_state) -> None:
-        self.stream_state = dict(new_state)
-        self.first_stage = False
+    @property
+    def pending(self):
+        return self.local.pending
+
+    def stage(self, tables_files=None, new_state=None):
+        sent = self.local.stage(tables_files, new_state)
+        if new_state is not None:
+            self.stream_state = dict(new_state)
+            self.first_stage = False
+        return sent
+
+    def scan(self, file):
+        return self.local.scan(file)
+
+    def unstage(self, files=None) -> None:
+        self.local.unstage(files)
 
     def checkpoint(self, new_state) -> None:
         self.stream_state = dict(new_state)

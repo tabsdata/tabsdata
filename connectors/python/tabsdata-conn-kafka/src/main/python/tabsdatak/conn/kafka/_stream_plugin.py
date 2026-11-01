@@ -10,9 +10,9 @@ one, as for the CDC sources; the ingester and the encoder sit in
 ``_stream_impl.py``, and the wire-format (de)serialisers in
 :mod:`tabsdatak.conn.kafka._serdes`.
 
-Each staged batch is a single-table positional manifest (one slot, the
-topic) handed to ``ctx.stage`` along with a callback that commits the
-Kafka consumer offset on the broker.
+Each buffer flush is sent to the stage with ``ctx.stage`` (one slot, the
+topic), and each batch is published with a callback that commits the Kafka
+consumer offset on the broker.
 
 * :class:`KafkaStreamSrcPlugin` -- wires :class:`KafkaStreamSrc` to the
   shared pipeline.

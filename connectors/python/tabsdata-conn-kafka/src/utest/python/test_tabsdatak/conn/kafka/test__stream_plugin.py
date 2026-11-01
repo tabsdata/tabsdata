@@ -16,6 +16,7 @@ from unittest.mock import MagicMock, patch
 import polars as pl
 import pyarrow.parquet as pq
 import pytest
+from tabsdatax.itest.fixture.functions.stream import LocalStage
 
 from tabsdatak.api import BatchThresholds, Secret, StreamThresholds
 
@@ -249,9 +250,7 @@ def _batches(polls: list) -> list[list]:
     return batches
 
 
-def _run(
-    tmp_path, polls, *, active_calls, src_cfg=None, dlq_topic=None, consumer=None
-):
+def _run(tmp_path, polls, *, active_calls, src_cfg=None, dlq_topic=None, consumer=None):
     from confluent_kafka import TopicPartition
 
     consumer = consumer or MagicMock()
@@ -384,8 +383,9 @@ def test_a_signalled_stop_stages_and_commits_nothing(tmp_path, monkeypatch):
 def _make_ctx(work_dir: Path, *, active_calls: list[bool]):
     """Minimal :class:`StreamSrcPluginCtx` stand-in. ``active_calls`` is
     read in order on each ``active`` access; once exhausted the last
-    value is repeated. ``stage`` records each manifest and invokes the
-    commit callback, as the runtime does."""
+    value is repeated. What is sent lands on a :class:`LocalStage`; each
+    publish records its manifest and invokes the commit callback, as the
+    runtime does."""
     calls = iter(active_calls)
     last = [active_calls[-1] if active_calls else False]
 
@@ -398,6 +398,11 @@ def _make_ctx(work_dir: Path, *, active_calls: list[bool]):
             self.first_stage = True
             self.stream_state = None
             self.manifests: list = []
+            self.local = LocalStage(work_dir / "stage")
+
+        @property
+        def pending(self):
+            return self.local.pending
 
         @property
         def active(self) -> bool:
@@ -408,8 +413,17 @@ def _make_ctx(work_dir: Path, *, active_calls: list[bool]):
             except StopIteration:
                 return last[0]
 
-        def stage(self, tables_files, new_state) -> None:
-            self.manifests.append(tables_files)
-            new_state()
+        def stage(self, tables_files=None, new_state=None):
+            sent = self.local.stage(tables_files, new_state)
+            if new_state is not None:
+                self.manifests.append(self.local.published[-1].tables)
+                new_state()
+            return sent
+
+        def scan(self, file) -> pl.LazyFrame:
+            return self.local.scan(file)
+
+        def unstage(self, files=None) -> None:
+            self.local.unstage(files)
 
     return _Ctx()

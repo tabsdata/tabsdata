@@ -4,33 +4,28 @@
 
 from __future__ import annotations
 
-import base64
 import logging
 from collections.abc import Iterable
-from pathlib import Path
 
+import polars as pl
 import pyarrow as pa
-import pyarrow.parquet as pq
-from uuid6 import UUID, uuid7
+
+from tabsdatak.spi import (
+    LazyFrameInput,
+    StageFileStats,
+    StreamSrcPluginCtx,
+    StreamStateSpec,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-def encode_id() -> tuple[UUID, str]:
-    id_uuid = uuid7()
-    id_code = base64.b32hexencode(id_uuid.bytes).decode("ascii")[:26]
-    return id_uuid, id_code
-
-
-def sanitize_file_name(name: str) -> str:
-    return "".join(c if c.isalnum() or c in "_." else "-" for c in name)
-
-
-class FileLedger:
-    def __init__(self, *, landing: Path, slots: Iterable[str]):
-        self._landing = landing
-        self._files: dict[str, list[Path]] = {slot: [] for slot in slots}
+class StageLedger:
+    def __init__(self, *, ctx: StreamSrcPluginCtx, slots: Iterable[str]):
+        self._ctx = ctx
+        self._positions = {slot: position for position, slot in enumerate(slots)}
+        self._staged: list[list[StageFileStats]] = [[] for _ in self._positions]
         self._rows: int = 0
         self._bytes: int = 0
 
@@ -46,37 +41,39 @@ class FileLedger:
     def has_data(self) -> bool:
         return self._rows > 0
 
-    def write(self, slot: str, table: pa.Table) -> Path:
-        _, file_suffix = encode_id()
-        file_prefix = sanitize_file_name(slot)
-        file_name = f"{file_prefix}_{file_suffix}.parquet"
-        file_path = self._landing / file_name
-        pq.write_table(table, file_path)
+    @property
+    def has_files(self) -> bool:
+        return any(self._staged)
 
-        file_bytes = file_path.stat().st_size
-        file_rows = table.num_rows
+    def write(self, slot: str, table: pa.Table) -> None:
+        self.stage(slot, pl.DataFrame(table).lazy())
 
-        self._files[slot].append(file_path)
-        self._rows += file_rows
-        self._bytes += file_bytes
+    def stage(self, slot: str, frame: pl.LazyFrame) -> None:
+        position = self._positions[slot]
+        tables: list[list[LazyFrameInput] | None] = [None] * len(self._positions)
+        tables[position] = [LazyFrameInput(frame)]
+        for stats in self._ctx.stage(tables)[position]:
+            self._staged[position].append(stats)
+            self._rows += stats.rows
+            self._bytes += stats.bytes
+            logger.debug(
+                f"Staged {stats.rows} row(s) and {stats.bytes} byte(s) of {slot} "
+                f"as {stats.name}"
+            )
 
-        logger.debug(
-            f"Wrote {file_rows} row(s) and {file_bytes} byte(s) of {slot} "
-            f"to {file_name}"
-        )
-        return file_path
+    def manifest(self) -> list[list[StageFileStats]]:
+        return [list(files) for files in self._staged]
 
-    def manifest(self) -> list[list[Path]]:
-        return [list(files) for files in self._files.values()]
+    def publish(self, new_state: StreamStateSpec) -> None:
+        self._ctx.stage(None, new_state)
+        self.clear()
 
     def clear(self) -> None:
-        for files in self._files.values():
+        for files in self._staged:
             files.clear()
         self._rows = 0
         self._bytes = 0
 
     def discard(self) -> None:
-        for files in self._files.values():
-            for path in files:
-                path.unlink(missing_ok=True)
+        self._ctx.unstage([stats for files in self._staged for stats in files])
         self.clear()

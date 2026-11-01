@@ -18,7 +18,7 @@ import sqlalchemy.types as sa_types
 from tabsdatak.conn.common.sql.cdc._column import TrackedColumn
 from tabsdatak.conn.common.sql.cdc._deduplicator import (
     deduplicate_initial_load,
-    deduplicate_initial_load_files,
+    deduplicate_initial_load_frames,
 )
 from tabsdatak.conn.common.sql.cdc._dictionary import SchemaVersion
 from tabsdatak.conn.common.sql.cdc._model import TableObject, TrackedTable
@@ -131,7 +131,7 @@ def dedup(
         table=TABLE,
         schema=schema(primary_key),
         cdc_format=cdc_format,
-    ).collect()
+    ).changes.collect()
 
 
 def kept(loaded: pl.DataFrame, rows: list[tuple], cdc_format=FLAT) -> list[tuple]:
@@ -424,7 +424,8 @@ def test_the_load_is_not_evaluated_without_a_primary_key():
     result = deduplicate_initial_load(
         unreadable, changes.lazy(), table=TABLE, schema=schema(()), cdc_format=FLAT
     )
-    assert result.collect().rows() == changes.rows()
+    assert result.changes.collect().rows() == changes.rows()
+    assert result.dropped == 0
 
 
 # ---- files ------------------------------------------------------------------------
@@ -469,43 +470,47 @@ def written(
     return path
 
 
-def dedup_files(tmp_path: Path, slots: list[tuple[str, list[str], list, list]]):
+def dedup_frames(tmp_path: Path, slots: list[tuple[str, list[str], list, list]]):
     """Each slot as ``(table, pk, loaded rows, change files)``, each change
     file a list of rows, with positions continuing from one file to the
     next."""
     source = tmp_path / "source"
     source.mkdir()
-    landing = tmp_path / "landing"
-    landing.mkdir()
     tables, schemas, loaded, changes = {}, {}, [], []
     for table, pk, load_rows, change_rows in slots:
         tracked, version = registered(table, pk)
         tables[f"s.{table}"] = tracked
         schemas[f"s.{table}"] = version
         load_rows = [("l", None, None)] + [("i", row, None) for row in load_rows]
-        loaded.append([written(source, f"{table}_load", load_rows, version)])
-        files, start = [], 0
+        loaded.append([
+            pl.scan_parquet(written(source, f"{table}_load", load_rows, version))
+        ])
+        frames, start = [], 0
         for index, file_rows in enumerate(change_rows):
-            files.append(
-                written(source, f"{table}_changes_{index}", file_rows, version, start)
+            path = written(
+                source, f"{table}_changes_{index}", file_rows, version, start
             )
+            frames.append(pl.scan_parquet(path))
             start += len(file_rows)
-        changes.append(files)
-    manifest = deduplicate_initial_load_files(
+        changes.append(frames)
+    reduced = deduplicate_initial_load_frames(
         loaded=loaded,
         changes=changes,
         tables=tables,
         schemas=schemas,
         cdc_format=FLAT,
-        landing=landing,
     )
-    return manifest, schemas, landing
+    return reduced, schemas
 
 
-def test_the_kept_changes_of_every_table_are_written_as_the_stream_writes_them(
+def layout(version: SchemaVersion) -> pl.Schema:
+    return pl.DataFrame(version.pa_schema.empty_table()).schema
+
+
+def test_only_the_tables_that_drop_changes_are_returned_in_the_stream_layout(
     tmp_path,
 ):
-    manifest, schemas, _ = dedup_files(
+    reduced, schemas = dedup_frames(
         tmp_path,
         [
             (
@@ -515,31 +520,34 @@ def test_the_kept_changes_of_every_table_are_written_as_the_stream_writes_them(
                 [[("i", (1, "a"), None), ("i", (2, "b"), None)]],
             ),
             ("keyless", [], [(1, "a")], [[("i", (1, "a"), None)]]),
+            ("applies", ["id"], [(1, "a")], [[("i", (2, "b"), None)]]),
         ],
     )
-    keyed, keyless = manifest
-    assert len(keyed) == 1
-    assert len(keyless) == 1
-    keyed_rows = pq.read_table(keyed[0])
-    assert keyed_rows.schema == schemas["s.keyed"].pa_schema
-    assert keyed_rows.column("id").to_pylist() == [2]
-    assert pq.read_table(keyless[0]).column("id").to_pylist() == [1]
+    assert list(reduced) == ["s.keyed"]
+    keyed = reduced["s.keyed"]
+    assert keyed.dropped == 1
+    rows = keyed.changes.collect()
+    assert rows.schema == layout(schemas["s.keyed"])
+    assert rows["id"].to_list() == [2]
 
 
-def test_a_table_without_changes_gets_no_file(tmp_path):
-    manifest, _, landing = dedup_files(
+def test_a_table_without_changes_is_left_out_and_one_that_drops_all_keeps_none(
+    tmp_path,
+):
+    reduced, _ = dedup_frames(
         tmp_path,
         [
             ("quiet", ["id"], [(1, "a")], []),
             ("replayed", ["id"], [(1, "a")], [[("i", (1, "a"), None)]]),
         ],
     )
-    assert manifest == [[], []]
-    assert list(landing.iterdir()) == []
+    assert list(reduced) == ["s.replayed"]
+    assert reduced["s.replayed"].dropped == 1
+    assert reduced["s.replayed"].changes.collect().height == 0
 
 
-def test_changes_over_several_files_keep_their_original_order(tmp_path):
-    manifest, _, _ = dedup_files(
+def test_changes_over_several_frames_keep_their_original_order(tmp_path):
+    reduced, _ = dedup_frames(
         tmp_path,
         [
             (
@@ -554,22 +562,18 @@ def test_changes_over_several_files_keep_their_original_order(tmp_path):
             )
         ],
     )
-    (files,) = manifest
-    assert [pq.read_table(file).column("id").to_pylist() for file in files] == [
-        [3, 2, 1, 4]
-    ]
+    assert reduced["s.split"].changes.collect()["id"].to_list() == [3, 2, 1, 4]
 
 
-def test_a_failing_table_leaves_no_file_behind(tmp_path):
+def test_a_failing_table_returns_nothing(tmp_path):
     with pytest.raises(SqlCdcException, match="CDC_24"):
-        dedup_files(
+        dedup_frames(
             tmp_path,
             [
                 ("fine", ["id"], [(1, "a")], [[("i", (2, "b"), None)]]),
                 ("truncated", ["id"], [(1, "a")], [[("t", None, None)]]),
             ],
         )
-    assert list((tmp_path / "landing").iterdir()) == []
 
 
 # ---- histories ----------------------------------------------------------------

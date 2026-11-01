@@ -11,7 +11,7 @@ import pyarrow as pa
 
 from tabsdatak._api import BATCH_FLOOR_SECS
 from tabsdatak.conn.common._stream._encoder import StreamEncoder
-from tabsdatak.conn.common._stream._ledger import FileLedger
+from tabsdatak.conn.common._stream._ledger import StageLedger
 from tabsdatak.conn.common._stream._offset import StreamOffset
 from tabsdatak.conn.common.error import ConnErrorCode
 
@@ -20,7 +20,7 @@ class ChunkSentinel:
     def __init__(
         self,
         *,
-        ledger: FileLedger,
+        ledger: StageLedger,
         max_rows: int | None,
         max_bytes: int | None,
     ):
@@ -64,7 +64,7 @@ class DiskSentinel:
     def __init__(
         self,
         *,
-        ledger: FileLedger,
+        ledger: StageLedger,
         buffer: BufferSentinel | None = None,
         max_rows: int | None,
         max_bytes: int | None,
@@ -126,7 +126,7 @@ class BufferSentinel[R, O: StreamOffset]:
     def __init__(
         self,
         *,
-        ledger: FileLedger,
+        ledger: StageLedger,
         encoder: StreamEncoder[R, O],
         slots: Iterable[str],
         max_rows: int | None,

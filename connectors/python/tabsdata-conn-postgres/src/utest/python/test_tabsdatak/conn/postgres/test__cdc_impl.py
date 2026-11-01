@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import psycopg2
@@ -21,11 +22,12 @@ import pytest
 import sqlalchemy.types as sa_types
 from sqlalchemy.dialects.postgresql import BYTEA, JSON, JSONB, OID, TEXT
 from sqlalchemy.types import LargeBinary, Text
+from tabsdatax.itest.fixture.functions.stream import LocalStage
 
 from tabsdatak.api import BatchThresholds, Secret, StreamThresholds
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream._ledger import FileLedger
+from tabsdatak.conn.common._stream._ledger import StageLedger
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._lifecycle import StreamLifecycle
@@ -569,7 +571,10 @@ def test_truncate_of_an_untracked_table_is_ignored():
 def test_schema_table_filter_default_is_wildcard_when_empty():
     conn = MagicMock()
     bi = Wal2JsonIngester(
-        conn=conn, tables=[], start_from="tail", replication_slot="s",
+        conn=conn,
+        tables=[],
+        start_from="tail",
+        replication_slot="s",
     )
     # wal2json's ``add-tables`` accepts ``"*.*"`` for "every table"
     # -- the schema-registry will reject events for untracked tables
@@ -676,7 +681,8 @@ def test_extract_new_values_v1_zips_columns_and_values():
         "columnvalues": [1, "alice"],
     }
     assert Wal2JsonIngester._extract_new_values_v1(change) == {
-        "id": 1, "name": "alice",
+        "id": 1,
+        "name": "alice",
     }
 
 
@@ -706,7 +712,8 @@ def test_extract_new_values_v2_from_columns():
         ],
     }
     assert Wal2JsonIngester._extract_new_values_v2(payload) == {
-        "id": 1, "name": "alice",
+        "id": 1,
+        "name": "alice",
     }
 
 
@@ -970,6 +977,7 @@ def test_another_gap_than_the_accepted_one_fails(monkeypatch, gap):
     assert ei.value.api_error is PostgresErrorCode.POSTGRES_25
     cursor.start_replication.assert_not_called()
 
+
 # --- The slot's own moves ---------------------------------------------
 
 
@@ -1104,7 +1112,8 @@ def test_a_stream_never_attached_settles_nothing(monkeypatch):
 
 
 class _StagedCtx:
-    def __init__(self, staged: int) -> None:
+    def __init__(self, staged: int, folder: Path) -> None:
+        self.local = LocalStage(folder)
         self.first_stage = False
         self.thresholds = StreamThresholds(batch=BatchThresholds(max_rows=1 << 62))
         self.stream_state = {CDC_OFFSET_STATE_KEY: _identified(staged).write()}
@@ -1114,21 +1123,27 @@ class _StagedCtx:
     def checkpoint(self, new_state) -> None:
         self.checkpoints.append(new_state)
 
-    def stage(self, tables_files, new_state) -> None:
-        self.staged.append(new_state)
+    def stage(self, tables_files=None, new_state=None):
+        sent = self.local.stage(tables_files, new_state)
+        if new_state is not None:
+            self.staged.append(new_state)
+        return sent
+
+    def unstage(self, files=None) -> None:
+        self.local.unstage(files)
 
 
 def _armed(monkeypatch, tmp_path, *, staged: int, moved: int) -> tuple:
     """A run staged up to `staged` whose ledger holds a transaction not staged
     yet, attached to a slot the watch reads at `moved`."""
     bi, _ = _attached(monkeypatch, staged=staged, rows=[(moved, PID)])
-    ctx = _StagedCtx(staged)
+    ctx = _StagedCtx(staged, tmp_path)
     plugin = PostgresCdcStreamSrcPlugin()
     run = plugin.build_run(
         ctx=ctx, ingester=bi, cfg=CdcRunConfig(), stop_signal=StopSignal()
     )
     run.staged = _identified(staged)
-    ledger = FileLedger(landing=tmp_path, slots=["public.t"])
+    ledger = StageLedger(ctx=ctx, slots=["public.t"])
     ledger.write("public.t", pa.table({"id": [4]}))
     buffer = BufferSentinel(
         ledger=ledger,
@@ -1601,9 +1616,11 @@ def test_a_format_1_transaction_without_its_commit_position_fails():
 
 def test_a_begin_without_its_commit_position_fails():
     messages = _transaction(9, "0/100", [("0/90", 1)], "0/120")
-    messages[0].payload = json.dumps(
-        {"action": "B", "xid": 9, "timestamp": "2026-09-29 19:15:18+00"}
-    )
+    messages[0].payload = json.dumps({
+        "action": "B",
+        "xid": 9,
+        "timestamp": "2026-09-29 19:15:18+00",
+    })
     with pytest.raises(TabsdataException) as ei:
         list(_format_2_ingester(messages)._poll_changes_v2(None))
     assert ei.value.api_error is PostgresErrorCode.POSTGRES_30
