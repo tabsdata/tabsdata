@@ -6,38 +6,34 @@ from __future__ import annotations
 
 import importlib
 import json
-import os
 import shutil
 import sys
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import polars as pl
 import pytest
 import yaml
 
-from tabsdatak._info import PublisherInfo
-from tabsdatak.api import FunctionCtx, TableFrameSpec, TableFramesSpec
+from tabsdatak._info import (
+    PublisherInfo,
+    StreamPublisherInfo,
+    SubscriberInfo,
+    TransformerInfo,
+)
+from tabsdatak.api import FunctionCtx
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
-from tabsdatak.server._tdrunner.function._commons.document.request import (
+from tabsdatak.server._tdrunner.function._commons.context.function import (
+    FunctionContext,
+)
+from tabsdatak.server._tdrunner.function._commons.document.message.request import (
     Info,
-    Location,
     Request,
 )
-from tabsdatak.server._tdrunner.function._commons.solver.secrets import ProjectSecret
-from tabsdatak.server._tdrunner.function._handlers.columns import ColumnPolicy, Zone
-from tabsdatak.server._tdrunner.function._handlers.landing import (
-    LandedInputs,
-    Landing,
+from tabsdatak.server._tdrunner.function._commons.document.state.function import (
+    FunctionState,
 )
-from tabsdatak.server._tdrunner.function._handlers.state import (
-    STATE_FILE,
-    StateOutput,
-    read_state,
-    write_state,
-)
-from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
-from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function._commons.manifests.input import (
     InputEntry,
     InputManifest,
@@ -47,6 +43,36 @@ from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputEntry,
     OutputManifest,
 )
+from tabsdatak.server._tdrunner.function._commons.solver.secrets import ProjectSecret
+from tabsdatak.server._tdrunner.function._commons.symbols.function import (
+    FunctionBundle,
+    FunctionInfo,
+)
+from tabsdatak.server._tdrunner.function._handlers.bundle import BundleArchive
+from tabsdatak.server._tdrunner.function._handlers.function import (
+    FunctionFailedError,
+    InputModeError,
+    NotATupleError,
+    ResultCountError,
+    ResultTypeError,
+    TypeHintsError,
+    UnknownDestinationError,
+    UserFunction,
+)
+from tabsdatak.server._tdrunner.function._handlers.inputs import (
+    Inputs,
+    InputScanError,
+    SingleSlotError,
+)
+from tabsdatak.server._tdrunner.function._handlers.outputs import (
+    SinkError,
+    StatsError,
+)
+from tabsdatak.server._tdrunner.function._handlers.state import (
+    STATE_FILE,
+    State,
+)
+from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.server._tdrunner.function.commands.runners.function import main
 from tabsdatak.server._tdrunner.function.commands.runners.function.error import (
     BadBundleError,
@@ -61,16 +87,13 @@ from tabsdatak.server._tdrunner.function.commands.runners.function.error import 
     RunFunctionErrorCode,
     UserFunctionFailedError,
 )
+from tabsdatak.server._tdrunner.function.commands.runners.function.options import (
+    RunFunctionArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.runners.function.runner import (
-    FunctionContext,
-    infer_table_modes,
-    invoke_user_function,
-    load_function_definition,
-    materialize_input_slot,
-    output_table_names,
-    output_targets,
-    scan_input,
-    sink_outputs,
+    DEFINITION_ERRORS,
+    KINDS,
+    Function,
 )
 from tabsdatak.spi import DestContext, SrcPluginCtx, TableMode
 from tabsdatak.tableframe import TableFrame
@@ -81,7 +104,7 @@ from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payl
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
-RUNNER_MODULE = "tabsdatak.server._tdrunner.function.commands.runners.function.runner"
+FUNCTION_HANDLER_MODULE = "tabsdatak.server._tdrunner.function._handlers.function"
 
 
 # --- shared fixtures ----------------------------------------------------
@@ -139,7 +162,7 @@ def build_test_bundle(
         bundle_path,
     )
     extracted = tmp_path / f"{project.name}_extracted"
-    extract_bundle(bundle_path, extracted)
+    BundleArchive(bundle_path).extract(extracted)
     return extracted
 
 
@@ -185,7 +208,7 @@ def built_bundle(
 
 
 # A trivial @transformer source used to build a transformer bundle.
-# Just enough to round-trip through `_load_function_def` and verify
+# Just enough to round-trip through `load_function_definition` and verify
 # the kind-dispatch picks TransformerInfo. The body never runs.
 @pytest.fixture
 def transformer_bundle(tmp_path, monkeypatch) -> Path:
@@ -483,7 +506,47 @@ def set_arguments(
     )
 
 
-# --- unit: _load_function_def -------------------------------------------
+def function_command(tmp_path: Path, **state) -> Function:
+    command = Function(
+        RunFunctionArguments(
+            request=tmp_path / "request.yaml",
+            bundle_folder=tmp_path / "bundle",
+            inputs_manifest=tmp_path / "inputs.yaml",
+            output_folder=tmp_path / "out",
+            outputs_manifest=tmp_path / "outputs.yaml",
+            state_folder=tmp_path / "state",
+            liveness=tmp_path / "liveness",
+            responder_url="http://127.0.0.1:1",
+            responder_method="POST",
+            responder_authorization="Bearer tok",
+            journal_file=tmp_path / "journal.yaml",
+        )
+    )
+    for name, value in state.items():
+        setattr(command, name, value)
+    return command
+
+
+def load_function_definition(bundle_folder: Path) -> FunctionInfo:
+    return FunctionBundle(bundle_folder).definition(KINDS, DEFINITION_ERRORS)
+
+
+def plain_function(function) -> UserFunction:
+    return UserFunction(SimpleNamespace(func=function))
+
+
+def fake_table_frame() -> TableFrame:
+    return TableFrame._build(pl.DataFrame({"x": [1]}).lazy(), CreationMode.MUT)
+
+
+def build_request(tmp_path: Path, *outputs: str) -> Request:
+    return Request.load(
+        write_request(tmp_path / "request.yaml", *outputs),
+        RunFunctionErrorCode.RF_1,
+    )
+
+
+# --- unit: load_function_definition -------------------------------------
 
 
 def test_load_function_def_happy(built_bundle):
@@ -495,39 +558,38 @@ def test_load_function_def_happy(built_bundle):
 def test_load_function_def_missing_manifest_raises_bad_bundle(tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()
-    with pytest.raises(BadBundleError):
+    with pytest.raises(BadBundleError) as error:
         load_function_definition(empty)
+    assert error.value.api_error is RunFunctionErrorCode.RF_2
 
 
 def test_load_function_def_malformed_json_raises_bad_bundle(tmp_path):
     bad = tmp_path / "bad-bundle"
     bad.mkdir()
     (bad / BUNDLE_MANIFEST_FILENAME).write_text("{ not json")
-    with pytest.raises(BadBundleError):
+    with pytest.raises(BadBundleError) as error:
         load_function_definition(bad)
+    assert error.value.api_error is RunFunctionErrorCode.RF_2
 
 
 def test_load_function_def_unresolvable_func_raises_bad_user_code(built_bundle):
-    """Edit the manifest's func reference to point at a missing module.
-    The import failure surfaces via pydantic ValidationError → mapped
-    to BadUserCodeError."""
     manifest = built_bundle / BUNDLE_MANIFEST_FILENAME
     data = json.loads(manifest.read_text())
     data["spec"]["func"] = "nonexistent.module:nope"
     manifest.write_text(json.dumps(data))
-    with pytest.raises(BadUserCodeError):
+    with pytest.raises(BadUserCodeError) as error:
         load_function_definition(built_bundle)
+    assert error.value.api_error is RunFunctionErrorCode.RF_3
 
 
 def test_load_function_def_unknown_kind_raises_bad_bundle(built_bundle):
-    """An envelope with a `kind` the runner doesn't know about is an
-    unsupported bundle, not a user-code error."""
     manifest = built_bundle / BUNDLE_MANIFEST_FILENAME
     data = json.loads(manifest.read_text())
-    data["kind"] = "autoPublisherDef"  # not yet handled here
+    data["kind"] = "autoPublisherDef"
     manifest.write_text(json.dumps(data))
-    with pytest.raises(BadBundleError):
+    with pytest.raises(BadBundleError) as error:
         load_function_definition(built_bundle)
+    assert error.value.api_error is RunFunctionErrorCode.RF_4
 
 
 def test_load_function_def_missing_kind_raises_bad_bundle(built_bundle):
@@ -535,16 +597,14 @@ def test_load_function_def_missing_kind_raises_bad_bundle(built_bundle):
     data = json.loads(manifest.read_text())
     del data["kind"]
     manifest.write_text(json.dumps(data))
-    with pytest.raises(BadBundleError):
+    with pytest.raises(BadBundleError) as error:
         load_function_definition(built_bundle)
+    assert error.value.api_error is RunFunctionErrorCode.RF_4
 
 
 def test_load_function_def_transformer_kind_loads_transformer_info(
     transformer_bundle,
 ):
-    """A transformerDef bundle deserialises as TransformerInfo."""
-    from tabsdatak._info import TransformerInfo
-
     definition = load_function_definition(transformer_bundle)
     assert isinstance(definition, TransformerInfo)
     assert list(definition.output_tables) == ["t_out"]
@@ -553,593 +613,283 @@ def test_load_function_def_transformer_kind_loads_transformer_info(
 def test_load_function_def_subscriber_kind_loads_subscriber_info(
     subscriber_bundle,
 ):
-    """A subscriberDef bundle deserialises as SubscriberInfo."""
-    from tabsdatak._info import SubscriberInfo
-
     definition = load_function_definition(subscriber_bundle)
     assert isinstance(definition, SubscriberInfo)
-    # SubscriberInfo has no `output_tables` attribute — names get
-    # synthesised by `_output_table_names`.
     assert not hasattr(definition, "output_tables")
 
 
 def test_load_function_def_stream_publisher_kind_loads_stream_publisher_info(
     stream_publisher_bundle,
 ):
-    """A streamPublisherDef bundle deserialises as StreamPublisherInfo.
-
-    Without this, `tdk fn trigger` on a `@stream_publisher` fails at
+    """Without this, `tdk fn trigger` on a `@stream_publisher` fails at
     the `function` step with WrongKindError (RF_4) — even though
     upstream steps (`source-plugin`'s substitution) have done their
     job materialising the staged inputs."""
-    from tabsdatak._info import StreamPublisherInfo
-
     definition = load_function_definition(stream_publisher_bundle)
     assert isinstance(definition, StreamPublisherInfo)
     assert list(definition.output_tables) == ["people_streamed"]
 
 
-# --- unit: _output_table_names -----------------------------------------
+# --- unit: load_inputs --------------------------------------------------
 
 
-def test_output_table_names_publisher_returns_declared_names(fixture_publisher):
-    # Publisher fixture declares ["my_table", "untouched"].
-    assert output_table_names(fixture_publisher) == ["my_table", "untouched"]
+def test_load_inputs_maps_an_unreadable_manifest_to_bad_manifest(tmp_path):
+    (tmp_path / "inputs.yaml").write_text("{ not yaml")
+    with pytest.raises(BadManifestError) as error:
+        function_command(tmp_path).load_inputs()
+    assert error.value.api_error is RunFunctionErrorCode.RF_5
 
 
-def test_output_table_names_subscriber_synthesises_indexed_names(
-    subscriber_bundle,
-):
-    """Subscribers don't declare output table names — they're
-    synthesised as `out_0, out_1, ...` from the destination's
-    cardinality. LocalFileDest with one path → cardinality 1."""
-    definition = load_function_definition(subscriber_bundle)
-    assert output_table_names(definition) == ["out_0"]
-
-
-def test_output_table_names_subscriber_unregistered_dest_raises_no_plugin(
-    subscriber_bundle,
-    monkeypatch,
-):
-    """If the destination class has no registered DestDef, surface
-    EXIT_NO_PLUGIN rather than letting the bare KeyError bubble."""
-    definition = load_function_definition(subscriber_bundle)
-
-    def missing_destination(_destination_class):
-        raise KeyError("no DestDef registered")
-
-    monkeypatch.setattr(f"{RUNNER_MODULE}.get_dest", missing_destination)
-    with pytest.raises(NoPluginError):
-        output_table_names(definition)
-
-
-# --- unit: _infer_table_modes ------------------------------------------
-
-
-def single_slot_function(in_1: TableFrameSpec):
-    pass
-
-
-def array_slot_function(in_1: TableFramesSpec):
-    pass
-
-
-def mixed_slot_function(
-    first: TableFrameSpec,
-    second: TableFramesSpec,
-    third: TableFrameSpec,
-):
-    pass
-
-
-def function_without_parameters():
-    pass
+# --- unit: infer_table_modes --------------------------------------------
 
 
 def unannotated_function(in_1):
     pass
 
 
-def wrongly_annotated_function(in_1: int):
+def unresolvable_function(in_1: NoSuchType):  # noqa: F821
     pass
 
 
-def test_infer_table_modes_single_slot():
-    assert infer_table_modes(single_slot_function) == [TableMode.SINGLE]
+def test_infer_table_modes_maps_type_hints_to_bad_user_code(tmp_path):
+    command = function_command(
+        tmp_path,
+        user_function=plain_function(unresolvable_function),
+    )
+    with pytest.raises(BadUserCodeError) as error:
+        command.infer_table_modes()
+    assert error.value.api_error is RunFunctionErrorCode.RF_6
+    assert isinstance(error.value.__cause__, TypeHintsError)
 
 
-def test_infer_table_modes_array_slot():
-    assert infer_table_modes(array_slot_function) == [TableMode.ARRAY]
+def test_infer_table_modes_maps_input_mode_to_bad_user_code(tmp_path):
+    command = function_command(
+        tmp_path,
+        user_function=plain_function(unannotated_function),
+    )
+    with pytest.raises(BadUserCodeError, match="'in_1'") as error:
+        command.infer_table_modes()
+    assert error.value.api_error is RunFunctionErrorCode.RF_7
+    assert isinstance(error.value.__cause__, InputModeError)
 
 
-def test_infer_table_modes_mixed_slots():
-    """Transformer-style: SINGLE and ARRAY parameters interleaved."""
-    assert infer_table_modes(mixed_slot_function) == [
-        TableMode.SINGLE,
-        TableMode.ARRAY,
-        TableMode.SINGLE,
-    ]
+# --- unit: input_slot ---------------------------------------------------
 
 
-def test_infer_table_modes_no_params_returns_empty():
-    assert infer_table_modes(function_without_parameters) == []
+def no_landing_inputs() -> Inputs:
+    return Inputs(Info.model_validate(info_payload()), publisher=False)
 
 
-def test_infer_table_modes_unannotated_param_raises_bad_user_code():
-    with pytest.raises(BadUserCodeError):
-        infer_table_modes(unannotated_function)
-
-
-def test_infer_table_modes_wrong_annotation_raises_bad_user_code():
-    with pytest.raises(BadUserCodeError):
-        infer_table_modes(wrongly_annotated_function)
-
-
-# --- unit: _scan_input --------------------------------------------------
-
-
-def test_scan_input_happy(tmp_path):
-    parquet_path = tmp_path / "x.parquet"
-    write_sample_parquet(parquet_path)
-    frame = scan_input(TableFile.of(InputRecord(file=str(parquet_path))))
-    assert isinstance(frame, pl.LazyFrame)
-
-
-def test_scan_input_garbage_raises_bad_input_parquet(tmp_path):
+def test_input_slot_maps_input_scan_to_bad_input_parquet(tmp_path):
     parquet_path = tmp_path / "x.parquet"
     parquet_path.write_bytes(b"not a parquet")
-    with pytest.raises(BadInputParquetError):
-        scan_input(TableFile.of(InputRecord(file=str(parquet_path))))
+    with pytest.raises(BadInputParquetError) as error:
+        function_command(tmp_path, inputs=no_landing_inputs()).input_slot(
+            slot_entry("in_1", 0, [str(parquet_path)]),
+            TableMode.SINGLE,
+        )
+    assert error.value.api_error is RunFunctionErrorCode.RF_9
+    assert isinstance(error.value.__cause__, InputScanError)
 
 
-def test_scan_input_from_a_stored_location(tmp_path):
-    parquet_path = tmp_path / "x.parquet"
-    write_sample_parquet(parquet_path)
-    record = InputRecord(
-        location=Location(uri=parquet_path.as_uri(), env_prefix="ROOT")
-    )
-    frame = scan_input(TableFile.of(record))
-    assert frame.collect()["name"].to_list() == ["a", "b", "c"]
+def test_input_slot_maps_single_slot_to_bad_manifest(tmp_path):
+    first = tmp_path / "a.parquet"
+    second = tmp_path / "b.parquet"
+    write_sample_parquet(first)
+    write_sample_parquet(second)
+    with pytest.raises(BadManifestError) as error:
+        function_command(tmp_path, inputs=no_landing_inputs()).input_slot(
+            slot_entry("in_1", 0, [str(first), str(second)]),
+            TableMode.SINGLE,
+        )
+    assert error.value.api_error is RunFunctionErrorCode.RF_11
+    assert isinstance(error.value.__cause__, SingleSlotError)
 
 
-def test_scan_input_with_an_unusable_mount_raises_bad_input_parquet(
+# --- unit: resolve_output_tables ----------------------------------------
+
+
+def test_resolve_output_tables_maps_unknown_destination_to_no_plugin(
     tmp_path,
+    subscriber_bundle,
     monkeypatch,
 ):
-    monkeypatch.setenv("SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__REGION", "eu")
-    record = InputRecord(location=Location(uri="s3://b/x.parquet", env_prefix="ROOT"))
-    with pytest.raises(BadInputParquetError, match="s3://b/x.parquet"):
-        scan_input(TableFile.of(record))
+    def missing_destination(_destination_class):
+        raise KeyError("no DestDef registered")
+
+    monkeypatch.setattr(f"{FUNCTION_HANDLER_MODULE}.get_dest", missing_destination)
+    command = function_command(
+        tmp_path,
+        user_function=UserFunction(load_function_definition(subscriber_bundle)),
+    )
+    with pytest.raises(NoPluginError) as error:
+        command.resolve_output_tables()
+    assert error.value.api_error is RunFunctionErrorCode.RF_8
+    assert isinstance(error.value.__cause__, UnknownDestinationError)
 
 
-# --- unit: _materialize_input_slot --------------------------------------
+# --- unit: call ---------------------------------------------------------
 
 
-def no_landing() -> LandedInputs:
-    return LandedInputs(Info.model_validate(info_payload()))
-
-
-def test_materialise_single_zero_files_is_none(tmp_path):
-    assert (
-        materialize_input_slot(
-            slot_entry(
-                "in_1",
-                0,
-                [],
-            ),
-            table_mode=TableMode.SINGLE,
-            definition=None,
-            landed=no_landing(),
-        )
-        is None
+def calling_command(tmp_path: Path, function, *tables: str) -> Function:
+    return function_command(
+        tmp_path,
+        user_function=plain_function(function),
+        call_arguments=[fake_table_frame()],
+        output_tables=list(tables),
     )
 
 
-def test_materialise_single_one_file_is_table_frame(tmp_path):
-    parquet_path = tmp_path / "x.parquet"
-    write_sample_parquet(parquet_path)
-    output = materialize_input_slot(
-        slot_entry(
-            "in_1",
-            0,
-            [str(parquet_path)],
-        ),
-        table_mode=TableMode.SINGLE,
-        definition=None,
-        landed=no_landing(),
-    )
-    assert isinstance(output, TableFrame)
+def raising_function(in_1):
+    raise RuntimeError("boom")
 
 
-def test_materialise_single_two_files_raises_bad_manifest(tmp_path):
-    first = tmp_path / "a.parquet"
-    second = tmp_path / "b.parquet"
-    write_sample_parquet(first)
-    write_sample_parquet(second)
-    with pytest.raises(BadManifestError):
-        materialize_input_slot(
-            slot_entry(
-                "in_1",
-                0,
-                [str(first), str(second)],
-            ),
-            table_mode=TableMode.SINGLE,
-            definition=None,
-            landed=no_landing(),
-        )
+def bare_function(in_1):
+    return in_1
 
 
-def test_materialise_single_chunked_publisher_input_is_one_table_frame(
-    tmp_path,
-    fixture_publisher,
-):
-    first, second = tmp_path / "a.parquet", tmp_path / "b.parquet"
-    pl.DataFrame({"id": [1, 2], "name": ["a", "b"]}).write_parquet(first)
-    pl.DataFrame({"id": [None, None], "name": ["c", "d"]}).write_parquet(second)
-
-    output = materialize_input_slot(
-        slot_entry(
-            "in_1",
-            0,
-            [str(first), str(second)],
-        ),
-        table_mode=TableMode.SINGLE,
-        definition=fixture_publisher,
-        landed=no_landing(),
-    )
-
-    assert isinstance(output, TableFrame)
-    frame = output._to_polars_lf().collect()
-    assert frame["name"].to_list() == ["a", "b", "c", "d"]
-    assert frame["id"].to_list() == [1, 2, None, None]
-    assert frame["id"].dtype == pl.Int64
+def two_results_function(in_1):
+    return (in_1, in_1)
 
 
-def test_materialise_single_chunks_of_unmergeable_types_are_strings(
-    tmp_path,
-    fixture_publisher,
-):
-    first, second = tmp_path / "a.parquet", tmp_path / "b.parquet"
-    pl.DataFrame(
-        {"flag": [True], "tags": [[1, 2]], "score": [1]},
-    ).write_parquet(first)
-    pl.DataFrame(
-        {"flag": [date(2026, 1, 2)], "tags": [None], "score": [2.5]},
-        schema_overrides={"tags": pl.Int64},
-    ).write_parquet(second)
-
-    output = materialize_input_slot(
-        slot_entry(
-            "in_1",
-            0,
-            [str(first), str(second)],
-        ),
-        table_mode=TableMode.SINGLE,
-        definition=fixture_publisher,
-        landed=no_landing(),
-    )
-
-    frame = output._to_polars_lf().collect()
-    assert frame.schema == pl.Schema(
-        {"flag": pl.String, "tags": pl.String, "score": pl.Float64},
-    )
-    assert frame["flag"].to_list() == ["true", "2026-01-02"]
-    assert frame["tags"].to_list() == ["[1,2]", None]
-    assert frame["score"].to_list() == [1.0, 2.5]
+def wrong_type_function(in_1):
+    return ("not a table frame",)
 
 
-def test_materialise_array_returns_list_of_table_frames(tmp_path):
-    first = tmp_path / "a.parquet"
-    second = tmp_path / "b.parquet"
-    write_sample_parquet(first)
-    write_sample_parquet(second)
-    output = materialize_input_slot(
-        slot_entry(
-            "in_1",
-            0,
-            [str(first), str(second)],
-        ),
-        table_mode=TableMode.ARRAY,
-        definition=None,
-        landed=no_landing(),
-    )
-    assert isinstance(output, list)
-    assert len(output) == 2
-    assert all(isinstance(item, TableFrame) for item in output)
-
-
-def test_materialise_array_empty_is_empty_list():
-    output = materialize_input_slot(
-        slot_entry(
-            "in_1",
-            0,
-            [],
-        ),
-        table_mode=TableMode.ARRAY,
-        definition=None,
-        landed=no_landing(),
-    )
-    assert output == []
-
-
-def landed_entry(root: Path, chunks: list[list[int]]) -> InputEntry:
-    landing = Landing(Location(uri=(root / "landing").as_uri(), env_prefix="ROOT"))
-    records = []
-    for index, values in enumerate(chunks):
-        landed = landing.land(0, index, pl.LazyFrame({"id": values}))
-        records.append(InputRecord(location=landed.data, schema=landed.schema))
-    return InputEntry(name="in_1", table_pos=0, tables=tuple(records))
-
-
-def test_materialise_single_landed_chunks_is_one_table_frame(
-    tmp_path,
-    fixture_publisher,
-):
-    output = materialize_input_slot(
-        landed_entry(tmp_path, [[1, 2], [3]]),
-        table_mode=TableMode.SINGLE,
-        definition=fixture_publisher,
-        landed=no_landing(),
-    )
-    assert isinstance(output, TableFrame)
-    assert output._to_polars_lf().collect()["id"].to_list() == [1, 2, 3]
-
-
-def test_materialise_array_landed_files_is_a_list(tmp_path, fixture_publisher):
-    output = materialize_input_slot(
-        landed_entry(tmp_path, [[1, 2], [3]]),
-        table_mode=TableMode.ARRAY,
-        definition=fixture_publisher,
-        landed=no_landing(),
-    )
-    assert isinstance(output, list)
-    assert [frame._to_polars_lf().collect()["id"].to_list() for frame in output] == [
-        [1, 2],
-        [3],
-    ]
-
-
-def test_materialise_a_missing_landed_file_raises_bad_input_parquet(
-    tmp_path,
-    fixture_publisher,
-):
-    missing = Location(uri=(tmp_path / "missing.s").as_uri(), env_prefix="ROOT")
-    entry = InputEntry(
-        name="in_1",
-        table_pos=0,
-        tables=(InputRecord(location=missing, schema=missing),),
-    )
-    with pytest.raises(BadInputParquetError):
-        materialize_input_slot(
-            entry,
-            table_mode=TableMode.SINGLE,
-            definition=fixture_publisher,
-            landed=no_landing(),
-        )
-
-
-# --- unit: _invoke_user_function ----------------------------------------
-
-
-def fake_table_frame() -> TableFrame:
-    return TableFrame._build(pl.DataFrame({"x": [1]}).lazy(), CreationMode.MUT)
-
-
-def test_invoke_user_function_happy():
-    def function(in_1):
-        return (in_1, None)
-
-    result = invoke_user_function(
-        function,
-        [fake_table_frame()],
-        ["t1", "t2"],
-    )
-    assert isinstance(result, list)
-    assert len(result) == 2
-    assert isinstance(result[0], TableFrame)
-    assert result[1] is None
-
-
-def test_invoke_user_function_runs_without_the_storage_secrets(monkeypatch):
-    variable = "SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AWS_SECRET_ACCESS_KEY"
-    monkeypatch.setenv(variable, "secret")
-    seen = {}
-
-    def function(in_1):
-        seen["value"] = os.environ.get(variable)
-        return in_1
-
-    invoke_user_function(
-        function,
-        [fake_table_frame()],
-        ["t1"],
-    )
-
-    assert seen == {"value": None}
-    assert os.environ[variable] == "secret"
-
-
-def test_invoke_user_function_raises_maps_to_user_function_failed():
-    def function(in_1):
-        raise RuntimeError("boom")
-
-    with pytest.raises(UserFunctionFailedError):
-        invoke_user_function(
-            function,
-            [fake_table_frame()],
+@pytest.mark.parametrize(
+    ("function", "tables", "exception", "code", "cause"),
+    [
+        (
+            raising_function,
             ["t1"],
-        )
-
-
-def test_invoke_user_function_non_tuple_return_raises_shape_mismatch():
-    # With more than one output slot a bare (non-tuple) return is still
-    # rejected -- the single-output convenience does not apply.
-    def function(in_1):
-        return fake_table_frame()  # missing tuple wrap, but 2 outputs expected
-
-    with pytest.raises(OutputShapeMismatchError):
-        invoke_user_function(
-            function,
-            [fake_table_frame()],
+            UserFunctionFailedError,
+            RunFunctionErrorCode.RF_12,
+            FunctionFailedError,
+        ),
+        (
+            bare_function,
             ["t1", "t2"],
-        )
-
-
-def test_invoke_user_function_bare_single_output_is_wrapped():
-    # Single-output convenience: a lone value returned bare is wrapped
-    # into a 1-tuple, mirroring the relaxed signature check.
-    def function(in_1):
-        return in_1  # bare TableFrame, one output slot
-
-    result = invoke_user_function(
-        function,
-        [fake_table_frame()],
-        ["t1"],
-    )
-    assert isinstance(result, list)
-    assert len(result) == 1
-    assert isinstance(result[0], TableFrame)
-
-
-def test_invoke_user_function_bare_single_output_none_is_wrapped():
-    # A bare ``None`` for a single output slot is also wrapped.
-    def function(in_1):
-        return None
-
-    result = invoke_user_function(
-        function,
-        [fake_table_frame()],
-        ["t1"],
-    )
-    assert result == [None]
-
-
-def test_invoke_user_function_wrong_length_raises_shape_mismatch():
-    def function(in_1):
-        return (fake_table_frame(), fake_table_frame())  # returns 2, expects 1
-
-    with pytest.raises(OutputShapeMismatchError):
-        invoke_user_function(
-            function,
-            [fake_table_frame()],
+            OutputShapeMismatchError,
+            RunFunctionErrorCode.RF_13,
+            NotATupleError,
+        ),
+        (
+            two_results_function,
             ["t1"],
-        )
-
-
-def test_invoke_user_function_wrong_element_type_raises_shape_mismatch():
-    def function(in_1):
-        return ("not a table frame",)
-
-    with pytest.raises(OutputShapeMismatchError):
-        invoke_user_function(
-            function,
-            [fake_table_frame()],
+            OutputShapeMismatchError,
+            RunFunctionErrorCode.RF_14,
+            ResultCountError,
+        ),
+        (
+            wrong_type_function,
             ["t1"],
-        )
+            OutputShapeMismatchError,
+            RunFunctionErrorCode.RF_15,
+            ResultTypeError,
+        ),
+    ],
+    ids=["failed", "not-a-tuple", "count", "type"],
+)
+def test_call_maps_the_user_function_errors(
+    tmp_path,
+    function,
+    tables,
+    exception,
+    code,
+    cause,
+):
+    with pytest.raises(exception) as error:
+        calling_command(tmp_path, function, *tables).call()
+    assert error.value.api_error is code
+    assert isinstance(error.value.__cause__, cause)
 
 
-# --- unit: _output_targets ----------------------------------------------
+def test_call_returns_the_results(tmp_path):
+    results = calling_command(tmp_path, bare_function, "t1").call()
+    assert len(results) == 1
+    assert isinstance(results[0], TableFrame)
 
 
-def build_request(tmp_path: Path, *outputs: str) -> Request:
-    return Request.load(
-        write_request(tmp_path / "request.yaml", *outputs),
-        RunFunctionErrorCode.RF_1,
-    )
+# --- unit: targets ------------------------------------------------------
 
 
-def test_output_targets_of_a_publisher_are_their_stored_locations(
+def test_targets_of_a_publisher_are_their_stored_locations(
     tmp_path,
     fixture_publisher,
 ):
-    targets = output_targets(
-        build_request(
+    command = function_command(
+        tmp_path,
+        request=build_request(
             tmp_path,
             "untouched",
             "my_table",
         ),
-        fixture_publisher,
-        ["my_table", "untouched"],
+        user_function=UserFunction(fixture_publisher),
+        output_tables=["my_table", "untouched"],
     )
-    assert [target.uri for target in targets] == [
+    assert [target.uri for target in command.targets()] == [
         stored_path(tmp_path, "my_table").as_uri(),
         stored_path(tmp_path, "untouched").as_uri(),
     ]
 
 
-def test_output_targets_reject_a_table_without_location(tmp_path, fixture_publisher):
-    with pytest.raises(BadRequestError, match="untouched"):
-        output_targets(
-            build_request(tmp_path, "my_table"),
-            fixture_publisher,
-            ["my_table", "untouched"],
-        )
+def test_targets_reject_a_table_without_location(tmp_path, fixture_publisher):
+    command = function_command(
+        tmp_path,
+        request=build_request(tmp_path, "my_table"),
+        user_function=UserFunction(fixture_publisher),
+        output_tables=["my_table", "untouched"],
+    )
+    with pytest.raises(BadRequestError, match="untouched") as error:
+        command.targets()
+    assert error.value.api_error is RunFunctionErrorCode.RF_20
 
 
-def test_output_targets_of_a_subscriber_are_its_landing_files(
+def test_targets_of_a_subscriber_are_its_landing_files(
     tmp_path,
     subscriber_bundle,
 ):
-    definition = load_function_definition(subscriber_bundle)
-    targets = output_targets(
-        build_request(tmp_path),
-        definition,
-        ["out_0", "out_1"],
+    command = function_command(
+        tmp_path,
+        request=build_request(tmp_path),
+        user_function=UserFunction(load_function_definition(subscriber_bundle)),
+        output_tables=["out_0", "out_1"],
     )
-    assert [target.uri for target in targets] == [
+    assert [target.uri for target in command.targets()] == [
         f"{landing_path(tmp_path).as_uri()}/0.t",
         f"{landing_path(tmp_path).as_uri()}/1.t",
     ]
 
 
-# --- unit: _sink_outputs ------------------------------------------------
+# --- unit: sink ---------------------------------------------------------
 
 
-HOST = ColumnPolicy(Zone.HOST)
-
-
-def stored_targets(tmp_path: Path, *tables: str) -> list[TableFile]:
-    return [TableFile.local(stored_path(tmp_path, table)) for table in tables]
-
-
-def test_sink_outputs_writes_each_table_frame(tmp_path):
-    result = (fake_table_frame(), fake_table_frame())
-    targets = stored_targets(
+def sinking_command(tmp_path: Path, fixture_publisher) -> Function:
+    return function_command(
         tmp_path,
-        "t1",
-        "t2",
+        request=build_request(tmp_path, "my_table"),
+        user_function=UserFunction(fixture_publisher),
+        output_tables=["my_table"],
+        results=[fake_table_frame()],
+        checks=[],
+        state=SimpleNamespace(output=lambda: None),
     )
-    entries = sink_outputs(
-        result,
-        ["t1", "t2"],
-        targets,
-        HOST,
-    ).outputs
-    assert [entry.name for entry in entries] == ["t1", "t2"]
-    for entry, target in zip(entries, targets):
-        assert entry.uri == target.uri
-        assert entry.stats == target.stats()
-        assert entry.stats.row_count == 1
 
 
-def test_sink_outputs_none_value_records_no_uri_nor_stats(tmp_path):
-    result = (None, fake_table_frame())
-    entries = sink_outputs(
-        result,
-        ["t1", "t2"],
-        stored_targets(
-            tmp_path,
-            "t1",
-            "t2",
-        ),
-        HOST,
-    ).outputs
-    assert entries[0] == OutputEntry(name="t1")
-    assert entries[1].stats is not None
-    assert not stored_path(tmp_path, "t1").exists()
+def test_sink_writes_the_outputs_manifest_entries(tmp_path, fixture_publisher):
+    command = sinking_command(tmp_path, fixture_publisher)
+    command.sink()
+    (entry,) = command.outputs_manifest.outputs
+    assert entry.name == "my_table"
+    assert entry.uri == stored_path(tmp_path, "my_table").as_uri()
+    assert entry.stats.row_count == 1
 
 
-def test_sink_outputs_write_failure_maps_to_output_write_failed(tmp_path, monkeypatch):
+def test_sink_maps_a_write_failure_to_output_write_failed(
+    tmp_path,
+    fixture_publisher,
+    monkeypatch,
+):
     def broken_sink(self, *arguments):
         raise RuntimeError("disk full")
 
@@ -1148,45 +898,15 @@ def test_sink_outputs_write_failure_maps_to_output_write_failed(tmp_path, monkey
         "_observed",
         broken_sink,
     )
-    with pytest.raises(OutputWriteFailedError, match="t1.t"):
-        sink_outputs(
-            (fake_table_frame(),),
-            ["t1"],
-            stored_targets(tmp_path, "t1"),
-            HOST,
-        )
+    with pytest.raises(OutputWriteFailedError, match="my_table.t") as error:
+        sinking_command(tmp_path, fixture_publisher).sink()
+    assert error.value.api_error is RunFunctionErrorCode.RF_16
+    assert isinstance(error.value.__cause__, SinkError)
 
 
-def test_sink_outputs_failure_while_writing_maps_to_output_write_failed(
+def test_sink_maps_unreadable_stats_to_output_write_failed(
     tmp_path,
-    monkeypatch,
-):
-    def fail(batch):
-        raise RuntimeError("disk full")
-
-    def failing_sink(self, *arguments):
-        return pl.LazyFrame({"x": [1]}).map_batches(fail)
-
-    monkeypatch.setattr(
-        TableFrame,
-        "_observed",
-        failing_sink,
-    )
-    with pytest.raises(OutputWriteFailedError, match="t1, t2"):
-        sink_outputs(
-            (fake_table_frame(), fake_table_frame()),
-            ["t1", "t2"],
-            stored_targets(
-                tmp_path,
-                "t1",
-                "t2",
-            ),
-            HOST,
-        )
-
-
-def test_sink_outputs_unreadable_stats_map_to_output_write_failed(
-    tmp_path,
+    fixture_publisher,
     monkeypatch,
 ):
     def unreadable(self):
@@ -1197,144 +917,29 @@ def test_sink_outputs_unreadable_stats_map_to_output_write_failed(
         "stats",
         unreadable,
     )
-    with pytest.raises(OutputWriteFailedError, match="stats of output 't1'"):
-        sink_outputs(
-            (fake_table_frame(),),
-            ["t1"],
-            stored_targets(tmp_path, "t1"),
-            HOST,
-        )
+    with pytest.raises(
+        OutputWriteFailedError,
+        match="stats of output 'my_table'",
+    ) as error:
+        sinking_command(tmp_path, fixture_publisher).sink()
+    assert error.value.api_error is RunFunctionErrorCode.RF_21
+    assert isinstance(error.value.__cause__, StatsError)
 
 
-def test_sink_outputs_writes_every_output_in_one_pass(tmp_path, monkeypatch):
-    collected = []
-    collect_all = pl.collect_all
-
-    def counting(plans, **options):
-        collected.append(len(plans))
-        return collect_all(plans, **options)
-
-    monkeypatch.setattr(
-        pl,
-        "collect_all",
-        counting,
-    )
-    sink_outputs(
-        (fake_table_frame(), fake_table_frame(), None),
-        ["t1", "t2", "t3"],
-        stored_targets(
-            tmp_path,
-            "t1",
-            "t2",
-            "t3",
-        ),
-        HOST,
-    )
-    assert collected == [2]
+# --- unit: write_manifest -----------------------------------------------
 
 
-def state_output(tmp_path: Path, values: dict) -> StateOutput:
-    source = tmp_path / "state" / STATE_FILE
-    source.parent.mkdir(parents=True, exist_ok=True)
-    write_state(values, source)
-    return StateOutput(
-        name=STATE_TABLE,
-        source=TableFile.local(source),
-        target=TableFile.local(stored_path(tmp_path, STATE_TABLE)),
-    )
-
-
-def test_sink_outputs_writes_the_state_in_the_same_pass(tmp_path, monkeypatch):
-    collected = []
-    collect_all = pl.collect_all
-
-    def counting(plans, **options):
-        collected.append(len(plans))
-        return collect_all(plans, **options)
-
-    monkeypatch.setattr(
-        pl,
-        "collect_all",
-        counting,
-    )
-    state = state_output(tmp_path, {"cursor": 250})
-    manifest = sink_outputs(
-        (fake_table_frame(),),
-        ["t1"],
-        stored_targets(tmp_path, "t1"),
-        HOST,
-        state=state,
-    )
-    assert collected == [2]
-    assert [entry.name for entry in manifest.outputs] == ["t1"]
-    assert manifest.state == OutputEntry(
-        name=STATE_TABLE,
-        uri=state.target.uri,
-        stats=state.target.stats(),
-    )
-    assert stored_state(tmp_path) == {"cursor": 250}
-
-
-def test_sink_outputs_writes_the_state_without_outputs(tmp_path):
-    state = state_output(tmp_path, {})
-    manifest = sink_outputs(
-        (None,),
-        ["t1"],
-        stored_targets(tmp_path, "t1"),
-        HOST,
-        state=state,
-    )
-    assert manifest.outputs == (OutputEntry(name="t1"),)
-    assert manifest.state.stats.column_count == 0
-    assert stored_state(tmp_path) == {}
-
-
-def test_sink_outputs_without_state_records_none(tmp_path):
-    manifest = sink_outputs(
-        (fake_table_frame(),),
-        ["t1"],
-        stored_targets(tmp_path, "t1"),
-        HOST,
-    )
-    assert manifest.state is None
-
-
-def test_sink_outputs_state_write_failure_maps_to_output_write_failed(
+def test_write_manifest_maps_an_os_error_to_outputs_manifest_write_failed(
     tmp_path,
-    monkeypatch,
 ):
-    def broken_copy(self, target):
-        raise RuntimeError("disk full")
-
-    monkeypatch.setattr(
-        TableFile,
-        "copy",
-        broken_copy,
+    (tmp_path / "outputs.yaml").mkdir()
+    command = function_command(
+        tmp_path,
+        outputs_manifest=OutputManifest(outputs=(OutputEntry(name="t1"),)),
     )
-    with pytest.raises(OutputWriteFailedError, match=STATE_TABLE):
-        sink_outputs(
-            (None,),
-            ["t1"],
-            stored_targets(tmp_path, "t1"),
-            HOST,
-            state=state_output(tmp_path, {}),
-        )
-
-
-@pytest.mark.parametrize("zone", [Zone.HOST, Zone.LAND])
-def test_sink_outputs_keeps_system_columns(tmp_path, zone):
-    from tabsdatak.tableframe._engine.constant.column.prefixes import (
-        TD_SYSTEM_COLUMN_PREFIX,
-    )
-
-    sink_outputs(
-        (fake_table_frame(),),
-        ["t1"],
-        stored_targets(tmp_path, "t1"),
-        ColumnPolicy(zone),
-    )
-    columns = pl.read_parquet_schema(stored_path(tmp_path, "t1"))
-    assert any(third.startswith(TD_SYSTEM_COLUMN_PREFIX) for third in columns)
+    with pytest.raises(OutputsManifestWriteFailedError) as error:
+        command.write_manifest()
+    assert error.value.api_error is RunFunctionErrorCode.RF_17
 
 
 # --- main: error paths --------------------------------------------------
@@ -1523,7 +1128,7 @@ def test_main_multi_cardinality_publisher_concatenates_two_slots(
     http_ok_url,
 ):
     """A publisher whose source has 2 paths produces 2 input slots, and
-    the user function declares 2 parameters. Exercises the full _run()
+    the user function declares 2 parameters. Exercises the full run()
     flow with input_count > 1 on the publisher path — guards against
     the regression where _input_count was hardcoded to 1 for
     publishers."""
@@ -1582,7 +1187,7 @@ def test_main_multi_cardinality_transformer_with_mixed_modes(
     http_ok_url,
 ):
     """A transformer with 3 input_tables (mixed SINGLE/ARRAY/SINGLE) and
-    one output. Exercises the full _run() flow with input_count > 1 on
+    one output. Exercises the full run() flow with input_count > 1 on
     the transformer path AND with mixed slot modes — guards against
     regressions in both per-slot mode inference and the slot count."""
     request_path = write_request(tmp_path / "request.yaml", "merged")
@@ -1804,7 +1409,7 @@ def test_main_carries_tabsdata_command_metadata():
             "tabsdata_command_name",
             None,
         )
-        == "td_function"
+        == "td-f-regular"
     )
 
 
@@ -1812,7 +1417,7 @@ def test_main_carries_tabsdata_command_metadata():
 
 
 def test_function_context_is_a_function_ctx_subclass():
-    """``_FunctionContext`` must be a concrete FunctionCtx so that
+    """``FunctionContext`` must be a concrete FunctionCtx so that
     ``isinstance(ctx, FunctionCtx)`` holds at the call boundary, and
     must NOT also satisfy the SrcPluginCtx / DestContext role tags."""
     third = FunctionContext(
@@ -1857,35 +1462,6 @@ def test_function_context_serves_the_project_secret():
     assert third.secret_keys("aws") == ["key1"]
     assert third.secret("aws", "key1") == "mykey1"
     assert third.secret("aws.key1") == "mykey1"
-
-
-def test_infer_table_modes_skips_trailing_ctx_param():
-    """When the user function declares a trailing TransactionCtx-typed param,
-    ``_infer_table_modes`` must skip it — only the input slots are
-    real table-mode-bearing parameters."""
-
-    def function_with_context(
-        in_1: TableFrameSpec,
-        context: FunctionCtx,
-    ) -> TableFrameSpec:
-        return None
-
-    modes = infer_table_modes(function_with_context)
-    assert modes == [TableMode.SINGLE]
-
-
-def test_infer_table_modes_does_not_skip_without_ctx():
-    """No trailing ctx → every parameter is a slot. Sanity check that
-    the trim only kicks in when has_transaction_ctx_param is True."""
-
-    def function_with_context(
-        in_1: TableFrameSpec,
-        in_2: TableFrameSpec,
-    ) -> TableFrameSpec:
-        return None
-
-    modes = infer_table_modes(function_with_context)
-    assert modes == [TableMode.SINGLE, TableMode.SINGLE]
 
 
 # Helper to build a self-contained user project with a ctx-aware
@@ -1953,7 +1529,7 @@ def request_with_state_slots(
     state_in = None
     if previous is not None:
         previous_state_path(path.parent).parent.mkdir(parents=True, exist_ok=True)
-        write_state(previous, previous_state_path(path.parent))
+        State.save(FunctionState(previous), previous_state_path(path.parent))
         state_in = {
             "uri": previous_state_path(path.parent).as_uri(),
             "env_prefix": "ROOT",
@@ -1987,7 +1563,7 @@ def request_with_state_slots(
 
 
 def stored_state(root: Path) -> dict:
-    return read_state(TableFile.local(stored_path(root, STATE_TABLE)))
+    return State.load(TableFile.local(stored_path(root, STATE_TABLE))).values
 
 
 def run_with_state(
@@ -2005,7 +1581,7 @@ def run_with_state(
     state_folder = tmp_path / "state"
     state_folder.mkdir()
     if local is not None:
-        write_state(local, state_folder / STATE_FILE)
+        State.save(FunctionState(local), state_folder / STATE_FILE)
     set_arguments(
         monkeypatch,
         request_path,
@@ -2040,9 +1616,8 @@ def test_main_ctx_aware_function_first_run_writes_its_state(
         request_path,
     )
     assert stored_state(tmp_path) == {"my-key": "from-user-fn"}
-    assert read_state(TableFile.local(tmp_path / "state" / STATE_FILE)) == {
-        "my-key": "from-user-fn"
-    }
+    state_file = TableFile.local(tmp_path / "state" / STATE_FILE)
+    assert State.load(state_file).values == {"my-key": "from-user-fn"}
     assert manifest.state == OutputEntry(
         name=STATE_TABLE,
         uri=stored_path(tmp_path, STATE_TABLE).as_uri(),

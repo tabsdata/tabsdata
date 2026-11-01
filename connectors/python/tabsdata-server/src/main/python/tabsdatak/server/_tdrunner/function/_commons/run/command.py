@@ -9,12 +9,15 @@ import logging
 import sys
 import urllib.error
 import urllib.request
+from abc import ABC, abstractmethod
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable
 
 from tabsdatak._logging import setup_logging
 from tabsdatak.common._enums import WorkerCallbackStatus
 from tabsdatak.common._runtime.pathenv import extend_path
+from tabsdatak.server._tdrunner.function._commons.document.journal import Journal
 from tabsdatak.server._tdrunner.function._commons.http.request import (
     DEFAULT_TIMEOUT_SECONDS,
 )
@@ -35,7 +38,6 @@ from tabsdatak.server._tdrunner.function._lib.errors import (
     StaleReportError,
     UnexpectedError,
 )
-from tabsdatak.server._tdrunner.function._lib.journal import Journal
 from tabsdatak.server._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak.server._tdrunner.function._lib.message import (
     EXIT_STATUS_SUCCESS,
@@ -52,7 +54,6 @@ STALE_OUTCOME = "Stale"
 DESTINATION_WRITE_REPORT = "destination write"
 
 
-# Test entry point; production commands run through ``command``.
 def run_command(main: Callable[[], int | None]) -> int:
     try:
         result = main()
@@ -64,15 +65,112 @@ def run_command(main: Callable[[], int | None]) -> int:
     return int(result)
 
 
-def notify(
-    arguments: CommandArguments,
-    body: dict[str, Any],
-    what: str,
-) -> None:
-    def post(notify_request: urllib.request.Request) -> bytes:
+class Responder:
+    url: str
+    method: str
+    authorization: str
+    journal_file: Path
+
+    def __init__(self, arguments: CommandArguments) -> None:
+        self.url = arguments.responder_url
+        self.method = arguments.responder_method
+        self.authorization = arguments.responder_authorization
+        self.journal_file = arguments.journal_file
+
+    def running(self) -> None:
+        journal = Journal.load(
+            self.journal_file,
+            strict=True,
+        )
+        self.report(
+            CallbackRequest(
+                status=WorkerCallbackStatus.RUNNING,
+                start=journal.start,
+            )
+        )
+
+    def done(
+        self,
+        *,
+        output: dict[str, Any] | None = None,
+        exit_code: int = EXIT_STATUS_SUCCESS,
+    ) -> None:
+        journal = Journal.load(
+            self.journal_file,
+            strict=True,
+        )
+        logger.debug(f"Done report output: {output}")
+        self.report(
+            CallbackRequest(
+                status=WorkerCallbackStatus.DONE,
+                start=journal.start,
+                end=journal.end,
+                output=output,
+                exit_status=exit_code,
+            )
+        )
+
+    def failed(self, exit_code: int, error: BaseException) -> None:
+        # noinspection PyBroadException
+        try:
+            journal = Journal.load(self.journal_file, strict=False)
+            if journal.end is not None:
+                end = journal.end
+            else:
+                end = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
+            if journal.start is not None:
+                start = journal.start
+            else:
+                start = end
+            self.report(
+                CallbackRequest(
+                    status=WorkerCallbackStatus.FAILED,
+                    start=start,
+                    end=end,
+                    exit_status=exit_code,
+                    error_message=repr(error),
+                )
+            )
+        except StaleReportError:
+            logger.info("The apiserver answered the Failed report as stale")
+        except Exception:
+            logger.warning("Failed to post Failed status to responder", exc_info=True)
+
+    def destination_write(self) -> None:
+        self.notify(
+            DestinationWriteMessage().to_body(),
+            DESTINATION_WRITE_REPORT,
+        )
+
+    def report(self, payload: CallbackRequest) -> None:
+        status = payload.status
+        logger.info(f"Reporting {status}: exit_status={payload.exit_status}")
+        self.notify(payload.to_body(), str(status))
+
+    def notify(self, body: dict[str, Any], what: str) -> None:
+        url = resolve_value(self.url)
+        method = resolve_value(self.method)
+        authorization = resolve_value(self.authorization)
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(body).encode("utf-8"),
+            method=method,
+            headers={
+                "Authorization": authorization,
+                "Content-Type": "application/json",
+            },
+        )
+        logger.info(f"Posting responder {what}: {method} {url}")
+        answer = call_with_retry(self.post, request)
+        logger.info(f"Posted responder {what}: {method} {url}")
+        if self.outcome(answer) == STALE_OUTCOME:
+            raise CommandErrorCode.CMD_8.exception(status=what)
+
+    @staticmethod
+    def post(request: urllib.request.Request) -> bytes:
         try:
             with urllib.request.urlopen(
-                notify_request, timeout=DEFAULT_TIMEOUT_SECONDS
+                request, timeout=DEFAULT_TIMEOUT_SECONDS
             ) as response:
                 return response.read()
         except urllib.error.HTTPError as error:
@@ -80,122 +178,25 @@ def notify(
             error.msg = f"{error.msg}: {error_body}" if error_body else error.msg
             raise
 
-    url = resolve_value(arguments.responder_url)
-    method = resolve_value(arguments.responder_method)
-    authorization = resolve_value(arguments.responder_authorization)
-    request = urllib.request.Request(
-        url,
-        data=json.dumps(body).encode("utf-8"),
-        method=method,
-        headers={
-            "Authorization": authorization,
-            "Content-Type": "application/json",
-        },
-    )
-    logger.info(f"Posting responder {what}: {method} {url}")
-    answer = call_with_retry(post, request)
-    logger.info(f"Posted responder {what}: {method} {url}")
-    if outcome(answer) == STALE_OUTCOME:
-        raise CommandErrorCode.CMD_8.exception(status=what)
+    @staticmethod
+    def outcome(answer: bytes) -> str | None:
+        try:
+            data = json.loads(answer).get(ANSWER_DATA_KEY)
+        except (ValueError, AttributeError):
+            return None
+        return data.get(ANSWER_OUTCOME_KEY) if isinstance(data, dict) else None
 
 
-def outcome(answer: bytes) -> str | None:
-    try:
-        data = json.loads(answer).get(ANSWER_DATA_KEY)
-    except (ValueError, AttributeError):
-        return None
-    return data.get(ANSWER_OUTCOME_KEY) if isinstance(data, dict) else None
+class Command[Arguments: CommandArguments](ABC):
+    arguments: Arguments
+    responder: Responder
 
+    def __init__(self, arguments: Arguments) -> None:
+        self.arguments = arguments
+        self.responder = Responder(arguments)
 
-def notify_status(
-    arguments: CommandArguments,
-    payload: CallbackRequest,
-) -> None:
-    status = payload.status
-    logger.info(f"Reporting {status}: exit_status={payload.exit_status}")
-    notify(arguments, payload.to_body(), str(status))
-
-
-def notify_status_running(arguments: CommandArguments) -> None:
-    journal = Journal.load(
-        arguments.journal_file,
-        strict=True,
-    )
-    notify_status(
-        arguments,
-        CallbackRequest(
-            status=WorkerCallbackStatus.RUNNING,
-            start=journal.start,
-        ),
-    )
-
-
-def notify_status_done(
-    arguments: CommandArguments,
-    *,
-    output: dict[str, Any] | None = None,
-    exit_code: int = EXIT_STATUS_SUCCESS,
-) -> None:
-    journal = Journal.load(
-        arguments.journal_file,
-        strict=True,
-    )
-    logger.debug(f"notify_status_done output: {output}")
-    notify_status(
-        arguments,
-        CallbackRequest(
-            status=WorkerCallbackStatus.DONE,
-            start=journal.start,
-            end=journal.end,
-            output=output,
-            exit_status=exit_code,
-        ),
-    )
-
-
-def notify_status_failed(
-    arguments: CommandArguments | None,
-    exit_code: int,
-    error: BaseException,
-) -> None:
-    if arguments is None:
-        logger.warning(
-            "Skipping responder Failed POST: command arguments not available."
-        )
-        return
-    # noinspection PyBroadException
-    try:
-        journal = Journal.load(arguments.journal_file, strict=False)
-        end = (
-            journal.end
-            if journal.end is not None
-            else int(datetime.now(tz=timezone.utc).timestamp() * 1000)
-        )
-        start = journal.start if journal.start is not None else end
-        notify_status(
-            arguments,
-            CallbackRequest(
-                status=WorkerCallbackStatus.FAILED,
-                start=start,
-                end=end,
-                exit_status=exit_code,
-                error_message=repr(error),
-            ),
-        )
-    except StaleReportError:
-        logger.info("The apiserver answered the Failed report as stale")
-    except Exception:
-        logger.warning("Failed to post Failed status to responder", exc_info=True)
-
-
-def notify_step_destination_write(
-    arguments: CommandArguments,
-) -> None:
-    notify(
-        arguments,
-        DestinationWriteMessage().to_body(),
-        DESTINATION_WRITE_REPORT,
-    )
+    @abstractmethod
+    def run(self) -> int: ...
 
 
 def show_dataflow_settings() -> None:
@@ -205,6 +206,19 @@ def show_dataflow_settings() -> None:
         return
     for name, value in settings.items():
         logger.info(f"Query engine setting {name} is '{value}'")
+
+
+def report_failure(
+    arguments: CommandArguments | None,
+    exit_code: int,
+    error: BaseException,
+) -> None:
+    if arguments is None:
+        logger.warning(
+            "Skipping responder Failed POST: command arguments not available."
+        )
+        return
+    Responder(arguments).failed(exit_code, error)
 
 
 def tabsdata_command(*, name: str) -> Callable[[Callable], Callable]:
@@ -220,6 +234,7 @@ def command(
     *,
     name: str,
     parser: Callable[[], ArgumentsParser],
+    reports: bool = True,
 ) -> Callable[[Callable[[Any], int | None]], Callable[[], int]]:
     def wrap(
         body: Callable[[Any], int | None],
@@ -227,6 +242,8 @@ def command(
         @tabsdata_command(name=name)
         def main() -> int:
             extend_path()
+            if not reports:
+                return run_command(lambda: body(parser().parse()))
             arguments: CommandArguments | None = None
             try:
                 arguments = parser().parse()
@@ -248,12 +265,12 @@ def command(
                         f"promoting to {InconsistentError.exit_code}"
                     )
                     exit_code = InconsistentError.exit_code
-                notify_status_failed(arguments, exit_code, error)
+                report_failure(arguments, exit_code, error)
                 return exit_code
             except Exception as exception:
                 exit_code = UnexpectedError.exit_code
                 logger.exception("Unhandled exception caught by command")
-                notify_status_failed(arguments, exit_code, exception)
+                report_failure(arguments, exit_code, exception)
                 return exit_code
             except SystemExit as exit_event:
                 exit_code = PrematureError.exit_code
@@ -261,12 +278,12 @@ def command(
                     f"Exit ({exit_event.code}) intercepted by command; "
                     f"promoting to {exit_code}"
                 )
-                notify_status_failed(arguments, exit_code, exit_event)
+                report_failure(arguments, exit_code, exit_event)
                 return exit_code
             except BaseException as exception:
                 exit_code = UnexpectedError.exit_code
                 logger.exception("Unhandled core exception caught by command")
-                notify_status_failed(arguments, exit_code, exception)
+                report_failure(arguments, exit_code, exception)
                 return exit_code
 
         return main

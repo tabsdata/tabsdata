@@ -740,11 +740,11 @@ class SrcDef[S: Src]:
 
     @model_validator(mode="after")
     def _validate(self) -> "SrcDef":
-        from tabsdatak._handoff import deprecated_src
+        from tabsdatak._handoff import SourceContract
 
         check_plugin_param_type(self.plugin, "read_in", "conn", self.conn)
         check_plugin_param_type(self.plugin, "read_in", "src", self.src)
-        if deprecated_src(self.plugin):
+        if SourceContract(self.plugin).deprecated():
             _api.warn_legacy_src(self.plugin)
         if self.explorer is not None:
             check_plugin_param_type(self.explorer, "metadata", "conn", self.conn)
@@ -851,9 +851,9 @@ class DestDef[D: Dest]:
     def _validate(self) -> "DestDef":
         check_plugin_param_type(self.plugin, "write_out", "conn", self.conn)
         check_plugin_param_type(self.plugin, "write_out", "dest", self.dest)
-        from tabsdatak._handoff import dest_frames
+        from tabsdatak._handoff import DestinationContract
 
-        if not dest_frames(self.plugin):
+        if not DestinationContract(self.plugin).frames():
             _api.warn_legacy_dest(self.plugin)
         if self.explorer is not None:
             check_plugin_param_type(self.explorer, "metadata", "conn", self.conn)

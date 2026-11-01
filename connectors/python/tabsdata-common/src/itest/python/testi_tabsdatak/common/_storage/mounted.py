@@ -63,4 +63,4 @@ def declaration(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> NamedMountDeclaration:
-    return mounts.read(mounted(domain, tmp_path, monkeypatch), MOUNT)
+    return NamedMountDeclaration.read(mounted(domain, tmp_path, monkeypatch), MOUNT)

@@ -13,14 +13,13 @@ from tabsdatak.server._tdrunner.function.commands.runners.function.options impor
     RunFunctionArguments,
 )
 from tabsdatak.server._tdrunner.function.commands.runners.function.runner import (
-    run,
+    Function,
 )
 
 VERSION = version()
 GENERATION = 2
 INFORMATION = (
-    "function — call the user function on its inputs and write the tables "
-    "it returns"
+    "function — call the user function on its inputs and write the tables it returns"
 )
 MANUAL = (
     "function --request <PATH> --bundle-folder <PATH> "
@@ -48,9 +47,9 @@ def build_command_parser() -> ArgumentsParser:
     )
 
 
-@command(name="td_function", parser=build_command_parser)
+@command(name="td-f-regular", parser=build_command_parser)
 def main(arguments: RunFunctionArguments) -> int:
-    return run(arguments)
+    return Function(arguments).run()
 
 
 if __name__ == "__main__":

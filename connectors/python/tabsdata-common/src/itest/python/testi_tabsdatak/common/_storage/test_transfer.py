@@ -40,19 +40,19 @@ def round_trip(domain, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     source.write_bytes(os.urandom(SIZE))
     expected = source.read_bytes()
     try:
-        assert transfer.upload(source, location) == SIZE
+        assert location.upload(source) == SIZE
         streamed = tmp_path / "streamed.bin"
-        assert transfer.download(location, streamed) == SIZE
+        assert location.download(streamed) == SIZE
         assert streamed.read_bytes() == expected
         monkeypatch.setattr(transfer, "STREAM_THRESHOLD", RANGED_THRESHOLD)
         monkeypatch.setattr(transfer, "RANGE_SIZE", RANGED_SIZE)
         ranged = tmp_path / "ranged.bin"
-        assert transfer.download(location, ranged) == SIZE
+        assert location.download(ranged) == SIZE
         assert ranged.read_bytes() == expected
-        assert b"".join(transfer.chunks(location)) == expected
+        assert b"".join(location.chunks()) == expected
     finally:
         store_root, name = transfer.split(uri)
-        obstore.delete(transfer.store(store_root, location.options), name)
+        obstore.delete(transfer.OBJECT_STORES.store(store_root, location.options), name)
 
 
 @s3local_domain("s3local")

@@ -16,11 +16,13 @@ import polars as pl
 import yaml
 
 from tabsdatak.common._archive.bundle import build_bundle
-from tabsdatak.server._tdrunner.function.commands import (
+from tabsdatak.server._tdrunner.function.commands.gathering import (
+    fetch_bundle,
+    plan_input,
+)
+from tabsdatak.server._tdrunner.function.commands.lifecycle import (
     begin_execution,
-    get_bundle,
-    prep_localize_state,
-    report_completion,
+    end_execution,
 )
 from tabsdatak.server._tdrunner.function.commands.runners import (
     destination_plugin as run_destination_plugin,
@@ -192,15 +194,15 @@ class Driver:
     def begin(self) -> None:
         self.step(begin_execution, "begin-execution")
         self.step(
-            get_bundle,
-            "get-bundle",
+            fetch_bundle,
+            "fetch-bundle",
             request=self.request,
             bundle_folder=self.path("bundle"),
             bundle_archive=self.path("shuttle/bundle.tar.zst"),
         )
         self.step(
-            prep_localize_state,
-            "prep-localize-state",
+            plan_input,
+            "plan-input",
             request=self.request,
             inputs_manifest=self.path("fn/in/inputs-manifest.yaml"),
         )
@@ -219,8 +221,8 @@ class Driver:
 
     def complete(self) -> None:
         self.step(
-            report_completion,
-            "report-completion",
+            end_execution,
+            "end-execution",
             request=self.request,
             outputs_manifest=self.path("fn/out/outputs-manifest.yaml"),
             response=self.path("response/response.yaml"),

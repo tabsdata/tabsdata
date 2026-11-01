@@ -13,7 +13,7 @@ import yaml
 
 from tabsdatak.common._configuration.document.error import DocumentException
 from tabsdatak.common._interpreter.python import archive
-from tabsdatak.common._storage import mounts
+from tabsdatak.common._storage import mounts, transfer
 from tabsdatak.common._storage.mounts import MountError
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
@@ -110,9 +110,9 @@ def test_cloud_target_carries_the_mount_credentials(
     )
     assert target.uri == f"s3://bucket/images/python/{IMAGE_NAME}"
     assert target.options == {
-        mounts.AWS_ACCESS_KEY_ID_OPTION: "key",
-        mounts.AWS_SECRET_ACCESS_KEY_OPTION: "secret",
-        mounts.AWS_REGION_OPTION: "eu-west-1",
+        transfer.AWS_ACCESS_KEY_ID_OPTION: "key",
+        transfer.AWS_SECRET_ACCESS_KEY_OPTION: "secret",
+        transfer.AWS_REGION_OPTION: "eu-west-1",
     }
 
 
@@ -120,7 +120,7 @@ def test_cloud_target_without_credentials_fails(tmp_path: Path):
     config = storage_config(
         tmp_path, images("s3://bucket/images", {"region": "eu-west-1"})
     )
-    with pytest.raises(MountError, match=mounts.S3_SIGNATURE_REQUIREMENT):
+    with pytest.raises(MountError, match=transfer.S3_SIGNATURE_REQUIREMENT):
         archive.target_location(
             config, archive.IMAGES_MOUNT_ID, archive.IMAGES_SUBFOLDER, IMAGE_NAME
         )

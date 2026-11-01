@@ -131,8 +131,8 @@ def test_link_libexec_launchers_symlinks_each_source_file(tmp_path: Path):
     project_root = tmp_path / "tabsdata-ee"
     source = project_root / "target" / "python" / "libexec" / "tabsdata"
     source.mkdir(parents=True)
-    (source / "td_function").write_text("#!script", encoding="utf-8")
-    (source / "td_fetch_request").write_text("#!script", encoding="utf-8")
+    (source / "td-f-regular").write_text("#!script", encoding="utf-8")
+    (source / "td-fetch-request").write_text("#!script", encoding="utf-8")
     environment = PythonEnvironment(env_root)
     recipe = make_recipe(TABSDATA_PACKAGE, location=project_root)
 
@@ -141,8 +141,8 @@ def test_link_libexec_launchers_symlinks_each_source_file(tmp_path: Path):
     target = env_root / "libexec" / "tabsdata"
     assert target.is_dir()
     assert {entry.name for entry in target.iterdir()} == {
-        "td_function",
-        "td_fetch_request",
+        "td-f-regular",
+        "td-fetch-request",
     }
     for entry in target.iterdir():
         assert entry.is_symlink()
@@ -154,7 +154,7 @@ def test_link_libexec_launchers_replaces_existing_symlink(tmp_path: Path):
     project_root = tmp_path / "tabsdata-ee"
     source = project_root / "target" / "python" / "libexec" / "tabsdata"
     source.mkdir(parents=True)
-    fresh = source / "td_function"
+    fresh = source / "td-f-regular"
     fresh.write_text("fresh", encoding="utf-8")
     environment = PythonEnvironment(env_root)
 
@@ -162,12 +162,12 @@ def test_link_libexec_launchers_replaces_existing_symlink(tmp_path: Path):
     target.mkdir(parents=True)
     stale_source = tmp_path / "stale"
     stale_source.write_text("stale", encoding="utf-8")
-    (target / "td_function").symlink_to(stale_source)
+    (target / "td-f-regular").symlink_to(stale_source)
 
     recipe = make_recipe(TABSDATA_PACKAGE, location=project_root)
     environment.link_libexec_launchers((recipe,))
 
-    link = target / "td_function"
+    link = target / "td-f-regular"
     assert link.is_symlink()
     assert link.resolve() == fresh.resolve()
 
@@ -178,7 +178,7 @@ def test_link_libexec_launchers_dedupes_same_source(tmp_path: Path):
     project_root = tmp_path / "tabsdata-ee"
     source = project_root / "target" / "python" / "libexec" / "tabsdata"
     source.mkdir(parents=True)
-    (source / "td_function").write_text("payload", encoding="utf-8")
+    (source / "td-f-regular").write_text("payload", encoding="utf-8")
     environment = PythonEnvironment(env_root)
     recipe_a = make_recipe(TABSDATA_PACKAGE, location=project_root)
     recipe_b = make_recipe("tabsdata-toolkit", location=project_root)

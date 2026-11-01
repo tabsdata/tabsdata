@@ -9,7 +9,9 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from tabsdatak.server._tdrunner.function._commons.document.request import Location
+from tabsdatak.server._tdrunner.function._commons.document.message.request import (
+    Location,
+)
 from tabsdatak.server._tdrunner.function._handlers.columns import (
     ColumnPolicy,
     ColumnPolicyError,

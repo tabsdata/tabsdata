@@ -19,8 +19,7 @@ from typing import IO, Iterator
 import obstore.exceptions
 import zstandard
 
-from tabsdatak.common._storage import mounts, transfer
-from tabsdatak.common._storage.mounts import MountError
+from tabsdatak.common._storage.mounts import MountError, NamedMountDeclaration
 from tabsdatak.common._storage.transfer import StorageLocation, TransferError
 
 IMAGES_MOUNT_ID = "IMAGES"
@@ -122,7 +121,7 @@ def human_size(size: int) -> str:
 
 
 def mount_location(storage_config: Path, mount_id: str) -> StorageLocation:
-    declaration = mounts.read(storage_config, mount_id)
+    declaration = NamedMountDeclaration.read(storage_config, mount_id)
     uri = declaration.resolved_uri()
     return StorageLocation(uri=uri, options=declaration.storage_options(uri))
 
@@ -164,7 +163,7 @@ class ChunkReader(io.RawIOBase):
 @contextlib.contextmanager
 def open_image(location: StorageLocation) -> Iterator[IO[bytes]]:
     trace(f"Downloading {location.uri}")
-    stream = io.BufferedReader(ChunkReader(transfer.chunks(location)))
+    stream = io.BufferedReader(ChunkReader(location.chunks()))
     try:
         yield stream
     finally:

@@ -21,10 +21,10 @@ from tabsdatak.common._archive.bundle import (
     BUNDLE_USER_CODE_DIRNAME,
 )
 from tabsdatak.server._tdrunner.function._commons.symbols.function import (
+    FunctionBundle,
     FunctionDefinitionError,
     InvalidDefinitionError,
     UnexpectedKindError,
-    load_definition,
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
@@ -41,7 +41,7 @@ def write_definition(bundle_folder: Path, text: str) -> Path:
 
 def test_a_missing_definition_is_a_definition_error(tmp_path):
     with pytest.raises(FunctionDefinitionError) as raised:
-        load_definition(tmp_path, SUBSCRIBERS)
+        FunctionBundle(tmp_path).load(SUBSCRIBERS)
     assert type(raised.value) is FunctionDefinitionError
     assert raised.value.manifest == tmp_path / BUNDLE_MANIFEST_FILENAME
 
@@ -49,14 +49,14 @@ def test_a_missing_definition_is_a_definition_error(tmp_path):
 def test_a_malformed_definition_is_a_definition_error(tmp_path):
     write_definition(tmp_path, "{ not json")
     with pytest.raises(FunctionDefinitionError) as raised:
-        load_definition(tmp_path, SUBSCRIBERS)
+        FunctionBundle(tmp_path).load(SUBSCRIBERS)
     assert type(raised.value) is FunctionDefinitionError
 
 
 def test_a_kind_outside_the_given_ones_is_unexpected(tmp_path):
     manifest = write_definition(tmp_path, json.dumps({"kind": KIND_PUBLISHER_DEF}))
     with pytest.raises(UnexpectedKindError) as raised:
-        load_definition(tmp_path, SUBSCRIBERS)
+        FunctionBundle(tmp_path).load(SUBSCRIBERS)
     assert raised.value.kind == KIND_PUBLISHER_DEF
     assert raised.value.allowed == [KIND_SUBSCRIBER_DEF]
     assert raised.value.manifest == manifest
@@ -65,7 +65,7 @@ def test_a_kind_outside_the_given_ones_is_unexpected(tmp_path):
 def test_a_definition_without_kind_is_unexpected(tmp_path):
     write_definition(tmp_path, json.dumps([]))
     with pytest.raises(UnexpectedKindError) as raised:
-        load_definition(tmp_path, SUBSCRIBERS)
+        FunctionBundle(tmp_path).load(SUBSCRIBERS)
     assert raised.value.kind is None
 
 
@@ -75,7 +75,7 @@ def test_invalid_content_of_a_known_kind_is_an_invalid_definition(tmp_path):
         json.dumps({"kind": KIND_PUBLISHER_DEF, "spec": {"func": 42}}),
     )
     with pytest.raises(InvalidDefinitionError):
-        load_definition(tmp_path, {KIND_PUBLISHER_DEF: PublisherInfo})
+        FunctionBundle(tmp_path).load({KIND_PUBLISHER_DEF: PublisherInfo})
 
 
 def test_the_user_code_is_importable_before_the_definition_is_read(
@@ -89,5 +89,5 @@ def test_the_user_code_is_importable_before_the_definition_is_read(
     )
     write_definition(tmp_path, json.dumps({"kind": KIND_PUBLISHER_DEF}))
     with pytest.raises(UnexpectedKindError):
-        load_definition(tmp_path, SUBSCRIBERS)
+        FunctionBundle(tmp_path).load(SUBSCRIBERS)
     assert str((tmp_path / BUNDLE_USER_CODE_DIRNAME).resolve()) in sys.path

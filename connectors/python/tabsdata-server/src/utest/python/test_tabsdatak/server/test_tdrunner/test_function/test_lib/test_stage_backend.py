@@ -15,7 +15,9 @@ from tabsdatak.common._transporter.handler.handler import TransporterReport
 from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
 from tabsdatak.common._transporter.handler.handler2 import TransporterHandler2
 from tabsdatak.common._transporter.invoker import transporter1, transporter2
-from tabsdatak.server._tdrunner.function._commons.document.request import Location
+from tabsdatak.server._tdrunner.function._commons.document.message.request import (
+    Location,
+)
 from tabsdatak.server._tdrunner.function._lib import stage_backend
 from tabsdatak.server._tdrunner.function._lib.endpoint import (
     AzureConfigs,

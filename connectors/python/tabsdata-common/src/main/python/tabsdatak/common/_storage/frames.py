@@ -16,14 +16,12 @@ class FrameLocator:
     uri: str
     storage_options: dict[str, str] = field(default_factory=dict, repr=False)
 
+    @classmethod
+    def of(cls, uri: str, declaration: MountDeclaration) -> FrameLocator:
+        return cls(uri=uri, storage_options=declaration.storage_options(uri))
 
-def locator(uri: str, declaration: MountDeclaration) -> FrameLocator:
-    return FrameLocator(uri=uri, storage_options=declaration.storage_options(uri))
+    def scan(self) -> pl.LazyFrame:
+        return pl.scan_parquet(self.uri, storage_options=self.storage_options)
 
-
-def scan_parquet(source: FrameLocator) -> pl.LazyFrame:
-    return pl.scan_parquet(source.uri, storage_options=source.storage_options)
-
-
-def sink_parquet(frame: pl.LazyFrame, destination: FrameLocator) -> None:
-    frame.sink_parquet(destination.uri, storage_options=destination.storage_options)
+    def sink(self, frame: pl.LazyFrame) -> None:
+        frame.sink_parquet(self.uri, storage_options=self.storage_options)

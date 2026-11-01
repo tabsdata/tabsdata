@@ -10,7 +10,8 @@ reduced to ``":secret:"``) and returns it, on read, alongside the secret
 :class:`~tabsdatak.spi.Explorer` probe) the secret values must be supplied from
 the caller's environment, matching the ``SECRET_CONN__<KEY>`` convention the
 worker path uses (see :func:`tabsdatak.common._json_serde.env_hydrate` and
-``tabsdatak.server._tdrunner``'s ``load_connection`` for the pod-side twin).
+``tabsdatak.server._tdrunner``'s ``ConnectionDocument`` for the pod-side
+twin).
 """
 
 from __future__ import annotations

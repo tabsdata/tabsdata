@@ -15,10 +15,19 @@ from tabsdatak.server._tdrunner.function._commons.run.version import version
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 SECOND_GENERATION = {
-    "get_bundle",
+    "lifecycle.begin_execution",
+    "gathering.fetch_request",
+    "gathering.fetch_bundle",
+    "monitoring.inspect_function",
+    "monitoring.inspect_instance",
+    "gathering.plan_input",
+    "lifecycle.end_execution",
+    "runners.cron_trigger",
     "runners.destination_plugin",
     "runners.function",
+    "runners.manifest_trigger",
     "runners.source_plugin",
+    "runners.stream_source_plugin",
 }
 
 

@@ -14,7 +14,6 @@ import obstore.exceptions
 from tabsdatak.common._configuration.document.error import DocumentException
 from tabsdatak.common._configuration.document.loader import load
 from tabsdatak.common._configuration.model.storage import StorageConfiguration
-from tabsdatak.common._storage import transfer
 from tabsdatak.common._storage.mounts import MountError
 from tabsdatak.common._storage.transfer import StorageLocation, TransferError
 
@@ -52,7 +51,7 @@ def send_image(
         raise FileNotFoundError(f"Image not found: {image}")
     target = target_location(storage_config, mount_id, subfolder, image.name)
     logger.info(f"Sending {image} to {target.uri}")
-    return transfer.upload(image, target)
+    return target.upload(image)
 
 
 def main() -> int:

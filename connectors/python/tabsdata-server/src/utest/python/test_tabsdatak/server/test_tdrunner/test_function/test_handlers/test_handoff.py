@@ -10,7 +10,7 @@ from typing import Any, Iterable, Iterator
 import polars as pl
 import pytest
 
-from tabsdatak.server._tdrunner.function._commons.document.request import Info
+from tabsdatak.server._tdrunner.function._commons.document.message.request import Info
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputEntry,
     OutputManifest,
@@ -27,7 +27,7 @@ from tabsdatak.server._tdrunner.function._handlers.handoff import (
     UnsupportedPluginError,
     local_file,
 )
-from tabsdatak.server._tdrunner.function._handlers.landing import Origin
+from tabsdatak.server._tdrunner.function._handlers.landing import SchemaOrigin
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.spi import (
     DestContext,
@@ -331,7 +331,7 @@ def test_a_frames_source_lands_what_it_returns(tmp_path):
     )
     [[landed]] = chosen.reap()
     assert (landed.position, landed.index, landed.rows) == (0, 0, 2)
-    assert landed.origin is Origin.DECLARED
+    assert landed.origin is SchemaOrigin.DECLARED
     assert landed.data.uri.endswith("/landing/0.0.t")
     assert landed_values(landed.data) == {"id": [1, 2]}
 
@@ -391,7 +391,7 @@ def test_a_lazy_frame_input_lands_its_schema_and_metadata(tmp_path):
         ],
     )
     [[landed]] = run_source(tmp_path, plugin, ["orders"]).reap()
-    assert landed.origin is Origin.INFERRED
+    assert landed.origin is SchemaOrigin.INFERRED
     assert landed.metadata == {"@path": "/data/a.csv"}
 
 

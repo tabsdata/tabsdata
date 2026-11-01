@@ -314,6 +314,19 @@ pods:
       action: replace
     function-transformer_kminus.yaml:
       action: replace
+  inspector.yaml:
+    inspector_aks.yaml:
+      action: retain
+    inspector_docker.yaml:
+      action: retain
+    inspector_eks.yaml:
+      action: retain
+    inspector_fargate.yaml:
+      action: retain
+    inspector_gke.yaml:
+      action: retain
+    inspector_kminus.yaml:
+      action: replace
   pymanager.yaml:
     pymanager_aks.yaml:
       action: replace

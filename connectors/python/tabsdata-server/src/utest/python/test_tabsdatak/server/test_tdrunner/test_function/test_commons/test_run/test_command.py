@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
 
 import pytest
@@ -12,12 +13,13 @@ import pytest
 from tabsdatak.common._enums import WorkerCallbackStatus
 from tabsdatak.server._tdrunner.function._commons.run import command as command_module
 from tabsdatak.server._tdrunner.function._commons.run.arguments import (
+    Arguments,
     ArgumentsParser,
     CommandArguments,
 )
 from tabsdatak.server._tdrunner.function._commons.run.command import (
-    notify_status,
-    notify_step_destination_write,
+    Responder,
+    command,
     run_command,
     show_dataflow_settings,
 )
@@ -194,6 +196,35 @@ def test_run_command_undefined_env(capsys):
     assert "FOO" in captured.err
 
 
+# --- standalone commands ---
+
+
+def standalone(body):
+    return command(
+        name="td_tool",
+        parser=lambda: Arguments.parser("tool", "A standalone tool."),
+        reports=False,
+    )(body)
+
+
+def test_a_standalone_command_takes_only_its_own_options(monkeypatch):
+    received: list[Arguments] = []
+    monkeypatch.setattr(sys, "argv", ["tool"])
+    main = standalone(lambda arguments: received.append(arguments) or 3)
+    assert main() == 3
+    assert isinstance(received[0], Arguments)
+    assert main.tabsdata_command_name == "td_tool"
+
+
+def test_a_failing_standalone_command_exits_with_its_code(monkeypatch, capsys):
+    def failing(arguments):
+        raise CommandErrorCode.CMD_1.exception(detail="bad option")
+
+    monkeypatch.setattr(sys, "argv", ["tool"])
+    assert standalone(failing)() == InvalidOptionsError.exit_code
+    assert "bad option" in capsys.readouterr().err
+
+
 # --- callback bodies ---
 
 
@@ -210,17 +241,16 @@ def _arguments() -> CommandArguments:
 def _posted(monkeypatch) -> list[dict]:
     bodies: list[dict] = []
     monkeypatch.setattr(
-        command_module,
+        Responder,
         "notify",
-        lambda _arguments, body, _what: bodies.append(body),
+        lambda _responder, body, _what: bodies.append(body),
     )
     return bodies
 
 
 def test_a_status_report_names_no_operation(monkeypatch):
     bodies = _posted(monkeypatch)
-    notify_status(
-        _arguments(),
+    Responder(_arguments()).report(
         CallbackRequest(status=WorkerCallbackStatus.RUNNING),
     )
     assert "op" not in bodies[0]
@@ -228,7 +258,7 @@ def test_a_status_report_names_no_operation(monkeypatch):
 
 def test_a_destination_write_names_its_operation_only(monkeypatch):
     bodies = _posted(monkeypatch)
-    notify_step_destination_write(_arguments())
+    Responder(_arguments()).destination_write()
     assert bodies == [{"op": "destination_write"}]
 
 

@@ -18,7 +18,8 @@ from tabsdatax.itest.fixture.backends.azurebloblocal import (
 from tabsdatax.itest.fixture.backends.gcslocal import GcsLocalDomain, gcslocal_domain
 from tabsdatax.itest.fixture.backends.s3local import S3LocalDomain, s3local_domain
 
-from tabsdatak.common._storage import frames, transfer
+from tabsdatak.common._storage import transfer
+from tabsdatak.common._storage.frames import FrameLocator
 from testi_tabsdatak.common._storage import mounted
 
 pytestmark = [pytest.mark.integration, pytest.mark.tabsdatak]
@@ -40,15 +41,17 @@ def round_trip(domain, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     declaration = mounted.declaration(domain, tmp_path, monkeypatch)
     root = declaration.resolved_uri().rstrip("/")
     uri = f"{root}/frames-{uuid.uuid4().hex}/table.parquet"
-    locator = frames.locator(uri, declaration)
+    locator = FrameLocator.of(uri, declaration)
     try:
-        frames.sink_parquet(table(), locator)
-        assert_frame_equal(frames.scan_parquet(locator).collect(), table().collect())
-        tail = frames.scan_parquet(locator).filter(pl.col("id") >= ROWS - TAIL)
+        locator.sink(table())
+        assert_frame_equal(locator.scan().collect(), table().collect())
+        tail = locator.scan().filter(pl.col("id") >= ROWS - TAIL)
         assert tail.collect().height == TAIL
     finally:
         store_root, name = transfer.split(uri)
-        obstore.delete(transfer.store(store_root, locator.storage_options), name)
+        obstore.delete(
+            transfer.OBJECT_STORES.store(store_root, locator.storage_options), name
+        )
 
 
 @s3local_domain("s3local")

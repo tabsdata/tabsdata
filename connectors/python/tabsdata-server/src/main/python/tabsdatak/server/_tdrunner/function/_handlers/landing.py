@@ -4,13 +4,13 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from enum import Enum
 
 import polars as pl
 
-from tabsdatak.server._tdrunner.function._commons.document.request import (
+from tabsdatak.common._configuration.document.loader import DocumentModel
+from tabsdatak.server._tdrunner.function._commons.document.message.request import (
     LANDING_SUFFIX,
     Info,
     Location,
@@ -29,12 +29,37 @@ SCHEMA_SUFFIX = ".s"
 TABSDATA_LANDING_FACTS_KEY = "tabsdata.landing.facts"
 
 
-# Where the schema of a landed file comes from.
-class Origin(Enum):
-    # The data's own types: typed data lands as it is.
+class SchemaOrigin(Enum):
     DECLARED = "declared"
-    # Types polars inferred for untyped data, which lands as strings.
     INFERRED = "inferred"
+
+
+class LandingFacts(DocumentModel):
+    rows: int
+    origin: SchemaOrigin
+    metadata: MetadataSpec | None = None
+
+
+@dataclass(frozen=True)
+class LandedTable:
+    data: Location
+    schema: Location
+
+    def facts(self) -> LandingFacts:
+        locator = TableFile.stored(self.schema).locator()
+        metadata = pl.read_parquet_metadata(
+            locator.uri,
+            storage_options=locator.storage_options,
+        )
+        return LandingFacts.model_validate_json(metadata[TABSDATA_LANDING_FACTS_KEY])
+
+    def scan(self) -> tuple[pl.LazyFrame, LandingFacts]:
+        facts = self.facts()
+        frame = TableFile.stored(self.data).scan()
+        if facts.origin is SchemaOrigin.INFERRED:
+            target = TableFile.stored(self.schema).scan().collect_schema()
+            frame = frame.select(parse(name, dtype) for name, dtype in target.items())
+        return frame, facts
 
 
 @dataclass(frozen=True)
@@ -44,8 +69,15 @@ class LandedFile:
     data: Location
     schema: Location
     rows: int
-    origin: Origin
+    origin: SchemaOrigin
     metadata: MetadataSpec | None = None
+
+    @property
+    def table(self) -> LandedTable:
+        return LandedTable(self.data, self.schema)
+
+    def record(self) -> InputRecord:
+        return InputRecord(location=self.data, schema=self.schema)
 
 
 class LandingError(Exception):
@@ -53,12 +85,17 @@ class LandingError(Exception):
 
 
 class NotLandedError(LandingError):
+    record: InputRecord
+
     def __init__(self, record: InputRecord) -> None:
         super().__init__(f"Input record {record} has no landed data and schema")
         self.record = record
 
 
 class SchemaMismatchError(LandingError):
+    position: int
+    detail: str
+
     def __init__(
         self,
         position: int,
@@ -70,6 +107,8 @@ class SchemaMismatchError(LandingError):
 
 
 class Landing:
+    base: Location
+
     def __init__(self, base: Location) -> None:
         self.base = base
 
@@ -85,6 +124,26 @@ class Landing:
             env_prefix=self.base.env_prefix,
         )
 
+    @staticmethod
+    def check_inferred(
+        position: int,
+        actual: pl.Schema,
+        inferred: pl.Schema,
+    ) -> None:
+        if list(actual) != list(inferred):
+            raise SchemaMismatchError(
+                position,
+                f"the schema names columns {list(inferred)} but the data has "
+                f"{list(actual)}",
+            )
+        typed = [name for name, dtype in actual.items() if dtype != pl.String]
+        if typed:
+            raise SchemaMismatchError(
+                position,
+                f"a schema is only for untyped data, every column a String, but "
+                f"{typed} are typed",
+            )
+
     def land(
         self,
         position: int,
@@ -97,24 +156,20 @@ class Landing:
         actual = frame.collect_schema()
         if schema is None:
             target = actual
-            origin = Origin.DECLARED
+            origin = SchemaOrigin.DECLARED
         else:
-            check_inferred(position, actual, schema)
+            self.check_inferred(position, actual, schema)
             target = schema
-            origin = Origin.INFERRED
+            origin = SchemaOrigin.INFERRED
         data = self.location(position, index, LANDING_SUFFIX)
         landed = TableFile.stored(data)
         landed.sink(frame).collect(engine="streaming")
         rows = landed.stats().row_count
-        facts = {
-            "rows": rows,
-            "origin": origin.value,
-            "metadata": metadata,
-        }
+        facts = LandingFacts(rows=rows, origin=origin, metadata=metadata)
         description = self.location(position, index, SCHEMA_SUFFIX)
         TableFile.stored(description).sink(
             pl.LazyFrame(schema=target),
-            metadata={TABSDATA_LANDING_FACTS_KEY: json.dumps(facts)},
+            metadata={TABSDATA_LANDING_FACTS_KEY: facts.model_dump_json()},
         ).collect()
         return LandedFile(
             position=position,
@@ -124,26 +179,6 @@ class Landing:
             rows=rows,
             origin=origin,
             metadata=metadata,
-        )
-
-
-def check_inferred(
-    position: int,
-    actual: pl.Schema,
-    inferred: pl.Schema,
-) -> None:
-    if list(actual) != list(inferred):
-        raise SchemaMismatchError(
-            position,
-            f"the schema names columns {list(inferred)} but the data has "
-            f"{list(actual)}",
-        )
-    typed = [name for name, dtype in actual.items() if dtype != pl.String]
-    if typed:
-        raise SchemaMismatchError(
-            position,
-            f"a schema is only for untyped data, every column a String, but "
-            f"{typed} are typed",
         )
 
 
@@ -174,67 +209,36 @@ def parse(
     return parsed.alias(name)
 
 
-def scan_landed(
-    data: Location,
-    schema: Location,
-) -> tuple[pl.LazyFrame, MetadataSpec | None]:
-    description = TableFile.stored(schema)
-    locator = description.locator()
-    facts = json.loads(
-        pl.read_parquet_metadata(
-            locator.uri,
-            storage_options=locator.storage_options,
-        )[TABSDATA_LANDING_FACTS_KEY],
-    )
-    frame = TableFile.stored(data).scan()
-    if Origin(facts["origin"]) is Origin.INFERRED:
-        target = description.scan().collect_schema()
-        frame = frame.select(parse(name, dtype) for name, dtype in target.items())
-    return frame, facts["metadata"]
-
-
-def raw_version(info: Info) -> DataVersion:
-    return (
-        DataVersion
-        .builder()
-        .with_execution(str(info.execution_id))
-        .with_transaction(str(info.transaction_id))
-        .with_version(EMPTY_VERSION)
-        .with_timestamp(info.triggered_on_datetime)
-        .build()
-    )
-
-
-def stamp(
-    frame: pl.LazyFrame,
-    *,
-    idx: int,
-    version: DataVersion,
-    metadata: MetadataSpec | None,
-) -> pl.LazyFrame:
-    return TableFrame._build(
-        add_connector_columns(frame, metadata),
-        CreationMode.RAW,
-        idx=idx,
-        version=version,
-    )._to_polars_lf(drop_system_columns=False)
-
-
-# Serves a run's landed inputs in manifest order, numbering every landed file
-# from one sequence: the input index the landing-data route resolves in
-# (position, index) order.
 class LandedInputs:
+    version: DataVersion
+    idx: IdxGenerator
+
     def __init__(self, info: Info) -> None:
-        self.version = raw_version(info)
+        self.version = (
+            DataVersion
+            .builder()
+            .with_execution(str(info.execution_id))
+            .with_transaction(str(info.transaction_id))
+            .with_version(EMPTY_VERSION)
+            .with_timestamp(info.triggered_on_datetime)
+            .build()
+        )
         self.idx = IdxGenerator()
 
     def scan(self, record: InputRecord) -> pl.LazyFrame:
         if record.location is None or record.schema is None:
             raise NotLandedError(record)
-        frame, metadata = scan_landed(record.location, record.schema)
-        return stamp(
-            frame,
+        frame, facts = LandedTable(record.location, record.schema).scan()
+        return self.stamp(frame, facts.metadata)
+
+    def stamp(
+        self,
+        frame: pl.LazyFrame,
+        metadata: MetadataSpec | None,
+    ) -> pl.LazyFrame:
+        return TableFrame._build(
+            add_connector_columns(frame, metadata),
+            CreationMode.RAW,
             idx=self.idx(),
             version=self.version,
-            metadata=metadata,
-        )
+        )._to_polars_lf(drop_system_columns=False)

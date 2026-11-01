@@ -20,11 +20,7 @@ from tabsdatak._api import (
     warn_legacy_dest,
     warn_legacy_src,
 )
-from tabsdatak._handoff import (
-    deprecated_src,
-    dest_frames,
-    src_frames,
-)
+from tabsdatak._handoff import DestinationContract, SourceContract
 from tabsdatak.api import (
     BasicDictSpec,
     BatchThresholds,
@@ -845,7 +841,7 @@ def register(plugin: type[DestPlugin]) -> DestDef:
     ],
 )
 def test_a_plugin_without_frames_keeps_the_file_list(plugin):
-    assert not dest_frames(plugin)
+    assert not DestinationContract(plugin).frames()
     register(plugin)
 
 
@@ -853,7 +849,7 @@ def test_a_plugin_overriding_nothing_keeps_the_file_list():
     class Abstract(DestPlugin):
         pass
 
-    assert not dest_frames(Abstract)
+    assert not DestinationContract(Abstract).frames()
 
 
 @pytest.mark.parametrize(
@@ -861,7 +857,7 @@ def test_a_plugin_overriding_nothing_keeps_the_file_list():
     [LazyFrameDestPlugin, InheritedDestPlugin],
 )
 def test_a_plugin_receives_the_lazy_frames_it_declares(plugin):
-    assert dest_frames(plugin)
+    assert DestinationContract(plugin).frames()
     register(plugin)
 
 
@@ -878,7 +874,7 @@ def test_a_plugin_receives_the_lazy_frames_it_declares(plugin):
 )
 def test_a_plugin_must_take_the_lazy_frames_it_declares(plugin, message):
     with pytest.raises(ValueError, match=message):
-        dest_frames(plugin)
+        DestinationContract(plugin).frames()
     with pytest.raises(ApiException) as raised:
         register(plugin)
     assert raised.value.api_error is ApiErrorCode.API_16
@@ -889,7 +885,7 @@ def test_an_unresolved_legacy_annotation_keeps_the_file_list():
         def write_out(self, ctx, conn, dest, tables: "MissingFiles"):  # noqa: F821
             return None
 
-    assert not dest_frames(Unresolved)
+    assert not DestinationContract(Unresolved).frames()
 
 
 def test_registering_a_legacy_plugin_warns_it_is_deprecated():
@@ -985,7 +981,7 @@ def returning(annotation: str, scope: dict[str, Any]) -> type[SrcPlugin]:
     [_GoodSrcPlugin, _PluginNoAnnotation, SpecSrcPlugin],
 )
 def test_a_source_plugin_without_frames_keeps_the_file_list(plugin):
-    assert not src_frames(plugin)
+    assert not SourceContract(plugin).frames()
     register_source(plugin)
 
 
@@ -993,7 +989,7 @@ def test_a_source_plugin_overriding_nothing_keeps_the_file_list():
     class Abstract(SrcPlugin):
         pass
 
-    assert not src_frames(Abstract)
+    assert not SourceContract(Abstract).frames()
 
 
 @pytest.mark.parametrize(
@@ -1005,7 +1001,7 @@ def test_a_source_plugin_overriding_nothing_keeps_the_file_list():
 )
 def test_a_source_plugin_returning_frames_lands_them(annotation):
     plugin = returning(annotation, SCOPE)
-    assert src_frames(plugin)
+    assert SourceContract(plugin).frames()
     register_source(plugin)
 
 
@@ -1019,14 +1015,14 @@ def test_a_source_plugin_returning_frames_lands_them(annotation):
 def test_a_source_plugin_wraps_its_frames_in_lazy_frame_inputs(annotation):
     plugin = returning(annotation, SCOPE)
     with pytest.raises(ValueError, match="to_lazy_frame_inputs"):
-        src_frames(plugin)
+        SourceContract(plugin).frames()
     with pytest.raises(ApiException) as raised:
         register_source(plugin)
     assert raised.value.api_error is ApiErrorCode.API_14
 
 
 def test_a_source_plugin_inherits_the_frames_of_its_base():
-    assert src_frames(InheritedSrcPlugin)
+    assert SourceContract(InheritedSrcPlugin).frames()
 
 
 @pytest.mark.parametrize(
@@ -1041,7 +1037,7 @@ def test_a_source_plugin_inherits_the_frames_of_its_base():
 def test_a_source_plugin_returns_exactly_iterables_of_inputs(annotation):
     plugin = returning(annotation, SCOPE)
     with pytest.raises(ValueError, match="-> list\\[Iterable\\[LazyFrameInput\\]\\]"):
-        src_frames(plugin)
+        SourceContract(plugin).frames()
     with pytest.raises(ApiException) as raised:
         register_source(plugin)
     assert raised.value.api_error is ApiErrorCode.API_14
@@ -1050,11 +1046,11 @@ def test_a_source_plugin_returns_exactly_iterables_of_inputs(annotation):
 def test_a_frames_annotation_must_resolve_at_runtime():
     plugin = returning('"list[Iterable[LazyFrameInput]]"', {})
     with pytest.raises(ValueError, match="does not resolve at runtime"):
-        src_frames(plugin)
+        SourceContract(plugin).frames()
 
 
 def test_an_unresolved_legacy_annotation_keeps_the_source_file_list():
-    assert not src_frames(returning('"list[list[MissingInput]]"', {}))
+    assert not SourceContract(returning('"list[list[MissingInput]]"', {})).frames()
 
 
 def test_a_lazy_frame_input_carries_nothing_by_default():
@@ -1091,9 +1087,9 @@ def test_a_stream_stage_source_plugin_is_not_deprecated():
     class Stage(StreamStageSrcPlugin):
         pass
 
-    assert not src_frames(Stage)
-    assert not deprecated_src(Stage)
-    assert deprecated_src(_GoodSrcPlugin)
+    assert not SourceContract(Stage).frames()
+    assert not SourceContract(Stage).deprecated()
+    assert SourceContract(_GoodSrcPlugin).deprecated()
 
 
 def test_the_legacy_source_warning_names_the_replacement():

@@ -16,7 +16,9 @@ from tabsdatak.common._storage.mounts import (
     EnvironmentMountDeclaration,
     MountError,
 )
-from tabsdatak.server._tdrunner.function._commons.document.request import Location
+from tabsdatak.server._tdrunner.function._commons.document.message.request import (
+    Location,
+)
 from tabsdatak.server._tdrunner.function._commons.manifests.input import InputRecord
 from tabsdatak.server._tdrunner.function._commons.manifests.output import TableStats
 from tabsdatak.server._tdrunner.function._handlers.tables import (

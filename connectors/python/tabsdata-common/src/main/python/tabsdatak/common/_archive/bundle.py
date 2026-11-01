@@ -5,7 +5,7 @@
 """tabsdatak function-bundle producer.
 
 Pairs with the consumer side at
-`tabsdatak.server._tdrunner.function._lib.bundle.extract_bundle`: this module
+`tabsdatak.server._tdrunner.function._handlers.bundle.BundleArchive`: this module
 *builds* the `.tar.zst` (zstandard-compressed tar) that the runner
 later unpacks.
 

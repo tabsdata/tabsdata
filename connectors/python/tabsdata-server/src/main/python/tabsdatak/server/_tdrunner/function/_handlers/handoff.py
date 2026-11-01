@@ -15,8 +15,8 @@ from urllib.request import url2pathname
 
 import polars as pl
 
-from tabsdatak._handoff import dest_frames, src_frames
-from tabsdatak.server._tdrunner.function._commons.document.request import Info
+from tabsdatak._handoff import DestinationContract, SourceContract
+from tabsdatak.server._tdrunner.function._commons.document.message.request import Info
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputManifest,
 )
@@ -42,6 +42,38 @@ from tabsdatak.tableframe import TableFrame
 
 class HandoffError(Exception):
     pass
+
+
+class UnexpectedTableError(HandoffError):
+    def __init__(
+        self,
+        plugin: SrcPlugin,
+        position: int,
+        table: object,
+        expected: str,
+    ) -> None:
+        super().__init__(
+            f"{type(plugin).__name__}.read_in returned a "
+            f"{type(table).__name__} for input {position}; it returns "
+            f"{expected}",
+        )
+        self.plugin = plugin
+        self.position = position
+        self.table = table
+
+
+class InputCountError(HandoffError):
+    def __init__(
+        self,
+        returned: int,
+        expected: int,
+    ) -> None:
+        super().__init__(
+            f"The source plugin returned {returned} input slot(s); the source "
+            f"declares {expected}",
+        )
+        self.returned = returned
+        self.expected = expected
 
 
 class MissingOutputError(HandoffError):
@@ -90,59 +122,27 @@ class UnsupportedPluginError(HandoffError):
         self.plugin = plugin
 
 
-class UnexpectedTableError(HandoffError):
-    def __init__(
-        self,
-        plugin: SrcPlugin,
-        position: int,
-        table: object,
-        expected: str,
-    ) -> None:
-        super().__init__(
-            f"{type(plugin).__name__}.read_in returned a "
-            f"{type(table).__name__} for input {position}; it returns "
-            f"{expected}",
-        )
-        self.plugin = plugin
-        self.position = position
-        self.table = table
-
-
-class InputCountError(HandoffError):
-    def __init__(
-        self,
-        returned: int,
-        expected: int,
-    ) -> None:
-        super().__init__(
-            f"The source plugin returned {returned} input slot(s); the source "
-            f"declares {expected}",
-        )
-        self.returned = returned
-        self.expected = expected
-
-
 class Handoff(ABC):
     @overload
     @staticmethod
-    def of(plugin: DestPlugin, base_folder: Path) -> DestinationHandoff: ...
+    def of(plugin: SrcPlugin, base_folder: Path) -> SourceHandoff: ...
 
     @overload
     @staticmethod
-    def of(plugin: SrcPlugin, base_folder: Path) -> SourceHandoff: ...
+    def of(plugin: DestPlugin, base_folder: Path) -> DestinationHandoff: ...
 
     @staticmethod
     def of(
         plugin: SrcPlugin | DestPlugin,
         base_folder: Path,
-    ) -> DestinationHandoff | SourceHandoff:
+    ) -> SourceHandoff | DestinationHandoff:
+        if isinstance(plugin, SrcPlugin):
+            return SourceHandoff(legacy=not SourceContract(type(plugin)).frames())
         if isinstance(plugin, DestPlugin):
             return DestinationHandoff(
                 base_folder=base_folder,
-                legacy=not dest_frames(type(plugin)),
+                legacy=not DestinationContract(type(plugin)).frames(),
             )
-        if isinstance(plugin, SrcPlugin):
-            return SourceHandoff(legacy=not src_frames(type(plugin)))
         raise UnsupportedPluginError(plugin)
 
 
@@ -150,6 +150,100 @@ class Handoff(ABC):
 class Slot:
     name: str
     position: int
+
+
+@dataclass
+class LandingSlot(Slot):
+    landing: Landing
+    landed: list[LandedFile] = field(default_factory=list)
+
+    def land(self, table: LazyFrameInput) -> None:
+        self.landed.append(
+            self.landing.land(
+                self.position,
+                len(self.landed),
+                table.frame,
+                schema=table.schema,
+                metadata=table.metadata,
+            ),
+        )
+
+
+@dataclass(kw_only=True)
+class SourceHandoff(Handoff):
+    legacy: bool = False
+    slots: list[LandingSlot] = field(default_factory=list, init=False)
+    variable: bool = field(default=False, init=False)
+
+    def seed(
+        self,
+        info: Info,
+        names: list[str],
+        *,
+        variable: bool = False,
+    ) -> list[LandingSlot]:
+        self.variable = variable
+        landing = Landing(info.function_landing)
+        self.slots = [
+            LandingSlot(
+                name,
+                position,
+                landing,
+            )
+            for position, name in enumerate(names)
+        ]
+        return self.slots
+
+    def grow(
+        self,
+        plugin: SrcPlugin,
+        context: SrcPluginCtx,
+        connection: Conn,
+        source: Src,
+    ) -> None:
+        produced = plugin.read_in(
+            context,
+            connection,
+            source,
+        )
+        expected = len(self.slots)
+        if len(produced) > expected or (
+            not self.variable and len(produced) != expected
+        ):
+            raise InputCountError(len(produced), expected)
+        for slot, tables in zip(self.slots, produced):
+            for table in tables:
+                slot.land(self.unpack(plugin, slot, table))
+
+    def unpack(
+        self,
+        plugin: SrcPlugin,
+        slot: Slot,
+        table: object,
+    ) -> LazyFrameInput:
+        if self.legacy:
+            if isinstance(table, TableFileInput):
+                return LazyFrameInput(
+                    pl.scan_parquet(local_file(table.file)),
+                    metadata=table.metadata,
+                )
+            raise UnexpectedTableError(
+                plugin,
+                slot.position,
+                table,
+                "TableFileInputs",
+            )
+        if isinstance(table, LazyFrameInput):
+            return table
+        raise UnexpectedTableError(
+            plugin,
+            slot.position,
+            table,
+            "LazyFrameInputs",
+        )
+
+    def reap(self) -> list[list[LandedFile]]:
+        return [slot.landed for slot in self.slots]
 
 
 @dataclass
@@ -258,100 +352,6 @@ class DestinationHandoff(Handoff):
         if self.tables_folder is not None:
             shutil.rmtree(self.tables_folder, ignore_errors=True)
             self.tables_folder = None
-
-
-@dataclass
-class LandingSlot(Slot):
-    landing: Landing
-    landed: list[LandedFile] = field(default_factory=list)
-
-    def land(self, table: LazyFrameInput) -> None:
-        self.landed.append(
-            self.landing.land(
-                self.position,
-                len(self.landed),
-                table.frame,
-                schema=table.schema,
-                metadata=table.metadata,
-            ),
-        )
-
-
-@dataclass(kw_only=True)
-class SourceHandoff(Handoff):
-    legacy: bool = False
-    slots: list[LandingSlot] = field(default_factory=list, init=False)
-    variable: bool = field(default=False, init=False)
-
-    def seed(
-        self,
-        info: Info,
-        names: list[str],
-        *,
-        variable: bool = False,
-    ) -> list[LandingSlot]:
-        self.variable = variable
-        landing = Landing(info.function_landing)
-        self.slots = [
-            LandingSlot(
-                name,
-                position,
-                landing,
-            )
-            for position, name in enumerate(names)
-        ]
-        return self.slots
-
-    def grow(
-        self,
-        plugin: SrcPlugin,
-        context: SrcPluginCtx,
-        connection: Conn,
-        source: Src,
-    ) -> None:
-        produced = plugin.read_in(
-            context,
-            connection,
-            source,
-        )
-        expected = len(self.slots)
-        if len(produced) > expected or (
-            not self.variable and len(produced) != expected
-        ):
-            raise InputCountError(len(produced), expected)
-        for slot, tables in zip(self.slots, produced):
-            for table in tables:
-                slot.land(self.unpack(plugin, slot, table))
-
-    def unpack(
-        self,
-        plugin: SrcPlugin,
-        slot: Slot,
-        table: object,
-    ) -> LazyFrameInput:
-        if self.legacy:
-            if isinstance(table, TableFileInput):
-                return LazyFrameInput(
-                    pl.scan_parquet(local_file(table.file)),
-                    metadata=table.metadata,
-                )
-            raise UnexpectedTableError(
-                plugin,
-                slot.position,
-                table,
-                "TableFileInputs",
-            )
-        if isinstance(table, LazyFrameInput):
-            return table
-        raise UnexpectedTableError(
-            plugin,
-            slot.position,
-            table,
-            "LazyFrameInputs",
-        )
-
-    def reap(self) -> list[list[LandedFile]]:
-        return [slot.landed for slot in self.slots]
 
 
 def local_file(file: Path) -> Path:

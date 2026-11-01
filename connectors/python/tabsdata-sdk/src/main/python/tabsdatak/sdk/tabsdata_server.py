@@ -5947,7 +5947,7 @@ def _workers(info: FunctionInfo) -> dict[str, str] | None:
       empty JSON object is enough to enqueue the long-running
       stream-publisher worker. The function-level batch settings
       live in the bundle's ``function_def.json`` and are consumed by
-      ``run_streamer`` in the pod, not via this worker config.
+      the ``streamer`` command in the pod, not via this worker config.
     * Anything else → ``None`` (no orchestrator-managed worker).
 
     Stream-publisher MUST emit ``"ST"``; otherwise the apiserver never

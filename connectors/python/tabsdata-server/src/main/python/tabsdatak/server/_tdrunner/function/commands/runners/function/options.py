@@ -24,7 +24,7 @@ class RunFunctionArguments(CommandArguments):
     outputs_manifest: Path = option(
         help=(
             "Path where the outputs manifest is written, with the location and "
-            "stats of each written table, for report-completion and "
+            "stats of each written table, for end-execution and "
             "destination-plugin."
         ),
     )

@@ -11,6 +11,7 @@ from tabsdatak.server._tdrunner.function._lib.errors import (
     BadManifestError as CommandBadManifestError,
     BadRequestError as CommandBadRequestError,
     BadUserCodeError as CommandBadUserCodeError,
+    CommandRuntimeException,
     NoPluginError as CommandNoPluginError,
     PluginFailedError as CommandPluginFailedError,
     WriteFailedError as CommandWriteFailedError,
@@ -52,6 +53,10 @@ class OutputCopyFailedError(CommandWriteFailedError):
 
 class OutputReadFailedError(CommandBadInputParquetError):
     exit_code = 18
+
+
+class BadConnectionError(CommandRuntimeException):
+    exit_code = 19
 
 
 class RunDestinationPluginErrorCode(ErrorCode):
@@ -97,4 +102,8 @@ class RunDestinationPluginErrorCode(ErrorCode):
     RDP_10 = ErrorDef(
         OutputReadFailedError,
         "Cannot read the landed output {slot} from {path}: {detail}",
+    )
+    RDP_11 = ErrorDef(
+        BadConnectionError,
+        "Cannot load the connection {path}: {detail}",
     )

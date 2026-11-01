@@ -57,6 +57,8 @@ from tabsdatak.spi import Conn
 
 # Combined budget for every dataframe carried by a `DataGenSrc` or a
 # `DevFrameSrc`, measured as the length of its base64-encoded parquet payload.
+# Per-flow scratch-state key holding a chunked slot's next-row offset.
+_OFFSET_PREFIX = "datagen.offset."
 MAX_DATA_BYTES = 10 * 1024 * 1024
 
 
@@ -102,6 +104,10 @@ class Data:
             default) emits the whole frame every run.
     """
 
+    _frame: Any
+    chunk_size: int | None
+    _parquet_b64: str | None
+
     def __init__(self, df: Any, chunk_size: int | None = None):
         if chunk_size is not None and (
             isinstance(chunk_size, bool)
@@ -111,7 +117,7 @@ class Data:
             raise DevErrorCode.DEV_6.exception(value=repr(chunk_size))
         self._frame = _to_polars(df)
         self.chunk_size = chunk_size
-        self._parquet_b64: str | None = None
+        self._parquet_b64 = None
 
     @property
     def frame(self) -> Any:
@@ -147,6 +153,23 @@ class Data:
     def __repr__(self) -> str:
         return f"Data(shape={self._frame.shape}, chunk_size={self.chunk_size})"
 
+    def _next_chunk(self, ctx: Any, slot: int) -> Any:
+        if self.chunk_size is None:
+            return self._frame
+        key = f"{_OFFSET_PREFIX}{slot}"
+        offset = int(ctx.get_attr(key) or 0)
+        if offset >= self._frame.height:
+            return None
+        chunk = self._frame.slice(offset, self.chunk_size)
+        ctx.set_attr(key, offset + chunk.height)
+        return chunk
+
+    @classmethod
+    def _check_budget(cls, items: list[Data], error: DevErrorCode) -> None:
+        total = sum(len(item.parquet_b64()) for item in items)
+        if total > MAX_DATA_BYTES:
+            raise error.exception(size=total, limit=MAX_DATA_BYTES)
+
     @classmethod
     def __get_pydantic_core_schema__(
         cls,
@@ -170,12 +193,6 @@ class Data:
                 return_schema=core_schema.dict_schema(),
             ),
         )
-
-
-def _check_budget(data: list[Data], error: DevErrorCode) -> None:
-    total = sum(len(d.parquet_b64()) for d in data)
-    if total > MAX_DATA_BYTES:
-        raise error.exception(size=total, limit=MAX_DATA_BYTES)
 
 
 # --- Connections ----------------------------------------------------
@@ -275,7 +292,7 @@ class DataGenSrc(Src):
 
         Called by the framework; raises `DevValidateException`.
         """
-        _check_budget(self.data, DevErrorCode.DEV_7)
+        Data._check_budget(self.data, DevErrorCode.DEV_7)
 
 
 @_api.dataclass(DevErrorCode.DEV_14, kw_only=True)
@@ -310,7 +327,7 @@ class DevFrameSrc(Src):
 
         Called by the framework; raises `DevValidateException`.
         """
-        _check_budget(self.data, DevErrorCode.DEV_15)
+        Data._check_budget(self.data, DevErrorCode.DEV_15)
 
 
 # --- Destination ----------------------------------------------------

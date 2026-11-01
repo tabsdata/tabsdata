@@ -15,7 +15,11 @@ from tabsdatak.common._storage.mounts import (
     MountError,
     NamedMountDeclaration,
 )
-from tabsdatak.common._storage.transfer import StoreKind
+from tabsdatak.common._storage.transfer import (
+    S3_SIGNATURE_REQUIREMENT,
+    StoreKind,
+    TransferError,
+)
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -77,22 +81,37 @@ def test_read_returns_the_declared_mount(tmp_path: Path):
         {"id": "ROOT", "uri": "s3://root"},
         {"id": "IMAGES", "uri": PLACEHOLDER, "options": {"region": "eu-west-1"}},
     )
-    assert mounts.read(config, "IMAGES") == NamedMountDeclaration(
+    assert NamedMountDeclaration.read(config, "IMAGES") == NamedMountDeclaration(
         id="IMAGES",
         uri=PLACEHOLDER,
         options={"region": "eu-west-1"},
     )
 
 
+def test_read_all_returns_every_identified_mount(tmp_path: Path):
+    config = storage_config(
+        tmp_path,
+        {"id": "ROOT", "uri": "s3://root"},
+        {"uri": "s3://anonymous"},
+        {"id": "IMAGES", "uri": PLACEHOLDER, "options": {"region": "eu-west-1"}},
+    )
+    assert NamedMountDeclaration.read_all(config) == [
+        NamedMountDeclaration(id="ROOT", uri="s3://root"),
+        NamedMountDeclaration(
+            id="IMAGES", uri=PLACEHOLDER, options={"region": "eu-west-1"}
+        ),
+    ]
+
+
 def test_read_of_an_undeclared_mount_fails(tmp_path: Path):
     config = storage_config(tmp_path, {"id": "IMAGES", "uri": "s3://images"})
     with pytest.raises(MountError, match="not declared"):
-        mounts.read(config, "LOGS")
+        NamedMountDeclaration.read(config, "LOGS")
 
 
 def test_read_of_an_unreadable_configuration_fails(tmp_path: Path):
     with pytest.raises(MountError, match="Cannot read"):
-        mounts.read(tmp_path / "missing.yaml", "IMAGES")
+        NamedMountDeclaration.read(tmp_path / "missing.yaml", "IMAGES")
 
 
 def test_literal_uri_is_used_as_written():
@@ -129,24 +148,39 @@ def test_mount_without_uri_fails():
     ],
 )
 def test_store_kind_comes_from_the_scheme(location: str, kind: StoreKind):
-    assert mounts.store_kind(location) == kind
+    assert StoreKind.of(location) == kind
 
 
 def test_unsupported_scheme_fails():
+    with pytest.raises(TransferError, match="unsupported scheme"):
+        StoreKind.of("ftp://host/key")
+
+
+def test_a_mount_on_an_unsupported_scheme_fails():
     with pytest.raises(MountError, match="unsupported scheme"):
-        mounts.store_kind("ftp://host/key")
+        NamedMountDeclaration(id="ROOT", uri="ftp://host").storage_options(
+            "ftp://host/key"
+        )
 
 
 def test_friendly_and_prefixed_keys_become_canonical():
-    assert mounts.canonical(StoreKind.S3, "region") == "aws_region"
-    assert mounts.canonical(StoreKind.S3, "anonymous") == "aws_skip_signature"
-    assert mounts.canonical(StoreKind.AZURE, "azure_endpoint") == "azure_endpoint"
-    assert mounts.canonical(StoreKind.GCS, "allow_http") == "google_allow_http"
+    assert StoreKind.S3.canonical("region") == "aws_region"
+    assert StoreKind.S3.canonical("anonymous") == "aws_skip_signature"
+    assert StoreKind.AZURE.canonical("azure_endpoint") == "azure_endpoint"
+    assert StoreKind.GCS.canonical("allow_http") == "google_allow_http"
 
 
 def test_unknown_key_fails():
+    with pytest.raises(TransferError, match="not a known s3 option"):
+        StoreKind.S3.canonical("colour")
+
+
+def test_a_mount_with_an_unknown_key_fails():
+    declaration = NamedMountDeclaration(
+        id="ROOT", uri="s3://root", options={"colour": "blue"}
+    )
     with pytest.raises(MountError, match="not a known s3 option"):
-        mounts.canonical(StoreKind.S3, "colour")
+        declaration.storage_options("s3://root/key")
 
 
 def test_options_mix_placeholders_and_literals(monkeypatch: pytest.MonkeyPatch):
@@ -234,7 +268,10 @@ def test_read_turns_scalars_into_text(tmp_path: Path):
         tmp_path,
         {"id": "ROOT", "uri": "s3://root", "options": {"allow_http": True, "port": 9}},
     )
-    assert mounts.read(config, "ROOT").options == {"allow_http": "true", "port": "9"}
+    assert NamedMountDeclaration.read(config, "ROOT").options == {
+        "allow_http": "true",
+        "port": "9",
+    }
 
 
 def test_the_scan_finds_every_option_of_a_mount():
@@ -280,7 +317,7 @@ def test_an_environment_mount_without_credentials_fails(
     monkeypatch: pytest.MonkeyPatch,
 ):
     monkeypatch.setenv(option_variable("ROOT", "aws_region"), "eu-west-1")
-    with pytest.raises(MountError, match=mounts.S3_SIGNATURE_REQUIREMENT):
+    with pytest.raises(MountError, match=S3_SIGNATURE_REQUIREMENT):
         mounts.EnvironmentMountDeclaration(id="ROOT").storage_options("s3://b/x")
 
 

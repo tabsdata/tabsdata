@@ -35,9 +35,6 @@ from tabsdatak.spi import (
     TableMode,
 )
 
-# Per-flow scratch-state key holding a chunked slot's next-row offset.
-_OFFSET_PREFIX = "datagen.offset."
-
 
 class DataGenSrcPlugin(SrcPlugin[DataGenSrcConn, DataGenSrc]):
     def read_in(
@@ -56,7 +53,7 @@ class DataGenSrcPlugin(SrcPlugin[DataGenSrcConn, DataGenSrc]):
 
     @staticmethod
     def _read_slot(ctx: SrcPluginCtx, i: int, data: Data) -> list[TableFileInput]:
-        chunk = _next_chunk(ctx, i, data)
+        chunk = data._next_chunk(ctx, i)
         if chunk is None:
             return []
         path = ctx.work_dir / f"datagen_{i}.parquet"
@@ -74,24 +71,11 @@ class DevFrameSrcPlugin(SrcPlugin[DevFrameSrcConn, DevFrameSrc]):
         tables: list[Iterable[LazyFrameInput]] = []
         for i, data in enumerate(src.data):
             try:
-                chunk = _next_chunk(ctx, i, data)
+                chunk = data._next_chunk(ctx, i)
             except Exception as exc:
                 raise DevErrorCode.DEV_16.exception(cause=exc, slot=i)
             tables.append([] if chunk is None else [LazyFrameInput(chunk.lazy())])
         return tables
-
-
-def _next_chunk(ctx: SrcPluginCtx, i: int, data: Data) -> pl.DataFrame | None:
-    frame = data.frame
-    if data.chunk_size is None:
-        return frame
-    key = f"{_OFFSET_PREFIX}{i}"
-    offset = int(ctx.get_attr(key) or 0)
-    if offset >= frame.height:
-        return None
-    chunk = frame.slice(offset, data.chunk_size)
-    ctx.set_attr(key, offset + chunk.height)
-    return chunk
 
 
 class TrashDestPlugin(DestPlugin[TrashDestConn, TrashDest]):

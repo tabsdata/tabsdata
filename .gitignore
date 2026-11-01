@@ -46,6 +46,7 @@ __pypackages__/
 !.vscode/extensions.json
 .webassets-cache
 *_context
+!test_context/
 *.cover
 *.dll
 *.dylib

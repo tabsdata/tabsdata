@@ -10,7 +10,8 @@ import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
 
-from tabsdatak.common._storage import frames, mounts
+from tabsdatak.common._storage import mounts
+from tabsdatak.common._storage.frames import FrameLocator
 from tabsdatak.common._storage.mounts import (
     AnonymousMountDeclaration,
     NamedMountDeclaration,
@@ -27,9 +28,9 @@ def option_variable(mount: str, key: str) -> str:
 
 
 def test_an_anonymous_location_is_read_as_it_is():
-    locator = frames.locator(LOCATION, AnonymousMountDeclaration())
+    locator = FrameLocator.of(LOCATION, AnonymousMountDeclaration())
 
-    assert locator == frames.FrameLocator(uri=LOCATION, storage_options={})
+    assert locator == FrameLocator(uri=LOCATION, storage_options={})
 
 
 def test_a_named_location_carries_its_mount_options(monkeypatch: pytest.MonkeyPatch):
@@ -45,9 +46,9 @@ def test_a_named_location_carries_its_mount_options(monkeypatch: pytest.MonkeyPa
         },
     )
 
-    locator = frames.locator(LOCATION, declaration)
+    locator = FrameLocator.of(LOCATION, declaration)
 
-    assert locator == frames.FrameLocator(
+    assert locator == FrameLocator(
         uri=LOCATION,
         storage_options={
             "aws_access_key_id": "identity",
@@ -73,7 +74,7 @@ def test_options_are_resolved_once_when_the_locator_is_built(
         },
     )
 
-    locator = frames.locator(LOCATION, declaration)
+    locator = FrameLocator.of(LOCATION, declaration)
     monkeypatch.delenv(variable)
 
     assert locator.storage_options["aws_secret_access_key"] == "secret"
@@ -89,15 +90,15 @@ def test_options_are_resolved_once_when_the_locator_is_built(
 )
 def test_a_frame_round_trips_through_a_file_uri(tmp_path: Path, declaration):
     frame = pl.LazyFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]})
-    locator = frames.locator((tmp_path / "table.parquet").as_uri(), declaration)
+    locator = FrameLocator.of((tmp_path / "table.parquet").as_uri(), declaration)
 
-    frames.sink_parquet(frame, locator)
+    locator.sink(frame)
 
-    assert_frame_equal(frames.scan_parquet(locator).collect(), frame.collect())
+    assert_frame_equal(locator.scan().collect(), frame.collect())
 
 
 def test_the_representation_hides_the_storage_options():
-    locator = frames.FrameLocator(
+    locator = FrameLocator(
         uri=LOCATION,
         storage_options={"aws_secret_access_key": "secret"},
     )

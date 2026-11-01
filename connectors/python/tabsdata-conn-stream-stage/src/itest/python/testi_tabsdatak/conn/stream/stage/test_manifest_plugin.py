@@ -90,7 +90,7 @@ def _make_scenario(tmp_path: Path) -> tuple[Path, Path]:
     _write_parquet(data / "t0_a.parquet", [{"id": 1}, {"id": 2}])
     _write_parquet(data / "t1_a.parquet", [{"id": 3}])
     _write_parquet(data / "t1_b.parquet", [{"id": 4}])
-    # The new layout (per NU1's ``stage_layout`` module): manifests live
+    # The stage layout (the server's ``Stage`` handler): manifests live
     # under ``<base>/manifests/`` so the plugin's wildcard can target
     # exactly that subdir. File paths inside each manifest stay
     # relative to ``<base>``.

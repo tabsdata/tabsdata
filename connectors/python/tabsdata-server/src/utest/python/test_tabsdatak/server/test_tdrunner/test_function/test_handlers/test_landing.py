@@ -15,7 +15,7 @@ import polars as pl
 import pyarrow.parquet as pq
 import pytest
 
-from tabsdatak.server._tdrunner.function._commons.document.request import (
+from tabsdatak.server._tdrunner.function._commons.document.message.request import (
     Info,
     Location,
 )
@@ -24,13 +24,11 @@ from tabsdatak.server._tdrunner.function._handlers.landing import (
     TABSDATA_LANDING_FACTS_KEY,
     LandedInputs,
     Landing,
+    LandingFacts,
     NotLandedError,
-    Origin,
     SchemaMismatchError,
+    SchemaOrigin,
     parse,
-    raw_version,
-    scan_landed,
-    stamp,
 )
 from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payload
 
@@ -63,7 +61,7 @@ def test_typed_data_lands_with_its_own_types(tmp_path):
         frame,
         metadata={"@query": "select 1"},
     )
-    assert landed.origin is Origin.DECLARED
+    assert landed.origin is SchemaOrigin.DECLARED
     assert landed.rows == 3
     assert pl.read_parquet(local(landed.data)).equals(frame.collect())
     described = pl.read_parquet(local(landed.schema))
@@ -91,7 +89,7 @@ def test_untyped_data_lands_as_strings_with_the_schema_polars_inferred(tmp_path)
         strings,
         schema=schema,
     )
-    assert landed.origin is Origin.INFERRED
+    assert landed.origin is SchemaOrigin.INFERRED
     assert landed.data.uri.endswith("/landing/1.2.t")
     assert landed.schema.uri.endswith("/landing/1.2.s")
     data = pl.read_parquet(local(landed.data))
@@ -200,9 +198,13 @@ def test_typed_data_is_served_as_landed(tmp_path):
         frame,
         metadata={"@query": "select 1"},
     )
-    served, metadata = scan_landed(landed.data, landed.schema)
+    served, facts = landed.table.scan()
     assert served.collect().equals(frame.collect())
-    assert metadata == {"@query": "select 1"}
+    assert facts == LandingFacts(
+        rows=2,
+        origin=SchemaOrigin.DECLARED,
+        metadata={"@query": "select 1"},
+    )
 
 
 def test_untyped_data_is_served_with_its_inferred_schema(tmp_path):
@@ -219,9 +221,10 @@ def test_untyped_data_is_served_with_its_inferred_schema(tmp_path):
         pl.scan_csv(source, infer_schema=False),
         schema=schema,
     )
-    served, metadata = scan_landed(landed.data, landed.schema)
+    served, facts = landed.table.scan()
     assert served.collect().equals(pl.read_csv(source, schema=schema))
-    assert metadata is None
+    assert facts.origin is SchemaOrigin.INFERRED
+    assert facts.metadata is None
 
 
 def landed_record(
@@ -240,12 +243,9 @@ def test_landed_inputs_get_their_metadata_and_system_columns(tmp_path):
     info = Info.model_validate(info_payload())
     record = landed_record(tmp_path, 0, 0, [1, 2])
     served = LandedInputs(info).scan(record).collect()
-    expected = stamp(
-        pl.LazyFrame({"id": [1, 2]}),
-        idx=0,
-        version=raw_version(info),
-        metadata={"@part": 0},
-    ).collect()
+    expected = (
+        LandedInputs(info).stamp(pl.LazyFrame({"id": [1, 2]}), {"@part": 0}).collect()
+    )
     assert served.columns == expected.columns
     assert served.select("id", "@td.@part").equals(expected.select("id", "@td.@part"))
 

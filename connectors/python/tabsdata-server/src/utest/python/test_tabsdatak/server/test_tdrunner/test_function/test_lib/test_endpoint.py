@@ -7,7 +7,9 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from tabsdatak.server._tdrunner.function._commons.document.request import Location
+from tabsdatak.server._tdrunner.function._commons.document.message.request import (
+    Location,
+)
 from tabsdatak.server._tdrunner.function._lib.endpoint import (
     AzureConfigs,
     AzureEndpoint,
@@ -39,9 +41,7 @@ def test_s3_uri_resolves_to_s3_endpoint_with_aws_creds():
 
 
 def test_s3_uri_with_env_prefix_namespaces_creds():
-    ep = endpoint_from_location(
-        Location(uri="s3://bucket/x", env_prefix="PROD_AWS")
-    )
+    ep = endpoint_from_location(Location(uri="s3://bucket/x", env_prefix="PROD_AWS"))
     assert isinstance(ep, S3Endpoint)
     assert ep.configs.access_key == EnvRef(name="PROD_AWS_AWS_ACCESS_KEY_ID")
     assert ep.configs.secret_key == EnvRef(name="PROD_AWS_AWS_SECRET_ACCESS_KEY")
@@ -60,9 +60,7 @@ def test_azure_schemes_resolve_to_azure_endpoint(scheme):
 
 
 def test_azure_with_env_prefix():
-    ep = endpoint_from_location(
-        Location(uri="abfss://container/x", env_prefix="STAGE")
-    )
+    ep = endpoint_from_location(Location(uri="abfss://container/x", env_prefix="STAGE"))
     assert isinstance(ep, AzureEndpoint)
     assert ep.configs.account_name == EnvRef(name="STAGE_AZURE_ACCOUNT_NAME")
     assert ep.configs.account_key == EnvRef(name="STAGE_AZURE_ACCOUNT_KEY")
@@ -80,9 +78,7 @@ def test_gs_uri_resolves_to_gcs_endpoint_with_gcp_creds():
 def test_gs_with_env_prefix():
     ep = endpoint_from_location(Location(uri="gs://bucket/x", env_prefix="PROD"))
     assert isinstance(ep, GCSEndpoint)
-    assert ep.configs.service_account_key == EnvRef(
-        name="PROD_GCP_SERVICE_ACCOUNT_KEY"
-    )
+    assert ep.configs.service_account_key == EnvRef(name="PROD_GCP_SERVICE_ACCOUNT_KEY")
 
 
 def test_file_uri_resolves_to_local_endpoint_without_creds():

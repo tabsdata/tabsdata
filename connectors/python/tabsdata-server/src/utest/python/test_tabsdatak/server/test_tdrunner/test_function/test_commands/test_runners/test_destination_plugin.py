@@ -9,6 +9,7 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import polars as pl
 import pytest
@@ -16,21 +17,30 @@ import yaml
 
 from tabsdatak._info import SubscriberInfo
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
-from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
-from tabsdatak.server._tdrunner.function._commons.document.request import Request
+from tabsdatak.server._tdrunner.function._commons.context.destination import (
+    DestinationContext,
+)
+from tabsdatak.server._tdrunner.function._commons.document.message.request import (
+    Request,
+)
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputEntry,
     OutputManifest,
 )
+from tabsdatak.server._tdrunner.function._commons.run.command import Responder
+from tabsdatak.server._tdrunner.function._commons.symbols.function import (
+    FunctionBundle,
+)
+from tabsdatak.server._tdrunner.function._handlers.bundle import BundleArchive
 from tabsdatak.server._tdrunner.function._handlers.columns import ColumnPolicy, Zone
 from tabsdatak.server._tdrunner.function._handlers.handoff import DestinationHandoff
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin import (
     main,
-    runner as runner_module,
 )
-from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.error import (
+from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.error import (  # noqa: E501
     BadBundleError,
+    BadConnectionError,
     BadManifestError,
     BadRequestError,
     BadUserCodeError,
@@ -40,12 +50,13 @@ from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.err
     RunDestinationPluginErrorCode,
     WrongKindError,
 )
+from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.options import (  # noqa: E501
+    RunDestinationPluginArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.runner import (  # noqa: E501
-    DestinationContext,
-    load_function_definition,
-    read_tables,
-    resolve_plugin,
-    write_tables,
+    DEFINITION_ERRORS,
+    KINDS,
+    DestinationPlugin,
 )
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
@@ -122,7 +133,7 @@ def built_bundle(
         bundle_path,
     )
     extracted = tmp_path / "extracted"
-    extract_bundle(bundle_path, extracted)
+    BundleArchive(bundle_path).extract(extracted)
     return extracted
 
 
@@ -205,6 +216,30 @@ def set_arguments(
             "/tmp/em.yaml",
         ],
     )
+
+
+def destination_plugin(tmp_path: Path, **state) -> DestinationPlugin:
+    command = DestinationPlugin(
+        RunDestinationPluginArguments(
+            request=tmp_path / "request.yaml",
+            bundle_folder=tmp_path / "bundle",
+            outputs_manifest=tmp_path / "outputs.yaml",
+            connection_file=tmp_path / "connection.yaml",
+            liveness=tmp_path / "liveness",
+            responder_url="http://127.0.0.1:1",
+            responder_method="POST",
+            responder_authorization="Bearer tok",
+            journal_file=tmp_path / "journal.yaml",
+            work_folder=tmp_path / "work",
+        )
+    )
+    for name, value in state.items():
+        setattr(command, name, value)
+    return command
+
+
+def load_function_definition(bundle_folder: Path) -> SubscriberInfo:
+    return FunctionBundle(bundle_folder).definition(KINDS, DEFINITION_ERRORS)
 
 
 # --- unit: DestinationContext --------------------------------------------------
@@ -314,19 +349,25 @@ def test_load_function_def_unresolvable_func_raises_bad_user_code(built_bundle):
 # --- unit: resolve_plugin ----------------------------------------------
 
 
-def test_resolve_plugin_happy(fixture_subscriber):
-    plugin = resolve_plugin(fixture_subscriber)
+def test_resolve_plugin_happy(tmp_path, fixture_subscriber):
+    plugin = destination_plugin(
+        tmp_path, subscriber=fixture_subscriber
+    ).resolve_plugin()
     # LocalFileDestPlugin is what's registered for LocalFileDest.
     assert plugin.__class__.__name__ == "LocalFileDestPlugin"
 
 
-def test_resolve_plugin_unknown_dest_raises_no_plugin(fixture_subscriber, monkeypatch):
+def test_resolve_plugin_unknown_dest_raises_no_plugin(
+    tmp_path,
+    fixture_subscriber,
+    monkeypatch,
+):
     def _raise(_destination_class):
         raise KeyError("no DestDef registered")
 
     monkeypatch.setattr(f"{RUNNER_MODULE}.get_dest", _raise)
     with pytest.raises(NoPluginError):
-        resolve_plugin(fixture_subscriber)
+        destination_plugin(tmp_path, subscriber=fixture_subscriber).resolve_plugin()
 
 
 # --- unit: read_tables -------------------------------------------------
@@ -345,12 +386,14 @@ def test_read_tables_maps_an_output_without_data_to_bad_manifest(tmp_path):
         RunDestinationPluginErrorCode.RDP_1,
     )
     manifest = OutputManifest(outputs=(OutputEntry(name="out_0"),))
+    command = destination_plugin(
+        tmp_path,
+        handoff=file_handoff(tmp_path),
+        request=request,
+        manifest=manifest,
+    )
     with pytest.raises(BadManifestError):
-        read_tables(
-            file_handoff(tmp_path),
-            request,
-            manifest,
-        )
+        command.read_tables()
 
 
 def test_read_tables_maps_an_unreadable_landing_file_to_read_failed(tmp_path):
@@ -359,15 +402,31 @@ def test_read_tables_maps_an_unreadable_landing_file_to_read_failed(tmp_path):
         RunDestinationPluginErrorCode.RDP_1,
     )
     entry = OutputEntry(name="out_0", uri=request.info.landing_file(0).uri)
+    command = destination_plugin(
+        tmp_path,
+        handoff=file_handoff(tmp_path),
+        request=request,
+        manifest=OutputManifest(outputs=(entry,)),
+    )
     with pytest.raises(OutputReadFailedError):
-        read_tables(
-            file_handoff(tmp_path),
-            request,
-            OutputManifest(outputs=(entry,)),
-        )
+        command.read_tables()
 
 
 # --- unit: write_tables ------------------------------------------------
+
+
+def writing_command(tmp_path: Path, plugin) -> DestinationPlugin:
+    return destination_plugin(
+        tmp_path,
+        handoff=file_handoff(tmp_path),
+        request=Request.load(
+            write_request(tmp_path / "request.yaml"),
+            RunDestinationPluginErrorCode.RDP_1,
+        ),
+        plugin=plugin,
+        connection=object(),
+        subscriber=SimpleNamespace(destination=object()),
+    )
 
 
 def test_write_tables_returns_normally(tmp_path):
@@ -383,14 +442,7 @@ def test_write_tables_returns_normally(tmp_path):
         ):
             calls.append((context, connection, destination, tables))
 
-    context = destination_context(work_folder=tmp_path)
-    write_tables(
-        file_handoff(tmp_path),
-        Plugin(),
-        context,
-        object(),
-        object(),
-    )
+    writing_command(tmp_path, Plugin()).write_tables()
     assert len(calls) == 1
 
 
@@ -405,15 +457,8 @@ def test_write_tables_wraps_plugin_exception(tmp_path):
         ):
             raise RuntimeError("boom")
 
-    context = destination_context(work_folder=tmp_path)
     with pytest.raises(PluginFailedError):
-        write_tables(
-            file_handoff(tmp_path),
-            Plugin(),
-            context,
-            object(),
-            object(),
-        )
+        writing_command(tmp_path, Plugin()).write_tables()
 
 
 # --- main: error paths --------------------------------------------------
@@ -626,9 +671,9 @@ def test_main_tells_the_server_before_it_writes(
     )
     seen: list[bool] = []
     monkeypatch.setattr(
-        runner_module,
-        "notify_step_destination_write",
-        lambda _arguments: seen.append(shipped.exists()),
+        Responder,
+        "destination_write",
+        lambda _responder: seen.append(shipped.exists()),
     )
     assert main() == 0
     assert seen == [False]
@@ -648,12 +693,12 @@ def test_main_writes_nothing_when_the_server_cannot_be_told(
         http_ok_url,
     )
 
-    def unreachable(_arguments):
+    def unreachable(_responder):
         raise OSError("apiserver unreachable")
 
     monkeypatch.setattr(
-        runner_module,
-        "notify_step_destination_write",
+        Responder,
+        "destination_write",
         unreachable,
     )
     assert main() != 0
@@ -678,5 +723,12 @@ def test_main_carries_tabsdata_command_metadata():
             "tabsdata_command_name",
             None,
         )
-        == "td_destination_plugin"
+        == "td-p-dst-regular"
     )
+
+
+def test_a_connection_that_cannot_be_loaded_is_reported(tmp_path):
+    command = destination_plugin(tmp_path)
+    with pytest.raises(BadConnectionError) as raised:
+        command.load_connection()
+    assert raised.value.api_error is RunDestinationPluginErrorCode.RDP_11

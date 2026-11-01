@@ -11,7 +11,12 @@ import pytest
 from obstore.store import S3Store
 
 from tabsdatak.common._storage import transfer
-from tabsdatak.common._storage.transfer import StorageLocation, TransferError
+from tabsdatak.common._storage.transfer import (
+    OBJECT_STORES,
+    ObjectStores,
+    StorageLocation,
+    TransferError,
+)
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -37,54 +42,54 @@ def stored(tmp_path: Path) -> StorageLocation:
 
 
 def test_upload_creates_the_target_folders(tmp_path: Path, source: Path):
-    assert transfer.upload(source, stored(tmp_path)) == SIZE
+    assert stored(tmp_path).upload(source) == SIZE
     assert (tmp_path / "store" / "deep" / "object.bin").read_bytes() == (
         source.read_bytes()
     )
 
 
 def test_streamed_download_round_trips(tmp_path: Path, source: Path):
-    transfer.upload(source, stored(tmp_path))
+    stored(tmp_path).upload(source)
     target = tmp_path / "out" / "object.bin"
-    assert transfer.download(stored(tmp_path), target) == SIZE
+    assert stored(tmp_path).download(target) == SIZE
     assert target.read_bytes() == source.read_bytes()
 
 
 def test_ranged_download_round_trips(tmp_path: Path, source: Path, ranged: None):
-    transfer.upload(source, stored(tmp_path))
+    stored(tmp_path).upload(source)
     target = tmp_path / "out" / "object.bin"
-    assert transfer.download(stored(tmp_path), target) == SIZE
+    assert stored(tmp_path).download(target) == SIZE
     assert target.read_bytes() == source.read_bytes()
 
 
 def test_ranged_chunks_keep_their_order(tmp_path: Path, source: Path, ranged: None):
-    transfer.upload(source, stored(tmp_path))
-    assert b"".join(transfer.chunks(stored(tmp_path))) == source.read_bytes()
+    stored(tmp_path).upload(source)
+    assert b"".join(stored(tmp_path).chunks()) == source.read_bytes()
 
 
 def test_size_of_a_stored_object(tmp_path: Path, source: Path):
-    transfer.upload(source, stored(tmp_path))
-    assert transfer.size(stored(tmp_path)) == SIZE
+    stored(tmp_path).upload(source)
+    assert stored(tmp_path).size() == SIZE
 
 
 def test_read_range_returns_the_bytes_between_start_and_end(
     tmp_path: Path, source: Path
 ):
-    transfer.upload(source, stored(tmp_path))
-    tail = transfer.read_range(stored(tmp_path), SIZE - 8, SIZE)
+    stored(tmp_path).upload(source)
+    tail = stored(tmp_path).read_range(SIZE - 8, SIZE)
     assert tail == source.read_bytes()[-8:]
 
 
 def test_size_of_a_missing_object_fails(tmp_path: Path):
     with pytest.raises(FileNotFoundError):
-        transfer.size(stored(tmp_path))
+        stored(tmp_path).size()
 
 
 def test_failed_download_leaves_no_files(tmp_path: Path):
     missing = StorageLocation(uri=(tmp_path / "store" / "missing.bin").as_uri())
     target = tmp_path / "out" / "missing.bin"
     with pytest.raises(FileNotFoundError):
-        transfer.download(missing, target)
+        missing.download(target)
     assert list(target.parent.iterdir()) == []
 
 
@@ -95,7 +100,7 @@ def test_location_must_name_an_object():
 
 def test_stores_are_reused_per_root_and_options(tmp_path: Path):
     root = tmp_path.as_uri()
-    assert transfer.store(root, {}) is transfer.store(root, {})
+    assert OBJECT_STORES.store(root, {}) is OBJECT_STORES.store(root, {})
 
 
 def test_ambient_credentials_are_ignored(monkeypatch: pytest.MonkeyPatch):
@@ -103,10 +108,10 @@ def test_ambient_credentials_are_ignored(monkeypatch: pytest.MonkeyPatch):
     explicit = {"aws_region": "eu-west-1", "aws_skip_signature": "true"}
     with pytest.raises(Exception, match="SecretAccessKey"):
         S3Store("ambient-bucket", config=explicit)
-    transfer.build("s3://ambient-bucket", explicit)
+    ObjectStores.build("s3://ambient-bucket", explicit)
     assert os.environ["AWS_ACCESS_KEY_ID"] == "ambient"
 
 
 def test_unsupported_scheme_fails():
     with pytest.raises(TransferError, match="unsupported scheme"):
-        transfer.build("ftp://host/folder", {})
+        ObjectStores.build("ftp://host/folder", {})

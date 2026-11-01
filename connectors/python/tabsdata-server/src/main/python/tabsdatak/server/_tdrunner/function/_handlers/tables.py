@@ -11,14 +11,15 @@ import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from tabsdatak.common._storage import frames, transfer
 from tabsdatak.common._storage.frames import FrameLocator
 from tabsdatak.common._storage.mounts import (
     AnonymousMountDeclaration,
     MountDeclaration,
 )
 from tabsdatak.common._storage.transfer import StorageLocation
-from tabsdatak.server._tdrunner.function._commons.document.request import Location
+from tabsdatak.server._tdrunner.function._commons.document.message.request import (
+    Location,
+)
 from tabsdatak.server._tdrunner.function._commons.manifests.input import InputRecord
 from tabsdatak.server._tdrunner.function._commons.manifests.output import TableStats
 
@@ -58,10 +59,10 @@ class TableFile:
         return None
 
     def locator(self) -> FrameLocator:
-        return frames.locator(self.uri, self.declaration)
+        return FrameLocator.of(self.uri, self.declaration)
 
     def scan(self) -> pl.LazyFrame:
-        frame = frames.scan_parquet(self.locator())
+        frame = self.locator().scan()
         frame.collect_schema()
         return frame
 
@@ -89,18 +90,16 @@ class TableFile:
         location = StorageLocation(
             uri=self.uri, options=self.declaration.storage_options(self.uri)
         )
-        size = transfer.size(location)
+        size = location.size()
         if size < len(PARQUET_MAGIC) + TRAILER_SIZE:
             raise TableFileError(f"Table file {self.uri} is too short for a parquet")
-        trailer = transfer.read_range(location, size - TRAILER_SIZE, size)
+        trailer = location.read_range(size - TRAILER_SIZE, size)
         if trailer[FOOTER_LENGTH_SIZE:] != PARQUET_MAGIC:
             raise TableFileError(f"Table file {self.uri} does not end as a parquet")
         footer_length = int.from_bytes(trailer[:FOOTER_LENGTH_SIZE], "little")
         if footer_length > size - TRAILER_SIZE - len(PARQUET_MAGIC):
             raise TableFileError(f"Table file {self.uri} has a truncated footer")
-        footer = transfer.read_range(
-            location, size - TRAILER_SIZE - footer_length, size
-        )
+        footer = location.read_range(size - TRAILER_SIZE - footer_length, size)
         try:
             metadata = pq.read_metadata(pa.BufferReader(PARQUET_MAGIC + footer))
         except (OSError, pa.ArrowException) as error:

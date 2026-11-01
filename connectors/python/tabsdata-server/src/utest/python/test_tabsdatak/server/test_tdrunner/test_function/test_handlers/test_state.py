@@ -10,36 +10,36 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from tabsdatak.server._tdrunner.function._commons.document.request import (
+from tabsdatak.server._tdrunner.function._commons.context.source import SourceContext
+from tabsdatak.server._tdrunner.function._commons.document.message.request import (
     Info,
     InputTable,
     Location,
     OutputTable,
     Request,
 )
-from tabsdatak.server._tdrunner.function._handlers import state
+from tabsdatak.server._tdrunner.function._commons.document.state.function import (
+    USER_NAMESPACE_COLUMN,
+    FunctionState,
+)
 from tabsdatak.server._tdrunner.function._handlers.state import (
     STATE_FILE,
-    USER_NAMESPACE_COLUMN,
-    StateError,
     State,
-    write_state,
+    StateError,
+    StateReadError,
+    StateWriteError,
 )
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
-from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.runner import (  # noqa: E501
-    SourceContext,
-)
-from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.error import (
-    BadStateInError,
-    BadStateOutError,
-    RunSourcePluginErrorCode,
-)
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
 def read_state(path: Path) -> dict:
-    return state.read_state(TableFile.local(path))
+    return State.load(TableFile.local(path)).values
+
+
+def write_state(values: dict, path: Path) -> None:
+    State.save(FunctionState(values), path)
 
 
 # --- round-trip happy paths ---
@@ -264,30 +264,6 @@ def test_write_crash_after_partial_tmp_cleans_up_orphan(tmp_path, monkeypatch):
     assert not (tmp_path / "iv.parquet.tmp").exists()
 
 
-# --- drift-prevention regression: pydantic-backed validators ------------
-
-
-def test_value_validator_uses_pydantic_against_basic_type_spec():
-    """If anyone replaces the pydantic-backed validator with a
-    hand-rolled isinstance ladder, that ladder will diverge from
-    ``BasicTypeSpec`` over time. This test pins the
-    pydantic-based approach in place by verifying the validator
-    chains a ``pydantic.ValidationError``."""
-    from pydantic import ValidationError
-
-    with pytest.raises(StateError) as ei:
-        state.validate_value("k", object())
-    assert isinstance(ei.value.__cause__, ValidationError)
-
-
-def test_key_validator_uses_pydantic_against_context_key_spec():
-    from pydantic import ValidationError
-
-    with pytest.raises(StateError) as ei:
-        state.validate_key(123)  # non-str key
-    assert isinstance(ei.value.__cause__, ValidationError)
-
-
 # --- State: hydrate, drain and output of one run --------------------------
 
 STATE_TABLE = "td.fn_state__F-1"
@@ -381,9 +357,7 @@ def _stored(tmp_path: Path, name: str, values: dict | None = None) -> Location:
 
 def _hydrated(request: Request, folder: Path, **flags) -> dict:
     context = _context()
-    State(request, folder).hydrate(
-        context, error_code=RunSourcePluginErrorCode.RSP_9, **flags
-    )
+    State(request, folder).hydrate(context, **flags)
     return context.drain()
 
 
@@ -423,21 +397,22 @@ def test_hydrate_falls_back_to_the_previous_state(tmp_path):
 
 def test_hydrate_a_missing_previous_state_raises(tmp_path):
     request = _request(system_input=(_input(_stored(tmp_path, "missing.t")),))
-    with pytest.raises(BadStateInError, match="missing.t"):
+    with pytest.raises(StateReadError, match="missing.t") as raised:
         _hydrated(request, tmp_path / "state")
+    assert raised.value.uri.endswith("missing.t")
 
 
 def test_hydrate_a_malformed_previous_state_raises(tmp_path):
     location = _stored(tmp_path, "s.t")
     Path(tmp_path / "storage").mkdir()
     (tmp_path / "storage" / "s.t").write_bytes(b"not parquet")
-    with pytest.raises(BadStateInError):
+    with pytest.raises(StateReadError):
         _hydrated(_request(system_input=(_input(location),)), tmp_path / "state")
 
 
 def _drain(context: SourceContext, request: Request, folder: Path) -> State:
     run_state = State(request, folder)
-    run_state.drain(context, error_code=RunSourcePluginErrorCode.RSP_10)
+    run_state.drain(context)
     return run_state
 
 
@@ -476,8 +451,9 @@ def test_drain_a_bad_value_raises(tmp_path):
     context = _context()
     context._scratch["k"] = object()  # type: ignore[assignment]
     request = _request(system_output=(_output(_stored(tmp_path, "s.t")),))
-    with pytest.raises(BadStateOutError):
+    with pytest.raises(StateWriteError) as raised:
         _drain(context, request, tmp_path)
+    assert raised.value.file == tmp_path / STATE_FILE
 
 
 def test_output_copies_this_run_state_to_the_output_location(tmp_path):

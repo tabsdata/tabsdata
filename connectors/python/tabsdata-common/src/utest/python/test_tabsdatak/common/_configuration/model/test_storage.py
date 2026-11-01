@@ -10,7 +10,6 @@ import pytest
 
 from tabsdatak.common._configuration.document.loader import load
 from tabsdatak.common._configuration.model.storage import StorageConfiguration
-from tabsdatak.common._storage import mounts
 from tabsdatak.common._storage.mounts import MountError, NamedMountDeclaration
 from test_tabsdatak.bootest import ROOT_FOLDER
 
@@ -71,7 +70,7 @@ def test_declaration_carries_resolved_text_options(configuration: Path):
 
 def test_typed_and_standalone_readers_agree(configuration: Path):
     typed = load(configuration, StorageConfiguration).mount("ROOT").declaration()
-    standalone = mounts.read(configuration, "ROOT")
+    standalone = NamedMountDeclaration.read(configuration, "ROOT")
     location = "s3://root/prefix/python/image.tar.zst"
     assert typed.resolved_uri() == standalone.resolved_uri()
     assert typed.storage_options(location) == standalone.storage_options(location)

@@ -33,6 +33,32 @@ class Zone(Enum):
     # Output data, as written outside the system through a destination plugin.
     EGRESS = "egress"
 
+    @property
+    def rule(self) -> ColumnRule:
+        from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
+
+        match self:
+            case Zone.INGRESS:
+                return ColumnRule(
+                    entry=None,
+                    exit=None,
+                )
+            case Zone.HOST:
+                return ColumnRule(
+                    entry=None,
+                    exit=Shape.INTERNAL,
+                )
+            case Zone.LAND:
+                return ColumnRule(
+                    entry=CreationMode.TAB,
+                    exit=Shape.INTERNAL,
+                )
+            case Zone.EGRESS:
+                return ColumnRule(
+                    entry=None,
+                    exit=Shape.PUBLIC,
+                )
+
 
 # The set of columns a frame carries, and their state, when it is written.
 class Shape(Enum):
@@ -60,39 +86,13 @@ class ColumnPolicyError(ValueError):
     pass
 
 
-def rule_of(zone: Zone) -> ColumnRule:
-    from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
-
-    match zone:
-        case Zone.INGRESS:
-            return ColumnRule(
-                entry=None,
-                exit=None,
-            )
-        case Zone.HOST:
-            return ColumnRule(
-                entry=None,
-                exit=Shape.INTERNAL,
-            )
-        case Zone.LAND:
-            return ColumnRule(
-                entry=CreationMode.TAB,
-                exit=Shape.INTERNAL,
-            )
-        case Zone.EGRESS:
-            return ColumnRule(
-                entry=None,
-                exit=Shape.PUBLIC,
-            )
-
-
 @dataclass(frozen=True)
 class ColumnPolicy:
     zone: Zone
 
     @property
     def rule(self) -> ColumnRule:
-        return rule_of(self.zone)
+        return self.zone.rule
 
     def scan(self, source: TableFile) -> TableFrame:
         from tabsdatak.tableframe import TableFrame

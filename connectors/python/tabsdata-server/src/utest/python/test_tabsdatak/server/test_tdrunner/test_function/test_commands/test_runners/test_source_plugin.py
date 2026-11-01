@@ -9,6 +9,7 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import polars as pl
 import pyarrow as pa
@@ -24,41 +25,56 @@ from tabsdatak._info import PublisherInfo
 from tabsdatak.api import TableFrameSpec, TableFramesSpec  # noqa: F401
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
-from tabsdatak.server._tdrunner.function._commons.document.request import (
+from tabsdatak.server._tdrunner.function._commons.context.source import SourceContext
+from tabsdatak.server._tdrunner.function._commons.document.message.request import (
     Info,
     Location,
+)
+from tabsdatak.server._tdrunner.function._commons.document.state.function import (
+    FunctionState,
 )
 from tabsdatak.server._tdrunner.function._commons.manifests.input import (
     InputManifest,
 )
+from tabsdatak.server._tdrunner.function._commons.symbols.function import (
+    FunctionBundle,
+)
+from tabsdatak.server._tdrunner.function._handlers.binding import (
+    SourceBinding,
+    StageConnection,
+    UnknownSourceError,
+    UnsupportedStageError,
+)
+from tabsdatak.server._tdrunner.function._handlers.bundle import BundleArchive
 from tabsdatak.server._tdrunner.function._handlers.handoff import Handoff
-from tabsdatak.server._tdrunner.function._handlers.landing import LandedFile, Origin
+from tabsdatak.server._tdrunner.function._handlers.landing import (
+    LandedFile,
+    SchemaOrigin,
+)
 from tabsdatak.server._tdrunner.function._handlers.state import (
     STATE_FILE,
-    read_state,
-    write_state,
+    State,
 )
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
-from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function.commands.runners.source_plugin import main
 from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.error import (
     BadBundleError,
+    BadConnectionError,
     BadRequestError,
     BadUserCodeError,
     ManifestWriteFailedError,
     NoPluginError,
     PluginFailedError,
+    RunSourcePluginErrorCode,
     UnsupportedStageSchemeError,
 )
+from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.options import (  # noqa: E501
+    RunSourcePluginArguments,
+)
 from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.runner import (  # noqa: E501
-    SourceBinding,
-    SourceContext,
-    bind_source,
-    build_manifest_stage_connection,
-    input_names,
-    load_function_definition,
-    write_in,
-    write_landed_manifest,
+    DEFINITION_ERRORS,
+    KINDS,
+    SourcePlugin,
 )
 from tabsdatak.spi import SrcPlugin, TableFileInput
 from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payload
@@ -68,9 +84,32 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 HANDLER = TransporterHandler1()
 
 
-RUNNER_MODULE = (
-    "tabsdatak.server._tdrunner.function.commands.runners.source_plugin.runner"
-)
+BINDING_MODULE = "tabsdatak.server._tdrunner.function._handlers.binding"
+
+
+def source_plugin(tmp_path: Path, **state) -> SourcePlugin:
+    command = SourcePlugin(
+        RunSourcePluginArguments(
+            request=tmp_path / "request.yaml",
+            bundle_folder=tmp_path / "bundle",
+            output_folder=tmp_path / "output",
+            inputs_manifest=tmp_path / "inputs.yaml",
+            state_folder=tmp_path / "state",
+            connection_file=tmp_path / "connection.yaml",
+            liveness=tmp_path / "liveness",
+            responder_url="http://127.0.0.1:1",
+            responder_method="POST",
+            responder_authorization="Bearer tok",
+            journal_file=tmp_path / "journal.yaml",
+        )
+    )
+    for name, value in state.items():
+        setattr(command, name, value)
+    return command
+
+
+def load_function_definition(bundle_folder: Path):
+    return FunctionBundle(bundle_folder).definition(KINDS, DEFINITION_ERRORS)
 
 
 # --- module-level stream-publisher fixture --------------------------------
@@ -180,7 +219,7 @@ def built_bundle(
         bundle_path,
     )
     extracted = tmp_path / "extracted"
-    extract_bundle(bundle_path, extracted)
+    BundleArchive(bundle_path).extract(extracted)
     return extracted
 
 
@@ -418,11 +457,11 @@ def test_load_function_def_unresolvable_func_raises_bad_user_code(
         load_function_definition(built_bundle)
 
 
-# --- unit: _resolve_plugin -----------------------------------------------
+# --- unit: SourceBinding.of ---------------------------------------------
 
 
-def test_resolve_plugin_and_io_publisher_passthrough(tmp_path, fixture_publisher):
-    """For a regular ``@publisher``, ``bind_source`` returns
+def test_a_publisher_binds_its_own_source(tmp_path, fixture_publisher):
+    """For a regular ``@publisher``, ``SourceBinding.of`` returns
     the plugin + user-declared source verbatim, and the conn loaded from
     the connection file."""
     from tabsdatak.conn.localfile import LocalFileSrcConn
@@ -434,7 +473,7 @@ def test_resolve_plugin_and_io_publisher_passthrough(tmp_path, fixture_publisher
         tmp_path / "connection.yaml",
         tmp_path / "srcdata",
     )
-    binding = bind_source(
+    binding = SourceBinding.of(
         fixture_publisher,
         stub_stage,
         connection_file,
@@ -445,29 +484,29 @@ def test_resolve_plugin_and_io_publisher_passthrough(tmp_path, fixture_publisher
     assert binding.cardinality == 1  # LocalFileSrc with one path
 
 
-def test_resolve_plugin_and_io_unknown_source_raises_no_plugin(
+def test_an_unknown_source_cannot_be_bound(
     tmp_path,
     fixture_publisher,
     monkeypatch,
 ):
-    """When `get_src` raises `KeyError`, the runner surfaces
-    `NoPluginError`."""
+    """When `get_src` raises `KeyError`, the binding raises
+    `UnknownSourceError`, which the command reports as `NoPluginError`."""
 
     def missing_source(_):
         raise KeyError("no connector registered")
 
-    monkeypatch.setattr(f"{RUNNER_MODULE}.get_src", missing_source)
-    with pytest.raises(NoPluginError):
+    monkeypatch.setattr(f"{BINDING_MODULE}.get_src", missing_source)
+    with pytest.raises(UnknownSourceError):
         # `get_src` raises before the connection file is read, so a
         # non-existent path is fine for the 3rd arg.
-        bind_source(
+        SourceBinding.of(
             fixture_publisher,
             Location(uri="file:///unused"),
             tmp_path / "no-connection.yaml",
         )
 
 
-# --- unit: build_manifest_stage_connection (stream-publisher substitution) --
+# --- unit: StageConnection.of (stream-publisher substitution) --------------
 
 
 def test_build_manifest_stage_conn_file_scheme_resolves_localfile():
@@ -477,7 +516,7 @@ def test_build_manifest_stage_conn_file_scheme_resolves_localfile():
     StageConnection idiom."""
     from tabsdatak.conn.localfile import LocalFileSrcConn
 
-    connection = build_manifest_stage_connection(Location(uri="file:///tmp/stage"))
+    connection = StageConnection.of(Location(uri="file:///tmp/stage"))
     assert connection.stage_backend is None
     assert isinstance(connection.local, LocalFileSrcConn)
     assert str(connection.local.base_path) == "/tmp/stage"
@@ -492,7 +531,7 @@ def test_build_manifest_stage_conn_s3_resolves_to_object_store_backend(monkeypat
     stage-relative path is appended to the stage-root URL."""
     for key in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"):
         monkeypatch.setenv(f"SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__{key}", "v")
-    connection = build_manifest_stage_connection(
+    connection = StageConnection.of(
         Location(uri="s3://bucket/stage", env_prefix="ROOT")
     )
     assert connection.local is None
@@ -504,16 +543,14 @@ def test_build_manifest_stage_conn_s3_resolves_to_object_store_backend(monkeypat
 
 
 def test_build_manifest_stage_conn_az_resolves():
-    connection = build_manifest_stage_connection(
-        Location(uri="az://account/container/stage")
-    )
+    connection = StageConnection.of(Location(uri="az://account/container/stage"))
     assert connection.stage_backend is not None
     assert connection.stage_backend.is_object_store is True
 
 
 def test_build_manifest_stage_conn_gs_resolves():
     """GCS uses the ``gs://`` scheme -- endpoint.py's registered builder."""
-    connection = build_manifest_stage_connection(Location(uri="gs://bucket/stage"))
+    connection = StageConnection.of(Location(uri="gs://bucket/stage"))
     assert connection.stage_backend is not None
     assert connection.stage_backend.is_object_store is True
 
@@ -522,14 +559,14 @@ def test_build_manifest_stage_conn_rejects_unsupported_scheme():
     """An unknown scheme still surfaces RSP_11 with a clean exit code.
     Note: GCS stages must use ``gs://`` -- ``gcs://`` has no endpoint
     builder and is rejected here."""
-    with pytest.raises(UnsupportedStageSchemeError):
-        build_manifest_stage_connection(Location(uri="gcs://bucket/stage"))
+    with pytest.raises(UnsupportedStageError):
+        StageConnection.of(Location(uri="gcs://bucket/stage"))
 
 
-def test_resolve_plugin_and_io_stream_publisher_substitutes_to_manifest_stage(
+def test_a_stream_publisher_binds_the_manifest_stage(
     tmp_path,
 ):
-    """For a ``@stream_publisher``, ``bind_source`` swaps
+    """For a ``@stream_publisher``, ``SourceBinding.of`` swaps
     the user-declared Kafka source for the publisher-side
     StreamStageSrc + a StageConnection shaped like ManifestStageConn
     that ``ManifestStageSrcPlugin`` knows how to read. Cardinality
@@ -554,7 +591,7 @@ def test_resolve_plugin_and_io_stream_publisher_substitutes_to_manifest_stage(
 
     # The stream-publisher path substitutes the conn from function_stage
     # and never reads the connection file, so a stub path is fine here.
-    binding = bind_source(
+    binding = SourceBinding.of(
         my_stream_publisher,
         Location(uri="file:///stage/dir"),
         tmp_path / "unused.yaml",
@@ -575,7 +612,7 @@ def test_resolve_plugin_and_io_stream_publisher_substitutes_to_manifest_stage(
 
 
 def test_load_function_def_accepts_stream_publisher_kind(tmp_path):
-    """`load_function_definition`'s allowed_kinds now includes
+    """The source plugin's definition kinds include
     ``streamPublisherDef``. Synthesise a minimal function_def.json by
     hand (no full bundle build) and verify the loader returns a
     StreamPublisherInfo.
@@ -600,16 +637,63 @@ def test_load_function_def_accepts_stream_publisher_kind(tmp_path):
     assert publisher.__kind__ == KIND_STREAM_PUBLISHER_DEF
 
 
+def binding_request(tmp_path: Path, stage_uri: str) -> SimpleNamespace:
+    return SimpleNamespace(info=SimpleNamespace(function_stage=Location(uri=stage_uri)))
+
+
+def test_an_unknown_source_is_reported_as_no_plugin(
+    tmp_path,
+    fixture_publisher,
+    monkeypatch,
+):
+    def missing_source(_):
+        raise KeyError("no connector registered")
+
+    monkeypatch.setattr(f"{BINDING_MODULE}.get_src", missing_source)
+    command = source_plugin(
+        tmp_path,
+        publisher=fixture_publisher,
+        request=binding_request(tmp_path, "file:///unused"),
+    )
+    with pytest.raises(NoPluginError):
+        command.bind()
+
+
+def test_a_connection_that_cannot_be_loaded_is_reported(tmp_path, fixture_publisher):
+    command = source_plugin(
+        tmp_path,
+        publisher=fixture_publisher,
+        request=binding_request(tmp_path, "file:///unused"),
+    )
+    with pytest.raises(BadConnectionError) as raised:
+        command.bind()
+    assert raised.value.api_error is RunSourcePluginErrorCode.RSP_12
+
+
+def test_an_unsupported_stage_is_reported_as_such(tmp_path):
+    command = source_plugin(
+        tmp_path,
+        publisher=module_level_stream_publisher,
+        request=binding_request(tmp_path, "gcs://bucket/stage"),
+    )
+    with pytest.raises(UnsupportedStageSchemeError):
+        command.bind()
+
+
 # --- unit: landed inputs ------------------------------------------------
 
 
+def binding_of(cardinality: int) -> SourceBinding:
+    return SourceBinding(object(), object(), object(), cardinality)
+
+
 def test_inputs_are_named_after_the_publisher_parameters(fixture_publisher):
-    assert input_names(fixture_publisher, 1) == ["in_1"]
-    assert input_names(fixture_publisher, -1) == ["in_1"]
-    assert input_names(fixture_publisher, 0) == []
+    assert binding_of(1).input_names(fixture_publisher) == ["in_1"]
+    assert binding_of(-1).input_names(fixture_publisher) == ["in_1"]
+    assert binding_of(0).input_names(fixture_publisher) == []
 
 
-def test_write_landed_manifest_records_each_landed_file(tmp_path):
+def test_the_inputs_manifest_records_each_landed_file(tmp_path):
     def landed(position: int, index: int) -> LandedFile:
         return LandedFile(
             position=position,
@@ -617,15 +701,16 @@ def test_write_landed_manifest_records_each_landed_file(tmp_path):
             data=Location(uri=f"file:///r/{position}.{index}.t", env_prefix="ROOT"),
             schema=Location(uri=f"file:///r/{position}.{index}.s", env_prefix="ROOT"),
             rows=1,
-            origin=Origin.DECLARED,
+            origin=SchemaOrigin.DECLARED,
         )
 
     path = tmp_path / "manifest.yaml"
-    write_landed_manifest(
-        ["orders", "customers"],
-        [[landed(0, 0), landed(0, 1)], []],
-        path,
-    )
+    source_plugin(
+        tmp_path,
+        names=["orders", "customers"],
+        landed=[[landed(0, 0), landed(0, 1)], []],
+        inputs_manifest_file=path,
+    ).write_manifest()
     orders, customers = InputManifest.load(path).inputs
     assert (orders.name, orders.table_pos, customers.tables) == ("orders", 0, ())
     assert [record.location.uri for record in orders.tables] == [
@@ -679,16 +764,17 @@ def write_legacy(
         names,
         variable=variable,
     )
-    return write_in(
-        handoff,
-        SourceBinding(
+    return source_plugin(
+        tmp_path,
+        handoff=handoff,
+        binding=SourceBinding(
             plugin,
             object(),
             object(),
             len(names),
         ),
-        object(),
-    )
+        context=object(),
+    ).write_in()
 
 
 def parquet_of(path: Path, values: list[int]) -> Path:
@@ -750,11 +836,17 @@ def test_write_in_reports_a_failing_plugin(tmp_path):
         write_legacy(tmp_path, RuntimeError("boom"), ["in_1"])
 
 
-def test_write_landed_manifest_reports_an_unwritable_path(tmp_path):
+def test_an_unwritable_inputs_manifest_is_reported(tmp_path):
     folder = tmp_path / "i-am-a-folder"
     folder.mkdir()
+    command = source_plugin(
+        tmp_path,
+        names=["in_1"],
+        landed=[[]],
+        inputs_manifest_file=folder,
+    )
     with pytest.raises(ManifestWriteFailedError):
-        write_landed_manifest(["in_1"], [[]], folder)
+        command.write_manifest()
 
 
 # --- main: error paths via argparse ---------------------------------------
@@ -920,7 +1012,7 @@ def test_main_carries_tabsdata_command_metadata():
             "tabsdata_command_name",
             None,
         )
-        == "td_source_plugin"
+        == "td-p-src-regular"
     )
 
 
@@ -942,7 +1034,7 @@ def test_main_hydrates_and_drains_initial_values(
     state_dir = tmp_path / "state"
     previous = tmp_path / "storage" / "state-in.t"
     previous.parent.mkdir()
-    write_state({"last-modified": "2026-05-27T00:00:00Z"}, previous)
+    State.save(FunctionState({"last-modified": "2026-05-27T00:00:00Z"}), previous)
 
     req_path = tmp_path / "request.yaml"
     landing = {"uri": (tmp_path / "landing").as_uri(), "env_prefix": "ROOT"}
@@ -993,7 +1085,7 @@ def test_main_hydrates_and_drains_initial_values(
     status = main()
     assert status == 0, f"main() returned {status}"
 
-    assert read_state(TableFile.local(state_dir / STATE_FILE)) == {
+    assert State.load(TableFile.local(state_dir / STATE_FILE)).values == {
         "last-modified": "2026-05-27T00:00:00Z"
     }
     assert not (tmp_path / "storage" / "state-out.t").exists()

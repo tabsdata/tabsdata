@@ -108,7 +108,7 @@ spec:
         - name: 0020-inspect-function
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_inspect_function"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td-inspect-function"]
           args:
             - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -222,7 +222,7 @@ spec:
         - name: 0040-begin-execution
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_begin_execution"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td-begin-execution"]
           args:
             - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -286,7 +286,7 @@ spec:
         - name: 0050-fetch-request
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_fetch_request"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td-fetch-request"]
           args:
             - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -355,10 +355,10 @@ spec:
               mountPath: /tabsdata/shared
             - name: work
               mountPath: /tabsdata/work
-        - name: 0060-get-bundle
+        - name: 0060-fetch-bundle
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_get_bundle"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td-fetch-bundle"]
           args:
             - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -415,7 +415,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-            - name: config-get-bundle
+            - name: config-fetch-bundle
               mountPath: /tabsdata/config
               readOnly: true
             - name: dataflow
@@ -429,10 +429,10 @@ spec:
               mountPath: /tabsdata/shared
             - name: work
               mountPath: /tabsdata/work
-        - name: 0070-prep-localize-state
+        - name: 0070-plan-input
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_prep_localize_state"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td-plan-input"]
           args:
             - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -483,7 +483,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-            - name: config-prep-localize-state
+            - name: config-plan-input
               mountPath: /tabsdata/config
               readOnly: true
             - name: dataflow
@@ -500,7 +500,7 @@ spec:
         - name: 0080-function
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_function"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td-f-regular"]
           args:
             - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -581,10 +581,10 @@ spec:
             - name: work
               mountPath: /tabsdata/work
       containers:
-        - name: 1000-report-completion
+        - name: 1000-end-execution
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_report_completion"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td-end-execution"]
           args:
             - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -637,7 +637,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-            - name: config-report-completion
+            - name: config-end-execution
               mountPath: /tabsdata/config
               readOnly: true
             - name: dataflow
@@ -702,21 +702,21 @@ spec:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-        - name: config-get-bundle
+        - name: config-fetch-bundle
           projected:
             sources:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-        - name: config-prep-localize-state
+        - name: config-plan-input
           projected:
             sources:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-        - name: config-report-completion
+        - name: config-end-execution
           projected:
             sources:
               - configMap:

@@ -13,7 +13,7 @@ from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.opt
     RunDestinationPluginArguments,
 )
 from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.runner import (  # noqa: E501
-    run,
+    DestinationPlugin,
 )
 
 VERSION = version()
@@ -44,9 +44,9 @@ def build_command_parser() -> ArgumentsParser:
     )
 
 
-@command(name="td_destination_plugin", parser=build_command_parser)
+@command(name="td-p-dst-regular", parser=build_command_parser)
 def main(arguments: RunDestinationPluginArguments) -> int:
-    return run(arguments)
+    return DestinationPlugin(arguments).run()
 
 
 if __name__ == "__main__":

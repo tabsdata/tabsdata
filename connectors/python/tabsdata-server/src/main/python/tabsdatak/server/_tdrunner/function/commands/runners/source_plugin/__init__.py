@@ -13,7 +13,7 @@ from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.options 
     RunSourcePluginArguments,
 )
 from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.runner import (
-    run,
+    SourcePlugin,
 )
 
 VERSION = version()
@@ -43,9 +43,9 @@ def build_command_parser() -> ArgumentsParser:
     )
 
 
-@command(name="td_source_plugin", parser=build_command_parser)
+@command(name="td-p-src-regular", parser=build_command_parser)
 def main(arguments: RunSourcePluginArguments) -> int:
-    return run(arguments)
+    return SourcePlugin(arguments).run()
 
 
 if __name__ == "__main__":

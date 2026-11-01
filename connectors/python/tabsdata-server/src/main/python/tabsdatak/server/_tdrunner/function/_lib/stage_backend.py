@@ -34,21 +34,25 @@ from urllib.request import url2pathname
 
 from tabsdatak.common._fileformat.taxonomy import DestFileFormat
 from tabsdatak.common._storage.mounts import (
+    MountError,
+    canonical_option_variables,
+)
+from tabsdatak.common._storage.transfer import (
     AWS_ACCESS_KEY_ID_OPTION,
     AWS_REGION_OPTION,
     AWS_SECRET_ACCESS_KEY_OPTION,
     AZURE_STORAGE_ACCOUNT_KEY_OPTION,
     AZURE_STORAGE_ACCOUNT_NAME_OPTION,
     GOOGLE_SERVICE_ACCOUNT_KEY_OPTION,
-    MountError,
-    canonical_option_variables,
 )
 from tabsdatak.common._transporter.facade import TRANSPORTER_MODE, make_handler
 from tabsdatak.common._transporter.handler.handler import TransporterHandler
 from tabsdatak.conn.common.file import _input, _output
 from tabsdatak.conn.localfile import LocalFileSrcConn
 from tabsdatak.conn.stream.stage._backend import StageBackend, _LocalStageBackend
-from tabsdatak.server._tdrunner.function._commons.document.request import Location
+from tabsdatak.server._tdrunner.function._commons.document.message.request import (
+    Location,
+)
 from tabsdatak.server._tdrunner.function._lib.endpoint import (
     AzureEndpoint,
     Endpoint,

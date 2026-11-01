@@ -14,7 +14,7 @@ import pytest
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.dev._plugin as plugin
-from tabsdatak._handoff import dest_frames, src_frames
+from tabsdatak._handoff import DestinationContract, SourceContract
 from tabsdatak.conn.dev import (
     MAX_DATA_BYTES,
     Data,
@@ -196,7 +196,7 @@ def _read_frames(ctx, src) -> list:
 
 
 def test_frame_src_returns_lazy_frame_inputs():
-    assert src_frames(plugin.DevFrameSrcPlugin)
+    assert SourceContract(plugin.DevFrameSrcPlugin).frames()
 
 
 def test_frame_src_round_trips_its_data():
@@ -278,7 +278,7 @@ def test_frame_dest_rejects_a_non_positive_output_count(bad):
 
 
 def test_frame_dest_receives_lazy_frames():
-    assert dest_frames(plugin.DevFrameDestPlugin)
+    assert DestinationContract(plugin.DevFrameDestPlugin).frames()
 
 
 def test_frame_dest_reports_what_each_table_holds(tmp_path):

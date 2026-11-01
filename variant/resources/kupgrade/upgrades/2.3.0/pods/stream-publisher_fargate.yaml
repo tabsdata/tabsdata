@@ -106,7 +106,7 @@ spec:
         - name: 0020-begin-execution
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_begin_execution"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td-begin-execution"]
           args:
             - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -170,7 +170,7 @@ spec:
         - name: 0030-fetch-request
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_fetch_request"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td-fetch-request"]
           args:
             - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -239,10 +239,10 @@ spec:
               mountPath: /tabsdata/shared
             - name: work
               mountPath: /tabsdata/work
-        - name: 0040-get-bundle
+        - name: 0040-fetch-bundle
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_get_bundle"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td-fetch-bundle"]
           args:
             - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -299,7 +299,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-            - name: config-get-bundle
+            - name: config-fetch-bundle
               mountPath: /tabsdata/config
               readOnly: true
             - name: dataflow
@@ -317,7 +317,7 @@ spec:
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
           restartPolicy: Always
-          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_manifest_trigger"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td-t-src-manifest"]
           args:
             - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -393,10 +393,10 @@ spec:
             - name: work
               mountPath: /tabsdata/work
       containers:
-        - name: 1000-streamer
+        - name: 1000-stream-source-plugin
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_streamer"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td-p-src-stream"]
           args:
             - --shared-folder
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -457,7 +457,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-            - name: config-streamer
+            - name: config-stream-source-plugin
               mountPath: /tabsdata/config
               readOnly: true
             - name: connection
@@ -511,7 +511,7 @@ spec:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-        - name: config-get-bundle
+        - name: config-fetch-bundle
           projected:
             sources:
               - configMap:
@@ -525,7 +525,7 @@ spec:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-        - name: config-streamer
+        - name: config-stream-source-plugin
           projected:
             sources:
               - configMap:

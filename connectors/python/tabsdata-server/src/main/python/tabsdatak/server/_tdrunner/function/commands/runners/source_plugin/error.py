@@ -59,6 +59,10 @@ class UnsupportedStageSchemeError(CommandRuntimeException):
     exit_code = 18
 
 
+class BadConnectionError(CommandRuntimeException):
+    exit_code = 19
+
+
 class RunSourcePluginErrorCode(ErrorCode):
     RSP_1 = ErrorDef(
         BadRequestError,
@@ -106,4 +110,8 @@ class RunSourcePluginErrorCode(ErrorCode):
     RSP_11 = ErrorDef(
         UnsupportedStageSchemeError,
         ("Cannot read the stream stage {uri}: its scheme {scheme!r} is not supported"),
+    )
+    RSP_12 = ErrorDef(
+        BadConnectionError,
+        "Cannot load the connection {path}: {detail}",
     )
