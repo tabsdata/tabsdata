@@ -27,7 +27,9 @@ use crate::cwarn;
 use crate::runtime::instance::verify_instance_version;
 use crate::runtime::provider::provider_for_instance_any_state;
 
-const TRASH_TIMESTAMP_FORMAT: &str = "%Y%m%d%H%M%S%3f";
+const TRASH_TIMESTAMP_FORMAT: &str = "%Y.%m.%d.%H.%M.%S%.3f";
+const COMPACT_TRASH_TIMESTAMP_FORMAT: &str = "%Y%m%d%H%M%S%3f";
+const COMPACT_ENV: &str = "TD_KMINUS_COMPACT";
 
 const TRASH_RENAME_BACKOFF: Duration = Duration::from_millis(250);
 #[cfg(not(windows))]
@@ -138,6 +140,17 @@ pub async fn command_trash(arguments: TrashArguments, globals: &GlobalArguments)
     Ok(())
 }
 
+// Without separators on Windows, whose paths are capped at 260 characters,
+// and wherever TD_KMINUS_COMPACT is true
+fn trash_timestamp_format(windows: bool, compact: Option<&str>) -> &'static str {
+    let compact = compact.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"));
+    if windows || compact {
+        COMPACT_TRASH_TIMESTAMP_FORMAT
+    } else {
+        TRASH_TIMESTAMP_FORMAT
+    }
+}
+
 pub fn trash_instance_folder(name: &str, folder: &Path) -> CommandResult<PathBuf> {
     let trash_root = trash_root()?;
     fs::create_dir_all(&trash_root).map_err(|error| {
@@ -147,7 +160,8 @@ pub fn trash_instance_folder(name: &str, folder: &Path) -> CommandResult<PathBuf
         })
     })?;
 
-    let timestamp = Local::now().format(TRASH_TIMESTAMP_FORMAT).to_string();
+    let format = trash_timestamp_format(cfg!(windows), std::env::var(COMPACT_ENV).ok().as_deref());
+    let timestamp = Local::now().format(format).to_string();
     let destination = trash_root.join(format!("{name}-{timestamp}"));
 
     let deadline = Instant::now() + TRASH_RENAME_TIMEOUT;
@@ -210,3 +224,6 @@ fn render(error: &CommandError, verbose: bool) -> String {
         None => error.status().to_string(),
     }
 }
+
+#[cfg(test)]
+mod tests;

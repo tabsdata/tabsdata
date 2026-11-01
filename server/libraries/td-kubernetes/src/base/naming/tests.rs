@@ -56,72 +56,29 @@ const WINDOWS_PATH_LIMIT: usize = 259;
 const USER_NAME_MAX: usize = 12;
 const INSTANCE_PREFIX_MAX: usize = 20;
 const INSTANCE_STAMP_SUFFIX: &str = "-20261030060741515";
-const POD_NAMESPACE: &str = "default";
 const POD_UID: &str = "d3744bc5-73c9-4f49-ae29-c9c7855b1c16";
-const COMPACT_POD_UID: &str = "d3744bc573";
-const TEMPLATE_HASH: &str = "-bbbbbbbbbb";
-const CRON_MINUTE: &str = "-99999999";
-const RANDOM_SUFFIX: &str = "-bbbbb";
-const LONGEST_WORKER_ID: &str = "wkr99991231-9999999999";
 const CONTAINER_ROOT: &str = "$(CONTAINER_ROOT)/";
 const WINDOWS_PLACEHOLDERS: [(&str, &str); 2] = [
     ("${{system:tdk_pyenv_scripts_folder}}", "Scripts"),
     ("${{system:tdk_exe_suffix}}", ".exe"),
 ];
 
-fn runtime_workload_names() -> std::collections::HashMap<String, String> {
-    let worker_id = WorkerId::try_from(LONGEST_WORKER_ID).unwrap();
-    let functions = [
-        Decorator::Publisher,
-        Decorator::Transformer,
-        Decorator::Subscriber,
-    ]
-    .map(|decorator| (WorkerName::Function, decorator));
-    let triggers = [WorkerName::StageTrigger, WorkerName::CronTrigger]
-        .map(|worker| (worker, Decorator::Publisher));
-    functions
-        .into_iter()
-        .chain(triggers)
-        .map(|(worker, decorator)| {
-            let key = format!("{}-{}", worker_pod_stem(&worker), decorator.as_ref());
-            let decorator = matches!(worker, WorkerName::Function).then_some(&decorator);
-            let prefix = worker_name_prefix(&worker, decorator);
-            (key, to_fn_pod_name(prefix, &worker_id).unwrap())
-        })
-        .collect()
-}
-
-fn workload_pods<'a>(
-    document: &'a serde_yaml::Value,
-    name: &str,
-) -> Option<(String, String, &'a serde_yaml::Value)> {
+fn workload_pod_spec(document: &serde_yaml::Value) -> Option<&serde_yaml::Value> {
     let spec = &document["spec"];
     match document["kind"].as_str()? {
-        "Deployment" => Some((
-            format!("{name}{TEMPLATE_HASH}{RANDOM_SUFFIX}"),
-            name.to_owned(),
-            &spec["template"]["spec"],
-        )),
-        "Job" => Some((
-            format!("{name}{RANDOM_SUFFIX}"),
-            name.to_owned(),
-            &spec["template"]["spec"],
-        )),
-        "CronJob" => Some((
-            format!("{name}{CRON_MINUTE}{RANDOM_SUFFIX}"),
-            format!("{name}{CRON_MINUTE}"),
-            &spec["jobTemplate"]["spec"]["template"]["spec"],
-        )),
-        "Pod" => Some((name.to_owned(), name.to_owned(), spec)),
+        "Deployment" | "Job" => Some(&spec["template"]["spec"]),
+        "CronJob" => Some(&spec["jobTemplate"]["spec"]["template"]["spec"]),
+        "Pod" => Some(spec),
         _ => None,
     }
 }
 
+// The pod-runner names a pod's data dir by its uid alone, so a pod's name
+// plays no part in the length of the paths under it
 #[test]
-fn every_kminus_program_path_fits_windows_for_users_and_for_ga() {
+fn every_kminus_program_path_fits_windows() {
     let folder = std::path::PathBuf::from(tm_workspace::workspace_root!())
         .join("variant/resources/kprofile/pods");
-    let runtime_names = runtime_workload_names();
     let user = "u".repeat(USER_NAME_MAX);
     let instance = format!("{}{INSTANCE_STAMP_SUFFIX}", "i".repeat(INSTANCE_PREFIX_MAX));
     let pod_run = format!(r"C:\Users\{user}\.tabsdata\instances\{instance}\cluster\data\pod-run");
@@ -140,28 +97,13 @@ fn every_kminus_program_path_fits_windows_for_users_and_for_ga() {
     let mut too_long = Vec::new();
     for file in &files {
         let file_name = file.file_name().unwrap().to_string_lossy().into_owned();
-        let template = file_name.split('_').next().unwrap();
         let yaml = std::fs::read_to_string(file).unwrap();
         for document in serde_yaml::Deserializer::from_str(&yaml) {
             let document = serde_yaml::Value::deserialize(document)
                 .unwrap_or_else(|error| panic!("{file_name} is YAML: {error}"));
-            let Some(name) = runtime_names
-                .get(template)
-                .cloned()
-                .or_else(|| document["metadata"]["name"].as_str().map(str::to_owned))
-            else {
+            let Some(pod_spec) = workload_pod_spec(&document) else {
                 continue;
             };
-            let Some((pod, base, pod_spec)) = workload_pods(&document, &name) else {
-                continue;
-            };
-            let dirs = [
-                ("full", format!("{POD_NAMESPACE}_{pod}_{POD_UID}")),
-                (
-                    "compact",
-                    format!("{POD_NAMESPACE}_{base}_{COMPACT_POD_UID}"),
-                ),
-            ];
             let containers = ["initContainers", "containers"]
                 .into_iter()
                 .filter_map(|key| pod_spec[key].as_sequence())
@@ -184,16 +126,14 @@ fn every_kminus_program_path_fits_windows_for_users_and_for_ga() {
                     "{file_name}: '{command}' has a placeholder this test does not resolve"
                 );
                 let container_name = container["name"].as_str().unwrap();
-                for (mode, dir) in &dirs {
-                    let path = format!(r"{pod_run}\{dir}\work\{container_name}\{program}");
-                    checked += 1;
-                    if path.len() > WINDOWS_PATH_LIMIT {
-                        too_long.push(format!(
-                            "{file_name}, container '{container_name}', {mode} pod dirs: \
-                             '{command}' is {path} ({} characters)",
-                            path.len()
-                        ));
-                    }
+                let path = format!(r"{pod_run}\{POD_UID}\work\{container_name}\{program}");
+                checked += 1;
+                if path.len() > WINDOWS_PATH_LIMIT {
+                    too_long.push(format!(
+                        "{file_name}, container '{container_name}': '{command}' is {path} ({} \
+                         characters)",
+                        path.len()
+                    ));
                 }
             }
         }

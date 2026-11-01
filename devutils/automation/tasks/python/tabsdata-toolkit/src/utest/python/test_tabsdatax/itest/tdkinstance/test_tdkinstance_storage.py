@@ -10,7 +10,11 @@ import pytest
 from click.testing import CliRunner
 
 from tabsdatax.itest.tdkinstance.cli import main
-from tabsdatax.itest.tdkinstance.commands import storage as storage_module
+from tabsdatax.itest.tdkinstance.commands import (
+    name as name_module,
+    storage as storage_module,
+)
+from tabsdatax.itest.tdkinstance.commands.name import numbered_name
 from tabsdatax.itest.tdkinstance.commands.storage import (
     ENV_INSTANCE,
     ENV_URI,
@@ -83,9 +87,61 @@ def test_a_name_defaults_to_the_file_storage():
     assert result.output.startswith("tdtest-file-")
 
 
-def test_a_name_ends_in_a_stamp_down_to_the_millisecond_with_no_separators():
+def test_a_name_ends_in_a_dotted_stamp_down_to_the_millisecond(monkeypatch):
+    monkeypatch.setattr(name_module, "compact_names", lambda: False)
     result = CliRunner().invoke(main, ["name", "tdtest"])
-    assert re.fullmatch(r"tdtest-file-\d{17}", result.output.strip())
+    assert re.fullmatch(r"tdtest-file-\d{4}(\.\d{2}){5}\.\d{3}", result.output.strip())
+
+
+def test_a_compact_name_ends_in_a_number_no_instance_folder_has(monkeypatch, tmp_path):
+    monkeypatch.setattr(name_module, "compact_names", lambda: True)
+    monkeypatch.setattr(name_module, "instances_folder", lambda: tmp_path)
+    result = CliRunner().invoke(main, ["name", "tdtest"])
+    assert re.fullmatch(r"tdtest-file-\d", result.output.strip())
+    assert not (tmp_path / result.output.strip()).exists()
+
+
+@pytest.mark.parametrize(
+    ("platform", "value", "compact"),
+    [
+        ("win32", "", True),
+        ("win32", "false", True),
+        ("linux", "", False),
+        ("linux", "false", False),
+        ("linux", "true", True),
+        ("darwin", "TRUE", True),
+    ],
+)
+def test_names_are_compact_on_windows_or_when_asked(
+    monkeypatch, platform, value, compact
+):
+    monkeypatch.setattr(name_module.sys, "platform", platform)
+    monkeypatch.setenv(name_module.COMPACT_ENV, value)
+    assert name_module.compact_names() is compact
+
+
+def test_a_numbered_name_tries_each_width_three_times_before_widening(tmp_path):
+    taken = ["tdtest-file-1", "tdtest-file-2", "tdtest-file-3", "tdtest-file-10"]
+    for folder in taken:
+        (tmp_path / folder).mkdir()
+    draws = iter([1, 2, 3, 10, 42])
+    calls = []
+
+    def draw(low, high):
+        calls.append((low, high))
+        return next(draws)
+
+    assert numbered_name("tdtest-file", tmp_path, draw) == "tdtest-file-42"
+    assert calls == [(0, 10)] * 3 + [(10, 100)] * 2
+
+
+def test_a_numbered_name_widens_past_two_digits_when_they_are_taken(tmp_path):
+    for folder in ["tdtest-file-5", "tdtest-file-55"]:
+        (tmp_path / folder).mkdir()
+    draws = iter([5, 5, 5, 55, 55, 55, 555])
+    assert numbered_name("tdtest-file", tmp_path, lambda *_: next(draws)) == (
+        "tdtest-file-555"
+    )
 
 
 def test_an_unknown_storage_is_rejected():
