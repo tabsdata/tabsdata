@@ -21,7 +21,7 @@ from tabsdatak.server._tdrunner.function._commons.transporter.transporter1 impor
 from tabsdatak.server._tdrunner.function._commons.transporter.transporter2 import (
     Transporter2,
 )
-from tabsdatak.server._tdrunner.function._lib.errors import (
+from tabsdatak.server._tdrunner.function._commons.error.command import (
     BadStorageConfigError,
     CommandErrorCode,
     UnexpectedError,

@@ -10,11 +10,11 @@ from typing import Literal
 from pydantic import ConfigDict, Field, ValidationError
 
 from tabsdatak.common._configuration.document.loader import DocumentModel
+from tabsdatak.server._tdrunner.function._commons.error.command import CommandErrorCode
 from tabsdatak.server._tdrunner.function._commons.storage.stage import (
     STREAM_STATE_FILE,
     Stage,
 )
-from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
 
 KIND = "streamState"
 API_VERSION = 1

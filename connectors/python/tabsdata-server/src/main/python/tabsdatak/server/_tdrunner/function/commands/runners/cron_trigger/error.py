@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 from tabsdatak.error import ErrorCode, ErrorDef
-from tabsdatak.server._tdrunner.function._lib.errors import CommandRuntimeException
+from tabsdatak.server._tdrunner.function._commons.error.command import (
+    CommandRuntimeException,
+)
 
 
 class CronTriggerConnectionError(CommandRuntimeException):

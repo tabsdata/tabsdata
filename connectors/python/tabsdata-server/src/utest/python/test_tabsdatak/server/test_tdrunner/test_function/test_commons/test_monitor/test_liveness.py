@@ -10,7 +10,7 @@ import threading
 
 import pytest
 
-from tabsdatak.server._tdrunner.function._lib.liveness import (
+from tabsdatak.server._tdrunner.function._commons.monitor.liveness import (
     LivenessLogHandler,
     beat,
     install_liveness_handler,

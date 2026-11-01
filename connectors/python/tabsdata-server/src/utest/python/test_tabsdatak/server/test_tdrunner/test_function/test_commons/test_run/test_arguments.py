@@ -15,7 +15,7 @@ from tabsdatak.server._tdrunner.function._commons.run.arguments import (
     CommandArguments,
     option,
 )
-from tabsdatak.server._tdrunner.function._lib.errors import InvalidOptionsError
+from tabsdatak.server._tdrunner.function._commons.error.command import InvalidOptionsError
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 

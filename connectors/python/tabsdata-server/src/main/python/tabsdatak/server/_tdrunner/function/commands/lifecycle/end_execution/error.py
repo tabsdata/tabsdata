@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from tabsdatak.error import ErrorCode, ErrorDef
-from tabsdatak.server._tdrunner.function._lib.errors import (
+from tabsdatak.server._tdrunner.function._commons.error.command import (
     BadManifestError as CommandBadManifestError,
     BadRequestError as CommandBadRequestError,
     ManifestMismatchError as CommandManifestMismatchError,

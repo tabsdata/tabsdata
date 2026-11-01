@@ -10,7 +10,7 @@ from dataclasses import MISSING, dataclass, field, fields
 from pathlib import Path
 from typing import Any, NoReturn, Union, get_args, get_origin, get_type_hints
 
-from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
+from tabsdatak.server._tdrunner.function._commons.error.command import CommandErrorCode
 
 OPTION = "option"
 PATH_PLACEHOLDER = "PATH"

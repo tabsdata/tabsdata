@@ -28,11 +28,11 @@ from tabsdatak.server._tdrunner.function._commons.run.dataflow import (
     POLARS_TEMP_DIR,
     POLARS_VARIABLES,
 )
-from tabsdatak.server._tdrunner.function._lib.errors import (
+from tabsdatak.server._tdrunner.function._commons.error.command import (
     CommandErrorCode,
     InvalidOptionsError,
 )
-from tabsdatak.server._tdrunner.function._lib.message import CallbackRequest
+from tabsdatak.server._tdrunner.function._commons.document.message.callback import CallbackRequest
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 

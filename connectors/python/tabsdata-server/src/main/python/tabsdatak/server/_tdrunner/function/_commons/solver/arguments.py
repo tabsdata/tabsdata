@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import os
 
-from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
+from tabsdatak.server._tdrunner.function._commons.error.command import CommandErrorCode
 
 ENVIRONMENT_PREFIX = "env:"
 VALUE_PREFIX = "val:"

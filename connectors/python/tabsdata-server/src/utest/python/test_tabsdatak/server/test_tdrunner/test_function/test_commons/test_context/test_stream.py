@@ -43,7 +43,7 @@ from tabsdatak.server._tdrunner.function._handlers.batch import (
     TableCountError,
     TableTypeError,
 )
-from tabsdatak.server._tdrunner.function._lib.errors import (
+from tabsdatak.server._tdrunner.function._commons.error.command import (
     BadStreamStateError,
     CommandErrorCode,
 )

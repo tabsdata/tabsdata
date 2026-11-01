@@ -24,7 +24,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 def test_be_1_resolves_to_write_failed_error():
     """BE_1 must resolve to the per-command WriteFailedError leaf
-    (not the shared ``_lib.errors.WriteFailedError`` base) so the
+    (not the shared ``_commons.error.command.WriteFailedError`` base) so the
     leaf's ``exit_code`` is what reaches the orchestration layer.
     """
     exc = BeginExecutionErrorCode.BE_1.exception(path="/tmp/x.yaml", detail="boom")

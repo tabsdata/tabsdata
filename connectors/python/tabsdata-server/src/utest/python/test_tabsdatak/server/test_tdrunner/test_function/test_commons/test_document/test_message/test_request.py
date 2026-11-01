@@ -26,7 +26,7 @@ from tabsdatak.server._tdrunner.function._commons.document.message.request impor
     Request,
     StreamerRequest,
 )
-from tabsdatak.server._tdrunner.function._lib.errors import CommandRuntimeException
+from tabsdatak.server._tdrunner.function._commons.error.command import CommandRuntimeException
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 

@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 
 from tabsdatak.error import TabsdataException
-from tabsdatak.server._tdrunner.function._lib.errors import (
+from tabsdatak.server._tdrunner.function._commons.error.command import (
     EXIT_INVALID_OPTIONS,
     EXIT_UNDEFINED_ENV,
     CommandErrorCode,

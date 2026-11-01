@@ -24,10 +24,10 @@ from tabsdatak.server._tdrunner.function._commons.document.message.request impor
     Location,
     Request,
 )
+from tabsdatak.server._tdrunner.function._commons.error.command import CommandErrorCode
 from tabsdatak.server._tdrunner.function._commons.transporter.transporter import (
     Transporter,
 )
-from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
 
 ENVIRONMENT_REFERENCE = "env:"
 

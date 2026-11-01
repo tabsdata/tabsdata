@@ -10,7 +10,7 @@ from tabsdatak.server._tdrunner.function._commons.solver.arguments import (
     resolve_flag,
     resolve_value,
 )
-from tabsdatak.server._tdrunner.function._lib.errors import (
+from tabsdatak.server._tdrunner.function._commons.error.command import (
     InvalidOptionsError,
     UndefinedEnvError,
 )

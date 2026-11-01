@@ -22,7 +22,7 @@ from tabsdatak.server._tdrunner.function._commons.run.arguments import (
     CommandArguments,
 )
 from tabsdatak.server._tdrunner.function._commons.run.command import UnexpectedError
-from tabsdatak.server._tdrunner.function._lib.errors import EXIT_STALE_REPORT
+from tabsdatak.server._tdrunner.function._commons.error.command import EXIT_STALE_REPORT
 from tabsdatak.server._tdrunner.function.commands.lifecycle.end_execution import main
 from tabsdatak.server._tdrunner.function.commands.lifecycle.end_execution.error import (
     BadManifestError,

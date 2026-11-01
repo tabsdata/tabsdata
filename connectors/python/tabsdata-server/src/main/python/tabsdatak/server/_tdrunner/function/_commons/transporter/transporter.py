@@ -13,7 +13,7 @@ from tabsdatak.server._tdrunner.function._commons.document.message.request impor
     AnyRequest,
     Request,
 )
-from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
+from tabsdatak.server._tdrunner.function._commons.error.command import CommandErrorCode
 
 
 class Transporter(ABC):

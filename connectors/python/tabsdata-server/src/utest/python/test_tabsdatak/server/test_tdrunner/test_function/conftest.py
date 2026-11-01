@@ -24,7 +24,7 @@ from tabsdatak.server._tdrunner.function._commons.http import retry
 # fan-out across every test module.
 #
 # Note: ``Info`` is declared with ``extra="forbid"`` (see
-# ``_lib/request.py``), so this dict must contain only fields the
+# ``_commons/document/message/request.py``), so this dict must contain only fields the
 # Pydantic model knows about. Defaults are filler values; override any
 # subset by keyword for per-test specifics (e.g.
 # ``execution_id="exec-42"``).
