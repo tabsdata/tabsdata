@@ -182,7 +182,10 @@ class _CdcCtx(StreamSrcPluginCtx):
             else:
                 new_state()
 
-    def unstage(self):
+    def scan(self, file):
+        raise NotImplementedError("this context stages local files only")
+
+    def unstage(self, files=None):
         pass
 
     @property

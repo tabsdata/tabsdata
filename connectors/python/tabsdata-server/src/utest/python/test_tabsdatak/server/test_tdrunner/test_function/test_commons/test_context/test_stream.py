@@ -38,6 +38,7 @@ from tabsdatak.server._tdrunner.function._commons.storage.stage import (
 )
 from tabsdatak.server._tdrunner.function._handlers.batch import (
     NotParquetError,
+    NotPendingError,
     StageBatch,
     TableCountError,
     TableTypeError,
@@ -491,3 +492,107 @@ def test_a_send_that_does_not_match_the_tables_is_refused(
 def test_a_stage_without_meaning_is_refused(tmp_path, tables_files, new_state, message):
     with pytest.raises(TypeError, match=message):
         make_context(tmp_path).stage(tables_files, new_state)
+
+
+def ids(frame: pl.LazyFrame) -> list[int]:
+    return frame.collect()["id"].to_list()
+
+
+def test_a_sent_table_is_read_back_as_sent(tmp_path):
+    context = make_context(tmp_path)
+    ((sent,),) = context.stage([[frame(1, 2)]])
+    assert ids(context.scan(sent)) == [1, 2]
+
+
+def test_a_published_table_cannot_be_read_back(tmp_path):
+    context = make_context(tmp_path)
+    ((sent,),) = context.stage([[frame(1)]], {"offset": 1})
+    with pytest.raises(NotPendingError, match="0.0.t"):
+        context.scan(sent)
+
+
+def test_unstaging_some_tables_keeps_the_others_pending(tmp_path):
+    context = make_context(tmp_path, tables=2)
+    sent = context.stage([[frame(1), frame(2)], [frame(3)]])
+    context.unstage([sent[0][0], sent[1][0]])
+    assert context.pending == [[sent[0][1]], []]
+    context.stage(None, {"offset": 1})
+    (manifest,) = manifests(tmp_path)
+    folder = f"{FILES_FOLDER}/{batch(manifest)}"
+    assert published(manifest) == [[f"{folder}/0.1.t"], []]
+    assert staged_files(tmp_path) == [
+        f"{batch(manifest)}/0.1.s",
+        f"{batch(manifest)}/0.1.t",
+    ]
+
+
+def test_a_name_is_not_reused_after_unstaging_some_tables(tmp_path):
+    context = make_context(tmp_path)
+    first, second = context.stage([[frame(1), frame(2)]])[0]
+    context.unstage([second])
+    (third,) = context.stage([[frame(3)]])[0]
+    assert third.name == "0.2.t"
+    assert context.pending == [[first, third]]
+
+
+def test_unstaging_a_table_that_is_not_pending_drops_nothing(tmp_path):
+    context = make_context(tmp_path)
+    (sent,) = context.stage([[frame(1)]])[0]
+    stranger = StageFileStats(name="0.9.t", rows=1, bytes=1)
+    with pytest.raises(NotPendingError, match="0.9.t"):
+        context.unstage([sent, stranger])
+    assert context.pending == [[sent]]
+    assert len(staged_files(tmp_path)) == 2
+
+
+def test_a_file_that_cannot_be_deleted_is_still_unstaged(tmp_path, monkeypatch, caplog):
+    context = make_context(tmp_path)
+    (sent,) = context.stage([[frame(1)]])[0]
+
+    def unreachable(name: str) -> None:
+        raise PermissionError("stage not mounted")
+
+    monkeypatch.setattr(context.staging, "discard", unreachable)
+    context.unstage([sent])
+    assert context.pending == [[]]
+    assert "Cannot delete" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda context, stats: context.scan(stats),
+        lambda context, stats: context.unstage([stats]),
+    ],
+    ids=["scan", "unstage some"],
+)
+def test_reading_back_or_unstaging_some_is_refused_once_files_were_staged(
+    tmp_path,
+    call,
+):
+    context = make_context(tmp_path)
+    with pytest.warns(LegacyStreamStageWarning):
+        context.stage([[work_file(tmp_path, "legacy.parquet")]], {"offset": 1})
+    stats = StageFileStats(name="legacy.parquet", rows=2, bytes=1)
+    with pytest.raises(StageFormError):
+        call(context, stats)
+
+
+def test_a_load_is_deduplicated_against_its_window_on_the_stage(tmp_path):
+    context = make_context(tmp_path)
+    load = context.stage([[frame(1, 2), frame(3)]])[0]
+    window = context.stage([[frame(2, 4)]])[0]
+    loaded = pl.concat([context.scan(stats) for stats in load])
+    changes = pl.concat([context.scan(stats) for stats in window])
+    kept = changes.join(loaded, on="id", how="anti")
+    context.stage([[LazyFrameInput(kept)]])
+    context.unstage(window)
+    context.stage(None, {"offset": 1})
+    (manifest,) = manifests(tmp_path)
+    folder = f"{FILES_FOLDER}/{batch(manifest)}"
+    assert published(manifest) == [
+        [f"{folder}/0.0.t", f"{folder}/0.1.t", f"{folder}/0.3.t"],
+    ]
+    stage = tmp_path / "stage"
+    rows = pl.concat(pl.scan_parquet(stage / name) for name in published(manifest)[0])
+    assert sorted(ids(rows)) == [1, 2, 3, 4]

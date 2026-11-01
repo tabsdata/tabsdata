@@ -181,7 +181,10 @@ class _CdcCtx(StreamSrcPluginCtx):
                 self._tabsdata_owns_state = False
                 new_state()
 
-    def unstage(self):
+    def scan(self, file):
+        raise NotImplementedError("this context stages local files only")
+
+    def unstage(self, files=None):
         pass
 
     @property

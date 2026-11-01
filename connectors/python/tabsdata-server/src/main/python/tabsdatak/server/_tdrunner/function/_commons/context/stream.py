@@ -10,6 +10,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Protocol
 
+import polars as pl
+
 from tabsdatak._api import warn_legacy_stage
 from tabsdatak.api import BasicDictSpec, StreamThresholds
 from tabsdatak.server._tdrunner.function._commons.context.request import (
@@ -65,7 +67,9 @@ class Batch(Protocol):
         tables_files: list[Iterable[LazyFrameInput] | None],
     ) -> list[list[StageFileStats]]: ...
 
-    def unstage(self) -> None: ...
+    def scan(self, stats: StageFileStats) -> pl.LazyFrame: ...
+
+    def unstage(self, files: Iterable[StageFileStats] | None = None) -> None: ...
 
     def publish(self) -> StageManifest: ...
 
@@ -227,8 +231,14 @@ class StreamSourceContext(FromFlowRequestCtx, StreamSrcPluginCtx):
             new_state()
             self.save({}, manifest.batch)
 
-    def unstage(self) -> None:
-        self.batch.unstage()
+    def scan(self, file: StageFileStats) -> pl.LazyFrame:
+        self.lock(StageForm.FRAMES)
+        return self.batch.scan(file)
+
+    def unstage(self, files: Iterable[StageFileStats] | None = None) -> None:
+        if files is not None:
+            self.lock(StageForm.FRAMES)
+        self.batch.unstage(files)
 
     def checkpoint(self, new_state: BasicDictSpec) -> None:
         if self.view is None:

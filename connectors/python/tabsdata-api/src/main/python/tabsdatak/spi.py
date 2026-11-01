@@ -328,7 +328,8 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
       one); the `buffer` and `poll` levels when the definition names them.
     * `stage` -- send tables to the stage, publish them as a batch and
       commit its new resume state, together or apart.
-    * `unstage` -- drop what was sent and not yet published.
+    * `scan` -- read back a table sent and not yet published.
+    * `unstage` -- drop tables sent and not yet published.
     * `pending` -- what was sent and not yet published.
     * `checkpoint` -- commit a new resume state with no batch.
     """
@@ -431,10 +432,38 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
         """
 
     @abstractmethod
-    def unstage(self) -> None:
-        """Drop every table sent and not yet published, deleting its
-        files as far as it can. The resume state does not change; use it
-        to start over from `stream_state`."""
+    def scan(self, file: StageFileStats) -> pl.LazyFrame:
+        """Read back a table sent and not yet published, as it was sent,
+        from where it is staged.
+
+        Use it to work on what was sent without keeping it: e.g. to
+        de-duplicate a load against the changes read after it, sending the
+        result and unstaging what it replaces.
+
+        Args:
+            file: The table, as `stage` returned it or `pending` lists it.
+        """
+
+    @overload
+    def unstage(self) -> None: ...
+
+    @overload
+    def unstage(self, files: Iterable[StageFileStats]) -> None: ...
+
+    @abstractmethod
+    def unstage(self, files: Iterable[StageFileStats] | None = None) -> None:
+        """Drop tables sent and not yet published, so no batch publishes
+        them, and delete their files as far as it can. The resume state
+        does not change.
+
+        * `unstage()` drops every one, e.g. to start over from
+          `stream_state`.
+        * `unstage(files)` drops only `files`.
+
+        Args:
+            files: The tables to drop, as `stage` returned them or
+                `pending` lists them.
+        """
 
     @property
     @abstractmethod

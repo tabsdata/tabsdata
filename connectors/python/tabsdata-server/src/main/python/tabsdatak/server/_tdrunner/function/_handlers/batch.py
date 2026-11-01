@@ -9,6 +9,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+import polars as pl
+
 from tabsdatak.server._tdrunner.function._commons.manifests.stage import (
     StageManifest,
 )
@@ -32,7 +34,7 @@ logger = logging.getLogger(__name__)
 class TableCountError(ValueError):
     def __init__(self, given: int, tables: int) -> None:
         super().__init__(
-            f"Cannot send {given} table entries: the function has {tables} "
+            f"Cannot send {given} table entries: the stream source has {tables} "
             f"table(s), and each needs its entry, None for no table"
         )
         self.given = given
@@ -47,6 +49,17 @@ class TableTypeError(TypeError):
         )
         self.position = position
         self.table = table
+
+
+class NotPendingError(KeyError):
+    def __init__(self, name: str) -> None:
+        super().__init__(
+            f"Cannot find {name} among the tables sent and not yet published"
+        )
+        self.name = name
+
+    def __str__(self) -> str:
+        return str(self.args[0])
 
 
 class NotParquetError(ValueError):
@@ -97,12 +110,14 @@ class StageBatch:
     tables: int
     manifest: StageManifest | None
     files: list[list[StagedFile]]
+    written: list[int]
 
     def __init__(self, storage: Stage, tables: int) -> None:
         self.storage = storage
         self.tables = tables
         self.manifest = None
         self.files = [[] for _ in range(tables)]
+        self.written = [0] * tables
 
     @property
     def pending(self) -> list[list[StageFileStats]]:
@@ -134,9 +149,11 @@ class StageBatch:
 
     def write(self, position: int, table: LazyFrameInput) -> StageFileStats:
         manifest = self.open()
+        index = self.written[position]
+        self.written[position] += 1
         landed = Landing(self.storage.locate(manifest.folder)).land(
             position,
-            len(self.files[position]),
+            index,
             table.frame,
             schema=table.schema,
             metadata=table.metadata,
@@ -169,20 +186,40 @@ class StageBatch:
         self.reset()
         return manifest
 
-    def unstage(self) -> None:
-        manifest = self.manifest
-        if manifest is None:
-            return
+    def find(self, stats: StageFileStats) -> StagedFile:
         for files in self.files:
             for file in files:
-                for path in LandedPair.of(file.path).names:
-                    try:
-                        self.storage.discard(path)
-                    except Exception as error:
-                        logger.warning(f"Cannot delete {path}: {error}")
-        logger.info(f"Unstaged batch {manifest.batch}")
-        self.reset()
+                if file.stats.name == stats.name:
+                    return file
+        raise NotPendingError(stats.name)
+
+    def scan(self, stats: StageFileStats) -> pl.LazyFrame:
+        file = self.find(stats)
+        return TableFile.stored(self.storage.locate(file.path)).scan()
+
+    def unstage(self, files: Iterable[StageFileStats] | None = None) -> None:
+        if files is None:
+            dropped = [file for staged in self.files for file in staged]
+        else:
+            dropped = [self.find(stats) for stats in files]
+        for staged in self.files:
+            staged[:] = [file for file in staged if file not in dropped]
+        for file in dropped:
+            self.delete(file)
+        manifest = self.manifest
+        if manifest is not None:
+            logger.info(f"Unstaged {len(dropped)} file(s) of batch {manifest.batch}")
+        if files is None:
+            self.reset()
+
+    def delete(self, file: StagedFile) -> None:
+        for path in LandedPair.of(file.path).names:
+            try:
+                self.storage.discard(path)
+            except Exception as error:
+                logger.warning(f"Cannot delete {path}: {error}")
 
     def reset(self) -> None:
         self.manifest = None
         self.files = [[] for _ in range(self.tables)]
+        self.written = [0] * self.tables

@@ -643,7 +643,10 @@ class _RecordingStreamCtx(StreamSrcPluginCtx):
     def checkpoint(self, new_state: BasicDictSpec) -> None:
         self._stream_state = dict(new_state)
 
-    def unstage(self) -> None:
+    def scan(self, file: StageFileStats) -> pl.LazyFrame:
+        raise NotImplementedError("this context stages local files only")
+
+    def unstage(self, files: Iterable[StageFileStats] | None = None) -> None:
         pass
 
     @property
@@ -1116,8 +1119,9 @@ def test_the_legacy_stage_warning_names_the_replacement():
     assert "LazyFrameInput" in str(raised[0].message)
 
 
-def test_a_stream_context_without_unstage_and_pending_stays_abstract():
+def test_a_stream_context_without_scan_unstage_and_pending_stays_abstract():
     class Partial(_RecordingStreamCtx):
+        scan = StreamSrcPluginCtx.scan
         unstage = StreamSrcPluginCtx.unstage
         pending = StreamSrcPluginCtx.pending
 
