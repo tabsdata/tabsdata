@@ -183,7 +183,7 @@ class DestinationPlugin(Command[RunDestinationPluginArguments]):
 
     def write_tables(self) -> None:
         context = DestinationContext.from_info(
-            self.bundle_folder,
+            self.work_folder,
             self.request.info,
         )
         logger.info(

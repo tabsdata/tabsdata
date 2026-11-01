@@ -446,6 +446,23 @@ def test_write_tables_returns_normally(tmp_path):
     assert len(calls) == 1
 
 
+def test_the_plugin_works_in_the_work_folder(tmp_path):
+    folders = []
+
+    class Plugin:
+        def write_out(
+            self,
+            context,
+            connection,
+            destination,
+            tables,
+        ):
+            folders.append(context.work_dir)
+
+    writing_command(tmp_path, Plugin()).write_tables()
+    assert folders == [tmp_path / "work"]
+
+
 def test_write_tables_wraps_plugin_exception(tmp_path):
     class Plugin:
         def write_out(
