@@ -60,6 +60,13 @@ class Run:
     root: Path = field(default_factory=Path)
 
 
+@dataclass(frozen=True)
+class StateSlots:
+    table: str
+    previous: Path | None
+    target: Path
+
+
 @dataclass
 class Function:
     kind: str
@@ -163,6 +170,32 @@ class Driver:
             "location": {"uri": source.as_uri(), "env_prefix": STORAGE_MOUNT},
         }
 
+    def state_input(self, state: StateSlots) -> dict:
+        location = None
+        if state.previous is not None:
+            location = {"uri": state.previous.as_uri(), "env_prefix": STORAGE_MOUNT}
+        return {
+            "Table": {
+                "collection_id": 1,
+                "collection": "c",
+                "table_id": f"T-{state.table}",
+                "table": state.table,
+                "table_version_id": f"TV-{state.table}",
+                "input_idx": 0,
+                "table_pos": 0,
+                "version_pos": 0,
+                "location": location,
+            }
+        }
+
+    def state_output(self, state: StateSlots) -> dict:
+        output = self.output_table(state.table, 0)
+        output["Table"]["location"] = {
+            "uri": state.target.as_uri(),
+            "env_prefix": STORAGE_MOUNT,
+        }
+        return output
+
     def inputs(self, inputs: dict[str, pl.DataFrame | list[pl.DataFrame]]) -> list:
         catalog = self.root / "catalog"
         catalog.mkdir()
@@ -252,6 +285,7 @@ class Driver:
             request=self.request,
             bundle_folder=self.path("bundle"),
             outputs_manifest=self.path("fn/out/outputs-manifest.yaml"),
+            state_folder=self.path("state"),
             connection_file=connection,
         )
 
@@ -263,6 +297,7 @@ class Driver:
         inputs: dict[str, pl.DataFrame | list[pl.DataFrame]] | None = None,
         source_files: dict[str, pl.DataFrame] | None = None,
         connection: Callable[[Path], dict] | None = None,
+        state: StateSlots | None = None,
     ) -> Run:
         bundle = self.root / "bundle.tar.zst"
         build_bundle(function.load(), function.project, bundle)
@@ -280,6 +315,9 @@ class Driver:
         }
         if inputs:
             body["input"] = self.inputs(inputs)
+        if state is not None:
+            body["system_input"] = [self.state_input(state)]
+            body["system_output"] = [self.state_output(state)]
         self.write_request(bundle, body)
 
         connection_file = None

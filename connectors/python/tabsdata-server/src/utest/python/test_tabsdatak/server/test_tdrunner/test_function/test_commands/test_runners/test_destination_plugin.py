@@ -23,6 +23,9 @@ from tabsdatak.server._tdrunner.function._commons.context.destination import (
 from tabsdatak.server._tdrunner.function._commons.document.message.request import (
     Request,
 )
+from tabsdatak.server._tdrunner.function._commons.document.state.function import (
+    FunctionState,
+)
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputEntry,
     OutputManifest,
@@ -34,6 +37,7 @@ from tabsdatak.server._tdrunner.function._commons.symbols.function import (
 from tabsdatak.server._tdrunner.function._handlers.bundle import BundleArchive
 from tabsdatak.server._tdrunner.function._handlers.columns import ColumnPolicy, Zone
 from tabsdatak.server._tdrunner.function._handlers.handoff import DestinationHandoff
+from tabsdatak.server._tdrunner.function._handlers.state import STATE_FILE, State
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin import (
     main,
@@ -60,7 +64,11 @@ from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.run
 )
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
-from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payload
+from test_tabsdatak.server.test_tdrunner.test_function.conftest import (
+    info_payload,
+    input_table,
+    output_table,
+)
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -137,25 +145,74 @@ def built_bundle(
     return extracted
 
 
-def write_request(path: Path, bundle_uri: str = "file:///bundle.tar.zst") -> Path:
-    path.write_text(
-        yaml.safe_dump({
-            "Function": {
-                "info": info_payload(
-                    bundle_uri,
-                    execution_id=42,
-                    transaction_id=99,
-                    logical_function_run_id=7,
-                    physical_function_run_id=7,
-                    function_landing={
-                        "uri": (path.parent / "landing").as_uri(),
+STATE_TABLE = "td.fn_state__F-1"
+
+
+def write_request(
+    path: Path,
+    bundle_uri: str = "file:///bundle.tar.zst",
+    *,
+    state: bool = False,
+    previous: dict | None = None,
+) -> Path:
+    function = {
+        "info": info_payload(
+            bundle_uri,
+            execution_id=42,
+            transaction_id=99,
+            logical_function_run_id=7,
+            physical_function_run_id=7,
+            function_landing={
+                "uri": (path.parent / "landing").as_uri(),
+                "env_prefix": "ROOT",
+            },
+        ),
+    }
+    if state:
+        location = None
+        if previous is not None:
+            State.save(FunctionState(previous), previous_state_path(path.parent))
+            location = {
+                "uri": previous_state_path(path.parent).as_uri(),
+                "env_prefix": "ROOT",
+            }
+        function["system_input"] = [
+            input_table({"table": STATE_TABLE, "location": location}, 0)
+        ]
+        function["system_output"] = [
+            output_table(
+                {
+                    "table": STATE_TABLE,
+                    "location": {
+                        "uri": stored_state_path(path.parent).as_uri(),
                         "env_prefix": "ROOT",
                     },
-                ),
-            }
-        })
-    )
+                },
+                0,
+            )
+        ]
+    path.write_text(yaml.safe_dump({"Function": function}))
     return path
+
+
+def previous_state_path(root: Path) -> Path:
+    path = root / "storage" / "previous-state.t"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def stored_state_path(root: Path) -> Path:
+    return root / "storage" / f"{STATE_TABLE}.t"
+
+
+def stored_state(root: Path) -> dict:
+    return State.load(TableFile.local(stored_state_path(root))).values
+
+
+def leave_state(root: Path, values: dict) -> None:
+    folder = root / "state"
+    folder.mkdir(parents=True, exist_ok=True)
+    State.save(FunctionState(values), folder / STATE_FILE)
 
 
 def land(request_path: Path, frame: pl.DataFrame) -> OutputEntry:
@@ -202,6 +259,8 @@ def set_arguments(
             str(bundle_folder),
             "--outputs-manifest",
             str(outputs_manifest),
+            "--state-folder",
+            str(outputs_manifest.parent / "state"),
             "--connection-file",
             str(connection_file),
             "--liveness",
@@ -231,6 +290,7 @@ def destination_plugin(tmp_path: Path, **state) -> DestinationPlugin:
             responder_authorization="Bearer tok",
             journal_file=tmp_path / "journal.yaml",
             work_folder=tmp_path / "work",
+            state_folder=tmp_path / "state",
         )
     )
     for name, value in state.items():
@@ -415,18 +475,23 @@ def test_read_tables_maps_an_unreadable_landing_file_to_read_failed(tmp_path):
 # --- unit: write_tables ------------------------------------------------
 
 
-def writing_command(tmp_path: Path, plugin) -> DestinationPlugin:
-    return destination_plugin(
+def writing_command(tmp_path: Path, plugin, **request) -> DestinationPlugin:
+    loaded = Request.load(
+        write_request(tmp_path / "request.yaml", **request),
+        RunDestinationPluginErrorCode.RDP_1,
+    )
+    command = destination_plugin(
         tmp_path,
         handoff=file_handoff(tmp_path),
-        request=Request.load(
-            write_request(tmp_path / "request.yaml"),
-            RunDestinationPluginErrorCode.RDP_1,
-        ),
+        request=loaded,
         plugin=plugin,
         connection=object(),
         subscriber=SimpleNamespace(destination=object()),
+        manifest=OutputManifest(outputs=(OutputEntry(name="out_0"),)),
     )
+    command.context = DestinationContext.from_info(command.work_folder, loaded.info)
+    command.state = State(loaded, command.state_folder)
+    return command
 
 
 def test_write_tables_returns_normally(tmp_path):
@@ -461,6 +526,74 @@ def test_the_plugin_works_in_the_work_folder(tmp_path):
 
     writing_command(tmp_path, Plugin()).write_tables()
     assert folders == [tmp_path / "work"]
+
+
+class StatefulPlugin:
+    def __init__(self) -> None:
+        self.seen: list = []
+
+    def write_out(
+        self,
+        context,
+        connection,
+        destination,
+        tables,
+    ):
+        self.seen.append(context.get_attr("cursor"))
+        context.set_attr("cursor", "from-destination")
+
+
+def stateful_command(tmp_path: Path, plugin, **request) -> DestinationPlugin:
+    return writing_command(tmp_path, plugin, state=True, **request)
+
+
+def write_with_state(command: DestinationPlugin) -> OutputManifest:
+    command.hydrate()
+    command.write_tables()
+    command.drain()
+    command.store_state()
+    return OutputManifest.load(command.outputs_manifest_file)
+
+
+def test_the_plugin_continues_the_state_the_function_left(tmp_path):
+    leave_state(tmp_path, {"cursor": "from-function"})
+    plugin = StatefulPlugin()
+    manifest = write_with_state(
+        stateful_command(tmp_path, plugin, previous={"cursor": "from-last-run"})
+    )
+    assert plugin.seen == ["from-function"]
+    assert stored_state(tmp_path) == {"cursor": "from-destination"}
+    assert manifest.state == OutputEntry(
+        name=STATE_TABLE,
+        uri=stored_state_path(tmp_path).as_uri(),
+        stats=TableFile.local(stored_state_path(tmp_path)).stats(),
+    )
+
+
+def test_without_the_function_state_the_plugin_reads_the_last_run_one(tmp_path):
+    plugin = StatefulPlugin()
+    write_with_state(
+        stateful_command(tmp_path, plugin, previous={"cursor": "from-last-run"})
+    )
+    assert plugin.seen == ["from-last-run"]
+    assert stored_state(tmp_path) == {"cursor": "from-destination"}
+
+
+def test_a_first_run_plugin_starts_without_state(tmp_path):
+    plugin = StatefulPlugin()
+    write_with_state(stateful_command(tmp_path, plugin))
+    assert plugin.seen == [None]
+    assert stored_state(tmp_path) == {"cursor": "from-destination"}
+
+
+def test_without_a_state_slot_no_state_is_stored(tmp_path):
+    command = writing_command(tmp_path, StatefulPlugin())
+    command.hydrate()
+    command.write_tables()
+    command.drain()
+    command.store_state()
+    assert not (tmp_path / "state" / STATE_FILE).exists()
+    assert not command.outputs_manifest_file.exists()
 
 
 def test_write_tables_wraps_plugin_exception(tmp_path):

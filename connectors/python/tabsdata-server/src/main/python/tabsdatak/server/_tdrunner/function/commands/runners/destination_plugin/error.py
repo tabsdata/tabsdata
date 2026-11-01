@@ -10,8 +10,11 @@ from tabsdatak.server._tdrunner.function._commons.error.command import (
     BadInputParquetError as CommandBadInputParquetError,
     BadManifestError as CommandBadManifestError,
     BadRequestError as CommandBadRequestError,
+    BadStateInError as CommandBadStateInError,
+    BadStateOutError as CommandBadStateOutError,
     BadUserCodeError as CommandBadUserCodeError,
     CommandRuntimeException,
+    ManifestWriteFailedError as CommandManifestWriteFailedError,
     NoPluginError as CommandNoPluginError,
     PluginFailedError as CommandPluginFailedError,
     WriteFailedError as CommandWriteFailedError,
@@ -57,6 +60,18 @@ class OutputReadFailedError(CommandBadInputParquetError):
 
 class BadConnectionError(CommandRuntimeException):
     exit_code = 19
+
+
+class BadStateInError(CommandBadStateInError):
+    exit_code = 20
+
+
+class BadStateOutError(CommandBadStateOutError):
+    exit_code = 21
+
+
+class OutputsManifestWriteFailedError(CommandManifestWriteFailedError):
+    exit_code = 22
 
 
 class RunDestinationPluginErrorCode(ErrorCode):
@@ -106,4 +121,20 @@ class RunDestinationPluginErrorCode(ErrorCode):
     RDP_11 = ErrorDef(
         BadConnectionError,
         "Cannot load the connection {path}: {detail}",
+    )
+    RDP_12 = ErrorDef(
+        BadStateInError,
+        "Cannot read the state {state_file}: {detail}",
+    )
+    RDP_13 = ErrorDef(
+        BadStateOutError,
+        "Cannot write the state {state_file}: {detail}",
+    )
+    RDP_14 = ErrorDef(
+        BadStateOutError,
+        "Cannot store the state {state_file} at {path}: {detail}",
+    )
+    RDP_15 = ErrorDef(
+        OutputsManifestWriteFailedError,
+        "Cannot write the outputs manifest {path}: {detail}",
     )

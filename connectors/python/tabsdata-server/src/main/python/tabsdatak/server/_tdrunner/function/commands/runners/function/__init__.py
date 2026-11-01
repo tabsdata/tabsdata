@@ -31,7 +31,8 @@ MANUAL = (
     "slot a list), calls the user function, and writes every returned table "
     "in one streaming pass: publisher and transformer outputs where the "
     "request stores them, subscriber outputs to the run's landing area for "
-    "destination-plugin. The run's state is written along with them. "
+    "destination-plugin. The run's state is written along with them, except "
+    "a subscriber's, which destination-plugin continues and stores. "
     "--outputs-manifest gets each written table's location and stats; a "
     "table the function returned as None gets neither."
 )

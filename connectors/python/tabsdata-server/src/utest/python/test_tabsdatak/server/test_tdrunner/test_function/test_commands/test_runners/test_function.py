@@ -99,7 +99,11 @@ from tabsdatak.spi import DestContext, SrcPluginCtx, TableMode
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 from test_tabsdatak.server.conftest import TESTING_RESOURCES_FOLDER
-from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payload
+from test_tabsdatak.server.test_tdrunner.test_function.conftest import (
+    info_payload,
+    input_table,
+    output_table,
+)
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -386,35 +390,6 @@ def quality_udf_transformer_bundle(
     )
 
     forget("udf_pkg")
-
-
-def input_table(entry: dict, index: int) -> dict:
-    table = {
-        "collection_id": 1,
-        "collection": "c",
-        "table_id": "T-1",
-        "table_version_id": "TV-1",
-        "input_idx": index,
-        "table_pos": index,
-        "version_pos": 0,
-        **entry,
-    }
-    return {"Table": table}
-
-
-def output_table(entry: dict, index: int) -> dict:
-    table = {
-        "collection_id": 1,
-        "collection": "c",
-        "table_id": "T-1",
-        "table_version_id": "TV-1",
-        "logical_table_data_version_id": "LDV-1",
-        "physical_table_data_version_id": "PDV-1",
-        "location": {"uri": "file:///irrelevant", "env_prefix": "ROOT"},
-        "table_pos": index,
-        **entry,
-    }
-    return {"Table": table}
 
 
 def stored_path(root: Path, table: str) -> Path:
@@ -1865,9 +1840,9 @@ def test_main_ctx_aware_subscriber_hydrates_and_drains(
     request,
     http_ok_url,
 ):
-    """A @subscriber that declares a trailing ``ctx: TransactionCtx`` also
-    round-trips state cleanly. Pins kind-agnostic runtime behaviour
-    for the third decorator kind."""
+    """A @subscriber that declares a trailing ``ctx: TransactionCtx`` reads
+    and drains state like the other kinds, but leaves it in the state folder
+    for destination-plugin, which continues and stores it."""
     dest_out = tmp_path / "sub_dest"
     dest_out.mkdir()
     extracted = build_extracted_bundle(
@@ -1884,12 +1859,17 @@ def test_main_ctx_aware_subscriber_hydrates_and_drains(
         tmp_path / "request.yaml",
         previous={"smoke.last-seen": "from-state-in"},
     )
-    run_with_state(
+    manifest = run_with_state(
         tmp_path,
         extracted,
         monkeypatch,
         http_ok_url,
         request_path,
     )
-    assert stored_state(tmp_path) == {"smoke.last-seen": "sub-after-from-state-in"}
+    state_file = TableFile.local(tmp_path / "state" / STATE_FILE)
+    assert State.load(state_file).values == {
+        "smoke.last-seen": "sub-after-from-state-in"
+    }
+    assert not stored_path(tmp_path, STATE_TABLE).exists()
+    assert manifest.state is None
     assert (landing_path(tmp_path) / "0.t").is_file()

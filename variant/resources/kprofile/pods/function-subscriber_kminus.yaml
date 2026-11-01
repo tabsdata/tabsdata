@@ -490,6 +490,8 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
             - --outputs-manifest
             - $(CONTAINER_ROOT)/tabsdata/shared/fn/out/outputs-manifest.yaml
+            - --state-folder
+            - $(CONTAINER_ROOT)/tabsdata/shared/state
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

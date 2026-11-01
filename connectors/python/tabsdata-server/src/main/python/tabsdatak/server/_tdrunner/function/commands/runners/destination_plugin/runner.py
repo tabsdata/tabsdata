@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 
 from tabsdatak._api import warn_legacy_dest
@@ -33,12 +34,22 @@ from tabsdatak.server._tdrunner.function._commons.symbols.function import (
     DefinitionErrors,
     FunctionBundle,
 )
+from tabsdatak.server._tdrunner.function._handlers.columns import ColumnPolicy, Zone
 from tabsdatak.server._tdrunner.function._handlers.handoff import (
     DestinationHandoff,
     Handoff,
     MissingOutputError,
     OutputCopyError,
     OutputReadError,
+)
+from tabsdatak.server._tdrunner.function._handlers.outputs import (
+    OutputError,
+    Outputs,
+)
+from tabsdatak.server._tdrunner.function._handlers.state import (
+    State,
+    StateReadError,
+    StateWriteError,
 )
 from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.error import (  # noqa: E501
     RunDestinationPluginErrorCode,
@@ -64,11 +75,14 @@ class DestinationPlugin(Command[RunDestinationPluginArguments]):
     outputs_manifest_file: Path
     connection_file: Path
     work_folder: Path
+    state_folder: Path
     request: Request
     subscriber: SubscriberInfo
     plugin: DestPlugin
     connection: Conn
     manifest: OutputManifest
+    context: DestinationContext
+    state: State
     handoff: DestinationHandoff
 
     def __init__(self, arguments: RunDestinationPluginArguments) -> None:
@@ -78,17 +92,25 @@ class DestinationPlugin(Command[RunDestinationPluginArguments]):
         self.outputs_manifest_file = arguments.outputs_manifest
         self.connection_file = arguments.connection_file
         self.work_folder = arguments.work_folder or Path(tempfile.gettempdir())
+        self.state_folder = arguments.state_folder
 
     def run(self) -> int:
         logger.info("Running the destination plugin")
         self.load()
+        self.hydrate()
         if self.empty:
             logger.info(
                 f"The subscriber returned no data for its "
                 f"{len(self.manifest.outputs)} output(s); "
                 f"{type(self.plugin).__name__} is not called"
             )
-            return 0
+        else:
+            self.write()
+        self.drain()
+        self.store_state()
+        return 0
+
+    def write(self) -> None:
         self.handoff = Handoff.of(self.plugin, self.work_folder)
         try:
             self.read_tables()
@@ -97,7 +119,6 @@ class DestinationPlugin(Command[RunDestinationPluginArguments]):
         finally:
             self.handoff.reap()
         logger.info(f"Destination plugin wrote {len(self.handoff.slots)} table(s)")
-        return 0
 
     def load(self) -> None:
         self.request = Request.load(
@@ -117,6 +138,57 @@ class DestinationPlugin(Command[RunDestinationPluginArguments]):
             f"for connection {type(self.connection).__name__}"
         )
         self.manifest = self.load_manifest()
+        self.context = DestinationContext.from_info(
+            self.work_folder,
+            self.request.info,
+        )
+        self.state = State(self.request, self.state_folder)
+
+    def hydrate(self) -> None:
+        try:
+            self.state.hydrate(self.context, prefer_local=True)
+        except StateReadError as error:
+            raise RunDestinationPluginErrorCode.RDP_12.exception(
+                cause=error,
+                state_file=error.uri,
+                detail=error.detail,
+            )
+
+    def drain(self) -> None:
+        try:
+            self.state.drain(self.context)
+        except StateWriteError as error:
+            raise RunDestinationPluginErrorCode.RDP_13.exception(
+                cause=error,
+                state_file=error.file,
+                detail=error.detail,
+            )
+        logger.debug(f"State drained to {self.state.file}")
+
+    def store_state(self) -> None:
+        state = self.state.output()
+        if state is None:
+            return
+        try:
+            stored = Outputs(ColumnPolicy(Zone.LAND)).sink([], [], [], state=state)
+        except OutputError as error:
+            raise RunDestinationPluginErrorCode.RDP_14.exception(
+                cause=error,
+                state_file=self.state.file,
+                path=state.target.uri,
+                detail=str(error),
+            )
+        self.manifest = replace(self.manifest, state=stored.state)
+        path = self.outputs_manifest_file
+        try:
+            self.manifest.write(path)
+        except OSError as error:
+            raise RunDestinationPluginErrorCode.RDP_15.exception(
+                cause=error,
+                path=path,
+                detail=str(error),
+            )
+        logger.debug(f"State stored at {state.target.uri}")
 
     @property
     def empty(self) -> bool:
@@ -182,10 +254,6 @@ class DestinationPlugin(Command[RunDestinationPluginArguments]):
         logger.debug(f"Outputs {self.manifest.outputs} handed over as {slots}")
 
     def write_tables(self) -> None:
-        context = DestinationContext.from_info(
-            self.work_folder,
-            self.request.info,
-        )
         logger.info(
             f"Writing {len(self.handoff.slots)} table(s) through "
             f"{type(self.plugin).__name__}"
@@ -193,7 +261,7 @@ class DestinationPlugin(Command[RunDestinationPluginArguments]):
         try:
             self.handoff.grow(
                 self.plugin,
-                context,
+                self.context,
                 self.connection,
                 self.subscriber.destination,
             )

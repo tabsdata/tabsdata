@@ -24,13 +24,17 @@ INFORMATION = (
 )
 MANUAL = (
     "destination-plugin --request <PATH> --bundle-folder <PATH> "
-    "--outputs-manifest <PATH> --connection-file <PATH> --liveness <PATH>\n\n"
+    "--outputs-manifest <PATH> --state-folder <PATH> --connection-file <PATH> "
+    "--liveness <PATH>\n\n"
     "Loads the subscriber definition from --bundle-folder, its destination "
     "plugin from the connectors registry and the connection from "
     "--connection-file, then hands the plugin the outputs --outputs-manifest "
     "lists in the run's landing area: with a file handoff, write_out() gets "
     "local parquet copies holding only the user's columns. Every output must "
-    "hold data, unless none does: then the plugin is not called."
+    "hold data, unless none does: then the plugin is not called. The plugin "
+    "context continues the state the function step left in --state-folder (or "
+    "the previous run's); it is drained back there, stored, and added to the "
+    "outputs manifest."
 )
 
 

@@ -108,3 +108,32 @@ def http_ok_url() -> Iterator[str]:
 def no_http_retry(monkeypatch):
     monkeypatch.setattr(retry, "TOTAL_SECONDS", 0)
     monkeypatch.setattr(retry, "WAIT_SECONDS", 0)
+
+
+def input_table(entry: dict, index: int) -> dict:
+    table = {
+        "collection_id": 1,
+        "collection": "c",
+        "table_id": "T-1",
+        "table_version_id": "TV-1",
+        "input_idx": index,
+        "table_pos": index,
+        "version_pos": 0,
+        **entry,
+    }
+    return {"Table": table}
+
+
+def output_table(entry: dict, index: int) -> dict:
+    table = {
+        "collection_id": 1,
+        "collection": "c",
+        "table_id": "T-1",
+        "table_version_id": "TV-1",
+        "logical_table_data_version_id": "LDV-1",
+        "physical_table_data_version_id": "PDV-1",
+        "location": {"uri": "file:///irrelevant", "env_prefix": "ROOT"},
+        "table_pos": index,
+        **entry,
+    }
+    return {"Table": table}

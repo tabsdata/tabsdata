@@ -333,7 +333,7 @@ class Function(Command[RunFunctionArguments]):
                 self.output_tables,
                 targets,
                 checks=self.checks,
-                state=self.state.output(),
+                state=None if self.user_function.subscriber else self.state.output(),
             )
         except SinkError as error:
             raise RunFunctionErrorCode.RF_16.exception(
