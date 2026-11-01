@@ -75,8 +75,13 @@ def test_retriable_failures(error):
     assert is_retriable(error)
 
 
+@pytest.fixture(autouse=True)
+def no_shutdown(monkeypatch):
+    monkeypatch.setattr(shutdown, "requested", False)
+
+
 @pytest.fixture
-def shutdown_requested(monkeypatch):
+def shutdown_requested(no_shutdown, monkeypatch):
     monkeypatch.setattr(shutdown, "requested", True)
 
 
@@ -171,7 +176,6 @@ def test_shutdown_stops_retrying_after_the_first_attempt(shutdown_requested):
 
 def test_shutdown_during_retries_stops_them(monkeypatch):
     monkeypatch.setattr(retry, "WAIT_SECONDS", 0)
-    monkeypatch.setattr(shutdown, "requested", False)
     attempts = []
 
     def call():
