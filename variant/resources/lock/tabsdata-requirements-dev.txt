@@ -9,7 +9,7 @@ agate-sql==0.7.3
 annotated-doc==0.0.5
 annotated-types==0.8.0
 ansi2html==1.9.5
-anyio==4.15.1
+anyio==4.16.0
 archspec==0.2.7
 argcomplete==3.7.2
 ast-serialize==0.13.1
