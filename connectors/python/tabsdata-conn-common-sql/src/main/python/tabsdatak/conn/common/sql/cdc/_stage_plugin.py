@@ -13,7 +13,8 @@ files through unchanged.
 
 :class:`CdcStageSrcPlugin` is the CDC publisher. For every output slot it:
 
-* concatenates the slot's staged parquet files into one frame;
+* concatenates the slot's staged tables into one frame, lazily, where they
+  are staged;
 * orders them by change segment
   (:data:`~tabsdatak.conn.common.sql.cdc.constants.CDC_META_SEG`) then
   ordinal (:data:`~tabsdatak.conn.common.sql.cdc.constants.CDC_META_ORD`),
@@ -39,21 +40,20 @@ Bind it to a flow by pointing a CDC :class:`~tabsdatak.spi.StreamSrcDef`'s
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from decimal import Decimal
 
 from tabsdatak.conn.common.sql.cdc._initial_load import INITIAL_LOAD_SEGMENT
 from tabsdatak.conn.common.sql.cdc.constants import CDC_META_ORD, CDC_META_SEG
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 from tabsdatak.spi import (
+    LazyFrameInput,
     SrcDef,
     SrcPluginCtx,
     StreamStageSrc,
     StreamStageSrcPlugin,
-    TableFileInput,
-    TableFileSpec,
     TableMode,
     _StreamStageSrcConn,
-    to_table_file_inputs,
 )
 
 logger = logging.getLogger(__name__)
@@ -87,37 +87,34 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
     def process_files(
         self,
         ctx: SrcPluginCtx,
-        files: list[list[TableFileInput]],
-    ) -> list[list[TableFileInput]]:
+        files: list[Iterable[LazyFrameInput]],
+    ) -> list[Iterable[LazyFrameInput]]:
         """De-duplicate and ``(seg, ord)``-filter each slot's CDC rows.
 
         ``files`` is positional by output slot (the same shape the base
-        ``read_in`` returns). Each slot's parquet files are concatenated,
-        sorted and de-duplicated on ``(seg, ord)``, filtered against the
+        ``read_in`` returns). Each slot's tables are concatenated, sorted
+        and de-duplicated on ``(seg, ord)``, and filtered against the
         per-slot ``(seg, ord)`` cursor in ``ctx`` (none stored -> no
-        filtering), and written to a single parquet under ``ctx.work_dir``;
-        the new high-water ``(seg, ord)`` is persisted via
-        ``ctx.set_attr``. An empty input slot yields an empty output
-        slot. Returns the per-slot file lists to publish (see module
-        docstring for the full contract)."""
+        filtering), all lazily, as one table; the new high-water
+        ``(seg, ord)`` is persisted via ``ctx.set_attr``. An empty input
+        slot yields an empty output slot. Returns the per-slot tables to
+        publish (see module docstring for the full contract)."""
         import polars as pl
 
-        out_dir = ctx.work_dir / "_cdc_stage"
-        out_dir.mkdir(parents=True, exist_ok=True)
-
-        results: list[list[TableFileSpec]] = []
-        for index, slot_files in enumerate(files):
-            if not slot_files:
-                # No files staged for this slot this run; nothing to emit.
+        results: list[Iterable[LazyFrameInput]] = []
+        for index, slot in enumerate(files):
+            tables = list(slot)
+            if not tables:
+                # No tables staged for this slot this run; nothing to emit.
                 results.append([])
                 continue
 
-            lazy_frames = [pl.scan_parquet(tfi.file) for tfi in slot_files]
+            lazy_frames = [table.frame for table in tables]
             # Stays lazy end to end: the dedup is a window aggregation rather
             # than ``unique(keep="first")`` so it does not depend on engine
             # row order (which the parallel/streaming engine does not
-            # preserve), and the result is streamed to disk by
-            # ``sink_parquet`` below, never materialised whole.
+            # preserve), and the result is returned as a frame the runtime
+            # streams to its landing, never materialised whole.
             #
             # ``concat`` keeps file order, so a global row index over it is a
             # true arrival order; within each ``(seg, ord)`` group the row
@@ -170,7 +167,6 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
             else:
                 emitted = deduped
 
-            out_path = out_dir / f"slot{index:04d}.parquet"
             try:
                 # High-water ``(seg, ord)`` over the de-duplicated batch.
                 # ``ord`` is scoped within ``seg``, so the cursor is the
@@ -189,7 +185,6 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
                     )
                     .collect(engine="streaming")
                 )
-                emitted.sink_parquet(out_path)
             except (pl.exceptions.PolarsError, OSError) as e:
                 raise SqlCdcErrorCode.CDC_15.exception(
                     cause=e, index=index, reason=str(e)
@@ -208,10 +203,10 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
                 ctx.set_attr(_seg_key(index), str(new_seg))
                 ctx.set_attr(_ord_key(index), str(new_ord))
 
-            results.append([out_path])
+            results.append([LazyFrameInput(emitted)])
 
         logger.info("cdc-stage: processed %d slot(s)", len(results))
-        return to_table_file_inputs(results)
+        return results
 
 
 # Entry-point binding for the CDC stream-stage publisher. Like the generic

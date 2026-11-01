@@ -30,7 +30,7 @@ from tabsdatak.conn.common.sql.cdc._stage_plugin import (
     _seg_key,
 )
 from tabsdatak.conn.common.sql.cdc.constants import CDC_META_ORD, CDC_META_SEG
-from tabsdatak.spi import TableFileInput
+from tabsdatak.spi import LazyFrameInput
 
 
 class FakeCtx:
@@ -52,13 +52,13 @@ class FakeCtx:
         self.attrs[attr] = val
 
 
-def _write(path: Path, rows: list[tuple[int, int, str]]) -> TableFileInput:
+def _write(path: Path, rows: list[tuple[int, int, str]]) -> LazyFrameInput:
     """Write a tiny parquet with (seg, ord, payload) rows.
 
     seg/ord are cast to ``decimal128(38, 0)`` -- the dtype the CDC ingester
     actually emits, and the only dtype the plugin sees in production. Returns
-    the :class:`TableFileInput` handle ``process_files`` consumes (metadata
-    left at its default)."""
+    the :class:`LazyFrameInput` over it that ``process_files`` consumes, as the
+    stage hands it a staged table."""
     frame = pl.DataFrame({
         CDC_META_SEG: [r[0] for r in rows],
         CDC_META_ORD: [r[1] for r in rows],
@@ -68,11 +68,11 @@ def _write(path: Path, rows: list[tuple[int, int, str]]) -> TableFileInput:
         pl.col(CDC_META_ORD).cast(pl.Decimal(38, 0)),
     )
     frame.write_parquet(path)
-    return TableFileInput(file=path)
+    return LazyFrameInput(pl.scan_parquet(path))
 
 
-def _read(tfi: TableFileInput) -> list[tuple[int, int]]:
-    df = pl.read_parquet(tfi.file)
+def _read(table: LazyFrameInput) -> list[tuple[int, int]]:
+    df = table.frame.collect()
     return list(zip(df.get_column(CDC_META_SEG), df.get_column(CDC_META_ORD)))
 
 
@@ -145,7 +145,7 @@ def test_ord_breaks_segment_ties_and_dedup_is_on_pair(tmp_path):
     assert _read(out[0][0]) == [(5, 1), (5, 2)]
     # Among the two (5, 1) duplicates the earliest-arriving row is kept:
     # the stable sort + unique(keep="first") retains "first", not "first-dup".
-    df = pl.read_parquet(out[0][0].file)
+    df = out[0][0].frame.collect()
     kept = df.filter(
         (pl.col(CDC_META_SEG) == 5) & (pl.col(CDC_META_ORD) == 1)
     ).get_column("payload")
@@ -165,7 +165,7 @@ def test_dedup_and_cursor_filter_combine_in_one_run(tmp_path):
     # (1,1)/(2,1) <= (2,1) filtered; the (3,1) duplicate collapsed; (4,1) new.
     assert _read(out[0][0]) == [(3, 1), (4, 1)]
     # The earliest-arriving (3,1) survives the dedup ("c", not "c-dup").
-    df = pl.read_parquet(out[0][0].file)
+    df = out[0][0].frame.collect()
     kept = df.filter(
         (pl.col(CDC_META_SEG) == 3) & (pl.col(CDC_META_ORD) == 1)
     ).get_column("payload")
@@ -185,7 +185,7 @@ def test_cursor_stored_as_scalar_strings(tmp_path):
     out = CdcStageSrcPlugin().process_files(ctx, [[f1, f2]])
 
     assert _read(out[0][0]) == [(3, 1), (4, 1)]
-    df = pl.read_parquet(out[0][0].file)
+    df = out[0][0].frame.collect()
     assert df.schema[CDC_META_SEG] == pl.Decimal(38, 0)
     cursor = _cursor(ctx)
     assert cursor == ("4", "1")
@@ -241,13 +241,18 @@ def test_initial_load_rows_publish_despite_a_prior_cursor(tmp_path):
     """Segment -1 is reserved for the initial load and cannot be a real
     position, so a reload publishes in full on a slot that already streamed;
     the stale change at segment 400 is still filtered."""
-    files = [_write(tmp_path / "a.parquet", [
-        (-1, 0, "load"),
-        (-1, 1, "row-1"),
-        (-1, 2, "row-2"),
-        (400, 1, "already-published"),
-        (600, 3, "new"),
-    ])]
+    files = [
+        _write(
+            tmp_path / "a.parquet",
+            [
+                (-1, 0, "load"),
+                (-1, 1, "row-1"),
+                (-1, 2, "row-2"),
+                (400, 1, "already-published"),
+                (600, 3, "new"),
+            ],
+        )
+    ]
     ctx = FakeCtx(tmp_path, _seed("500", "9"))
 
     out = CdcStageSrcPlugin().process_files(ctx, [files])

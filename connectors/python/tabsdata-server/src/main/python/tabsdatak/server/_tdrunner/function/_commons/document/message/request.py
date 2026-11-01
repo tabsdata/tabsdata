@@ -12,6 +12,7 @@ from pydantic import model_validator
 
 from tabsdatak.common._configuration.document.error import DocumentException
 from tabsdatak.common._configuration.document.loader import DocumentModel, load
+from tabsdatak.common._storage.landed import LANDING_SUFFIX
 from tabsdatak.common._storage.mounts import (
     AnonymousMountDeclaration,
     EnvironmentMountDeclaration,
@@ -20,7 +21,6 @@ from tabsdatak.common._storage.mounts import (
 from tabsdatak.common._storage.transfer import StorageLocation
 from tabsdatak.error import ErrorCode
 
-LANDING_SUFFIX = ".t"
 MILLISECONDS_PER_SECOND = 1000
 
 TABLE = "Table"

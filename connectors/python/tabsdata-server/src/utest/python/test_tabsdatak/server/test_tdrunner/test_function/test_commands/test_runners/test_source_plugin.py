@@ -24,7 +24,7 @@ from tabsdatak._info import PublisherInfo
 # @stream_publisher fixtures resolve via ``get_type_hints``.
 from tabsdatak.api import TableFrameSpec, TableFramesSpec  # noqa: F401
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
-from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
+from tabsdatak.common._storage.landed import SchemaOrigin
 from tabsdatak.server._tdrunner.function._commons.context.source import SourceContext
 from tabsdatak.server._tdrunner.function._commons.document.message.request import (
     Info,
@@ -47,10 +47,7 @@ from tabsdatak.server._tdrunner.function._handlers.binding import (
 )
 from tabsdatak.server._tdrunner.function._handlers.bundle import BundleArchive
 from tabsdatak.server._tdrunner.function._handlers.handoff import Handoff
-from tabsdatak.server._tdrunner.function._handlers.landing import (
-    LandedFile,
-    SchemaOrigin,
-)
+from tabsdatak.server._tdrunner.function._handlers.landing import LandedFile
 from tabsdatak.server._tdrunner.function._handlers.state import (
     STATE_FILE,
     State,
@@ -80,8 +77,6 @@ from tabsdatak.spi import SrcPlugin, TableFileInput
 from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payload
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
-
-HANDLER = TransporterHandler1()
 
 
 BINDING_MODULE = "tabsdatak.server._tdrunner.function._handlers.binding"
@@ -509,58 +504,34 @@ def test_an_unknown_source_cannot_be_bound(
 # --- unit: StageConnection.of (stream-publisher substitution) --------------
 
 
-def test_build_manifest_stage_conn_file_scheme_resolves_localfile():
-    """file:// keeps the connector-conn form: a LocalFileSrcConn in the
-    `local` slot and no prebuilt `stage_backend`. ManifestStageSrcPlugin's
-    backend_for_conn reads the slot. The integration tests use the same
-    StageConnection idiom."""
-    from tabsdatak.conn.localfile import LocalFileSrcConn
-
+def test_a_local_stage_connection_carries_the_stage_location():
     connection = StageConnection.of(Location(uri="file:///tmp/stage"))
-    assert connection.stage_backend is None
-    assert isinstance(connection.local, LocalFileSrcConn)
-    assert str(connection.local.base_path) == "/tmp/stage"
-    assert connection.s3 is None
-    assert connection.az is None
-    assert connection.gcs is None
+    assert connection.location.uri == "file:///tmp/stage"
 
 
-def test_build_manifest_stage_conn_s3_resolves_to_object_store_backend(monkeypatch):
-    """Cloud schemes resolve (via endpoint.py) to a prebuilt StageBackend
-    carried on `stage_backend`; backend_for_conn returns it as-is. The
-    stage-relative path is appended to the stage-root URL."""
+def test_a_cloud_stage_connection_carries_the_mount_options(monkeypatch):
     for key in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"):
         monkeypatch.setenv(f"SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__{key}", "v")
     connection = StageConnection.of(
         Location(uri="s3://bucket/stage", env_prefix="ROOT")
     )
-    assert connection.local is None
-    backend = connection.stage_backend
-    assert backend is not None
-    assert backend.is_object_store is True
-    loc = backend.build_location("manifests/stream-manifest-*.json", HANDLER)
-    assert loc.url == "s3://bucket/stage/manifests/stream-manifest-*.json"
+    assert connection.location.uri == "s3://bucket/stage"
+    assert connection.location.options
 
 
-def test_build_manifest_stage_conn_az_resolves():
-    connection = StageConnection.of(Location(uri="az://account/container/stage"))
-    assert connection.stage_backend is not None
-    assert connection.stage_backend.is_object_store is True
+@pytest.mark.parametrize(
+    "uri",
+    ["az://account/container/stage", "gs://bucket/stage"],
+    ids=["azure", "gcs"],
+)
+def test_a_cloud_stage_connection_opens(uri):
+    assert StageConnection.of(Location(uri=uri)).location.uri == uri
 
 
-def test_build_manifest_stage_conn_gs_resolves():
-    """GCS uses the ``gs://`` scheme -- endpoint.py's registered builder."""
-    connection = StageConnection.of(Location(uri="gs://bucket/stage"))
-    assert connection.stage_backend is not None
-    assert connection.stage_backend.is_object_store is True
-
-
-def test_build_manifest_stage_conn_rejects_unsupported_scheme():
-    """An unknown scheme still surfaces RSP_11 with a clean exit code.
-    Note: GCS stages must use ``gs://`` -- ``gcs://`` has no endpoint
-    builder and is rejected here."""
+def test_a_stage_connection_rejects_an_unsupported_scheme():
+    """An unknown scheme surfaces RSP_11 with a clean exit code."""
     with pytest.raises(UnsupportedStageError):
-        StageConnection.of(Location(uri="gcs://bucket/stage"))
+        StageConnection.of(Location(uri="ftp://bucket/stage"))
 
 
 def test_a_stream_publisher_binds_the_manifest_stage(
@@ -568,13 +539,12 @@ def test_a_stream_publisher_binds_the_manifest_stage(
 ):
     """For a ``@stream_publisher``, ``SourceBinding.of`` swaps
     the user-declared Kafka source for the publisher-side
-    StreamStageSrc + a StageConnection shaped like ManifestStageConn
-    that ``ManifestStageSrcPlugin`` knows how to read. Cardinality
+    StreamStageSrc + a StageConnection carrying the function stage's
+    location, which ``ManifestStageSrcPlugin`` reads. Cardinality
     drops to ``-1`` because the manifest decides slot count at read
     time."""
     from tabsdatak.api import stream_publisher
     from tabsdatak.conn.kafka import KafkaStreamSrc
-    from tabsdatak.conn.localfile import LocalFileSrcConn
     from tabsdatak.spi import StreamStageSrc, StreamStageSrcPlugin
 
     @stream_publisher(
@@ -599,12 +569,8 @@ def test_a_stream_publisher_binds_the_manifest_stage(
     # Plugin substituted to StreamStageSrcPlugin (which delegates to
     # ManifestStageSrcPlugin internally on read_in).
     assert isinstance(binding.plugin, StreamStageSrcPlugin)
-    # Conn substituted to a duck-typed namespace with file:// backend.
-    assert isinstance(binding.connection.local, LocalFileSrcConn)
-    assert str(binding.connection.local.base_path) == "/stage/dir"
-    assert binding.connection.s3 is None
-    assert binding.connection.az is None
-    assert binding.connection.gcs is None
+    # Conn substituted to the function stage's location.
+    assert binding.connection.location.uri == "file:///stage/dir"
     # Source substituted to a StreamStageSrc instance.
     assert isinstance(binding.source, StreamStageSrc)
     # Cardinality is -1 (dynamic, from the StreamStageSrc registration).
@@ -674,7 +640,7 @@ def test_an_unsupported_stage_is_reported_as_such(tmp_path):
     command = source_plugin(
         tmp_path,
         publisher=module_level_stream_publisher,
-        request=binding_request(tmp_path, "gcs://bucket/stage"),
+        request=binding_request(tmp_path, "ftp://bucket/stage"),
     )
     with pytest.raises(UnsupportedStageSchemeError):
         command.bind()

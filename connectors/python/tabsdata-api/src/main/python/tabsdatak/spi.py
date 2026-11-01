@@ -517,7 +517,11 @@ class StreamStageSrcPlugin(SrcPlugin[_StreamStageSrcConn, StreamStageSrc]):
 
     The manifest scan + ingest is fixed in `read_in` and **must not be
     overridden**; customise the ingested data (e.g. de-duplication) by
-    overriding `process_files` instead. To register a customised
+    overriding `process_files` instead, annotating its `files` as
+    `list[Iterable[LazyFrameInput]]` to receive the tables where they are
+    staged (an override annotated, or left, with the legacy
+    `list[list[TableFileInput]]` receives local parquet copies, and is
+    deprecated). To register a customised
     variant, pair a `StreamStageSrc` subclass with this plugin in a
     `SrcDef` whose `cardinality` returns `-1` (disables the
     slot-count check) and whose `explorer` is `None`.
@@ -530,31 +534,39 @@ class StreamStageSrcPlugin(SrcPlugin[_StreamStageSrcConn, StreamStageSrc]):
         ctx: SrcPluginCtx,
         conn: _StreamStageSrcConn,
         src: StreamStageSrc,
-    ) -> list[list[TableFileInput]]:
-        """Ingest the oldest unconsumed manifest's files.
+    ) -> list[Iterable[LazyFrameInput]]:
+        """Ingest the oldest unconsumed manifest's tables.
 
         Final -- subclasses must **not** override this; customise the
         ingested data via `process_files` instead."""
+        from tabsdatak._handoff import StageContract
+
         plugin_cls = getattr(
             importlib.import_module("tabsdatak.conn.stream.stage"),
             "ManifestStageSrcPlugin",
         )
         plugin = cast(SrcPlugin, plugin_cls())
-        return self.process_files(ctx, plugin.read_in(ctx, conn, src))
+        tables = cast(list[Iterable[LazyFrameInput]], plugin.read_in(ctx, conn, src))
+        return StageContract(type(self)).process(self, ctx, tables)
 
     # noinspection PyMethodMayBeStatic
     def process_files(
         self,
         _ctx: SrcPluginCtx,
-        files: list[list[TableFileInput]],
-    ) -> list[list[TableFileInput]]:
-        """Hook for subclass post-processing of the ingested files
+        files: list[Iterable[LazyFrameInput]],
+    ) -> list[Iterable[LazyFrameInput]]:
+        """Hook for subclass post-processing of the ingested tables
         (e.g. de-duplication).
 
-        Receives the per-slot file lists `read_in` materialised from
-        the manifest and returns the per-slot file lists the plugin
-        ultimately yields. The base implementation returns `files`
-        unchanged."""
+        Receives the per-slot tables `read_in` took from the manifest,
+        lazily over where they are staged, and returns the per-slot
+        tables the plugin ultimately yields. The base implementation
+        returns `files` unchanged.
+
+        An override whose `files` is annotated (or left unannotated) as
+        the legacy `list[list[TableFileInput]]` receives local parquet
+        copies and returns `TableFileInput`\\ s; it is deprecated, and
+        cannot take untyped tables (those staged with a `schema`)."""
         return files
 
 

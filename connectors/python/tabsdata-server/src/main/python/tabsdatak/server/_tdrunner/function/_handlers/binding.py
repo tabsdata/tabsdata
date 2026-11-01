@@ -8,25 +8,22 @@ import inspect
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
-from urllib.request import url2pathname
 
 from tabsdatak._connectors import get_src, get_stream_src
 from tabsdatak._info import PublisherInfo, StreamPublisherInfo, _unwrap_info
 from tabsdatak.api import Src
-from tabsdatak.conn.stream.stage._backend import StageBackend
+from tabsdatak.common._storage.transfer import (
+    StorageLocation,
+    StoreKind,
+    TransferError,
+)
 from tabsdatak.server._tdrunner.function._commons.document.connection import (
     ConnectionDocument,
 )
 from tabsdatak.server._tdrunner.function._commons.document.message.request import (
     Location,
 )
-from tabsdatak.server._tdrunner.function._lib.endpoint import UnsupportedSchemeError
-from tabsdatak.server._tdrunner.function._lib.stage_backend import (
-    stage_backend_from_location,
-)
 from tabsdatak.spi import Conn, SrcPlugin
-
-FILE_SCHEME = "file"
 
 Publisher = PublisherInfo | StreamPublisherInfo
 
@@ -52,37 +49,19 @@ class UnsupportedStageError(Exception):
 
 
 class StageConnection(Conn):
-    stage_backend: StageBackend | None
-    local: Conn | None
-    s3: Conn | None
-    az: Conn | None
-    gcs: Conn | None
+    location: StorageLocation
 
-    def __init__(
-        self,
-        *,
-        stage_backend: StageBackend | None = None,
-        local: Conn | None = None,
-    ) -> None:
-        self.stage_backend = stage_backend
-        self.local = local
-        self.s3 = None
-        self.az = None
-        self.gcs = None
+    def __init__(self, location: StorageLocation) -> None:
+        self.location = location
 
     @classmethod
     def of(cls, function_stage: Location) -> StageConnection:
-        parsed = urlparse(function_stage.uri)
-        if parsed.scheme == FILE_SCHEME:
-            from tabsdatak.conn.localfile import LocalFileSrcConn
-
-            base_path = Path(url2pathname(parsed.path)).as_posix()
-            return cls(local=LocalFileSrcConn(base_path=base_path))
         try:
-            backend = stage_backend_from_location(function_stage)
-        except UnsupportedSchemeError as error:
-            raise UnsupportedStageError(function_stage.uri, parsed.scheme) from error
-        return cls(stage_backend=backend)
+            StoreKind.of(function_stage.uri)
+        except TransferError as error:
+            scheme = urlparse(function_stage.uri).scheme
+            raise UnsupportedStageError(function_stage.uri, scheme) from error
+        return cls(function_stage.storage_location())
 
 
 @dataclass(frozen=True)

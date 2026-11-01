@@ -10,6 +10,7 @@ from typing import Any, Iterable, Iterator
 import polars as pl
 import pytest
 
+from tabsdatak.common._storage.landed import SchemaOrigin
 from tabsdatak.server._tdrunner.function._commons.document.message.request import Info
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputEntry,
@@ -27,7 +28,6 @@ from tabsdatak.server._tdrunner.function._handlers.handoff import (
     UnsupportedPluginError,
     local_file,
 )
-from tabsdatak.server._tdrunner.function._handlers.landing import SchemaOrigin
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.spi import (
     DestContext,

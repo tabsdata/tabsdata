@@ -17,12 +17,13 @@ from tabsdatak import _api
 from tabsdatak._api import (
     LegacyDestTablesWarning,
     LegacySrcTablesWarning,
+    LegacyStageFilesWarning,
     LegacyStreamStageWarning,
     warn_legacy_dest,
     warn_legacy_src,
     warn_legacy_stage,
 )
-from tabsdatak._handoff import DestinationContract, SourceContract
+from tabsdatak._handoff import DestinationContract, SourceContract, StageContract
 from tabsdatak.api import (
     BasicDictSpec,
     BatchThresholds,
@@ -1100,9 +1101,121 @@ def test_a_stream_stage_source_plugin_is_not_deprecated():
     class Stage(StreamStageSrcPlugin):
         pass
 
-    assert not SourceContract(Stage).frames()
+    assert SourceContract(Stage).frames()
     assert not SourceContract(Stage).deprecated()
     assert SourceContract(_GoodSrcPlugin).deprecated()
+
+
+class _FramesStage(StreamStageSrcPlugin):
+    def process_files(
+        self,
+        ctx: SrcPluginCtx,
+        files: list[Iterable[LazyFrameInput]],
+    ) -> list[Iterable[LazyFrameInput]]:
+        return [
+            [LazyFrameInput(table.frame.select(pl.col("id") * 10)) for table in slot]
+            for slot in files
+        ]
+
+
+class _FilesStage(StreamStageSrcPlugin):
+    def process_files(
+        self,
+        ctx: SrcPluginCtx,
+        files: list[list[TableFileInput]],
+    ) -> list[list[TableFileInput]]:
+        return [list(reversed(slot)) for slot in files]
+
+
+class _UnannotatedStage(StreamStageSrcPlugin):
+    def process_files(self, ctx, files):
+        return files
+
+
+class _StageCtx:
+    def __init__(self, work_dir: Path) -> None:
+        self.work_dir = work_dir
+
+
+def _staged(*slots: list[int]) -> list[Iterable[LazyFrameInput]]:
+    return [
+        [LazyFrameInput(pl.LazyFrame({"id": [value]})) for value in slot]
+        for slot in slots
+    ]
+
+
+def _ids(tables: list[Iterable[LazyFrameInput]]) -> list[list[int]]:
+    return [
+        [value for table in slot for value in table.frame.collect()["id"].to_list()]
+        for slot in tables
+    ]
+
+
+@pytest.mark.parametrize(
+    "plugin, frames",
+    [
+        (StreamStageSrcPlugin, True),
+        (_FramesStage, True),
+        (_FilesStage, False),
+        (_UnannotatedStage, False),
+    ],
+    ids=["base", "frames", "files", "unannotated"],
+)
+def test_a_stage_hook_takes_frames_unless_it_declares_files(plugin, frames):
+    assert StageContract(plugin).frames() is frames
+
+
+def test_a_stage_hook_taking_bare_frames_is_refused():
+    class Bare(StreamStageSrcPlugin):
+        def process_files(self, ctx, files: list[list[pl.LazyFrame]]):
+            return files
+
+    with pytest.raises(ValueError, match="LazyFrameInput"):
+        StageContract(Bare).frames()
+
+
+def test_a_frames_stage_hook_works_on_the_staged_tables(tmp_path):
+    tables = StageContract(_FramesStage).process(
+        _FramesStage(), _StageCtx(tmp_path), _staged([1, 2], [3])
+    )
+    assert _ids(tables) == [[10, 20], [30]]
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_files_stage_hook_works_on_local_copies_and_is_deprecated(tmp_path):
+    with pytest.warns(LegacyStageFilesWarning, match="_FilesStage.process_files"):
+        tables = StageContract(_FilesStage).process(
+            _FilesStage(), _StageCtx(tmp_path), _staged([1, 2], [3])
+        )
+    assert _ids(tables) == [[2, 1], [3]]
+
+
+def test_a_files_stage_hook_cannot_take_untyped_tables(tmp_path):
+    untyped = [
+        [
+            LazyFrameInput(
+                pl.LazyFrame({"id": ["1"]}), schema=pl.Schema({"id": pl.Int64})
+            )
+        ]
+    ]
+    with pytest.warns(LegacyStageFilesWarning):
+        with pytest.raises(TypeError, match="untyped"):
+            StageContract(_FilesStage).process(
+                _FilesStage(), _StageCtx(tmp_path), untyped
+            )
+
+
+def test_a_stage_hook_returning_the_other_form_is_refused(tmp_path):
+    class Mixed(StreamStageSrcPlugin):
+        def process_files(
+            self,
+            ctx: SrcPluginCtx,
+            files: list[Iterable[LazyFrameInput]],
+        ) -> list[Iterable[LazyFrameInput]]:
+            return [[TableFileInput(file=tmp_path / "x.parquet")]]
+
+    with pytest.raises(TypeError, match="TableFileInput"):
+        StageContract(Mixed).process(Mixed(), _StageCtx(tmp_path), _staged([1]))
 
 
 def test_the_legacy_source_warning_names_the_replacement():

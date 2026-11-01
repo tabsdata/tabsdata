@@ -1642,3 +1642,24 @@ def warn_legacy_stage(plugin: type) -> str:
     )
     warnings.warn(message, category=LegacyStreamStageWarning, stacklevel=2)
     return message
+
+
+# Warning category of a stream stage source plugin still post-processing local
+# parquet copies of the staged tables.
+LegacyStageFilesWarning = deprecated_category(
+    reason=(
+        "process_files takes list[list[TableFileInput]], so every staged table is "
+        "copied to local parquet files first"
+    ),
+    replacement="annotate process_files' files as list[Iterable[LazyFrameInput]]",
+    since="2.3.0",
+)
+
+
+def warn_legacy_stage_files(plugin: type) -> str:
+    message = (
+        f"{plugin.__module__}.{plugin.__qualname__}.process_files takes the "
+        f"deprecated list[list[TableFileInput]]; take LazyFrameInputs instead"
+    )
+    warnings.warn(message, category=LegacyStageFilesWarning, stacklevel=2)
+    return message

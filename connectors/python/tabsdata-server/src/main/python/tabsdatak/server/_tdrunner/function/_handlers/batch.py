@@ -11,6 +11,7 @@ from pathlib import Path
 
 import polars as pl
 
+from tabsdatak.common._storage.landed import LandedPair
 from tabsdatak.server._tdrunner.function._commons.manifests.stage import (
     StageManifest,
 )
@@ -18,10 +19,7 @@ from tabsdatak.server._tdrunner.function._commons.storage.stage import (
     PATH_SEPARATOR,
     Stage,
 )
-from tabsdatak.server._tdrunner.function._handlers.landing import (
-    LandedPair,
-    Landing,
-)
+from tabsdatak.server._tdrunner.function._handlers.landing import Landing
 from tabsdatak.server._tdrunner.function._handlers.tables import (
     TableFile,
     TableFileError,

@@ -16,12 +16,15 @@ from typing import (
     get_type_hints,
 )
 
+import tabsdatak._api as _api
 from tabsdatak.spi import (
     DestPlugin,
     LazyFrameInput,
     SrcPlugin,
+    SrcPluginCtx,
     SrcTablesSpec,
     StreamStageSrcPlugin,
+    TableFileInput,
     TableFileSpec,
 )
 
@@ -69,6 +72,13 @@ class PluginContract[Plugin]:
             for argument in get_args(annotation)
         )
 
+    @staticmethod
+    def iterables_of_inputs(annotation: Any) -> bool:
+        if get_origin(annotation) is not list:
+            return False
+        [entry] = get_args(annotation)
+        return get_origin(entry) is Iterable and get_args(entry) == (LazyFrameInput,)
+
 
 # Whether a source plugin's read_in returns LazyFrameInputs or the legacy list of
 # local parquet files, read from its return annotation.
@@ -104,13 +114,6 @@ class SourceContract(PluginContract[SrcPlugin]):
             )
         return True
 
-    @staticmethod
-    def iterables_of_inputs(annotation: Any) -> bool:
-        if get_origin(annotation) is not list:
-            return False
-        [entry] = get_args(annotation)
-        return get_origin(entry) is Iterable and get_args(entry) == (LazyFrameInput,)
-
     def deprecated(self) -> bool:
         # A stream stage plugin's read_in is framework code its subclasses must
         # not override, so they could not act on the warning.
@@ -122,6 +125,111 @@ class SourceContract(PluginContract[SrcPlugin]):
 
 # Whether a destination plugin's write_out receives LazyFrames or the legacy list
 # of local parquet files, read from DestPlugin's third type argument.
+# Whether a stream stage source plugin's process_files takes the staged tables as
+# LazyFrameInputs or the legacy local parquet files, read from the annotation of
+# its files parameter; the base hook takes frames.
+class StageContract(PluginContract[StreamStageSrcPlugin]):
+    def frames(self) -> bool:
+        method = self.plugin.process_files
+        if method is StreamStageSrcPlugin.process_files:
+            return True
+        try:
+            files = get_type_hints(method).get("files")
+        except Exception as error:
+            if self.mentions(
+                method.__annotations__.get("files"),
+                self.frame_types(),
+            ):
+                raise ValueError(
+                    f"{self.plugin.__qualname__}.process_files: the files "
+                    f"annotation does not resolve at runtime ({error}); import "
+                    f"what it names at module level",
+                ) from error
+            return False
+        if not self.mentions(files, (LazyFrameInput,)):
+            if self.mentions(files, self.frame_types()):
+                raise ValueError(
+                    f"{self.plugin.__qualname__}.process_files: takes {files!r}; "
+                    f"take list[Iterable[LazyFrameInput]]",
+                )
+            return False
+        if not self.iterables_of_inputs(files):
+            raise ValueError(
+                f"{self.plugin.__qualname__}.process_files: takes {files!r}; "
+                f"annotate files as list[Iterable[LazyFrameInput]]",
+            )
+        return True
+
+    def process(
+        self,
+        plugin: StreamStageSrcPlugin,
+        ctx: SrcPluginCtx,
+        tables: list[Iterable[LazyFrameInput]],
+    ) -> list[Iterable[LazyFrameInput]]:
+        if self.frames():
+            processed = plugin.process_files(ctx, tables)
+            return [
+                self.checked(position, slot, LazyFrameInput)
+                for position, slot in enumerate(processed)
+            ]
+        _api.warn_legacy_stage_files(self.plugin)
+        files = self.copies(ctx, tables)
+        processed = plugin.process_files(ctx, files)  # type: ignore[arg-type]
+        return [
+            [
+                LazyFrameInput(scan_parquet(file.file), metadata=file.metadata)
+                for file in self.checked(position, slot, TableFileInput)
+            ]
+            for position, slot in enumerate(processed)
+        ]
+
+    def checked[Table](
+        self,
+        position: int,
+        slot: Iterable[Any],
+        table_type: type[Table],
+    ) -> list[Table]:
+        tables = list(slot)
+        for table in tables:
+            if not isinstance(table, table_type):
+                raise TypeError(
+                    f"{self.plugin.__qualname__}.process_files returned a "
+                    f"{type(table).__name__} for slot {position}; it returns "
+                    f"{table_type.__name__}s",
+                )
+        return tables
+
+    def copies(
+        self,
+        ctx: SrcPluginCtx,
+        tables: list[Iterable[LazyFrameInput]],
+    ) -> list[list[TableFileInput]]:
+        files: list[list[TableFileInput]] = []
+        for position, slot in enumerate(tables):
+            folder = ctx.work_dir / "_stream_stage" / f"slot{position:04d}"
+            folder.mkdir(parents=True, exist_ok=True)
+            copied: list[TableFileInput] = []
+            for index, table in enumerate(slot):
+                if table.schema is not None:
+                    raise TypeError(
+                        f"{self.plugin.__qualname__}.process_files takes the "
+                        f"legacy list[list[TableFileInput]], which cannot carry "
+                        f"the untyped table {index} of slot {position}; take "
+                        f"list[Iterable[LazyFrameInput]]",
+                    )
+                file = folder / f"{index:04d}.parquet"
+                table.frame.sink_parquet(file)
+                copied.append(TableFileInput(file=file, metadata=table.metadata))
+            files.append(copied)
+        return files
+
+
+def scan_parquet(file: Any) -> Any:
+    import polars as pl
+
+    return pl.scan_parquet(file)
+
+
 class DestinationContract(PluginContract[DestPlugin]):
     def tables(self) -> Any:
         for klass in self.plugin.__mro__:

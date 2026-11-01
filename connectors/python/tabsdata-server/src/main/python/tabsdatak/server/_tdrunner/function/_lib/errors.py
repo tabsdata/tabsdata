@@ -283,8 +283,8 @@ class CommandErrorCode(ErrorCode):
         UnexpectedError,
         "The transporter mode '{mode}' is not supported.",
     )
-    # Raised by ``_commons.transporter.transporter`` and ``_lib.stage_backend``
-    # when TRANSPORTER_MODE is neither the legacy nor the current implementation.
+    # Raised by ``_commons.transporter.transporter`` when TRANSPORTER_MODE is
+    # neither the legacy nor the current implementation.
 
     CMD_6 = ErrorDef(
         BadStreamStateError,
@@ -305,9 +305,3 @@ class CommandErrorCode(ErrorCode):
         "The apiserver answered the {status} report as stale; the attempt was "
         "superseded or had already ended, so this worker stops.",
     )
-    CMD_9 = ErrorDef(
-        BadStorageConfigError,
-        "The options of the storage mount '{mount}' cannot be used: {detail}.",
-    )
-    # Raised by ``_lib.stage_backend`` when a mount option is unknown, or one the
-    # transporter requires is missing.

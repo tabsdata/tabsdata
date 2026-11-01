@@ -5,15 +5,10 @@
 """Stream-stage connector -- internal streaming source.
 
 Framework plumbing for the streaming pipeline (not a user-facing
-database connector). A streamer pod writes per-flush manifests and the
-staged parquet files to a cloud / local stage; this source picks up one
-new manifest per trigger and materialises the files it lists.
-
-* `ManifestStageConn` -- the connection: exactly one backend
-  sub-connection (`local` / `s3` / `az` / `gcs`) pointing at
-  the stage root.
-* `ManifestStageSrc` -- the source; the number of output slots is
-  decided by the manifest at run time.
+database connector). A stream source plugin stages batches of tables to
+the function stage, each named by a manifest; this source picks up one
+new manifest per trigger and reads the tables it lists where they are
+staged.
 
 Manifests live under `<stage_root>/manifests/` and are consumed in
 last-modified order; a per-flow cursor advances one manifest per run.
@@ -21,254 +16,137 @@ last-modified order; a per-flow cursor advances one manifest per run.
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import logging
-from pathlib import Path
-from typing import Any, cast
+from collections.abc import Iterable
+from datetime import datetime
+from typing import Any, Protocol, cast
+from urllib.parse import urlparse
 
-from tabsdatak.api import Src
-from tabsdatak.common._fileformat.taxonomy import DestFileFormat
-from tabsdatak.common._transporter.facade import make_handler
-from tabsdatak.common._transporter.handler.handler import TransporterHandler
-from tabsdatak.common._transporter.invoker.transporter1 import (
-    TransporterBinaryNotFoundError,
-    TransporterReportError,
-    TransporterRunError,
-)
-from tabsdatak.conn.azureblob import AzureBlobSrcConn
-from tabsdatak.conn.common.file import _input, _output
-from tabsdatak.conn.gcs import GCSSrcConn
-from tabsdatak.conn.localfile import LocalFileSrcConn
-from tabsdatak.conn.s3 import S3SrcConn
-from tabsdatak.conn.stream.stage._backend import StageBackend, backend_for_conn
+import obstore
+
+from tabsdatak.common._storage.frames import FrameLocator
+from tabsdatak.common._storage.landed import LANDING_SUFFIX, LandedPair, LandedTable
+from tabsdatak.common._storage.transfer import OBJECT_STORES, StorageLocation
+from tabsdatak.conn.common._cursor import LastModifiedCursor
 from tabsdatak.conn.stream.stage.error import ManifestStageErrorCode
-from tabsdatak.error import ApiException
 from tabsdatak.spi import (
-    Conn,
+    LazyFrameInput,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
     StreamStageSrc,
     StreamStageSrcPlugin,
-    TableFileInput,
-    TableFileSpec,
     TableMode,
     _StreamStageSrcConn,
-    to_table_file_inputs,
 )
 
 logger = logging.getLogger(__name__)
 
+MANIFESTS_FOLDER = "manifests"
+MANIFEST_PATTERN = "stream-manifest-*.json"
+PATH_SEPARATOR = "/"
 
-class ManifestStageConn(Conn):
-    """Connection for `ManifestStageSrc` -- one stage backend.
-
-    :categories: source
-
-    Exactly one of `local` / `s3` / `az` / `gcs` must be set;
-    it points at the stage root the streamer pod writes to. The others
-    stay `None`.
-    """
-
-    local: LocalFileSrcConn | None
-    s3: S3SrcConn | None
-    az: AzureBlobSrcConn | None
-    gcs: GCSSrcConn | None
+MANIFEST_CURSOR_KEY = "stream-manifest.lastmod"
+MANIFEST_INITIAL_LASTMOD = datetime.fromisoformat("1970-01-01T00:00:00.000000+00:00")
 
 
-class ManifestStageSrc(Src):
-    """Stream-stage source -- materialises the files in one manifest.
-
-    :categories: source
-
-    Carries no configuration: each run fetches the next unseen manifest
-    from the stage and emits its listed parquet files. The manifest
-    decides the output slot count, so it is not fixed on the class.
-    """
+class StageConnection(Protocol):
+    location: StorageLocation
 
 
-# Manifests live under the conn's `manifests/` subdir (the layout
-# the streamer pod writes; see the tabsdata-server
-# `_commons/storage/stage.py` and `_commons/manifests/stage.py`).
-# The wildcard is relative to
-# `conn.base_path`, which by convention is the stage root, so this
-# globs `<stage_root>/manifests/stream-manifest-*.json`. The file
-# paths inside each manifest stay relative to the same
-# `conn.base_path` (typically `files/<TS>/<name>.parquet`, one
-# subdir per manifest).
-_STREAM_MANIFEST_FILE_WILDCARD = "manifests/stream-manifest-*.json"
-
-# Per-flow cursor for the manifest wildcard. Dot-separated, hyphenated
-# segments only (no underscores) so it matches the context-key regex, and
-# kept out of the file connector's reserved `file-lastmod.*` namespace.
-_MANIFEST_LASTMOD_KEY = "stream-manifest.lastmod"
-
-# Baseline handed to the transporter so last-modified tracking activates on
-# the first run: epoch means every manifest ever written is a candidate, and
-# the returned cursor then advances one manifest at a time.
-_MANIFEST_INITIAL_LASTMOD = "1970-01-01T00:00:00.000000+00:00"
-
-
-class ManifestStageSrcPlugin(SrcPlugin[ManifestStageConn, ManifestStageSrc]):
+class ManifestStageSrcPlugin(SrcPlugin[_StreamStageSrcConn, StreamStageSrc]):
     def read_in(
         self,
         ctx: SrcPluginCtx,
-        conn: ManifestStageConn,
-        src: ManifestStageSrc,
-    ) -> list[list[TableFileInput]]:
-        backend = backend_for_conn(conn)
-        handler = make_handler()
-
-        try:
-            env = backend.credential_env(handler)
-        except (ApiException, TypeError, ValueError) as e:
-            raise ManifestStageErrorCode.MANIFEST_STAGE_2.exception(
-                cause=e, reason=str(e)
-            )
-
-        manifest_path = self._fetch_manifest(ctx, backend, handler, env)
-        if manifest_path is None:
-            # No new manifest matched this trigger; nothing to materialise.
+        conn: _StreamStageSrcConn,
+        src: StreamStageSrc,
+    ) -> list[Iterable[LazyFrameInput]]:
+        location = cast(StageConnection, conn).location
+        root = location.uri.rstrip(PATH_SEPARATOR)
+        manifest = self.next_manifest(ctx, location, root)
+        if manifest is None:
             logger.info("manifest-stage: no new manifest matched; producing 0 slots")
             return []
-
-        slots = self._parse_manifest(manifest_path)
-        return to_table_file_inputs(
-            self._fetch_data_files(ctx, backend, handler, env, manifest_path, slots)
+        tables = self.read_manifest(location, manifest)
+        logger.info(
+            f"manifest-stage: read manifest {manifest} with files per slot "
+            f"{[len(names) for names in tables]}"
         )
+        return [
+            [self.table(location, root, name) for name in names] for names in tables
+        ]
 
-    # -- steps ------------------------------------------------------
-
-    def _fetch_manifest(
-        self,
+    @staticmethod
+    def next_manifest(
         ctx: SrcPluginCtx,
-        backend: StageBackend,
-        handler: TransporterHandler,
-        env: dict[str, str] | None,
-    ) -> Path | None:
-        manifest_dir = ctx.work_dir / "_manifest"
-        manifest_dir.mkdir(parents=True, exist_ok=True)
-        source = backend.build_location(_STREAM_MANIFEST_FILE_WILDCARD, handler)
-
-        prior = cast(str | None, ctx.get_attr(_MANIFEST_LASTMOD_KEY))
+        location: StorageLocation,
+        root: str,
+    ) -> str | None:
+        pattern = f"{root}/{MANIFESTS_FOLDER}/{MANIFEST_PATTERN}"
+        store = OBJECT_STORES.store(root, location.options)
         try:
-            report = _input.wildcard_copy_one(
-                handler=handler,
-                source=source,
-                target_dir=manifest_dir,
-                initial_lastmod=_MANIFEST_INITIAL_LASTMOD,
-                lastmod_info=prior,
-                max_files=1,
-                env=env,
-            )
-        except TransporterBinaryNotFoundError as e:
-            raise ManifestStageErrorCode.MANIFEST_STAGE_3.exception(cause=e)
-        except TransporterRunError as e:
+            listing = obstore.list_with_delimiter(store, prefix=MANIFESTS_FOLDER)
+        except Exception as error:
             raise ManifestStageErrorCode.MANIFEST_STAGE_4.exception(
-                cause=e, pattern=_STREAM_MANIFEST_FILE_WILDCARD
+                cause=error,
+                pattern=pattern,
+                reason=str(error),
             )
-        except TransporterReportError as e:
-            raise ManifestStageErrorCode.MANIFEST_STAGE_5.exception(
-                cause=e, pattern=_STREAM_MANIFEST_FILE_WILDCARD
-            )
+        manifests = sorted(
+            (
+                item
+                for item in listing["objects"]
+                if fnmatch.fnmatchcase(
+                    item["path"].rpartition(PATH_SEPARATOR)[2],
+                    MANIFEST_PATTERN,
+                )
+            ),
+            key=lambda item: (item["last_modified"], item["path"]),
+        )
+        cursor = LastModifiedCursor.decode(
+            cast(str | None, ctx.get_attr(MANIFEST_CURSOR_KEY)),
+            MANIFEST_INITIAL_LASTMOD,
+        )
+        key = urlparse(pattern).path
+        chosen = None
+        for item in manifests:
+            name = item["path"].rpartition(PATH_SEPARATOR)[2]
+            if cursor.take(key, name, item["last_modified"]):
+                chosen = item["path"]
+                break
+        ctx.set_attr(MANIFEST_CURSOR_KEY, cursor.encode())
+        return chosen
 
-        # Advance the cursor so the next trigger picks up the next manifest.
-        # `None` means nothing was observed; leave the prior cursor in place.
-        if report.lastmod_info is not None:
-            ctx.set_attr(_MANIFEST_LASTMOD_KEY, report.lastmod_info)
-
-        targets = [f["to"] for f in report.files if isinstance(f, dict) and f.get("to")]
-        if not targets:
-            return None
-        manifest_path = _local_path(cast(str, targets[0]))
-        logger.info("manifest-stage: fetched manifest %s", manifest_path)
-        return manifest_path
-
-    def _parse_manifest(self, manifest_path: Path) -> list[list[str]]:
+    @staticmethod
+    def read_manifest(location: StorageLocation, path: str) -> list[list[str]]:
+        root = location.uri.rstrip(PATH_SEPARATOR)
+        store = OBJECT_STORES.store(root, location.options)
         try:
-            raw: Any = json.loads(manifest_path.read_text())
-        except (OSError, ValueError) as e:
+            raw: Any = json.loads(bytes(obstore.get(store, path).bytes()))
+        except (OSError, ValueError) as error:
             raise ManifestStageErrorCode.MANIFEST_STAGE_6.exception(
-                cause=e, path=str(manifest_path)
+                cause=error,
+                path=path,
             )
         if not isinstance(raw, list) or not all(
-            isinstance(slot, list) and all(isinstance(p, str) for p in slot)
-            for slot in raw
+            isinstance(names, list) and all(isinstance(name, str) for name in names)
+            for names in raw
         ):
-            raise ManifestStageErrorCode.MANIFEST_STAGE_7.exception(
-                path=str(manifest_path)
-            )
+            raise ManifestStageErrorCode.MANIFEST_STAGE_7.exception(path=path)
         return raw
 
-    def _fetch_data_files(
-        self,
-        ctx: SrcPluginCtx,
-        backend: StageBackend,
-        handler: TransporterHandler,
-        env: dict[str, str] | None,
-        manifest_path: Path,
-        slots: list[list[str]],
-    ) -> list[list[TableFileSpec]]:
-        pairs: list[tuple[Any, Any]] = []
-        paths: list[str] = []
-        results: list[list[TableFileSpec]] = []
-        for slot_idx, slot in enumerate(slots):
-            slot_dir = ctx.work_dir / f"slot{slot_idx}"
-            slot_dir.mkdir(parents=True, exist_ok=True)
-            slot_targets: list[TableFileSpec] = []
-            for file_idx, rel in enumerate(slot):
-                source = backend.build_location(rel, handler)
-                name = Path(rel).name or f"file{file_idx}"
-                target_path = slot_dir / f"{file_idx:04d}-{name}"
-                target = handler.local_path_location(target_path)
-                pairs.append((source, target))
-                paths.append(str(target_path))
-                slot_targets.append(target_path)
-            results.append(slot_targets)
-
-        if pairs:
-            try:
-                _output.copy_one(
-                    handler=handler,
-                    source_target_pairs=pairs,
-                    work_dir=ctx.work_dir,
-                    file_format=DestFileFormat.PARQUET,
-                    paths=paths,
-                    env=env,
-                )
-            except TransporterBinaryNotFoundError as e:
-                raise ManifestStageErrorCode.MANIFEST_STAGE_3.exception(cause=e)
-            except TransporterRunError as e:
-                raise ManifestStageErrorCode.MANIFEST_STAGE_8.exception(
-                    cause=e, path=str(manifest_path)
-                )
-            except TransporterReportError as e:
-                raise ManifestStageErrorCode.MANIFEST_STAGE_9.exception(
-                    cause=e, path=str(manifest_path)
-                )
-
-        logger.info(
-            "manifest-stage: materialised %d slot(s) (%d file(s))",
-            len(results),
-            len(pairs),
-        )
-        return results
+    @staticmethod
+    def table(location: StorageLocation, root: str, name: str) -> LazyFrameInput:
+        data = FrameLocator(f"{root}/{name}", location.options)
+        if not name.endswith(LANDING_SUFFIX):
+            return LazyFrameInput(data.scan())
+        pair = LandedPair.of(name)
+        schema = FrameLocator(f"{root}/{pair.schema}", location.options)
+        return LandedTable(data, schema).input()
 
 
-def _local_path(file_uri: str) -> Path:
-    from urllib.parse import unquote, urlparse
-
-    parsed = urlparse(file_uri)
-    if parsed.scheme == "file":
-        return Path(unquote(parsed.path))
-    return Path(file_uri)
-
-
-# Default stream-stage source binding. The manifest decides how many
-# output slots a run yields, so `cardinality` returns `-1` -- the
-# sentinel that disables the framework's produced-vs-declared slot-count
-# check -- and there is no explorer. `ARRAY` mode because a single
-# manifest slot may list more than one parquet file.
 STREAM_STAGE_SRC = SrcDef(
     conn=_StreamStageSrcConn,
     type_=".stream-stage",

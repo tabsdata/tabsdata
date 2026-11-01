@@ -9,12 +9,12 @@ import time
 from collections import deque
 from typing import Callable
 
+from tabsdatak.common._storage.landed import LandedPair
 from tabsdatak.server._tdrunner.function._commons.manifests.stage import (
     InvalidManifestError,
     StageManifest,
 )
 from tabsdatak.server._tdrunner.function._commons.storage.stage import Stage
-from tabsdatak.server._tdrunner.function._handlers.landing import LandedPair
 
 logger = logging.getLogger(__name__)
 

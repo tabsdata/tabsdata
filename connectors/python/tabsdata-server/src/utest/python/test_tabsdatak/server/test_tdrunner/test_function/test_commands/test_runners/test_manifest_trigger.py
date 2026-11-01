@@ -21,6 +21,7 @@ from tabsdatak.server._tdrunner.function._commons.document.message.request impor
 from tabsdatak.server._tdrunner.function._commons.manifests.stage import (
     StageManifest,
 )
+from tabsdatak.server._tdrunner.function._commons.run import shutdown
 from tabsdatak.server._tdrunner.function._commons.storage.stage import Stage
 from tabsdatak.server._tdrunner.function._handlers import trigger
 from tabsdatak.server._tdrunner.function._handlers.sweeper import Sweeper
@@ -474,7 +475,8 @@ def test_trigger_pending_honors_inactive_flag(tmp_path):
     assert queued(command) == []
 
 
-def test_a_shutdown_stops_the_trigger(tmp_path):
+def test_a_shutdown_stops_the_trigger(tmp_path, monkeypatch):
+    monkeypatch.setattr(shutdown, "requested", False)
     command = manifest_trigger(tmp_path)
     command.shutdown(15, None)
     assert command.is_active() is False
