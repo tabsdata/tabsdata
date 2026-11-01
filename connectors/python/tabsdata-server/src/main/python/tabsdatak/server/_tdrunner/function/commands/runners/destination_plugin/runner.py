@@ -34,6 +34,7 @@ from tabsdatak.server._tdrunner.function._handlers.handoff import (
     Handoff,
     MissingOutputError,
     OutputCopyError,
+    OutputReadError,
 )
 from tabsdatak.server._tdrunner.function._lib.connection import load_connection
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
@@ -116,6 +117,13 @@ def read_tables(
             cause=error,
             slot=error.slot,
             name=error.name,
+        )
+    except OutputReadError as error:
+        raise RunDestinationPluginErrorCode.RDP_10.exception(
+            cause=error,
+            slot=error.slot,
+            path=error.path,
+            detail=error.detail,
         )
     except OutputCopyError as error:
         raise RunDestinationPluginErrorCode.RDP_9.exception(

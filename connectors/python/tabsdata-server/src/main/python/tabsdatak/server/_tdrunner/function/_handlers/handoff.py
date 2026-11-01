@@ -55,6 +55,19 @@ class MissingOutputError(HandoffError):
         self.name = name
 
 
+class OutputReadError(HandoffError):
+    def __init__(
+        self,
+        slot: int,
+        path: str,
+        detail: str,
+    ) -> None:
+        super().__init__(f"Output {slot} at {path} could not be read: {detail}")
+        self.slot = slot
+        self.path = path
+        self.detail = detail
+
+
 class OutputCopyError(HandoffError):
     def __init__(
         self,
@@ -70,7 +83,10 @@ class OutputCopyError(HandoffError):
 
 class UnsupportedPluginError(HandoffError):
     def __init__(self, plugin: object) -> None:
-        super().__init__(f"No handoff exists yet for {type(plugin).__name__}")
+        super().__init__(
+            f"No handoff exists for {type(plugin).__name__}: it is neither a "
+            "SrcPlugin nor a DestPlugin",
+        )
         self.plugin = plugin
 
 
@@ -130,13 +146,13 @@ class Handoff(ABC):
         raise UnsupportedPluginError(plugin)
 
 
-@dataclass(frozen=True)
+@dataclass
 class Slot:
     name: str
     position: int
 
 
-@dataclass(frozen=True)
+@dataclass
 class DestinationSlot(Slot):
     table: pl.LazyFrame | Path
 
@@ -163,8 +179,8 @@ class DestinationHandoff(Handoff):
             try:
                 frames.append(self.source.scan(source))
             except Exception as error:
-                raise OutputCopyError(
-                    str(slot),
+                raise OutputReadError(
+                    slot,
                     source.uri,
                     str(error),
                 ) from error
@@ -244,7 +260,7 @@ class DestinationHandoff(Handoff):
             self.tables_folder = None
 
 
-@dataclass(frozen=True)
+@dataclass
 class LandingSlot(Slot):
     landing: Landing
     landed: list[LandedFile] = field(default_factory=list)

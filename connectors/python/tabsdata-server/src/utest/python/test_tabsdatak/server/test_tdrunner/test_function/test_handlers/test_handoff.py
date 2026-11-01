@@ -21,7 +21,7 @@ from tabsdatak.server._tdrunner.function._handlers.handoff import (
     Handoff,
     InputCountError,
     MissingOutputError,
-    OutputCopyError,
+    OutputReadError,
     SourceHandoff,
     UnexpectedTableError,
     UnsupportedPluginError,
@@ -237,8 +237,8 @@ def test_an_output_without_data_is_missing(tmp_path):
 def test_an_unreadable_landing_file_is_reported(tmp_path):
     info = landing_info(tmp_path)
     missing = OutputEntry(name="out_0", uri=info.landing_file(0).uri)
-    with pytest.raises(OutputCopyError, match="0.t"):
-        handoff(tmp_path, legacy=True).seed(
+    with pytest.raises(OutputReadError, match="0.t"):
+        handoff(tmp_path).seed(
             info,
             OutputManifest(outputs=(missing,)),
         )

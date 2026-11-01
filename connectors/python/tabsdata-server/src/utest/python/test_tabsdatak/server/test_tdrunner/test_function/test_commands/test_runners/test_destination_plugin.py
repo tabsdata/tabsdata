@@ -35,7 +35,7 @@ from tabsdatak.server._tdrunner.function.commands.runners.destination_plugin.err
     BadRequestError,
     BadUserCodeError,
     NoPluginError,
-    OutputCopyFailedError,
+    OutputReadFailedError,
     PluginFailedError,
     RunDestinationPluginErrorCode,
     WrongKindError,
@@ -353,13 +353,13 @@ def test_read_tables_maps_an_output_without_data_to_bad_manifest(tmp_path):
         )
 
 
-def test_read_tables_maps_an_unreadable_landing_file_to_copy_failed(tmp_path):
+def test_read_tables_maps_an_unreadable_landing_file_to_read_failed(tmp_path):
     request = Request.load(
         write_request(tmp_path / "request.yaml"),
         RunDestinationPluginErrorCode.RDP_1,
     )
     entry = OutputEntry(name="out_0", uri=request.info.landing_file(0).uri)
-    with pytest.raises(OutputCopyFailedError):
+    with pytest.raises(OutputReadFailedError):
         read_tables(
             file_handoff(tmp_path),
             request,

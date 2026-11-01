@@ -7,6 +7,7 @@ from __future__ import annotations
 from tabsdatak.error import ErrorCode, ErrorDef
 from tabsdatak.server._tdrunner.function._lib.errors import (
     BadBundleError as CommandBadBundleError,
+    BadInputParquetError as CommandBadInputParquetError,
     BadManifestError as CommandBadManifestError,
     BadRequestError as CommandBadRequestError,
     BadUserCodeError as CommandBadUserCodeError,
@@ -49,6 +50,10 @@ class OutputCopyFailedError(CommandWriteFailedError):
     exit_code = 17
 
 
+class OutputReadFailedError(CommandBadInputParquetError):
+    exit_code = 18
+
+
 class RunDestinationPluginErrorCode(ErrorCode):
     RDP_1 = ErrorDef(
         BadRequestError,
@@ -88,4 +93,8 @@ class RunDestinationPluginErrorCode(ErrorCode):
     RDP_9 = ErrorDef(
         OutputCopyFailedError,
         "Cannot copy the landed output {slot} from {path}: {detail}",
+    )
+    RDP_10 = ErrorDef(
+        OutputReadFailedError,
+        "Cannot read the landed output {slot} from {path}: {detail}",
     )
