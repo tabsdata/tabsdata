@@ -41,11 +41,12 @@ class LazyGroupBy:
         u_args = unwrap(aggs)
         u_named = unwrap(named_aggs)
         by, named_by = self._by
+        system = _system_aggregations("agg")
         return compute(
             "agg",
             (self._parent,),
             {"by": by, "named_by": named_by, "aggs": u_args, "named_aggs": u_named},
-            call=lambda *_: self._lgb.agg(*u_args, **u_named),
+            call=lambda *_: self._lgb.agg(*u_args, *system, **u_named),
         )
 
     def len(self, *args, **kwargs):

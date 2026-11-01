@@ -233,7 +233,8 @@ def test_lazygroupby_agg(main_root):
     assert "def agg(self, *aggs, **named_aggs):" in text
     assert "by, named_by = self._by" in text
     assert '"agg",\n            (self._parent,),' in text
-    assert "call=lambda *_: self._lgb.agg(*u_args, **u_named)" in text
+    assert 'system = _system_aggregations("agg")' in text
+    assert "call=lambda *_: self._lgb.agg(*u_args, *system, **u_named)" in text
 
 
 def test_value_class_and_function_still_transparent(main_root):
