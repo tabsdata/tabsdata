@@ -27,7 +27,7 @@ use tokio::sync::Mutex;
 use tokio::time::Instant;
 use tracing::{debug, info, warn};
 
-use crate::archive::{ArchiveReader, ArchiveRequest, STARTED_ON_LEEWAY_MILLIS};
+use crate::archive::{ArchiveReader, ArchiveRequest, LOG_ID_LABEL, STARTED_ON_LEEWAY_MILLIS};
 use crate::env::{ENV_TD_WORKER_LOGS_BUCKET, ENV_TD_WORKER_LOGS_LOCATION};
 use crate::render::container_header;
 
@@ -45,7 +45,6 @@ const DEFAULT_BUCKET: &str = "_Default";
 const DEFAULT_LOCATION: &str = "global";
 const VIEW_PREFIX: &str = "tabsdata-";
 const GKE_POD_LABEL_PREFIX: &str = "k8s-pod/";
-const LOG_ID_LABEL: &str = "tabsdata.com/log-id";
 const CONTAINER_LABEL: &str = "container_name";
 const PAGE_SIZE: u32 = 1000;
 const MAX_ATTEMPTS: u32 = 5;

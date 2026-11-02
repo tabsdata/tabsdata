@@ -100,6 +100,16 @@ configs:
                 - key: workload
                   value: batch
                   effect: NoSchedule
+        - op: insert-child-if-missing
+          leaf: pods.service.apiserver
+          child: service_account
+          value:
+            annotations: {}
+        - op: insert-child-if-missing
+          leaf: pods.service.apiserver
+          child: worker_logs
+          value:
+            workspace:
     tabsdata_docker.yaml:
       action: modify
       changes:

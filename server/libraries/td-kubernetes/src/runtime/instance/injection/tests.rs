@@ -855,9 +855,10 @@ const WORKER_LOGS_CONFIG: &str = indoc! {"
 #[test]
 fn worker_logs_settings_reach_the_component_pods() {
     let mut spec = build_pod_spec_with(&["1000-apiserver"]);
-    apply_component_envs(
+    apply_component_settings(
         WORKER_LOGS_CONFIG,
         &placement("apiserver", "server"),
+        &mut ObjectMeta::default(),
         &mut spec,
     )
     .expect("applies");
@@ -874,9 +875,10 @@ fn worker_logs_settings_reach_the_component_pods() {
 #[test]
 fn worker_logs_settings_skip_other_components() {
     let mut spec = build_pod_spec_with(&["1000-aiagent"]);
-    apply_component_envs(
+    apply_component_settings(
         WORKER_LOGS_CONFIG,
         &placement("aiagent", "server"),
+        &mut ObjectMeta::default(),
         &mut spec,
     )
     .expect("applies");
@@ -900,7 +902,13 @@ fn a_worker_logs_location_alone_sets_only_the_location() {
                 location: europe-west1
     "};
     let mut spec = build_pod_spec_with(&["1000-apiserver"]);
-    apply_component_envs(config, &placement("apiserver", "server"), &mut spec).expect("applies");
+    apply_component_settings(
+        config,
+        &placement("apiserver", "server"),
+        &mut ObjectMeta::default(),
+        &mut spec,
+    )
+    .expect("applies");
     assert_eq!(
         env_value(&spec, "1000-apiserver", ENV_TD_WORKER_LOGS_BUCKET),
         None
@@ -922,7 +930,13 @@ fn empty_worker_logs_settings_set_nothing() {
                 location:
     "#};
     let mut spec = build_pod_spec_with(&["1000-apiserver"]);
-    apply_component_envs(config, &placement("apiserver", "server"), &mut spec).expect("applies");
+    apply_component_settings(
+        config,
+        &placement("apiserver", "server"),
+        &mut ObjectMeta::default(),
+        &mut spec,
+    )
+    .expect("applies");
     assert!(spec.containers[0].env.as_ref().is_none_or(Vec::is_empty));
 }
 
@@ -934,9 +948,10 @@ fn worker_logs_settings_replace_a_value_the_template_declares() {
         value: Some("stale".to_owned()),
         ..Default::default()
     }]);
-    apply_component_envs(
+    apply_component_settings(
         WORKER_LOGS_CONFIG,
         &placement("apiserver", "server"),
+        &mut ObjectMeta::default(),
         &mut spec,
     )
     .expect("applies");
@@ -944,4 +959,164 @@ fn worker_logs_settings_replace_a_value_the_template_declares() {
         env_value(&spec, "1000-apiserver", ENV_TD_WORKER_LOGS_BUCKET).as_deref(),
         Some("tabsdata-logs")
     );
+}
+
+#[test]
+fn a_worker_logs_workspace_reaches_the_component_pods() {
+    let config = indoc! {"
+        pods:
+          service:
+            apiserver:
+              worker_logs:
+                workspace: 0f9c2b8e-1111-4222-8333-944455556666
+    "};
+    let mut spec = build_pod_spec_with(&["1000-apiserver"]);
+    apply_component_settings(
+        config,
+        &placement("apiserver", "server"),
+        &mut ObjectMeta::default(),
+        &mut spec,
+    )
+    .expect("applies");
+    assert_eq!(
+        env_value(&spec, "1000-apiserver", ENV_TD_WORKER_LOGS_WORKSPACE).as_deref(),
+        Some("0f9c2b8e-1111-4222-8333-944455556666")
+    );
+    assert_eq!(
+        env_value(&spec, "1000-apiserver", ENV_TD_WORKER_LOGS_BUCKET),
+        None
+    );
+}
+
+const AZURE_IDENTITY_CONFIG: &str = indoc! {"
+    pods:
+      service:
+        apiserver:
+          service_account:
+            annotations:
+              azure.workload.identity/client-id: 7b1c2d3e-aaaa-4bbb-8ccc-0d1e2f3a4b5c
+"};
+
+fn use_label(metadata: &ObjectMeta) -> Option<&str> {
+    metadata
+        .labels
+        .as_ref()?
+        .get(AZURE_WORKLOAD_IDENTITY_USE_LABEL)
+        .map(String::as_str)
+}
+
+#[test]
+fn an_azure_identity_labels_the_component_pods_for_workload_identity() {
+    let mut metadata = ObjectMeta::default();
+    apply_component_settings(
+        AZURE_IDENTITY_CONFIG,
+        &placement("apiserver", "server"),
+        &mut metadata,
+        &mut build_pod_spec_with(&["1000-apiserver"]),
+    )
+    .expect("applies");
+    assert_eq!(use_label(&metadata), Some("true"));
+}
+
+#[test]
+fn an_azure_identity_leaves_other_components_unlabelled() {
+    let mut metadata = ObjectMeta::default();
+    apply_component_settings(
+        AZURE_IDENTITY_CONFIG,
+        &placement("aiagent", "server"),
+        &mut metadata,
+        &mut build_pod_spec_with(&["1000-apiserver"]),
+    )
+    .expect("applies");
+    assert_eq!(use_label(&metadata), None);
+}
+
+#[test]
+fn an_empty_or_missing_azure_identity_adds_no_label() {
+    for config in [
+        indoc! {r#"
+            pods:
+              service:
+                apiserver:
+                  service_account:
+                    annotations:
+                      azure.workload.identity/client-id: ""
+        "#},
+        indoc! {"
+            pods:
+              service:
+                apiserver:
+                  service_account:
+                    annotations:
+                      eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/apiserver
+        "},
+    ] {
+        let mut metadata = ObjectMeta::default();
+        apply_component_settings(
+            config,
+            &placement("apiserver", "server"),
+            &mut metadata,
+            &mut build_pod_spec_with(&["1000-apiserver"]),
+        )
+        .expect("applies");
+        assert_eq!(use_label(&metadata), None, "{config}");
+    }
+}
+
+#[test]
+fn an_azure_identity_keeps_the_template_labels() {
+    let mut metadata = ObjectMeta {
+        labels: Some(BTreeMap::from([(
+            "app.kubernetes.io/name".to_owned(),
+            "tabsdata".to_owned(),
+        )])),
+        ..Default::default()
+    };
+    apply_component_settings(
+        AZURE_IDENTITY_CONFIG,
+        &placement("apiserver", "server"),
+        &mut metadata,
+        &mut build_pod_spec_with(&["1000-apiserver"]),
+    )
+    .expect("applies");
+    let labels = metadata.labels.expect("labels");
+    assert_eq!(labels.len(), 2);
+    assert_eq!(labels["app.kubernetes.io/name"], "tabsdata");
+}
+
+#[test]
+fn an_azure_identity_labels_the_deployment_pod_template() {
+    use k8s_openapi::api::apps::v1::DeploymentSpec;
+    use k8s_openapi::api::core::v1::PodTemplateSpec;
+
+    use crate::base::constants::{POD_YAML_COMPONENT_LABEL, TIER_LABEL};
+
+    let profile = build_profile(&[(TABSDATA_FILE, AZURE_IDENTITY_CONFIG)]);
+    let mut deployment = Deployment {
+        metadata: ObjectMeta {
+            labels: Some(BTreeMap::from([
+                (POD_YAML_COMPONENT_LABEL.to_owned(), "apiserver".to_owned()),
+                (TIER_LABEL.to_owned(), "server".to_owned()),
+            ])),
+            ..Default::default()
+        },
+        spec: DeploymentSpec {
+            template: PodTemplateSpec {
+                metadata: None,
+                spec: Some(build_pod_spec_with(&["1000-apiserver"])),
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    inject_into_deployment(
+        &profile,
+        "apiserver.yaml",
+        &mut deployment,
+        &BTreeSet::new(),
+    )
+    .expect("injects");
+    let template = deployment.spec.template.metadata.expect("metadata");
+    assert_eq!(use_label(&template), Some("true"));
+    assert_eq!(use_label(&deployment.metadata), None);
 }

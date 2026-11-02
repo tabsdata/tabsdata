@@ -136,9 +136,9 @@ pub enum LauncherError {
         cause: String,
     } = 5022,
     #[error(
-        "Could not parse config '{config}' while setting component variables of pod '{pod}': {cause}."
+        "Could not parse config '{config}' while applying component settings to pod '{pod}': {cause}."
     )]
-    ComponentEnvConfigParseFailed {
+    ComponentSettingsConfigParseFailed {
         config: String,
         pod: String,
         cause: String,

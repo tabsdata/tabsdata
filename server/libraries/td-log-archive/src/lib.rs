@@ -14,8 +14,11 @@ mod cloudlogging;
 mod cloudwatch;
 mod env;
 mod kminus;
+mod loganalytics;
 mod render;
 
 pub use archive::{ArchiveReader, ArchiveRequest, LogArchive};
-pub use env::{ENV_TD_WORKER_LOGS_BUCKET, ENV_TD_WORKER_LOGS_LOCATION};
+pub use env::{
+    ENV_TD_WORKER_LOGS_BUCKET, ENV_TD_WORKER_LOGS_LOCATION, ENV_TD_WORKER_LOGS_WORKSPACE,
+};
 pub use render::container_header;

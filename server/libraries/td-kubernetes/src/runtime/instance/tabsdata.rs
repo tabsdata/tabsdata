@@ -84,6 +84,7 @@ pub struct ServiceAccountConfig {
 pub struct WorkerLogsConfig {
     pub bucket: Option<String>,
     pub location: Option<String>,
+    pub workspace: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

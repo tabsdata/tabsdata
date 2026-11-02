@@ -2,18 +2,21 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{
-    Container, EnvVar, EnvVarSource, Pod, PodSpec, SecretKeySelector,
+    Container, EnvVar, EnvVarSource, Pod, PodSpec, PodTemplateSpec, SecretKeySelector,
 };
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 
-use td_log_archive::{ENV_TD_WORKER_LOGS_BUCKET, ENV_TD_WORKER_LOGS_LOCATION};
+use td_log_archive::{
+    ENV_TD_WORKER_LOGS_BUCKET, ENV_TD_WORKER_LOGS_LOCATION, ENV_TD_WORKER_LOGS_WORKSPACE,
+};
 
 use crate::base::constants::{
+    AZURE_WORKLOAD_IDENTITY_CLIENT_ID_ANNOTATION, AZURE_WORKLOAD_IDENTITY_USE_LABEL,
     ENV_TD_DATAFLOW__ABORT__MEMORY_THRESHOLD_PERCENT, ENV_TD_DATAFLOW__SPILL__DISK_LIMIT_PERCENT,
     ENV_TD_DATAFLOW__SPILL__ENABLED, ENV_TD_DATAFLOW__SPILL__FOLDER,
     ENV_TD_DATAFLOW__SPILL__MEMORY_THRESHOLD_PERCENT, ENV_TD_DATAFLOW__TEMPORARY_FOLDER,
@@ -30,7 +33,7 @@ use crate::kube::context::KubeContext;
 use crate::runtime::instance::profile::Profile;
 use crate::runtime::instance::sizing::{PodPlacement, inject_sizing};
 use crate::runtime::instance::tabsdata::{
-    DataflowConfig, Percent, TABSDATA_FILE, TabsdataConfig, WorkerLogsConfig,
+    DataflowConfig, Percent, ServiceAccountConfig, TABSDATA_FILE, TabsdataConfig, WorkerLogsConfig,
 };
 use crate::runtime::secrets::discovery::{SecretLeaf, extract_secret_leaves};
 use crate::runtime::secrets::source::to_secret_name;
@@ -61,7 +64,13 @@ pub fn inject_into_pod(
                 cause: "pod has no spec".to_owned(),
             })?;
     inject_sizing(profile, pod_template_key, &placement, spec)?;
-    inject_component_envs(profile, pod_template_key, &placement, spec)?;
+    inject_component_settings(
+        profile,
+        pod_template_key,
+        &placement,
+        &mut pod.metadata,
+        spec,
+    )?;
     inject_secret_envs(profile, pod_template_key, delivery, spec, available_secrets)
 }
 
@@ -77,16 +86,16 @@ pub fn inject_into_job(
             .as_ref()
             .and_then(|job_spec| job_spec.template.metadata.as_ref()),
     );
-    let spec = job
+    let (metadata, spec) = job
         .spec
         .as_mut()
-        .and_then(|job_spec| job_spec.template.spec.as_mut())
+        .and_then(|job_spec| template_parts(&mut job_spec.template))
         .ok_or_else(|| LauncherError::SecretEnvInjectionConfigParseFailed {
             config: pod_template_key.to_owned(),
             cause: "job has no spec.template.spec".to_owned(),
         })?;
     inject_sizing(profile, pod_template_key, &placement, spec)?;
-    inject_component_envs(profile, pod_template_key, &placement, spec)?;
+    inject_component_settings(profile, pod_template_key, &placement, metadata, spec)?;
     inject_secret_envs(profile, pod_template_key, delivery, spec, available_secrets)
 }
 
@@ -105,18 +114,18 @@ pub fn inject_into_cronjob(
             .as_ref()
             .and_then(|job_spec| job_spec.template.metadata.as_ref()),
     );
-    let spec = cronjob
+    let (metadata, spec) = cronjob
         .spec
         .job_template
         .spec
         .as_mut()
-        .and_then(|job_spec| job_spec.template.spec.as_mut())
+        .and_then(|job_spec| template_parts(&mut job_spec.template))
         .ok_or_else(|| LauncherError::SecretEnvInjectionConfigParseFailed {
             config: pod_template_key.to_owned(),
             cause: "cronjob has no spec.jobTemplate.spec.template.spec".to_owned(),
         })?;
     inject_sizing(profile, pod_template_key, &placement, spec)?;
-    inject_component_envs(profile, pod_template_key, &placement, spec)?;
+    inject_component_settings(profile, pod_template_key, &placement, metadata, spec)?;
     inject_secret_envs(profile, pod_template_key, delivery, spec, available_secrets)
 }
 
@@ -128,14 +137,14 @@ pub fn inject_into_deployment(
 ) -> Result<(), LauncherError> {
     let placement = PodPlacement::of(deployment.metadata.labels.as_ref());
     let delivery = SecretDelivery::of(deployment.spec.template.metadata.as_ref());
-    let spec = deployment.spec.template.spec.as_mut().ok_or_else(|| {
+    let (metadata, spec) = template_parts(&mut deployment.spec.template).ok_or_else(|| {
         LauncherError::SecretEnvInjectionConfigParseFailed {
             config: pod_template_key.to_owned(),
             cause: "deployment has no spec.template.spec".to_owned(),
         }
     })?;
     inject_sizing(profile, pod_template_key, &placement, spec)?;
-    inject_component_envs(profile, pod_template_key, &placement, spec)?;
+    inject_component_settings(profile, pod_template_key, &placement, metadata, spec)?;
     inject_secret_envs(profile, pod_template_key, delivery, spec, available_secrets)
 }
 
@@ -155,17 +164,26 @@ impl SecretDelivery {
     }
 }
 
-pub fn inject_component_envs(
+fn template_parts(template: &mut PodTemplateSpec) -> Option<(&mut ObjectMeta, &mut PodSpec)> {
+    let spec = template.spec.as_mut()?;
+    Some((
+        template.metadata.get_or_insert_with(ObjectMeta::default),
+        spec,
+    ))
+}
+
+pub fn inject_component_settings(
     profile: &Profile,
     pod_template_key: &str,
     placement: &PodPlacement,
+    metadata: &mut ObjectMeta,
     spec: &mut PodSpec,
 ) -> Result<(), LauncherError> {
     let Some(config_yaml) = profile.configs.get(TABSDATA_FILE) else {
         return Ok(());
     };
-    apply_component_envs(config_yaml, placement, spec).map_err(|cause| {
-        LauncherError::ComponentEnvConfigParseFailed {
+    apply_component_settings(config_yaml, placement, metadata, spec).map_err(|cause| {
+        LauncherError::ComponentSettingsConfigParseFailed {
             config: TABSDATA_FILE.to_owned(),
             pod: pod_template_key.to_owned(),
             cause: cause.to_string(),
@@ -173,9 +191,10 @@ pub fn inject_component_envs(
     })
 }
 
-pub fn apply_component_envs(
+pub fn apply_component_settings(
     config_yaml: &str,
     placement: &PodPlacement,
+    metadata: &mut ObjectMeta,
     spec: &mut PodSpec,
 ) -> Result<(), serde_yaml::Error> {
     let config = TabsdataConfig::parse(config_yaml)?;
@@ -187,6 +206,14 @@ pub fn apply_component_envs(
     if !entries.is_empty() {
         override_env_entries(spec, &entries);
     }
+    // Azure Workload Identity only injects its credentials into pods labelled
+    // for it, so naming an Azure identity on the service account isn't enough.
+    if names_azure_identity(&component.service_account) {
+        metadata.labels.get_or_insert_with(BTreeMap::new).insert(
+            AZURE_WORKLOAD_IDENTITY_USE_LABEL.to_owned(),
+            "true".to_owned(),
+        );
+    }
     Ok(())
 }
 
@@ -194,6 +221,7 @@ fn worker_logs_env_entries(worker_logs: &WorkerLogsConfig) -> Vec<EnvVar> {
     [
         (ENV_TD_WORKER_LOGS_BUCKET, &worker_logs.bucket),
         (ENV_TD_WORKER_LOGS_LOCATION, &worker_logs.location),
+        (ENV_TD_WORKER_LOGS_WORKSPACE, &worker_logs.workspace),
     ]
     .into_iter()
     .filter_map(|(name, value)| {
@@ -207,6 +235,13 @@ fn worker_logs_env_entries(worker_logs: &WorkerLogsConfig) -> Vec<EnvVar> {
             })
     })
     .collect()
+}
+
+fn names_azure_identity(service_account: &ServiceAccountConfig) -> bool {
+    service_account
+        .annotations
+        .get(AZURE_WORKLOAD_IDENTITY_CLIENT_ID_ANNOTATION)
+        .is_some_and(|client_id| !client_id.is_empty())
 }
 
 pub fn inject_secret_envs(
