@@ -20,7 +20,11 @@ from tabsdatax.setup.common.commands import (
 )
 from tabsdatax.setup.common.config import load_setup_configuration
 from tabsdatax.setup.common.descriptor import load_package_descriptor
-from tabsdatax.setup.common.groups import load_binary_groups
+from tabsdatax.setup.common.groups import (
+    load_binary_groups,
+    load_edition_resource_groups,
+    load_resource_groups,
+)
 from tabsdatax.setup.common.logging import global_spinner, init_logging
 from tabsdatax.setup.common.paths import (
     CONNECTOR_TO_ROOT,
@@ -36,7 +40,10 @@ from tabsdatax.setup.common.platform import (
     next_minor_version,
 )
 from tabsdatax.setup.common.requirements import read_requirements
-from tabsdatax.setup.tabsdata.binaries import collect_group_datafiles
+from tabsdatax.setup.tabsdata.binaries import (
+    collect_group_datafiles,
+    collect_resource_datafiles,
+)
 from tabsdatax.setup.tabsdata.editable import create_editable_binary_symlinks
 
 
@@ -89,6 +96,13 @@ def build(setup_file: str) -> None:
         )
     else:
         datafiles = create_empty_datafiles()
+    package_folder = os.path.dirname(os.path.abspath(setup_file))
+    datafiles += collect_resource_datafiles(
+        load_resource_groups(package_folder)
+        + load_edition_resource_groups(root, os.path.basename(package_folder)),
+        root,
+        require_server_binaries=configuration.require_server_binaries,
+    )
     create_editable_binary_symlinks(datafiles)
     ensure_egg_folder()
 
@@ -204,6 +218,7 @@ def build(setup_file: str) -> None:
                     # a plugin def's ``icon=`` relative path).
                     os.path.join(
                         "resources",
+                        "**",
                         "*",
                     ),
                     *yaml_files_tabsdata,
@@ -219,6 +234,7 @@ def build(setup_file: str) -> None:
                     # a plugin def's ``icon=`` relative path).
                     os.path.join(
                         "resources",
+                        "**",
                         "*",
                     ),
                     *yaml_files_tabsdatak,

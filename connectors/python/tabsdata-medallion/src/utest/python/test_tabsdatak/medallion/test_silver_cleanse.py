@@ -8,11 +8,11 @@ import pytest
 
 import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
-from tabsdatak._medallion.silver.scd import (
+from tabsdatak.medallion import (
     build_scd1_silver_cleanse,
     build_scd2_silver_cleanse,
 )
-from tabsdatak._medallion.constants import (
+from tabsdatak.medallion import (
     MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
     MEDALLION_SYSTEM_COLUMN_OP,
     MEDALLION_SYSTEM_COLUMN_PK,

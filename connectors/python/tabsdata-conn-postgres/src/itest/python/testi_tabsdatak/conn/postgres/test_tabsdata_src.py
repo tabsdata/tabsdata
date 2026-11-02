@@ -27,7 +27,7 @@ from testi_tabsdatak.conn.common.sql.employees_model import (
 from testi_tabsdatak.conn.common.sql.plugin_io import entity_rows
 from testi_tabsdatak.conn.postgres.backend import src_conn, store
 
-from tabsdatak.sdk.status_utils.execution import EXECUTION_SUCCESSFUL_FINAL_STATUSES
+from tabsdatak.sdk.status_utils.groups import Entity, Health, health
 
 pytestmark = pytest.mark.postgres
 
@@ -75,12 +75,12 @@ def test_publisher_initial_values_advance_across_runs(
     )
 
     status = wait_for_completion(function.trigger())
-    assert status in EXECUTION_SUCCESSFUL_FINAL_STATUSES
+    assert health(Entity.EXECUTION, status) is Health.OK
     first = table_frame(collection, publisher.PUBLISHED_TABLE)
     assert sorted(first["emp_no"].to_list()) == all_emp_nos
 
     status = wait_for_completion(function.trigger())
-    assert status in EXECUTION_SUCCESSFUL_FINAL_STATUSES
+    assert health(Entity.EXECUTION, status) is Health.OK
     second = table_frame(collection, publisher.PUBLISHED_TABLE)
     assert sorted(second["emp_no"].to_list()) == [
         n for n in all_emp_nos if n > publisher.WATERMARK_ADVANCE_TO

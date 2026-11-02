@@ -31,6 +31,10 @@ keeps reading a format it already understands.
 caller to capture the function's source separately (e.g. to pass to
 the server's register API as display metadata, mirroring the legacy
 pattern in `tabsdata.api.tabsdata_server._create_archive`).
+
+A downloaded bundle is read back with `read_function_source` /
+`read_bundle_sources`, unpacked with `extract_bundle`, and re-based for a
+code-only patch with `splice_function_source`.
 """
 
 from __future__ import annotations
@@ -38,10 +42,14 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+import os
+import re
 import shutil
 import tarfile
 import tempfile
-from collections.abc import Iterable
+from collections.abc import Container, Iterable, Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Union
 
@@ -142,45 +150,293 @@ def capture_source_snippet(info: FunctionInfo) -> str:
         return f"# source unavailable: {exc}\n"
 
 
-def read_function_source(archive: Path) -> tuple[str, str] | None:
-    """Return `(qualname, source)` of the module defining the bundled
-    function, read back out of a `.tar.zst` bundle.
+@contextmanager
+def _open_tar(archive: Path) -> Iterator[tarfile.TarFile]:
+    with (
+        open(archive, "rb") as raw,
+        zstandard.ZstdDecompressor().stream_reader(raw) as stream,
+        tarfile.open(fileobj=stream, mode="r|") as tar,
+    ):
+        yield tar
 
-    The manifest is a `JsonSerde` envelope whose `spec.func` is
-    `"<module>:<qualname>"`; the module resolves against `user_code/`,
-    the same way the runner resolves it at execution time. This is the source
-    that actually runs — unlike the registered snippet, which is display
-    metadata and may have been trimmed. Returns `None` when the bundle carries
-    no manifest, no `func`, or no matching module.
-    """
-    manifest: str | None = None
-    modules: dict[str, str] = {}
-    with open(archive, "rb") as raw:
-        with zstandard.ZstdDecompressor().stream_reader(raw) as stream:
-            with tarfile.open(fileobj=stream, mode="r|") as tar:
-                for member in tar:
-                    if not member.isfile():
-                        continue
-                    name = member.name.removeprefix("./")
-                    if name == BUNDLE_MANIFEST_FILENAME:
-                        manifest = _member_text(tar, member)
-                    elif name.startswith(
-                        f"{BUNDLE_USER_CODE_DIRNAME}/"
-                    ) and name.endswith(".py"):
-                        modules[name] = _member_text(tar, member)
-    if manifest is None:
-        return None
-    spec = json.loads(manifest).get("spec") or {}
-    module, _, qualname = (spec.get("func") or "").partition(":")
-    if not module:
-        return None
-    source = modules.get(f"{BUNDLE_USER_CODE_DIRNAME}/{module.replace('.', '/')}.py")
-    return None if source is None else (qualname, source)
+
+def _walk(archive: Path):
+    """Yield `(tar, member, bundle-relative name)` for every file in a
+    `.tar.zst` bundle. Streaming: read a member before advancing."""
+    with _open_tar(archive) as tar:
+        for member in tar:
+            if member.isfile():
+                yield tar, member, member.name.removeprefix("./")
 
 
 def _member_text(tar: tarfile.TarFile, member: tarfile.TarInfo) -> str:
     content = tar.extractfile(member)
     return "" if content is None else content.read().decode("utf-8", errors="replace")
+
+
+def function_ref(manifest: str) -> tuple[str, str] | None:
+    """`(module, qualname)` of the bundled function, from the manifest
+    envelope's `spec.func` (`"<module>:<qualname>"`)."""
+    try:
+        spec = json.loads(manifest).get("spec") or {}
+    except (json.JSONDecodeError, AttributeError):
+        return None
+    module, _, qualname = (spec.get("func") or "").partition(":")
+    return (module, qualname) if module else None
+
+
+def defining_module(module: str, names: Container[str]) -> str | None:
+    """Bundle path of `module` among the bundle's file `names`: the module
+    resolves against `user_code/` as the runner resolves it, to
+    `<module>.py` or to a package's `<module>/__init__.py`."""
+    base = f"{BUNDLE_USER_CODE_DIRNAME}/{module.replace('.', '/')}"
+    for candidate in (f"{base}.py", f"{base}/__init__.py"):
+        if candidate in names:
+            return candidate
+    return None
+
+
+def read_function_source(archive: Path) -> tuple[str, str] | None:
+    """Return `(qualname, source)` of the module defining the bundled
+    function, read back out of a `.tar.zst` bundle.
+
+    This is the source that actually runs — unlike the registered snippet,
+    which is display metadata and may have been trimmed. Returns `None` when
+    the bundle carries no manifest, no `func`, or no matching module.
+    """
+    manifest: str | None = None
+    modules: dict[str, str] = {}
+    for tar, member, name in _walk(archive):
+        if name == BUNDLE_MANIFEST_FILENAME:
+            manifest = _member_text(tar, member)
+        elif name.startswith(f"{BUNDLE_USER_CODE_DIRNAME}/") and name.endswith(".py"):
+            modules[name] = _member_text(tar, member)
+    ref = function_ref(manifest) if manifest is not None else None
+    if ref is None:
+        return None
+    module, qualname = ref
+    path = defining_module(module, modules)
+    return None if path is None else (qualname, modules[path])
+
+
+_TEXT_SUFFIXES = (
+    ".cfg",
+    ".ini",
+    ".json",
+    ".md",
+    ".py",
+    ".toml",
+    ".txt",
+    ".yaml",
+    ".yml",
+)
+_MAX_FILE_BYTES = 128 * 1024
+_MAX_TOTAL_BYTES = 512 * 1024
+# The defining module is trimmed rather than dropped, but capped so it
+# cannot starve its siblings.
+_MAX_DEFINING_BYTES = _MAX_TOTAL_BYTES // 2
+_TRIM_MARKER_RESERVE = 64
+
+
+@dataclass(frozen=True)
+class BundleSources:
+    """The text members of a bundle, within a byte budget."""
+
+    defining_module: str | None
+    files: dict[str, str]
+    skipped: list[str]
+    truncated: list[str]
+
+
+def _within_budget(sizes: dict[str, int], defining: str | None) -> dict[str, int]:
+    """Bytes each member may spend, by relevance: the defining module, then
+    the rest of the user's Python, then everything else."""
+
+    def rank(name: str) -> int:
+        if name == defining:
+            return 0
+        if name.startswith(f"{BUNDLE_USER_CODE_DIRNAME}/") and name.endswith(".py"):
+            return 1
+        return 2
+
+    allowance: dict[str, int] = {}
+    total = 0
+    for name in sorted(sizes, key=lambda member: (rank(member), member)):
+        size = sizes[name]
+        if not name.endswith(_TEXT_SUFFIXES):
+            continue
+        if name == defining:
+            spend = min(size, _MAX_DEFINING_BYTES)
+        elif size > _MAX_FILE_BYTES or total + size > _MAX_TOTAL_BYTES:
+            continue
+        else:
+            spend = size
+        allowance[name] = spend
+        total += spend
+    return allowance
+
+
+def _trimmed(data: bytes, budget: int) -> str:
+    """Head and tail of `data` around an elision marker, cut on line
+    boundaries and no longer than `budget` bytes."""
+    room = max(budget - _TRIM_MARKER_RESERVE, 0)
+    head_end = data.rfind(b"\n", 0, room * 2 // 3) + 1
+    tail_index = data.find(b"\n", len(data) - (room - head_end))
+    tail_start = len(data) if tail_index < 0 else tail_index + 1
+    elided = tail_start - head_end
+    return (
+        data[:head_end].decode("utf-8")
+        + f"# ... {elided} bytes elided ...\n"
+        + data[tail_start:].decode("utf-8")
+    )
+
+
+def read_bundle_sources(archive: Path) -> BundleSources:
+    """Read the text members of a `.tar.zst` bundle, keyed by bundle path.
+
+    Binary members, and anything that would push the total past the byte
+    caps, are `skipped`; the defining module is never skipped for its size
+    but `truncated` to its own cap instead. The archive is walked twice: to
+    size every member, then to read the ones the budget kept.
+    """
+    manifest = ""
+    sizes: dict[str, int] = {}
+    for tar, member, name in _walk(archive):
+        if name == BUNDLE_MANIFEST_FILENAME:
+            manifest = _member_text(tar, member)
+        sizes[name] = member.size
+    ref = function_ref(manifest)
+    defining = defining_module(ref[0], sizes) if ref else None
+    allowance = _within_budget(sizes, defining)
+
+    files: dict[str, str] = {}
+    truncated: list[str] = []
+    skipped: list[str] = [name for name in sizes if name not in allowance]
+    for tar, member, name in _walk(archive):
+        if name not in allowance:
+            continue
+        content = tar.extractfile(member)
+        data = content.read() if content is not None else None
+        try:
+            text = data.decode("utf-8") if data is not None else None
+        except UnicodeDecodeError:
+            text = None
+        if text is None:
+            skipped.append(name)
+            continue
+        if len(data) > allowance[name]:
+            text = _trimmed(data, allowance[name])
+            truncated.append(name)
+        files[name] = text
+    return BundleSources(defining, files, sorted(skipped), sorted(truncated))
+
+
+def extract_bundle(archive: Path, dest: Path) -> None:
+    """Unpack a `.tar.zst` bundle into `dest`, refusing members that would
+    land outside it (tarfile's `data` filter)."""
+    dest.mkdir(parents=True, exist_ok=True)
+    with _open_tar(archive) as tar:
+        tar.extractall(dest, filter="data")
+
+
+@dataclass(frozen=True)
+class SplicedBundle:
+    """A bundle's project tree with its defining module replaced: `path` is
+    the `file.py::qualname` to import, `project_root` the tree to bundle,
+    `requirements` the parent's `requirements.yaml`, if it has one, and
+    `local_packages` the parent's staged local packages, in bundle order."""
+
+    path: str
+    project_root: Path
+    requirements: Path | None
+    local_packages: tuple[Path, ...] = ()
+
+
+def _package_name(requirement: str) -> str:
+    name = re.split(r"[\s\[<>=!~;@(]", requirement.strip(), maxsplit=1)[0]
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _merged_pins(pinned: Iterable[str], packages: Iterable[str]) -> list[str]:
+    """`pinned` with each of `packages` added, replacing any requirement on
+    the same package (names compared as PEP 503 normalises them)."""
+    added = {_package_name(package): package for package in packages}
+    kept = [p for p in pinned if _package_name(p) not in added]
+    return sorted([*kept, *added.values()], key=str.casefold)
+
+
+def _merge_packages(requirements: Path, packages: Iterable[str]) -> None:
+    manifest = yaml.safe_load(requirements.read_text(encoding="utf-8")) or {}
+    manifest[_PUBLIC_PACKAGES_KEY] = _merged_pins(
+        manifest.get(_PUBLIC_PACKAGES_KEY) or [], packages
+    )
+    requirements.write_text(yaml.safe_dump(manifest, sort_keys=True), encoding="utf-8")
+
+
+def _staged_local_packages(dest_dir: Path) -> tuple[Path, ...]:
+    base = dest_dir / BUNDLE_LOCAL_PACKAGES_DIRNAME
+    if not base.is_dir():
+        return ()
+    slots = sorted(
+        (slot for slot in base.iterdir() if slot.is_dir() and slot.name.isdigit()),
+        key=lambda slot: int(slot.name),
+    )
+    return tuple(package for slot in slots for package in sorted(slot.iterdir()))
+
+
+def splice_function_source(
+    archive: Path,
+    new_source: str,
+    dest_dir: Path,
+    *,
+    add_packages: Iterable[str] = (),
+) -> SplicedBundle:
+    """Extract `archive` into `dest_dir` and replace the module defining its
+    function with `new_source`, keeping every sibling module and the
+    parent's `requirements.yaml`, with `add_packages` merged into its public
+    packages (replacing the pins of the same packages), and returning the
+    parent's staged local packages to bundle again.
+
+    Raises:
+        CommonRuntimeException (COMMON_15): the bundle carries no manifest,
+            no function reference, or no defining module.
+    """
+    extract_bundle(archive, dest_dir)
+    manifest = dest_dir / BUNDLE_MANIFEST_FILENAME
+    if not manifest.is_file():
+        raise CommonErrorCode.COMMON_15.exception(missing=BUNDLE_MANIFEST_FILENAME)
+    ref = function_ref(manifest.read_text(encoding="utf-8"))
+    if ref is None:
+        raise CommonErrorCode.COMMON_15.exception(missing="function reference")
+    module, qualname = ref
+    names = {
+        path.relative_to(dest_dir).as_posix()
+        for path in dest_dir.rglob("*")
+        if path.is_file()
+    }
+    found = defining_module(module, names)
+    if found is None:
+        raise CommonErrorCode.COMMON_15.exception(missing=f"module '{module}'")
+    module_file = dest_dir / found
+    module_file.write_text(new_source, encoding="utf-8")
+    requirements = dest_dir / BUNDLE_REQUIREMENTS_FILENAME
+    packages = list(add_packages)
+    if requirements.is_file():
+        if packages:
+            _merge_packages(requirements, packages)
+    elif packages:
+        synthesised, python_version = PythonEnvironment.synthesise()
+        write_requirements(
+            dest_dir, _merged_pins(synthesised, packages), python_version
+        )
+    else:
+        requirements = None
+    return SplicedBundle(
+        path=f"{module_file}::{qualname}",
+        project_root=dest_dir / BUNDLE_USER_CODE_DIRNAME,
+        requirements=requirements,
+        local_packages=_staged_local_packages(dest_dir),
+    )
 
 
 # --- requirements snapshot + python version ------------------------------
@@ -230,7 +486,33 @@ def validate_python_version(python_version: str, valid_versions: Iterable[str]) 
 # --- local packages ------------------------------------------------------
 
 
-def collect_local_packages(packages: Iterable[Path], dest_dir: Path) -> list[Path]:
+def _require_inside(path: Path | str, root: Path | None) -> None:
+    if root is None:
+        return
+    real = os.path.realpath(path)
+    try:
+        inside = os.path.commonpath([root, real]) == str(root)
+    except ValueError:
+        inside = False
+    if not inside:
+        raise CommonErrorCode.COMMON_14.exception(path=path, root=root)
+
+
+def _copy(root: Path | None):
+    def copy(src, dst, *, follow_symlinks=True):
+        _require_inside(src, root)
+        return shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
+
+    return copy
+
+
+def _real_root(confine_to: Path | None) -> Path | None:
+    return None if confine_to is None else Path(os.path.realpath(confine_to))
+
+
+def collect_local_packages(
+    packages: Iterable[Path], dest_dir: Path, *, confine_to: Path | None = None
+) -> list[Path]:
     """Copy each local-package directory into
     `<dest_dir>/local_packages/<n>/<package_basename>/`.
 
@@ -238,7 +520,10 @@ def collect_local_packages(packages: Iterable[Path], dest_dir: Path) -> list[Pat
 
     Raises:
         CommonRuntimeException (COMMON_10): an entry isn't a directory.
+        CommonRuntimeException (COMMON_14): a file resolves outside
+            `confine_to`.
     """
+    root = _real_root(confine_to)
     base = dest_dir / BUNDLE_LOCAL_PACKAGES_DIRNAME
     staged: list[Path] = []
     for index, pkg in enumerate(packages):
@@ -247,10 +532,12 @@ def collect_local_packages(packages: Iterable[Path], dest_dir: Path) -> list[Pat
         slot = base / str(index)
         slot.mkdir(parents=True, exist_ok=True)
         target = slot / pkg.name
+        _require_inside(pkg, root)
         shutil.copytree(
             pkg,
             target,
             ignore=shutil.ignore_patterns(*_IGNORE_PATTERNS),
+            copy_function=_copy(root),
             dirs_exist_ok=True,
         )
         staged.append(target)
@@ -269,6 +556,7 @@ def build_bundle(
     valid_python_versions: Iterable[str] | None = None,
     include: Iterable[str] | None = None,
     requirements_yaml: Path | None = None,
+    confine_to: Path | None = None,
 ) -> Path:
     """Build a function bundle at `output_path`.
 
@@ -304,6 +592,8 @@ def build_bundle(
             when the build env differs from the runtime env (e.g.
             cross-platform deployment) and the legacy env-builder
             schema must be controlled by hand.
+        confine_to: optional directory every bundled file must resolve
+            inside of, symlinks followed.
 
     Returns:
         `output_path`.
@@ -312,11 +602,16 @@ def build_bundle(
         CommonRuntimeException (COMMON_9): `project_root` is not a directory.
         CommonRuntimeException (COMMON_10): a local-package entry is not a directory.
         CommonRuntimeException (COMMON_11): see `valid_python_versions`.
+        CommonRuntimeException (COMMON_14): a file resolves outside
+            `confine_to`.
         OSError: I/O failure during staging or tar creation.
     """
     if not project_root.is_dir():
         raise CommonErrorCode.COMMON_9.exception(path=project_root)
     include_list = list(include) if include is not None else None
+    root = _real_root(confine_to)
+    if requirements_yaml is not None:
+        _require_inside(requirements_yaml, root)
 
     if requirements_yaml is None:
         requirements, python_version = PythonEnvironment.synthesise()
@@ -339,11 +634,12 @@ def build_bundle(
             project_root,
             staging / BUNDLE_USER_CODE_DIRNAME,
             include=include_list,
+            root=root,
         )
 
         write_function_def(info, staging)
         if local_packages:
-            collect_local_packages(local_packages, staging)
+            collect_local_packages(local_packages, staging, confine_to=root)
         if requirements_yaml is not None:
             shutil.copyfile(requirements_yaml, staging / BUNDLE_REQUIREMENTS_FILENAME)
         else:
@@ -379,19 +675,23 @@ def _copy_project_tree(
     dest: Path,
     *,
     include: list[str] | None,
+    root: Path | None,
 ) -> None:
     dest.mkdir(parents=True, exist_ok=True)
+    copy = _copy(root)
     for entry in _iter_project_entries(project_root, include):
         target = dest / entry.name
         if entry.is_dir():
+            _require_inside(entry, root)
             shutil.copytree(
                 entry,
                 target,
                 ignore=shutil.ignore_patterns(*_IGNORE_PATTERNS),
+                copy_function=copy,
                 dirs_exist_ok=True,
             )
         elif entry.is_file():
-            shutil.copy2(entry, target)
+            copy(entry, target)
 
 
 def _iter_project_entries(project_root: Path, include: list[str] | None) -> list[Path]:

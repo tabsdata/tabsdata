@@ -22,8 +22,8 @@ from tabsdatax.itest.fixture.instances.tabsdata import Instance, tabsdata_instan
 from testi_tabsdatak.conn.azureblob.backend import run_prefix, src_conn, store
 from testi_tabsdatak.conn.common.function_project import function_module
 
-from tabsdatak.sdk.status_utils.execution import EXECUTION_SUCCESSFUL_FINAL_STATUSES
-from tabsdatak.sdk.tabsdata_server import FunctionInfo
+from tabsdatak.sdk._function_archive import FunctionInfo
+from tabsdatak.sdk.status_utils.groups import Entity, Health, health
 
 pytestmark = pytest.mark.azureblob
 
@@ -125,7 +125,7 @@ def test_publisher_purges_the_objects_it_has_consumed(
     )
 
     status = wait_for_completion(function.trigger())
-    assert status in EXECUTION_SUCCESSFUL_FINAL_STATUSES
+    assert health(Entity.EXECUTION, status) is Health.OK
     assert_frames_match(
         table_frame(collection, publisher.PUBLISHED_TABLE),
         pl.DataFrame({"name": ["first.parquet"]}),
@@ -134,7 +134,7 @@ def test_publisher_purges_the_objects_it_has_consumed(
 
     _stage_parquet(domain, second_key, "second.parquet", tmp_path)
     status = wait_for_completion(function.trigger())
-    assert status in EXECUTION_SUCCESSFUL_FINAL_STATUSES
+    assert health(Entity.EXECUTION, status) is Health.OK
     assert_frames_match(
         table_frame(collection, publisher.PUBLISHED_TABLE),
         pl.DataFrame({"name": ["second.parquet"]}),

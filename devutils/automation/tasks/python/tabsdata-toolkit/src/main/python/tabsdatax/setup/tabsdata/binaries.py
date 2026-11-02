@@ -109,3 +109,35 @@ def collect_group_datafiles(
 
     logger.debug(f"Including tabsdata binaries: {datafiles}")
     return datafiles
+
+
+def collect_resource_datafiles(
+    resource_groups: Sequence[Mapping],
+    root: str,
+    require_server_binaries: bool = False,
+) -> list[tuple[str, list[str]]]:
+    """The data files of `[[resource_groups]]`. A group missing any file is
+    skipped, or fails a build that requires the server binaries."""
+    datafiles: list[tuple[str, list[str]]] = []
+    for group in resource_groups:
+        group_name = group.get("name", "")
+        folder = os.path.join(root, group["source"])
+        names = group.get("names", [])
+        missing = [
+            name for name in names if not os.path.isfile(os.path.join(folder, name))
+        ]
+        if missing:
+            message = (
+                f"Resource group '{group_name}' lacks {', '.join(missing)} in"
+                f" '{folder}'"
+            )
+            if require_server_binaries:
+                raise FileNotFoundError(message)
+            logger.debug(f"{message}; skipping.")
+            continue
+        files = [
+            os.path.relpath(os.path.join(folder, name)).replace(os.sep, "/")
+            for name in names
+        ]
+        datafiles.append((group["install_dest"], files))
+    return datafiles

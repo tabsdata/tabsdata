@@ -5,11 +5,12 @@
 """GCS connection explorer.
 
 ``check_connect`` proves auth + bucket existence; ``metadata`` lists the
-objects under the conn's ``base_path``; ``data`` previews the first ``limit``
-rows of a single object, fetching only the bytes it needs (never the whole
-object) and dispatching by format: parquet via pyarrow, avro via fastavro,
-json / ndjson as newline-delimited JSON, and every other format (csv, log,
-...) via CSV parsing.
+objects under the conn's ``base_path``, with their schemas read from the
+objects' heads by range requests (``_schema.attach_schemas``); ``data``
+previews the first ``limit`` rows of a single object, fetching only the bytes
+it needs (never the whole object) and dispatching by format: parquet via
+pyarrow, avro via fastavro, json / ndjson as newline-delimited JSON, and every
+other format (csv, log, ...) via CSV parsing.
 """
 
 import csv
@@ -23,6 +24,7 @@ from tabsdatak.conn.common.file._explorer import (
     FileStorageConnMetaModel,
     FileStorageEntity,
 )
+from tabsdatak.conn.common.file._schema import attach_schemas
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert, normalize_dir_path
@@ -79,7 +81,13 @@ class GCSConnectionExplorer(Explorer):
                     last_modified=updated.isoformat() if updated else None,
                 )
             )
-        return entities
+        handle = client.bucket(bucket)
+        return attach_schemas(
+            entities,
+            lambda entity: handle.blob(entity.object_key()).open(
+                "rb", chunk_size=256 * 1024
+            ),
+        )
 
     def data(
         self, conn: GCSConn, entity: FileStorageEntity, limit: int = 100
@@ -88,12 +96,7 @@ class GCSConnectionExplorer(Explorer):
             return []
         fmt = (entity.file.format or "").lower()
         bucket = entity.bucket or conn._bucket()
-        key = (
-            f"{entity.prefix}/{entity.file.pattern}"
-            if entity.prefix
-            else entity.file.pattern
-        )
-        blob = _storage_client(conn).bucket(bucket).blob(key)
+        blob = _storage_client(conn).bucket(bucket).blob(entity.object_key())
         if fmt == "parquet":
             return _read_parquet(blob, limit)
         if fmt == "avro":

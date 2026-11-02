@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
-from packaging.version import Version
+from packaging.version import InvalidVersion, Version
 
 from tabsdatax.cmake.kupgrader.common.emission import header_of, render
 from tabsdatax.cmake.kupgrader.common.errors import KupgraderError
@@ -67,8 +67,21 @@ def read_inventory(upgrades_file: Path) -> list[Entry]:
     ]
 
 
+def parse_version(version: str) -> Version:
+    try:
+        return Version(version)
+    except InvalidVersion as error:
+        raise VersionError(f"'{version}' is not a valid version.") from error
+
+
 def resolve(current: str, entries: list[Entry]) -> Resolution:
     newest = entries[0]
+    if parse_version(current) < parse_version(newest.version):
+        raise VersionError(
+            f"The current version '{current}' is older than the newest version "
+            f"'{newest.version}' in the upgrades inventory. Bump the version file or "
+            "fix the inventory."
+        )
     if newest.version == current:
         previous = entries[1].version if len(entries) > 1 else None
     else:

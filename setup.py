@@ -173,6 +173,23 @@ LIBEXEC_COMMANDS_SOURCES: list[LibexecCommandsSource] = [
             "commands",
         ),
     ),
+    LibexecCommandsSource(
+        source_code_root=os.path.join(
+            ROOT,
+            "connectors",
+            "python",
+            "tabsdata-server",
+            "src",
+            "main",
+            "python",
+        ),
+        root_module_path=os.path.join(
+            "tabsdatak",
+            "server",
+            "_tdrunner",
+            "probe",
+        ),
+    ),
 ]
 LIBEXEC_BUILD_FOLDER = os.path.join("target", "python", "libexec", "tabsdata")
 LIBEXEC_INSTALL_FOLDER = os.path.join("libexec", "tabsdata")
@@ -241,7 +258,7 @@ console_scripts: list[str] = [
     "td_pyvenv = tabsdatak.common._interpreter.python.pyvenv:main",
     "td_resource = tabsdatak.common._resources.reader:main",
     "td_tdinfo = tabsdatak.server._tdserver.workers.tdinfo:main",
-    "tdk = tabsdatak.cli.td.cli:cli",
+    "tdk = tabsdatak.cli:main",
     "tdk_assess = tabsdatak.server._tdserver.render.assess:main",
     "tdk_check = tabsdatak.server._tdserver.render.check:main",
     "tdk_table = tabsdatak.server._tdserver.render.table:main",

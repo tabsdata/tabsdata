@@ -77,6 +77,15 @@ def test_a_pipe_gets_every_value_whole():
 
 
 @pytest.mark.common
+def test_a_view_without_title_or_context_prints_no_title_line():
+    lines = printed(plans(title="", context=[], count=None, notes=[])).split("\n")
+
+    assert lines[0] == ""
+    assert lines[1].startswith("┏")
+    assert lines[-2:] == ["", ""]
+
+
+@pytest.mark.common
 def test_the_block_starts_and_ends_with_a_blank_line():
     lines = printed(plans()).split("\n")
 
@@ -149,6 +158,23 @@ def test_wrap_fits_the_terminal_and_keeps_every_value(monkeypatch):
     words = " ".join(line.strip("│ ") for line in lines)
     assert "pyiceberg" in words
     assert "Currently," in output
+
+
+@pytest.mark.common
+def test_a_view_that_wraps_fits_the_terminal_and_keeps_every_value(monkeypatch):
+    wrapped = printed(
+        plans(),
+        Display(wrap=True),
+        terminal=True,
+        columns=60,
+        monkeypatch=monkeypatch,
+    )
+
+    assert printed(
+        plans(wrap=True), terminal=True, columns=60, monkeypatch=monkeypatch
+    ) == wrapped
+    assert printed(plans(wrap=True)) == printed(plans(), Display(wrap=True))
+    assert "…" not in wrapped
 
 
 @pytest.mark.common

@@ -94,3 +94,15 @@ class CommonErrorCode(ErrorCode):
         "hydration input carries a plaintext secret at {paths!r}; a stored "
         "document must only carry the ':secret:' placeholder",
     )  # hydrate / env_hydrate: a leaf is already 'secret:<value>'
+
+    # --- bundle confinement (tabsdatak.common._archive.bundle) ------
+    COMMON_14 = ErrorDef(
+        CommonRuntimeException,
+        "{path} resolves outside {root}, where the bundle is confined",
+    )  # build_bundle: a file to bundle is outside confine_to (symlinks followed)
+
+    # --- bundle patching (tabsdatak.common._archive.bundle) ---------
+    COMMON_15 = ErrorDef(
+        CommonRuntimeException,
+        "the bundle carries no {missing}, so its function source cannot be replaced",
+    )  # splice_function_source: no manifest, no func, or no defining module

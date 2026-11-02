@@ -24,8 +24,8 @@ from tabsdatax.itest.fixture.instances.tabsdata import Instance, tabsdata_instan
 from testi_tabsdatak.conn.common.function_project import function_module
 from testi_tabsdatak.conn.localfile.backend import scratch, src_conn, stage_parquet
 
-from tabsdatak.sdk.status_utils.execution import EXECUTION_SUCCESSFUL_FINAL_STATUSES
-from tabsdatak.sdk.tabsdata_server import FunctionInfo
+from tabsdatak.sdk._function_archive import FunctionInfo
+from tabsdatak.sdk.status_utils.groups import Entity, Health, health
 
 pytestmark = pytest.mark.localfile
 
@@ -101,7 +101,7 @@ def test_publisher_imports_only_new_files_across_runs(
     )
 
     status = wait_for_completion(function.trigger())
-    assert status in EXECUTION_SUCCESSFUL_FINAL_STATUSES
+    assert health(Entity.EXECUTION, status) is Health.OK
     assert_frames_match(
         table_frame(collection, publisher.PUBLISHED_TABLE),
         pl.DataFrame({"name": ["first.parquet"]}),
@@ -111,7 +111,7 @@ def test_publisher_imports_only_new_files_across_runs(
         base, "second.parquet", publisher.INCREMENTAL_CUTOFF + timedelta(hours=1)
     )
     status = wait_for_completion(function.trigger())
-    assert status in EXECUTION_SUCCESSFUL_FINAL_STATUSES
+    assert health(Entity.EXECUTION, status) is Health.OK
     assert_frames_match(
         table_frame(collection, publisher.PUBLISHED_TABLE),
         pl.DataFrame({"name": ["second.parquet"]}),
@@ -139,7 +139,7 @@ def test_publisher_purges_the_files_it_has_consumed(
     )
 
     status = wait_for_completion(function.trigger())
-    assert status in EXECUTION_SUCCESSFUL_FINAL_STATUSES
+    assert health(Entity.EXECUTION, status) is Health.OK
     assert_frames_match(
         table_frame(collection, publisher.PUBLISHED_TABLE),
         pl.DataFrame({"name": ["first.parquet"]}),
@@ -150,7 +150,7 @@ def test_publisher_purges_the_files_it_has_consumed(
         base, "second.parquet", publisher.INCREMENTAL_CUTOFF + timedelta(hours=1)
     )
     status = wait_for_completion(function.trigger())
-    assert status in EXECUTION_SUCCESSFUL_FINAL_STATUSES
+    assert health(Entity.EXECUTION, status) is Health.OK
     assert_frames_match(
         table_frame(collection, publisher.PUBLISHED_TABLE),
         pl.DataFrame({"name": ["second.parquet"]}),
@@ -182,11 +182,11 @@ def test_publisher_purge_leaves_a_file_below_the_baseline(
     )
 
     status = wait_for_completion(function.trigger())
-    assert status in EXECUTION_SUCCESSFUL_FINAL_STATUSES
+    assert health(Entity.EXECUTION, status) is Health.OK
     stage_parquet(
         base, "second.parquet", publisher.INCREMENTAL_CUTOFF + timedelta(hours=1)
     )
     status = wait_for_completion(function.trigger())
-    assert status in EXECUTION_SUCCESSFUL_FINAL_STATUSES
+    assert health(Entity.EXECUTION, status) is Health.OK
 
     assert stale.exists(), "a file the baseline excluded was never ours to delete"

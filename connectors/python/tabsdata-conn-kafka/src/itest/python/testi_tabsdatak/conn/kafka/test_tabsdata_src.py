@@ -46,8 +46,8 @@ def _published_rows(collection: Collection, table: str) -> pl.DataFrame | None:
     frames = []
     with tempfile.TemporaryDirectory() as tmp:
         for index, version in enumerate(handle.dataversions):
-            path = handle.download(str(Path(tmp) / f"{index}.parquet"), version=version)
-            if path is not None:
+            path = Path(tmp) / f"{index}.parquet"
+            if handle.download(str(path), version=version) is not None:
                 frames.append(pl.read_parquet(path))
     if not frames:
         return None

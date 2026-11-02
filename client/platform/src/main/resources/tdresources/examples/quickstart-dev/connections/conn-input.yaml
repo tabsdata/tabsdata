@@ -2,7 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-# Source connection for the quickstart publisher.
 kind: connectionDef
 apiVersion: '1.0'
 type: tabsdatak.conn.localfile:LocalFileSrcConn

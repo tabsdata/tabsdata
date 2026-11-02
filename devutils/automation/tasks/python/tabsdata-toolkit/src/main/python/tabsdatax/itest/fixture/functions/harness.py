@@ -28,11 +28,9 @@ from time import sleep
 import polars as pl
 import pytest
 from tabsdatak.api import Secret
-from tabsdatak.sdk.status_utils.execution import (
-    EXECUTION_FINAL_STATUSES,
-    EXECUTION_SUCCESSFUL_FINAL_STATUSES,
-)
-from tabsdatak.sdk.tabsdata_server import Collection, FunctionInfo, TabsdataServer
+from tabsdatak.sdk._function_archive import FunctionInfo
+from tabsdatak.sdk.status_utils.groups import Entity, Health, health, is_final
+from tabsdatak.sdk.tabsdata_server import Collection, TabsdataServer
 from tabsdatak.spi import Conn
 
 from tabsdatax.itest.fixture.instances.tabsdata import Instance
@@ -50,7 +48,7 @@ CollectionFactory = Callable[..., Collection]
 def wait_for_completion(execution) -> str:
     """Poll ``execution`` until it reaches a terminal state; return that status."""
     waited = 0
-    while execution.status not in EXECUTION_FINAL_STATUSES:
+    while not is_final(Entity.EXECUTION, execution.status):
         if waited >= POLL_TIMEOUT_SECONDS:
             pytest.fail(
                 f"execution did not finish within {POLL_TIMEOUT_SECONDS}s "
@@ -71,7 +69,7 @@ def run_function(
         info=function_info, project_root=str(project_root)
     )
     status = wait_for_completion(function.trigger())
-    assert status in EXECUTION_SUCCESSFUL_FINAL_STATUSES, (
+    assert health(Entity.EXECUTION, status) is Health.OK, (
         f"execution finished with non-success status {status!r}"
     )
 

@@ -6,11 +6,12 @@
 
 ``check_connect`` proves auth + bucket existence (an authenticated
 ``head_bucket``); ``metadata`` lists the objects under the conn's
-``base_path``; ``data`` previews the first ``limit`` rows of a single object,
-fetching only the bytes it needs (never the whole object) and dispatching by
-format: parquet via pyarrow range requests, avro via fastavro, json / ndjson
-as newline-delimited JSON, and every other format (csv, log, ...) via CSV
-parsing.
+``base_path``, with their schemas read from the objects' heads by range
+requests (``_schema.attach_schemas``); ``data`` previews the first ``limit``
+rows of a single object, fetching only the bytes it needs (never the whole
+object) and dispatching by format: parquet via pyarrow range requests, avro
+via fastavro, json / ndjson as newline-delimited JSON, and every other format
+(csv, log, ...) via CSV parsing.
 """
 
 import csv
@@ -24,6 +25,7 @@ from tabsdatak.conn.common.file._explorer import (
     FileStorageConnMetaModel,
     FileStorageEntity,
 )
+from tabsdatak.conn.common.file._schema import attach_schemas
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import normalize_dir_path
@@ -82,7 +84,11 @@ class S3ConnectionExplorer(Explorer):
                         ),
                     )
                 )
-        return entities
+        fs = _filesystem(conn)
+        return attach_schemas(
+            entities,
+            lambda entity: fs.open_input_file(f"{bucket}/{entity.object_key()}"),
+        )
 
     def data(
         self, conn: S3Conn, entity: FileStorageEntity, limit: int = 100
@@ -91,11 +97,7 @@ class S3ConnectionExplorer(Explorer):
             return []
         fmt = (entity.file.format or "").lower()
         bucket = entity.bucket or conn._bucket()
-        key = (
-            f"{entity.prefix}/{entity.file.pattern}"
-            if entity.prefix
-            else entity.file.pattern
-        )
+        key = entity.object_key()
         if fmt == "parquet":
             return _read_parquet(conn, bucket, key, limit)
         if fmt == "avro":
@@ -104,6 +106,21 @@ class S3ConnectionExplorer(Explorer):
             return _read_ndjson(_s3_client(conn), bucket, key, limit)
         # csv and every other format fall back to CSV parsing.
         return _read_csv(_s3_client(conn), bucket, key, limit)
+
+
+def _filesystem(conn: S3Conn):
+    # pyarrow is imported lazily; its S3 filesystem reads by range requests.
+    import pyarrow.fs as pafs
+
+    access_key = secret_key = None
+    if conn.credentials is not None:
+        access_key = conn.credentials.access_key_id.value() or None
+        secret_key = conn.credentials.secret_access_key.value() or None
+    return pafs.S3FileSystem(
+        access_key=access_key,
+        secret_key=secret_key,
+        region=conn._region() or None,
+    )
 
 
 def _s3_client(conn: S3Conn):
@@ -179,21 +196,10 @@ def _read_avro(client, bucket: str, key: str, limit: int) -> list[dict]:
 
 
 def _read_parquet(conn: S3Conn, bucket: str, key: str, limit: int) -> list[dict]:
-    # pyarrow is imported lazily; the S3 filesystem reads via range requests,
-    # so only the footer and the first row group are fetched.
-    import pyarrow.fs as pafs
+    # Range requests: only the footer and the first row group are fetched.
     import pyarrow.parquet as pq
 
-    access_key = secret_key = None
-    if conn.credentials is not None:
-        access_key = conn.credentials.access_key_id.value() or None
-        secret_key = conn.credentials.secret_access_key.value() or None
-    fs = pafs.S3FileSystem(
-        access_key=access_key,
-        secret_key=secret_key,
-        region=conn._region() or None,
-    )
-    with fs.open_input_file(f"{bucket}/{key}") as handle:
+    with _filesystem(conn).open_input_file(f"{bucket}/{key}") as handle:
         parquet_file = pq.ParquetFile(handle)
         try:
             batch = next(parquet_file.iter_batches(batch_size=limit))

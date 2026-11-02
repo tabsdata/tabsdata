@@ -172,7 +172,7 @@ def tdabout_from_metadata(package_name=TABSDATA_MODULE_NAME):
         print(f"Error: Failed to execute tdabout: {exception}")
 
 
-def tdabout_from_build(package_name=TABSDATA_MODULE_NAME):
+def tdabout_from_build(package_name=TABSDATA_MODULE_NAME, capture=False):
     try:
         build = td_resource(BUILD_MANIFEST_RESOURCE)
     except Exception as exception:
@@ -196,12 +196,20 @@ def tdabout_from_build(package_name=TABSDATA_MODULE_NAME):
     env[TD_ABOUT_MANIFEST] = str(build)
 
     try:
-        subprocess.run([tdabout_binary], check=True, env=env)
+        completed = subprocess.run(
+            [tdabout_binary],
+            check=True,
+            env=env,
+            capture_output=capture,
+            text=capture,
+        )
     except subprocess.CalledProcessError as error:
         print(f"Error: tdabout failed with exit code {error.returncode}")
     except Exception as exception:
         print(f"Error: Failed to execute tdabout: {exception}")
+    else:
+        return completed.stdout
 
 
-def tdabout(package_name="tabsdata"):
-    tdabout_from_build(package_name)
+def tdabout(package_name="tabsdata", capture=False):
+    return tdabout_from_build(package_name, capture)

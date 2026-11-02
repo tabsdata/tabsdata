@@ -116,3 +116,54 @@ def test_materialize_trims_resolved_value(monkeypatch):
     monkeypatch.setenv("SECRETS__API_KEY", "  padded  ")
     document = {"api_key": "${{secret:k}}"}
     assert materialize(document) == {"api_key": "padded"}
+
+
+_OPENAI_KEY = {"ai_providers": {"openai": {"api_key": "${{secret:openai-key}}"}}}
+
+
+def test_materialize_reads_the_secret_file_first(monkeypatch, tmp_path):
+    (tmp_path / "AI_PROVIDERS__OPENAI__API_KEY").write_text("sk-file\n")
+    monkeypatch.setenv("TD_SECRETS_DIR", str(tmp_path))
+    monkeypatch.setenv("SECRETS__AI_PROVIDERS__OPENAI__API_KEY", "sk-env")
+    assert materialize(_OPENAI_KEY) == {
+        "ai_providers": {"openai": {"api_key": "sk-file"}}
+    }
+
+
+def test_materialize_falls_back_to_env_without_the_file(monkeypatch, tmp_path):
+    monkeypatch.setenv("TD_SECRETS_DIR", str(tmp_path))
+    monkeypatch.setenv("SECRETS__AI_PROVIDERS__OPENAI__API_KEY", "sk-env")
+    assert materialize(_OPENAI_KEY) == {
+        "ai_providers": {"openai": {"api_key": "sk-env"}}
+    }
+
+
+def test_materialize_missing_file_and_env_still_raises(monkeypatch, tmp_path):
+    monkeypatch.setenv("TD_SECRETS_DIR", str(tmp_path))
+    monkeypatch.delenv("SECRETS__AI_PROVIDERS__OPENAI__API_KEY", raising=False)
+    with pytest.raises(MaterializerSecretException):
+        materialize(_OPENAI_KEY)
+
+
+def test_a_list_of_mappings_is_addressed_by_its_first_value(monkeypatch):
+    monkeypatch.setenv("SECRETS__PROVIDERS__OPENAI__API_KEY", "sk-live")
+    monkeypatch.delenv("SECRETS__PROVIDERS__ANTHROPIC__API_KEY", raising=False)
+    config = {
+        "providers": [
+            {"name": "anthropic", "api_key": "${{secret:anthropic-key?}}"},
+            {"name": "openai", "api_key": "${{secret:openai-key?}}"},
+        ]
+    }
+    assert materialize(config) == {
+        "providers": [
+            {"name": "anthropic", "api_key": ""},
+            {"name": "openai", "api_key": "sk-live"},
+        ]
+    }
+
+
+def test_a_list_that_cannot_be_keyed_is_addressed_by_index(monkeypatch):
+    monkeypatch.setenv("SECRETS__ITEMS___1", "second")
+    assert materialize({"items": ["plain", "${{secret:x}}"]}) == {
+        "items": ["plain", "second"]
+    }

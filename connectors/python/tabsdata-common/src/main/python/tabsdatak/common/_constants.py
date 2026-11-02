@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import os
+
 # --- Filesystem / URL helpers ---------------------------------------------
 
 FILE_PROTOCOL = "file://"
@@ -22,6 +24,12 @@ PLATFORM_SRC_MAIN = ("client", "platform", "src", "main")
 
 TABSDATA_TDRESOURCES_SOURCE_PARTS = PLATFORM_SRC_MAIN + (RESOURCES,)
 TABSDATA_AGENT_TDRESOURCES_SOURCE_PARTS = SRC_MAIN + (RESOURCES,)
+
+
+def tabsdata_directory() -> str:
+    """The Tabsdata directory of the current ``HOME``, read at call time."""
+    return os.path.join(os.path.expanduser("~"), ".tabsdata")
+
 
 # --- Package / module names -----------------------------------------------
 

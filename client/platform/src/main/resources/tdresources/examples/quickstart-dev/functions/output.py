@@ -2,8 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-# Quickstart subscriber: write the `people` table to output-data/people.jsonl.
-
 from tabsdatak.api import TableFrameSpec, subscriber
 from tabsdatak.conn.localfile import LocalFileDest
 

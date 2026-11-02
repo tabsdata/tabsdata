@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import re
+from pathlib import Path
 
 from tabsdatak.common._configuration.materializer.error import MaterializerErrorCode
 
@@ -18,6 +19,7 @@ OPTIONAL_GROUP = 3
 PATH_SEPARATOR = "."
 SECRET_KEY_SEPARATOR = "__"
 SECRET_ENV_PREFIX = "SECRETS__"
+SECRETS_DIR_ENV = "TD_SECRETS_DIR"
 SEGMENT_REPLACEMENT = "_"
 DIGIT_PREFIX = "_"
 EMPTY_VALUE = ""
@@ -47,12 +49,21 @@ def encode_secret_variable(path: list[str]) -> str:
     return f"{SECRET_ENV_PREFIX}{encoded}"
 
 
+def read_secret(variable: str) -> str | None:
+    folder = os.environ.get(SECRETS_DIR_ENV)
+    if folder:
+        file = Path(folder) / variable.removeprefix(SECRET_ENV_PREFIX)
+        if file.is_file():
+            return file.read_text(encoding="utf-8")
+    return os.environ.get(variable)
+
+
 def resolve_scalar(value: str, path: list[str]) -> str:
     match = SECRET_PLACEHOLDER_PATTERN.match(value)
     if match is None:
         return value
     variable = encode_secret_variable(path)
-    resolved = os.environ.get(variable)
+    resolved = read_secret(variable)
     if resolved is not None:
         return resolved.strip()
     if match.group(OPTIONAL_GROUP) is not None:

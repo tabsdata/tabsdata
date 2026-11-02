@@ -41,13 +41,11 @@ from types import ModuleType
 import requests
 from kubernetes import client as kube
 
-from tabsdatak.sdk.status_utils.execution import EXECUTION_FINAL_STATUSES
 from tabsdatak.sdk.status_utils.function_run import (
     FunctionRunStatus,
     function_run_status_to_mapping,
 )
 from tabsdatak.sdk.status_utils.transaction import (
-    TRANSACTION_FINAL_STATUSES,
     TransactionStatus,
     transaction_status_to_mapping,
 )
@@ -117,6 +115,8 @@ from testi_tabsdatak.conn.common.monkey.progress import (
     spoken,
 )
 from testi_tabsdatak.conn.common.monkey.rollups import (
+    EXECUTION_FINALS,
+    TRANSACTION_FINALS,
     execution_problems,
     transaction_problems,
     worker_problems,
@@ -241,9 +241,10 @@ def function_of(item) -> str:
 def workload_groups(items: list, ignored: set[str]) -> dict[tuple[str, str], set[str]]:
     groups: dict[tuple[str, str], set[str]] = defaultdict(set)
     for item in items:
-        if item.metadata.name in ignored:
+        function_id = function_of(item)
+        if item.metadata.name in ignored or not function_id:
             continue
-        key = (function_of(item), labels_of(item).get(DECORATOR, ""))
+        key = (function_id, labels_of(item).get(DECORATOR, ""))
         groups[key].add(item.metadata.name)
     return groups
 
@@ -748,7 +749,7 @@ class MonkeyRun:
                 name = getattr(execution.function, "name", execution.function)
                 self._executions[name].append(execution)
         unfinished = sum(
-            execution.status not in EXECUTION_FINAL_STATUSES for execution in executions
+            execution.status not in EXECUTION_FINALS for execution in executions
         )
         self.progress(
             f"Adopted {counted(len(functions), 'function')} and "
@@ -851,8 +852,7 @@ class MonkeyRun:
         return [
             (f"{execution.function} ({execution.trigger_type})", execution)
             for execution in server.list_executions()
-            if execution.id not in tracked
-            and execution.status not in EXECUTION_FINAL_STATUSES
+            if execution.id not in tracked and execution.status not in EXECUTION_FINALS
         ]
 
     def _await_untracked(self, others: list[tuple[str, Execution]]) -> None:
@@ -946,7 +946,7 @@ class MonkeyRun:
                 except Exception:
                     still.append((function, execution))
                     continue
-                if execution.status not in EXECUTION_FINAL_STATUSES:
+                if execution.status not in EXECUTION_FINALS:
                     still.append((function, execution))
             pending = still
             if pending:
@@ -1002,8 +1002,7 @@ class MonkeyRun:
             if execution_id in execution_ids
             and any(transaction.id in held for transaction in parts)
             and all(
-                transaction.id in held
-                or transaction.status in TRANSACTION_FINAL_STATUSES
+                transaction.id in held or transaction.status in TRANSACTION_FINALS
                 for transaction in parts
             )
         }

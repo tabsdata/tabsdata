@@ -23,7 +23,10 @@ from tabsdatak.common._archive.bundle import (
     build_bundle,
     capture_source_snippet,
     collect_local_packages,
+    extract_bundle,
+    read_bundle_sources,
     read_function_source,
+    splice_function_source,
     validate_python_version,
     write_function_def,
     write_requirements,
@@ -291,6 +294,19 @@ def test_read_function_source_with_module_missing_returns_none(tmp_path):
     assert read_function_source(out) is None
 
 
+def test_read_function_source_reads_a_package_init_module(tmp_path):
+    out = tmp_path / "bundle.tar.zst"
+    _write_bundle(
+        out,
+        {
+            BUNDLE_MANIFEST_FILENAME: json.dumps(_manifest("my_pkg:my_fn")),
+            f"{BUNDLE_USER_CODE_DIRNAME}/my_pkg/__init__.py": _MODULE_SOURCE,
+        },
+    )
+
+    assert read_function_source(out) == ("my_fn", _MODULE_SOURCE)
+
+
 def _tar_members(path: Path) -> set[str]:
     """Return the set of member names in the bundle (a `.tar.zst`).
 
@@ -497,3 +513,191 @@ def test_build_bundle_manifest_round_trips(tmp_path):
     text = _read_tar_member(out, f"./{BUNDLE_MANIFEST_FILENAME}").decode("utf-8")
     roundtripped = PublisherInfo.from_json(text)
     assert roundtripped.output_tables == _info().output_tables
+
+
+def _outside(tmp_path: Path) -> Path:
+    outside = tmp_path / "outside"
+    (outside / "secrets").mkdir(parents=True)
+    (outside / "secrets" / "key.txt").write_text("k\n")
+    return outside
+
+
+@pytest.mark.parametrize(
+    "link, target",
+    [
+        ("secrets", "secrets"),
+        ("my_pkg/secrets", "secrets"),
+        ("key.txt", "secrets/key.txt"),
+        ("my_pkg/key.txt", "secrets/key.txt"),
+    ],
+)
+def test_build_bundle_confined_rejects_symlinks_leaving_the_root(
+    link, target, tmp_path
+):
+    project = _make_project(tmp_path)
+    (project / link).symlink_to(_outside(tmp_path) / target)
+    with pytest.raises(CommonRuntimeException, match="outside") as exc_info:
+        build_bundle(_info(), project, tmp_path / "bundle.tar.zst", confine_to=project)
+    assert exc_info.value.api_error is CommonErrorCode.COMMON_14
+
+
+def test_build_bundle_confined_allows_symlinks_inside_the_root(tmp_path):
+    project = _make_project(tmp_path)
+    (project / "alias.md").symlink_to(project / "README.md")
+    out = tmp_path / "bundle.tar.zst"
+    build_bundle(_info(), project, out, confine_to=tmp_path)
+    assert f"{BUNDLE_USER_CODE_DIRNAME}/alias.md" in _tar_members(out)
+
+
+def test_build_bundle_unconfined_follows_symlinks(tmp_path):
+    project = _make_project(tmp_path)
+    (project / "secrets").symlink_to(_outside(tmp_path) / "secrets")
+    out = tmp_path / "bundle.tar.zst"
+    build_bundle(_info(), project, out)
+    assert f"{BUNDLE_USER_CODE_DIRNAME}/secrets/key.txt" in _tar_members(out)
+
+
+def test_build_bundle_confined_rejects_local_packages_outside(tmp_path):
+    project = _make_project(tmp_path)
+    with pytest.raises(CommonRuntimeException) as exc_info:
+        build_bundle(
+            _info(),
+            project,
+            tmp_path / "bundle.tar.zst",
+            local_packages=[_outside(tmp_path) / "secrets"],
+            confine_to=project,
+        )
+    assert exc_info.value.api_error is CommonErrorCode.COMMON_14
+
+
+_UC = BUNDLE_USER_CODE_DIRNAME
+
+
+def _parent_bundle(tmp_path, module="pkg.mod", files=None, requirements=True):
+    members = {
+        BUNDLE_MANIFEST_FILENAME: json.dumps(_manifest(f"{module}:my_fn")),
+        f"{_UC}/pkg/mod.py": "OLD = 1\n",
+        f"{_UC}/pkg/helpers.py": "HELP = 1\n",
+        **(files or {}),
+    }
+    if requirements:
+        members[BUNDLE_REQUIREMENTS_FILENAME] = yaml.safe_dump({
+            "pythonVersion": "3.12.1",
+            "publicPackages": ["polars==1.0"],
+        })
+    out = tmp_path / "parent.tar.zst"
+    _write_bundle(out, members)
+    return out
+
+
+def test_splice_replaces_the_defining_module_and_keeps_its_siblings(tmp_path):
+    spliced = splice_function_source(
+        _parent_bundle(tmp_path), "NEW = 1\n", tmp_path / "tree"
+    )
+    root = tmp_path / "tree" / _UC
+    assert spliced.project_root == root
+    assert spliced.path == f"{root / 'pkg' / 'mod.py'}::my_fn"
+    assert (root / "pkg" / "mod.py").read_text() == "NEW = 1\n"
+    assert (root / "pkg" / "helpers.py").read_text() == "HELP = 1\n"
+    assert spliced.requirements == tmp_path / "tree" / BUNDLE_REQUIREMENTS_FILENAME
+
+
+def test_splice_merges_added_packages_into_the_parent_requirements(tmp_path):
+    spliced = splice_function_source(
+        _parent_bundle(tmp_path),
+        "NEW = 1\n",
+        tmp_path / "tree",
+        add_packages=["Requests==2.0", "polars==1.0"],
+    )
+    manifest = yaml.safe_load(spliced.requirements.read_text())
+    assert manifest["pythonVersion"] == "3.12.1"
+    assert manifest["publicPackages"] == ["polars==1.0", "Requests==2.0"]
+
+
+def test_splice_without_parent_requirements(tmp_path):
+    archive = _parent_bundle(tmp_path, requirements=False)
+    plain = splice_function_source(archive, "x = 1\n", tmp_path / "a")
+    assert plain.requirements is None
+    spliced = splice_function_source(
+        archive, "x = 1\n", tmp_path / "b", add_packages=["extra==1"]
+    )
+    packages = yaml.safe_load(spliced.requirements.read_text())["publicPackages"]
+    assert "extra==1" in packages
+
+
+def test_splice_replaces_a_package_init_module(tmp_path):
+    archive = _parent_bundle(
+        tmp_path, module="pkg", files={f"{_UC}/pkg/__init__.py": "OLD = 1\n"}
+    )
+    spliced = splice_function_source(archive, "NEW = 1\n", tmp_path / "tree")
+    init = tmp_path / "tree" / _UC / "pkg" / "__init__.py"
+    assert init.read_text() == "NEW = 1\n"
+    assert spliced.path == f"{init}::my_fn"
+
+
+@pytest.mark.parametrize(
+    "members, missing",
+    [
+        ({f"{_UC}/pkg/mod.py": ""}, BUNDLE_MANIFEST_FILENAME),
+        ({BUNDLE_MANIFEST_FILENAME: json.dumps({"spec": {}})}, "function reference"),
+        (
+            {BUNDLE_MANIFEST_FILENAME: json.dumps(_manifest("pkg.gone:my_fn"))},
+            "module 'pkg.gone'",
+        ),
+    ],
+)
+def test_splice_refuses_a_bundle_it_cannot_patch(members, missing, tmp_path):
+    out = tmp_path / "b.tar.zst"
+    _write_bundle(out, members)
+    with pytest.raises(CommonRuntimeException) as exc_info:
+        splice_function_source(out, "x = 1\n", tmp_path / "tree")
+    assert exc_info.value.api_error is CommonErrorCode.COMMON_15
+    assert missing in str(exc_info.value)
+
+
+def test_extract_refuses_members_escaping_the_destination(tmp_path):
+    staging = tmp_path / "evil.txt"
+    staging.write_text("x")
+    out = tmp_path / "evil.tar.zst"
+    with open(out, "wb") as raw:
+        with zstandard.ZstdCompressor().stream_writer(raw, closefd=False) as stream:
+            with tarfile.open(fileobj=stream, mode="w|") as tar:
+                tar.add(staging, arcname="../escaped.txt")
+    with pytest.raises(tarfile.OutsideDestinationError):
+        extract_bundle(out, tmp_path / "dest")
+    assert not (tmp_path / "escaped.txt").exists()
+
+
+def test_bundle_sources_rank_the_defining_module_first(tmp_path):
+    sources = read_bundle_sources(
+        _parent_bundle(tmp_path, files={f"{_UC}/data.bin": "x"})
+    )
+    assert sources.defining_module == f"{_UC}/pkg/mod.py"
+    assert sources.files[f"{_UC}/pkg/mod.py"] == "OLD = 1\n"
+    assert f"{_UC}/pkg/helpers.py" in sources.files
+    assert BUNDLE_MANIFEST_FILENAME in sources.files
+    assert sources.skipped == [f"{_UC}/data.bin"]
+    assert sources.truncated == []
+
+
+def test_bundle_sources_trim_a_large_defining_module_by_bytes(tmp_path):
+    line = "s = '" + "é" * 10 + "'\n"
+    big = line * 20_000
+    sources = read_bundle_sources(
+        _parent_bundle(tmp_path, files={f"{_UC}/pkg/mod.py": big})
+    )
+    text = sources.files[f"{_UC}/pkg/mod.py"]
+    assert sources.truncated == [f"{_UC}/pkg/mod.py"]
+    assert "bytes elided" in text
+    assert len(text.encode("utf-8")) <= 256 * 1024
+    assert text.startswith(line)
+    assert text.endswith(line)
+
+
+def test_bundle_sources_skip_what_exceeds_the_budget(tmp_path):
+    large = "x" * (129 * 1024)
+    sources = read_bundle_sources(
+        _parent_bundle(tmp_path, files={f"{_UC}/pkg/large.py": large})
+    )
+    assert f"{_UC}/pkg/large.py" in sources.skipped
+    assert f"{_UC}/pkg/large.py" not in sources.files

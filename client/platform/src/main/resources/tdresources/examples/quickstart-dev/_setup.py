@@ -2,11 +2,8 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-# Quickstart setup step. Run automatically by `tdk examples extract` from
-# inside the extracted directory, with no arguments. It creates the
-# output-data/ folder and points each connection file's `base_path` at the
-# absolute location of its data folder, so the functions resolve their files
-# regardless of where the example was extracted.
+# `tdk examples extract` runs this from the extracted directory: each
+# connection's base_path must be absolute for the functions to find their files.
 
 from pathlib import Path
 

@@ -16,8 +16,10 @@ from tabsdatak.sdk.status_utils.function_run import (
     FunctionRunStatus,
     function_run_status_to_mapping,
 )
+from tabsdatak.sdk.status_utils.groups import FINAL, Entity, status_name
 from tabsdatak.sdk.status_utils.transaction import (
-    TRANSACTION_SUCCESSFUL_FINAL_STATUSES,
+    TransactionStatus,
+    transaction_status_to_mapping,
 )
 from tabsdatak.sdk.status_utils.worker import WorkerStatus, worker_status_to_mapping
 
@@ -29,7 +31,20 @@ RUN_TERMINALS = {
         FunctionRunStatus.YANKED,
     )
 }
-TRANSACTION_TERMINALS = TRANSACTION_SUCCESSFUL_FINAL_STATUSES
+TRANSACTION_TERMINALS = {
+    transaction_status_to_mapping(status.value)
+    for status in (
+        TransactionStatus.COMMITTED,
+        TransactionStatus.CANCELED,
+        TransactionStatus.YANKED,
+    )
+}
+TRANSACTION_FINALS = {
+    status_name(Entity.TRANSACTION, code) for code in FINAL[Entity.TRANSACTION]
+}
+EXECUTION_FINALS = {
+    status_name(Entity.EXECUTION, code) for code in FINAL[Entity.EXECUTION]
+}
 LIVE_WORKERS = {
     worker_status_to_mapping(status.value)
     for status in (

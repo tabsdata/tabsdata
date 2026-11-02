@@ -63,6 +63,11 @@ def title_line(view: TableView | RecordView) -> Text:
     return line
 
 
+def heading_lines(view: TableView | RecordView) -> list[Text]:
+    """The title line, or none for a view without a title or context."""
+    return [title_line(view)] if view.title or view.context else []
+
+
 def footer_lines(view: TableView | RecordView) -> list[Text]:
     return [Text(line, style=MUTED) for line in view.footer()]
 
@@ -183,11 +188,11 @@ def renderable(
     view: TableView | RecordView,
     display: Display = Display(),
 ) -> RenderableType:
-    title = title_line(view)
+    heading = heading_lines(view)
     if is_empty(view):
-        return Group(title, *empty_lines(view))
+        return Group(*heading, *empty_lines(view))
     table = build_table(view, cut_renderer(view, display))
-    return Group(title, table, *footer_lines(view))
+    return Group(*heading, table, *footer_lines(view))
 
 
 def print_view(
@@ -199,20 +204,20 @@ def print_view(
     output = file or sys.stdout
     terminal = output.isatty()
     columns = shutil.get_terminal_size().columns
-    title = title_line(view)
+    heading = heading_lines(view)
     footer = footer_lines(view)
     if is_empty(view):
-        lines = empty_lines(view)
-        width = max(title.cell_len, *(line.cell_len for line in lines))
+        lines = [*heading, *empty_lines(view)]
+        width = max(line.cell_len for line in lines)
         console = Console(file=output, width=width)
         if lead:
             console.print()
-        console.print(title)
         for line in lines:
             console.print(line)
         console.print()
         return
-    if display.wrap:
+    wrap = display.wrap or (isinstance(view, TableView) and view.wrap)
+    if wrap:
         table = build_table(view, wrapped_renderer(view), wrap=True)
         width = columns if terminal else natural_width(table)
     elif terminal:
@@ -221,13 +226,14 @@ def print_view(
     else:
         table = build_table(view, whole_renderer(view))
         width = natural_width(table)
-    if not (display.wrap and terminal):
-        width = max(width, title.cell_len, *(line.cell_len for line in footer))
+    if not (wrap and terminal):
+        width = max([width, *(line.cell_len for line in [*heading, *footer])])
     console = Console(file=output, width=width)
     if lead:
         console.print()
-    console.print(title)
-    if terminal and not display.wrap:
+    for line in heading:
+        console.print(line)
+    if terminal and not wrap:
         lines = console.render_lines(table, console.options, pad=False)
         console.print(
             Segments(

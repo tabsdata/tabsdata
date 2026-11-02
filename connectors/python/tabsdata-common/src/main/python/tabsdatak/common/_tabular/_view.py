@@ -46,6 +46,7 @@ class TableView:
     notes: list[str] = field(default_factory=list)
     empty: str | None = None
     rules: bool = False
+    wrap: bool = False
     placeholder: str = PLACEHOLDER
     max_width: int = DEFAULT_MAX_WIDTH
 

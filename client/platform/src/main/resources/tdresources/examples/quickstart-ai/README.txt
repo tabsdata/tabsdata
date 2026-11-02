@@ -50,5 +50,5 @@ logged in:
 Vibing It
 ---------
 
-Using a Code agent, Claude or CodeX, with Tabsdata MCP installed ask the agent to
-build the above steps for you.
+Ask a coding agent that can run `tdk`, such as Claude Code or Codex, to build
+the above steps for you.

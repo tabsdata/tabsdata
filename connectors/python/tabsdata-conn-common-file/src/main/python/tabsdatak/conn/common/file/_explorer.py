@@ -5,7 +5,7 @@
 from dataclasses import field
 
 import tabsdatak._api as _api
-from tabsdatak.conn.common._explorer import BaseConnMetaModel
+from tabsdatak.conn.common._explorer import BaseConnMetaModel, Column
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.spi import (
     Entity,
@@ -59,7 +59,12 @@ class FilePattern:
 
 @_api.dataclass(FileCommonErrorCode.FILE_COMMON_20)
 class FileStorageEntity(Entity):
-    """A single file inside a file- or object-storage system."""
+    """A single file inside a file- or object-storage system.
+
+    ``columns`` is the file's schema, read at metadata time; when it was read
+    from another file of the same prefix and format, ``schema_from`` names
+    that file.
+    """
 
     scheme: str = ""
     bucket: str = ""
@@ -67,6 +72,8 @@ class FileStorageEntity(Entity):
     file: FilePattern | None = None
     size: int | None = None  # object size in bytes
     last_modified: str | None = None  # ISO-8601 last-modified timestamp
+    columns: list[Column] = field(default_factory=list)
+    schema_from: str = ""
 
     def fqn(self) -> str:
         return self.connection_type.entity_fqn({
@@ -76,8 +83,14 @@ class FileStorageEntity(Entity):
             "file": self.file.pattern if self.file is not None else "",
         })
 
+    def object_key(self) -> str:
+        """``<prefix>/<file>``, or the file alone when there is no prefix."""
+        return (
+            f"{self.prefix}/{self.file.pattern}" if self.prefix else self.file.pattern
+        )
+
     def field_names(self) -> list[str]:
-        return [self.file.pattern] if self.file is not None else []
+        return [c.name for c in self.columns]
 
     def to_dict(self) -> dict:
         d = {}
@@ -94,6 +107,10 @@ class FileStorageEntity(Entity):
             d["size"] = self.size
         if self.last_modified is not None:
             d["last_modified"] = self.last_modified
+        if self.columns:
+            d["columns"] = [c.to_dict() for c in self.columns]
+        if self.schema_from:
+            d["schema_from"] = self.schema_from
         return d
 
     @classmethod
@@ -109,4 +126,6 @@ class FileStorageEntity(Entity):
             file=FilePattern.from_dict(file) if file else None,
             size=data.get("size"),
             last_modified=data.get("last_modified"),
+            columns=[Column.from_dict(c) for c in data.get("columns", [])],
+            schema_from=data.get("schema_from", ""),
         )

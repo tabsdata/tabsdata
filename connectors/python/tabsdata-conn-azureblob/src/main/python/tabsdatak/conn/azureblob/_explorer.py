@@ -5,11 +5,12 @@
 """Azure Blob Storage connection explorer.
 
 ``check_connect`` proves auth + container existence; ``metadata`` lists the
-blobs under the conn's ``base_path``; ``data`` previews the first ``limit``
-rows of a single blob, fetching only the bytes it needs (never the whole
-blob) and dispatching by format: parquet via pyarrow, avro via fastavro,
-json / ndjson as newline-delimited JSON, and every other format (csv, log,
-...) via CSV parsing.
+blobs under the conn's ``base_path``, with their schemas read from the blobs'
+heads by range requests (``_schema.attach_schemas``); ``data`` previews the
+first ``limit`` rows of a single blob, fetching only the bytes it needs (never
+the whole blob) and dispatching by format: parquet via pyarrow, avro via
+fastavro, json / ndjson as newline-delimited JSON, and every other format
+(csv, log, ...) via CSV parsing.
 """
 
 import csv
@@ -24,6 +25,7 @@ from tabsdatak.conn.common.file._explorer import (
     FileStorageConnMetaModel,
     FileStorageEntity,
 )
+from tabsdatak.conn.common.file._schema import attach_schemas
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import normalize_dir_path
@@ -80,7 +82,11 @@ class AzureBlobConnectionExplorer(Explorer):
                     ),
                 )
             )
-        return entities
+        fs = _filesystem(conn)
+        return attach_schemas(
+            entities,
+            lambda entity: fs.open_input_file(f"{container}/{entity.object_key()}"),
+        )
 
     def data(
         self, conn: AzureBlobConn, entity: FileStorageEntity, limit: int = 100
@@ -88,11 +94,7 @@ class AzureBlobConnectionExplorer(Explorer):
         if entity.file is None:
             return []
         fmt = (entity.file.format or "").lower()
-        key = (
-            f"{entity.prefix}/{entity.file.pattern}"
-            if entity.prefix
-            else entity.file.pattern
-        )
+        key = entity.object_key()
         if fmt == "parquet":
             return _read_parquet(conn, key, limit)
         container = _container_client(conn)
@@ -102,6 +104,16 @@ class AzureBlobConnectionExplorer(Explorer):
             return _read_ndjson(container, key, limit)
         # csv and every other format fall back to CSV parsing.
         return _read_csv(container, key, limit)
+
+
+def _filesystem(conn: AzureBlobConn):
+    # pyarrow is imported lazily; AzureFileSystem serves range requests.
+    import pyarrow.fs as pafs
+
+    return pafs.AzureFileSystem(
+        account_name=conn.credentials.account_name.value(),
+        account_key=conn.credentials.account_key.value(),
+    )
 
 
 def _container_client(conn: AzureBlobConn):
@@ -173,16 +185,11 @@ def _read_avro(container, key: str, limit: int) -> list[dict]:
 
 
 def _read_parquet(conn: AzureBlobConn, key: str, limit: int) -> list[dict]:
-    # AzureFileSystem serves range requests, so ParquetFile reads only the
-    # footer and iter_batches only the first row group -- never the whole blob.
-    import pyarrow.fs as pafs
+    # Range requests: ParquetFile reads only the footer and iter_batches only
+    # the first row group -- never the whole blob.
     import pyarrow.parquet as pq
 
-    account_name = conn.credentials.account_name.value()
-    account_key = conn.credentials.account_key.value()
-    container = conn._container()
-    fs = pafs.AzureFileSystem(account_name=account_name, account_key=account_key)
-    with fs.open_input_file(f"{container}/{key}") as handle:
+    with _filesystem(conn).open_input_file(f"{conn._container()}/{key}") as handle:
         parquet_file = pq.ParquetFile(handle)
         try:
             batch = next(parquet_file.iter_batches(batch_size=limit))

@@ -19,12 +19,10 @@ import time
 from dataclasses import dataclass, field
 
 from tabsdatak.sdk._apiserver import APIServerError
-from tabsdatak.sdk.status_utils.execution import (
-    EXECUTION_FINAL_STATUSES,
-    execution_status_to_mapping,
-)
+from tabsdatak.sdk.status_utils.execution import execution_status_to_mapping
 from tabsdatak.sdk.tabsdata_server import Collection, TabsdataServer
 from testi_tabsdatak.conn.common.monkey.listing import listed
+from testi_tabsdatak.conn.common.monkey.rollups import EXECUTION_FINALS
 
 SOURCES_GROUP = "sources"
 SYSTEM_GROUPS = ("default", "sources", "destinations")
@@ -375,7 +373,7 @@ class Lane:
                 request_filter=f"id:eq:{execution.id}"
             ).json()["data"]["data"][0]
             status = execution_status_to_mapping(data["status"])
-            if status in EXECUTION_FINAL_STATUSES:
+            if status in EXECUTION_FINALS:
                 break
             if time.monotonic() > deadline:
                 self.model.problem(f"execution {execution.id} never finished")

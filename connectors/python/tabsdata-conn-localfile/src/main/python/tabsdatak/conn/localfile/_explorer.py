@@ -5,7 +5,8 @@
 """Local-file connection explorer.
 
 ``check_connect`` proves the connection's ``base_path`` exists and is a
-directory; ``metadata`` walks it recursively and lists the files found;
+directory; ``metadata`` walks it recursively and lists the files found, with
+their schemas read from the files' heads (``_schema.attach_schemas``);
 ``data`` previews the first ``limit`` rows of a single file, reading only
 the leading bytes it needs and dispatching by format: parquet via pyarrow,
 avro via fastavro, json / ndjson as newline-delimited JSON, and every other
@@ -27,6 +28,7 @@ from tabsdatak.conn.common.file._explorer import (
     FileStorageConnMetaModel,
     FileStorageEntity,
 )
+from tabsdatak.conn.common.file._schema import attach_schemas
 from tabsdatak.conn.localfile import LocalFileDestConn, LocalFileSrcConn
 from tabsdatak.spi import ConnMetaModel, Entity, Explorer
 
@@ -69,7 +71,7 @@ class LocalFileExplorer(Explorer):
                         last_modified=_isoformat(stat.st_mtime),
                     )
                 )
-        return entities
+        return attach_schemas(entities, lambda entity: open(_path(entity), "rb"))
 
     def data(
         self, conn: LocalFileConn, entity: FileStorageEntity, limit: int = 100
@@ -77,11 +79,7 @@ class LocalFileExplorer(Explorer):
         if entity.file is None:
             return []
         fmt = (entity.file.format or "").lower()
-        path = (
-            os.path.join(entity.prefix, entity.file.pattern)
-            if entity.prefix
-            else entity.file.pattern
-        )
+        path = _path(entity)
         if fmt == "parquet":
             return _read_parquet(path, limit)
         if fmt == "avro":
@@ -90,6 +88,14 @@ class LocalFileExplorer(Explorer):
             return _read_ndjson(path, limit)
         # csv and every other format fall back to CSV parsing.
         return _read_csv(path, limit)
+
+
+def _path(entity: FileStorageEntity) -> str:
+    return (
+        os.path.join(entity.prefix, entity.file.pattern)
+        if entity.prefix
+        else entity.file.pattern
+    )
 
 
 def _isoformat(mtime: float) -> str:

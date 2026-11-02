@@ -23,7 +23,7 @@ from testi_tabsdatak.conn.common.function_project import function_module
 from testi_tabsdatak.conn.s3.backend import dest_conn, run_prefix, store
 
 from tabsdatak.conn.dev import DataGenSrcConn
-from tabsdatak.sdk.tabsdata_server import FunctionInfo
+from tabsdatak.sdk._function_archive import FunctionInfo
 
 pytestmark = pytest.mark.s3
 

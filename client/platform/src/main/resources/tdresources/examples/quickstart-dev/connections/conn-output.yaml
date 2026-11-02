@@ -2,7 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-# Destination connection for the quickstart subscriber.
 kind: connectionDef
 apiVersion: '1.0'
 type: tabsdatak.conn.localfile:LocalFileDestConn

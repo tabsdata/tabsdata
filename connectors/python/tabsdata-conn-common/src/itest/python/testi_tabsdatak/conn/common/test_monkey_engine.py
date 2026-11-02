@@ -19,7 +19,10 @@ from types import SimpleNamespace
 import pytest
 import requests
 
-from tabsdatak.sdk.status_utils.execution import EXECUTION_FINAL_STATUSES
+from tabsdatak.sdk.status_utils.execution import (
+    ExecutionStatus,
+    execution_status_to_mapping,
+)
 from testi_tabsdatak.conn.common.cluster import (
     DECORATOR,
     FUNCTION_ID,
@@ -69,7 +72,7 @@ from testi_tabsdatak.conn.common.monkey.rollups import (
 NAMESPACE = "mktest"
 PROJECT = "e2e_monkey_proj"
 PROJECT_ID = "06ggproject0000000000000000"
-FINAL = sorted(EXECUTION_FINAL_STATUSES)[0]
+FINAL = execution_status_to_mapping(ExecutionStatus.FINISHED.value)
 
 
 def rejected(status: int):
