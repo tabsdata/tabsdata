@@ -87,6 +87,7 @@
    "--old-password",
    "--profile",
    "--user",
+   "-n",
    "SERVER_URL"
   ]
  },
@@ -145,6 +146,24 @@
   "parameters": [
    "--profile",
    "--slot",
+   "-o"
+  ]
+ },
+ "tdk collection connection": {
+  "capability": {
+   "credential": "session",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--name",
+   "--profile",
+   "--proj",
    "-o"
   ]
  },
@@ -1189,6 +1208,7 @@
   },
   "parameters": [
    "--coll",
+   "--detach",
    "--name",
    "--plan-name",
    "--profile",
@@ -2180,6 +2200,7 @@
    "--proj",
    "--prompt",
    "--server",
+   "--trigger-wait",
    "-o"
   ]
  },
@@ -2353,6 +2374,7 @@
    "--proj",
    "--sql",
    "--version",
+   "--wide",
    "--wrap",
    "-o"
   ]
@@ -2805,6 +2827,7 @@
    "--proj",
    "--prompt",
    "--server",
+   "--trigger-wait",
    "-o"
   ]
  },

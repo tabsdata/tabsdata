@@ -17,9 +17,11 @@ from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli._space import OUT_OF_SPACE, room
 from tabsdatak.cli.cli_utils import (
     DEFAULT_SAMPLE_LEN,
+    VIEW_OPTIONS,
     MutuallyExclusiveOption,
     ancestry,
     command_failure,
+    deprecated_option,
     format_option,
     get_currently_pinned_object,
     hint_common_solutions,
@@ -74,7 +76,7 @@ def render_no_data(ctx: click.Context) -> None:
     if output_format(ctx) == "table":
         click.echo(NO_DATA_AT_VERSION)
     else:
-        render(ctx, data=None)
+        render(ctx, data=None, compat=[])
 
 
 UNCOMMITTED_VERSION_STATES = {
@@ -535,6 +537,12 @@ def list_tables(
         "both. Defaults to 'none'."
     ),
 )
+@click.option(
+    "--wide",
+    is_flag=True,
+    hidden=True,
+    callback=deprecated_option("--wide", "'--max-width 0'"),
+)
 @view_options(browse=True)
 @format_option
 @click.pass_context
@@ -550,8 +558,13 @@ def data(
     at_trx: str,
     version: str,
     extra_cols: str,
+    wide: bool,
 ):
     """Show rows of data from the table"""
+    if wide:
+        chosen = ctx.obj.setdefault(VIEW_OPTIONS, {})
+        if chosen.get("max_width") is None:
+            chosen["max_width"] = 0
     require_id("--at-trx", at_trx, TRX_ID_HINT)
     verify_login_or_prompt(ctx)
     coll, name = _resolve_table(ctx, coll, name)
@@ -583,6 +596,7 @@ def data(
         render(
             ctx,
             data=lambda: tabular(table_data, len or DEFAULT_SAMPLE_LEN),
+            compat=table_data.to_dicts,
             view=lambda: table_data_view(
                 name, table_data, coll, server.connection.project
             ),

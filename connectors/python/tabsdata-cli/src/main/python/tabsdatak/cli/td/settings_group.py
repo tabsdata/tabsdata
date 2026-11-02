@@ -14,6 +14,7 @@ from tabsdatak.cli.cli_utils import (
     OPTION_HINTS,
     OPTION_PROMPT,
     OPTION_SERVER,
+    OPTION_TRIGGER_WAIT,
     PIN_COLLECTION,
     PIN_PROJECT,
     SERVER_URL_DEFAULTS_HELP,
@@ -44,21 +45,22 @@ from tabsdatak.common._tabular import RecordView
 
 _NOTHING_TO_SET = (
     "Nothing to set. Specify at least one setting: --hints true|false, "
-    "--prompt true|false, --server SERVER, --proj PROJECT, --coll COLLECTION "
-    "and/or --profile NAME."
+    "--prompt true|false, --trigger-wait true|false, --server SERVER, --proj "
+    "PROJECT, --coll COLLECTION and/or --profile NAME."
 )
 _NOTHING_TO_UNSET = (
     "Nothing to unset. Specify at least one setting: --hints, --prompt, "
-    "--server, --proj, --coll and/or --profile -- or --all for every one of "
-    "them but the profile."
+    "--trigger-wait, --server, --proj, --coll and/or --profile -- or --all for "
+    "every one of them but the profile."
 )
 
 _TRUE = "true"
 _FALSE = "false"
 # The on/off settings take the value explicitly, so a command reads as what it
-# leaves behind; both default to true, which is what `tdk unset` restores. The
-# same two words render them in `tdk settings`.
+# leaves behind; `tdk unset` restores their default. The same two words render
+# them in `tdk settings`.
 _BOOL = click.Choice((_TRUE, _FALSE))
+_DEFAULTS = {OPTION_HINTS: True, OPTION_PROMPT: True, OPTION_TRIGGER_WAIT: True}
 
 
 def _valid_profile(ctx: click.Context, param, value):
@@ -81,6 +83,14 @@ def _valid_profile(ctx: click.Context, param, value):
         "Prompt for a value a command needs but was not given. Default: true; "
         "'tdk set --prompt false' is the standing form of the root "
         "'--no-prompt' flag."
+    ),
+)
+@click.option(
+    "--trigger-wait",
+    type=_BOOL,
+    help=(
+        "Make 'tdk fn trigger' wait for the plan it starts, as '--wait' does; "
+        "'--no-wait' still returns at once. Default: true."
     ),
 )
 @click.option(
@@ -120,6 +130,7 @@ def set_setting(
     ctx: click.Context,
     hints: str,
     prompt: str,
+    trigger_wait: str,
     url: str,
     project: str,
     collection: str,
@@ -135,6 +146,7 @@ def set_setting(
     Examples:
         tdk set --hints false
         tdk set --prompt false
+        tdk set --trigger-wait true             # fn trigger waits for its plan
         tdk set --server http://127.0.0.1:2457
         tdk set --server 127.0.0.1              # http://127.0.0.1:2457
         tdk set --proj sales
@@ -144,7 +156,10 @@ def set_setting(
     """
     ensure_stateful(ctx, "tdk set")
     settings_given = (
-        hints is not None or prompt is not None or bool(url or project or collection)
+        hints is not None
+        or prompt is not None
+        or trigger_wait is not None
+        or bool(url or project or collection)
     )
     if not (settings_given or profile):
         raise click.UsageError(_NOTHING_TO_SET)
@@ -154,6 +169,8 @@ def set_setting(
         _set_enabled(ctx, OPTION_HINTS, hints == _TRUE)
     if prompt is not None:
         _set_enabled(ctx, OPTION_PROMPT, prompt == _TRUE)
+    if trigger_wait is not None:
+        _set_enabled(ctx, OPTION_TRIGGER_WAIT, trigger_wait == _TRUE)
     if url:
         _set_server(ctx, url)
     if project or collection:
@@ -173,6 +190,11 @@ def set_setting(
     is_flag=True,
     help="Restore the prompting default (true).",
 )
+@click.option(
+    "--trigger-wait",
+    is_flag=True,
+    help="Restore the default of 'tdk fn trigger' (false: return at once).",
+)
 @click.option("--server", "url", is_flag=True, help="Clear the configured server.")
 @click.option(
     "--proj",
@@ -191,8 +213,8 @@ def set_setting(
     is_flag=True,
     help=(
         "Unset every setting stored in the profile: shorthand for --hints, "
-        "--prompt, --server, --proj and --coll, leaving every one of them at "
-        "its default. The default profile stays as it is."
+        "--prompt, --trigger-wait, --server, --proj and --coll, leaving every "
+        "one of them at its default. The default profile stays as it is."
     ),
 )
 @click.option(
@@ -208,6 +230,7 @@ def unset_setting(
     ctx: click.Context,
     hints: bool,
     prompt: bool,
+    trigger_wait: bool,
     url: bool,
     project: bool,
     collection: bool,
@@ -223,6 +246,7 @@ def unset_setting(
     Examples:
         tdk unset --hints
         tdk unset --prompt
+        tdk unset --trigger-wait
         tdk unset --server
         tdk unset --coll                        # unpin the collection only
         tdk unset --proj                        # unpins the collection too
@@ -231,14 +255,16 @@ def unset_setting(
     """
     ensure_stateful(ctx, "tdk unset")
     if all_settings:
-        hints = prompt = url = project = collection = True
-    settings_given = hints or prompt or url or project or collection
+        hints = prompt = trigger_wait = url = project = collection = True
+    settings_given = hints or prompt or trigger_wait or url or project or collection
     if not (settings_given or profile):
         raise click.UsageError(_NOTHING_TO_UNSET)
     if hints:
         _clear_enabled(ctx, OPTION_HINTS)
     if prompt:
         _clear_enabled(ctx, OPTION_PROMPT)
+    if trigger_wait:
+        _clear_enabled(ctx, OPTION_TRIGGER_WAIT)
     if url:
         _unset_server(ctx)
     if project or collection:
@@ -265,6 +291,7 @@ def settings(ctx: click.Context):
     profile = active_profile(ctx)
     hints_enabled = cli_option_enabled(ctx, OPTION_HINTS)
     prompt_enabled = cli_option_enabled(ctx, OPTION_PROMPT)
+    trigger_wait = _enabled(ctx, OPTION_TRIGGER_WAIT)
     current_server = configured_server(ctx)
     project = get_pin(ctx, PIN_PROJECT)
     collection = get_pin(ctx, PIN_COLLECTION)
@@ -276,6 +303,7 @@ def settings(ctx: click.Context):
                 ("Profile", profile or "(default)"),
                 ("Hints", _true_false(hints_enabled)),
                 ("Prompt", _true_false(prompt_enabled)),
+                ("Trigger wait", _true_false(trigger_wait)),
                 ("Server", present(current_server)),
                 ("Pinned project", present(project)),
                 ("Pinned collection", present(collection)),
@@ -290,6 +318,7 @@ def _settings_document(ctx: click.Context) -> dict:
         "profile": active_profile(ctx),
         OPTION_HINTS: _stored(cli_option_enabled(ctx, OPTION_HINTS)),
         OPTION_PROMPT: _stored(cli_option_enabled(ctx, OPTION_PROMPT)),
+        OPTION_TRIGGER_WAIT: _stored(_enabled(ctx, OPTION_TRIGGER_WAIT)),
         OPTION_SERVER: configured_server(ctx),
         "pins": {
             PIN_PROJECT: get_pin(ctx, PIN_PROJECT),
@@ -308,10 +337,23 @@ _TOGGLE_MESSAGES = {
         "Prompting disabled. Commands will fail instead of prompting for "
         "missing values.",
     ),
+    OPTION_TRIGGER_WAIT: (
+        "Trigger wait enabled. 'tdk fn trigger' will wait for its plan unless "
+        "given '--no-wait'.",
+        "Trigger wait disabled. 'tdk fn trigger' will return at once unless "
+        "given '--wait'.",
+    ),
 }
 
-# Both on/off settings default to true, so unsetting one always lands on true.
-_CLEARED_LABELS = {OPTION_HINTS: "Hints", OPTION_PROMPT: "Prompting"}
+_CLEARED_LABELS = {
+    OPTION_HINTS: "Hints",
+    OPTION_PROMPT: "Prompting",
+    OPTION_TRIGGER_WAIT: "Trigger wait",
+}
+
+
+def _enabled(ctx: click.Context, option: str) -> bool:
+    return cli_option_enabled(ctx, option, default=_DEFAULTS[option])
 
 
 def _set_enabled(ctx: click.Context, option: str, enabled: bool):
@@ -321,11 +363,12 @@ def _set_enabled(ctx: click.Context, option: str, enabled: bool):
 
 def _clear_enabled(ctx: click.Context, option: str):
     label = _CLEARED_LABELS[option]
+    default = _true_false(_DEFAULTS[option])
     if get_current_cli_option(ctx, option) is None:
-        progress(ctx, f"{label} was already at its default (true).")
+        progress(ctx, f"{label} was already at its default ({default}).")
     else:
         clear_current_cli_option(ctx, option)
-        progress(ctx, f"{label} unset, back to its default (true).")
+        progress(ctx, f"{label} unset, back to its default ({default}).")
 
 
 def _set_default_profile(ctx: click.Context, profile: str):

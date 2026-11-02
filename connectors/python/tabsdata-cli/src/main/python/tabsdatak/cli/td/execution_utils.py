@@ -638,9 +638,19 @@ def _entry_text(entry: dict) -> str:
     return os.linesep.join(lines)
 
 
+def _compat_logs(entries: list[dict]) -> dict:
+    return {
+        "logs": (os.linesep * 2).join(
+            f"Worker {entry['worker_id']}{os.linesep}{entry.get('log') or ''}"
+            for entry in entries
+        )
+    }
+
+
 def emit_logs(ctx: click.Context, entries: list[dict], truncated: bool, file: str):
-    """Render worker log entries: the ``{items, truncated, next}`` envelope in
-    the machine formats, the logs themselves for humans."""
+    """Render worker log entries: the logs themselves for humans, the
+    ``{items, truncated, next}`` envelope in ``jsonb``, and ``{"logs": text}``
+    in ``json`` and ``yaml``."""
     text = (os.linesep * 2).join(_entry_text(entry) for entry in entries)
     if file == "-":
         if machine() is not None:
@@ -663,7 +673,12 @@ def emit_logs(ctx: click.Context, entries: list[dict], truncated: bool, file: st
             click.echo(text)
         else:
             click.echo("No worker logs to show.")
-    render_list(ctx, items=lambda: _capped(entries), truncated=truncated)
+    render_list(
+        ctx,
+        items=lambda: _capped(entries),
+        truncated=truncated,
+        compat=lambda: _compat_logs(entries),
+    )
 
 
 def emit_worker_logs(

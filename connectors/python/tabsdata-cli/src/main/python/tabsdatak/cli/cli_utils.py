@@ -79,6 +79,7 @@ DEFAULT_TABSDATA_DIRECTORY = tabsdata_directory()
 # pinned project and collection.
 OPTION_HINTS = "hints"
 OPTION_PROMPT = "prompt"
+OPTION_TRIGGER_WAIT = "trigger_wait"
 OPTION_SERVER = "server"
 OPTION_PINS = "pins"
 
@@ -527,30 +528,33 @@ def ancestry(
 
 
 # ---------------------------------------------------------------------------
-# Output rendering: -o/--format {table,json,yaml}.
+# Output rendering: -o/--format {table,json,jsonb,yaml}.
 # ---------------------------------------------------------------------------
 
-OUTPUT_FORMATS = ("table", "json", "yaml")
+DOCUMENT_FORMAT = "jsonb"
+OUTPUT_FORMATS = ("table", "json", DOCUMENT_FORMAT, "yaml")
+_AS_DATA = object()
 
 
 def _apply_format(ctx: click.Context, param, value):
     """``-o/--format`` callback: stash the chosen format on the context so the
-    command's renderer can dispatch on it. A machine run speaks JSON only."""
+    command's renderer can dispatch on it. A machine run speaks ``jsonb``
+    only, which it also gives for ``json``."""
     ctx.ensure_object(dict)
     if machine() is not None:
-        if value not in (None, "json"):
+        if value not in (None, "json", DOCUMENT_FORMAT):
             raise TdkException(
                 "usage", f"'--format {value}' is not available in a machine run."
             )
-        value = "json"
+        value = DOCUMENT_FORMAT
     ctx.obj["output_format"] = value or "table"
     _check_view_options(ctx)
     return value
 
 
 def format_option(fn):
-    """Decorator adding ``-o/--format {table,json,yaml}`` (default ``table``,
-    ``json`` in a machine run)."""
+    """Decorator adding ``-o/--format {table,json,jsonb,yaml}`` (default
+    ``table``, ``jsonb`` in a machine run)."""
     return click.option(
         "-o",
         "--format",
@@ -560,7 +564,11 @@ def format_option(fn):
         show_default="table",
         expose_value=False,
         callback=_apply_format,
-        help="Output format.",
+        help=(
+            "Output format. 'json' and 'yaml' give a listing as an array and "
+            "table data as one object per row; 'jsonb' gives a listing as "
+            "{items, truncated, next} and table data as columns and rows."
+        ),
     )(fn)
 
 
@@ -583,9 +591,10 @@ def progress_console(ctx: click.Context) -> "Console":
 
 
 def serialize(payload, fmt: str) -> str:
-    """Serialize a payload to a ``json`` or ``yaml`` string (the machine formats
-    of ``--format``). JSON is pretty-printed; both carry every field."""
-    if fmt == "json":
+    """Serialize a payload to a ``json``/``jsonb`` or ``yaml`` string (the
+    machine formats of ``--format``). JSON is pretty-printed; both carry every
+    field."""
+    if fmt in ("json", DOCUMENT_FORMAT):
         return json.dumps(payload, indent=2, ensure_ascii=False, default=str)
     from ruamel.yaml import YAML
 
@@ -613,15 +622,18 @@ def render(
     data,
     view=None,
     truncated: bool = False,
+    compat=_AS_DATA,
 ) -> None:
     """Render a command's result in the active output format.
 
     ``view`` is a zero-arg callable returning the ``TableView`` or ``RecordView``
     (or a list of them) shown in ``table`` mode, through the options of
     ``view_options``. ``data`` is -- or returns -- the full DTO(s) to serialize
-    for ``json``/``yaml``; pass a callable to defer fetching the full payload
-    when the table view is shown. JSON is pretty-printed and both machine
-    formats carry all available fields; data goes to stdout so it stays
+    for ``jsonb`` and a machine run; pass a callable to defer fetching the full
+    payload when the table view is shown. ``compat``, when given, is -- or
+    returns -- what ``json`` and ``yaml`` give instead: their documents keep
+    the shapes of tdk 2.2, which scripts parse. JSON is pretty-printed and the
+    machine formats carry all available fields; data goes to stdout so it stays
     parseable. ``truncated`` says the listing was cut by ``--max-result``: the
     view's footer tells, and the machine formats tell on stderr unless a
     machine run carries it in its result. Without view the command has
@@ -641,14 +653,15 @@ def render(
         return
     if truncated and machine() is None:
         click.echo(more_results_message(ctx), err=True)
-    payload = data() if callable(data) else data
     run = machine()
     if run is not None:
-        run.emit(payload)
+        run.emit(data() if callable(data) else data)
         return
+    source = data if compat is _AS_DATA or fmt == DOCUMENT_FORMAT else compat
+    payload = source() if callable(source) else source
     text = serialize(payload, fmt)
     # YAML already ends with a newline; JSON does not.
-    click.echo(text, nl=(fmt == "json"))
+    click.echo(text, nl=(fmt != "yaml"))
 
 
 # ---------------------------------------------------------------------------
@@ -835,19 +848,28 @@ def render_status_done(
     render_done(ctx, action=action, kind=kind, id=id, message=message, details=details)
 
 
-def render_list(ctx: click.Context, *, items, truncated: bool, view=None) -> None:
-    """Render a listing: ``view`` for humans, as in :func:`render`, else the
-    list envelope ``{"items": [...], "truncated": bool, "next": cursor}``;
-    ``next`` is the ``--cursor`` that continues a truncated listing, or null."""
+def render_list(
+    ctx: click.Context, *, items, truncated: bool, view=None, compat=_AS_DATA
+) -> None:
+    """Render a listing: ``view`` for humans, as in :func:`render`; in ``jsonb``
+    and a machine run the list envelope ``{"items": [...], "truncated": bool,
+    "next": cursor}``, where ``next`` is the ``--cursor`` that continues a
+    truncated listing, or null; in ``json`` and ``yaml`` the bare items, or
+    ``compat`` when given."""
+
+    def _items():
+        return items() if callable(items) else items
+
     render(
         ctx,
         data=lambda: {
-            "items": items() if callable(items) else items,
+            "items": _items(),
             "truncated": truncated,
             "next": list_next(ctx),
         },
         view=view,
         truncated=truncated,
+        compat=_items if compat is _AS_DATA else compat,
     )
 
 
@@ -1330,6 +1352,13 @@ def set_cli_option_enabled(ctx: click.Context, option: str, enabled: bool):
     set_current_cli_option(ctx, option, ENABLED if enabled else DISABLED)
 
 
+def trigger_waits(ctx: click.Context) -> bool:
+    """Whether ``fn trigger`` waits for its plan when given neither ``--wait``
+    nor ``--no-wait``: the ``tdk set --trigger-wait`` setting, on unless set
+    and never read in a machine run."""
+    return machine() is None and cli_option_enabled(ctx, OPTION_TRIGGER_WAIT)
+
+
 def configured_server(ctx: click.Context) -> str | None:
     """The server URL ``tdk login`` falls back to when given no ``--server``,
     as set by ``tdk set --server``."""
@@ -1380,6 +1409,27 @@ def show_hint(ctx: click.Context, hint: str, final_empty_line: bool = False):
         progress(ctx, "Use 'tdk unset --hints' to stop seeing these hints.")
         if final_empty_line:
             progress(ctx)
+
+
+def warn_deprecated(used: str, instead: str) -> None:
+    """Say on stderr that ``used`` still works but is deprecated, and what
+    replaces it."""
+    click.echo(
+        f"Warning: '{used}' is deprecated and will be removed; use {instead}.",
+        err=True,
+    )
+
+
+def deprecated_option(used: str, instead: str):
+    """An option callback that warns, with :func:`warn_deprecated`, when the
+    option is given."""
+
+    def callback(ctx: click.Context, param, value):
+        if value:
+            warn_deprecated(used, instead)
+        return value
+
+    return callback
 
 
 def hint_common_solutions(ctx: click.Context, e: Exception):

@@ -132,6 +132,25 @@ def test_list_filters(root, tmp_path, filters, names):
     assert [item["name"] for item in document["items"]] == names
 
 
+def test_list_json_is_the_items_with_their_description(root, tmp_path):
+    result = _invoke(["examples", "list", "-o", "json"], tmp_path, root)
+    assert result.exit_code == 0, result.output
+    items = json.loads(result.stdout)
+    assert [(item["name"], item["description"]) for item in items] == [
+        ("proj", "Whole flow"),
+        ("pub-demo", "Reads a CSV."),
+        ("tfr-other", "Reads a CSV."),
+    ]
+
+
+def test_a_machine_run_given_json_gets_the_envelope(root, tmp_path):
+    result, document = _machine(["examples", "list", "-o", "json"], tmp_path, root)
+    assert result.exit_code == 0
+    names = [item["name"] for item in document["items"]]
+    assert names == ["proj", "pub-demo", "tfr-other"]
+    assert "description" not in document["items"][0]
+
+
 def test_list_table(root, tmp_path):
     result = _invoke(["examples", "list"], tmp_path, root)
     assert result.exit_code == 0, result.output

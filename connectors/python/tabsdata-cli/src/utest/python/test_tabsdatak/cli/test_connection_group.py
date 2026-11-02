@@ -8,6 +8,7 @@ speaks YAML, and the catalog commands, mocked at the SDK seam."""
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -330,9 +331,29 @@ def test_get_definition_never_shows_secret_names(tmp_path):
     client.get_collection_connection.assert_called_once_with("crm")
 
 
-def test_the_collection_connection_command_is_gone(tmp_path):
-    result = _machine(["collection", "connection", "-n", "crm"], _client(), tmp_path)
-    assert result.exit_code == ExitCode.USAGE
+def test_collection_connection_is_a_deprecated_alias(tmp_path):
+    client = _client()
+    client.get_collection_connection.return_value = {
+        "connection": {"system": "postgres"},
+        "secret_names": ["pw"],
+    }
+    argv = ["collection", "connection", "-n", "crm"]
+
+    result = _human(argv, client, tmp_path)
+    assert result.exit_code == ExitCode.OK, result.output
+    assert json.loads(result.stdout) == {"connection": {"system": "postgres"}}
+    assert "'tdk collection connection' is deprecated" in result.stderr
+    assert "'tdk connection get --definition'" in result.stderr
+
+    result = _machine(argv, client, tmp_path)
+    assert result.exit_code == ExitCode.OK, result.output
+    assert _document(result) == {"connection": {"system": "postgres"}}
+
+
+def test_collection_connection_is_hidden(tmp_path):
+    result = _human(["collection", "--help"], _client(), tmp_path)
+    assert result.exit_code == ExitCode.OK, result.output
+    assert not re.search(r"^\s*connection\b", result.output, re.MULTILINE)
 
 
 def test_check_waits_for_the_probe(tmp_path):

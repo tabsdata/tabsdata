@@ -114,6 +114,7 @@ def list_(ctx: click.Context, kind: str | None, connector: str | None, tag: str 
         items=rows,
         truncated=False,
         view=lambda: _examples_view(rows),
+        compat=lambda: [{**row, "description": row["summary"]} for row in rows],
     )
 
 

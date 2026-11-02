@@ -17,6 +17,7 @@ from tabsdatak.cli._credentials import (
 )
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
+    deprecated_option,
     format_option,
     logical_prompt,
     present,
@@ -199,11 +200,23 @@ def info(ctx: click.Context):
         "provided."
     ),
 )
+@click.option(
+    "-n",
+    "new_password_short",
+    hidden=True,
+    callback=deprecated_option("-n", "'--new-password'"),
+)
 @click.pass_context
 def password_change(
-    ctx: click.Context, server_url: str, user: str, old_password: str, new_password: str
+    ctx: click.Context,
+    server_url: str,
+    user: str,
+    old_password: str,
+    new_password: str,
+    new_password_short: str,
 ):
     """Change the password of a user in a Tabsdata Server"""
+    new_password = new_password or new_password_short
     user = user or logical_prompt(
         ctx, "Username for the Tabsdata Server", option="--user"
     )

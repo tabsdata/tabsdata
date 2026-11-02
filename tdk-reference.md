@@ -9,9 +9,9 @@ the same from the installed CLI.
 
 - **Identifiers are named options** — a command takes its target via `--name NAME` (entities) or `--plan`/`--trx`/`--fnrun`/`--worker`/`--user` (execution & access). Positional arguments are kept for free text and local inputs: a search query, a symbol, an example name or path, and the server of `auth password-change`.
 - **Execution split into entity subgroups** (`plan`, `trx`, `fnrun`, `worker`).
-- **Consistent flags**: `--enabled/--disabled`, `--confirm WORD` for destructive ops, `-o/--format {table,json,yaml}`.
+- **Consistent flags**: `--enabled/--disabled`, `--confirm WORD` for destructive ops, `-o/--format {table,json,jsonb,yaml}`.
 - **Pinned-aware defaults**: `--proj` → pinned project, `--coll` → pinned collection. The
-  notice naming a pinned value goes to stderr, so `-o json|yaml` stdout stays parseable.
+  notice naming a pinned value goes to stderr, so `-o json|jsonb|yaml` stdout stays parseable.
 
 ---
 
@@ -83,7 +83,9 @@ Applied where shown in each command. Every value option takes an argument.
                                   command that needs one and has neither prompts
                                   for it before any other value.
   -c, --coll   COLLECTION         Target collection. Default: pinned collection.
-  -o, --format {table|json|yaml}  Output format. Default: table.
+  -o, --format {table|json|jsonb|yaml}
+                                  Output format. Default: table. See Machine
+                                  output for json and yaml against jsonb.
       --browse|--print            Open the table in a viewer that scrolls both
                                   ways, or print it and return. Default: --print
                                   (--browse for `table data`). Off a terminal the
@@ -103,7 +105,8 @@ Applied where shown in each command. Every value option takes an argument.
       --max-result N              Maximum rows a `list` command shows. Default: 100.
                                   0 lists everything. When rows are left over,
                                   the command says so (on stderr under
-                                  --format json|yaml, so stdout stays parseable).
+                                  --format json|jsonb|yaml, so stdout stays
+                                  parseable).
       --filter FIELD:OP:VALUE     Server-side filter on a paged `list` (every one
                                   with --max-result), OP one of eq ne gt ge lt le
                                   lk btw is. Repeatable: conditions on different
@@ -124,7 +127,7 @@ A listing the server refuses over a field it does not support (a `ListError`,
 exit 1, `invalid_request`) carries a hint to check the fields in `--filter`
 and `--order-by` only when the command was given one of them.
 
-The only short flag a secret option takes is `-p`, for `--password` (`login` / `user`) and `--old-password` (`auth password-change`); `--proj` is `-P`. `--new-password` and `--token` are long-only.
+The only short flag a secret option takes is `-p`, for `--password` (`login` / `user`) and `--old-password` (`auth password-change`); `--proj` is `-P`. `--new-password` and `--token` are long-only (`-n` for `--new-password` is a deprecated alias).
 
 ---
 
@@ -240,8 +243,10 @@ fn bundle   --fn-version FVID | --name NAME [--coll COLLECTION] [--proj PROJECT]
 fn list                 [--proj PROJECT] [--coll COLLECTION] [-o]
                         #   --coll, else the pinned collection, else every collection of the project
                         #   cron-triggered / stream-publisher functions: see `tdk cron|stream list`
-fn trigger  --name NAME [--proj PROJECT] [--coll COLLECTION] [--plan-name N] [--wait [--timeout S]]
-                        #   returns the plan at once; --wait waits for it (see Waiting)
+fn trigger  --name NAME [--proj PROJECT] [--coll COLLECTION] [--plan-name N]
+            [--wait [--timeout S] | --no-wait]
+                        #   --wait waits for the plan (see Waiting), --no-wait returns it at once;
+                        #   with neither, `tdk set --trigger-wait` decides (default: true, waits)
 fn enable   --name NAME [--proj PROJECT] [--coll COLLECTION]
 fn disable  --name NAME [--proj PROJECT] [--coll COLLECTION]
                         #   already in that state: reports it, changes nothing
@@ -505,15 +510,18 @@ produced, whatever the verdict; a plan or run that is not found exits 5.
 
 ### Waiting
 
-`fn trigger --wait`, `plan|trx monitor`, `plan|trx get --wait`, the `recover`
+`fn trigger --wait` (or with neither `--wait` nor `--no-wait` while `tdk set
+--trigger-wait` is true, its default),
+`plan|trx monitor`, `plan|trx get --wait`, the `recover`
 commands with `--wait`, `fnrun replay --wait`, `fnrun get --wait` and `plan|trx
 list --monitor` poll until what they wait for is final, backing off from one
 second to five. The wait lasts `--timeout` seconds, without limit when it is
 not given. The expiry of a `TDK_BEARER` session caps every wait (5 seconds
 before it); a cap that applies is reported on stderr. No request reads for
 longer than the time left. `--timeout` (or `--attempt`) on a command that does
-not wait, without `--wait` or with `--no-wait`, is a usage error: `'--timeout'
-applies only while waiting.`; on `plan|trx list` it needs `--monitor`.
+not wait, without `--wait` or with `--no-wait`, is a usage
+error: `'--timeout' applies only while waiting.`; on `plan|trx list` it needs
+`--monitor`.
 
 - Out of time: exit 7 (`wait_timeout`). The hint names the command that
   continues the wait, e.g. `tdk plan get --plan <id> --wait`, with the
@@ -655,9 +663,9 @@ value, `unset` drops what was stored so the default applies again, and `settings
 shows them all. Each takes any combination of its settings in one command.
 
 ```
-set   [--hints true|false] [--prompt true|false] [--server SERVER]
-      [--proj PROJECT] [--coll COLLECTION] [--profile NAME]
-unset [--hints] [--prompt] [--server] [--proj] [--coll] [--profile] | --all
+set   [--hints true|false] [--prompt true|false] [--trigger-wait true|false]
+      [--server SERVER] [--proj PROJECT] [--coll COLLECTION] [--profile NAME]
+unset [--hints] [--prompt] [--trigger-wait] [--server] [--proj] [--coll] [--profile] | --all
 settings [-o]                                       # current settings
 ```
 
@@ -668,6 +676,7 @@ setting of the profile at its shipped default.
 |---|---|
 | `--hints true\|false` | Show the hints the CLI adds to errors. Default: true |
 | `--prompt true\|false` | Prompt for a missing value, or fail instead. Default: true |
+| `--trigger-wait true\|false` | Make `fn trigger` wait for its plan when given neither `--wait` nor `--no-wait`. Default: true. A machine run (agent mode) never reads it |
 | `--server SERVER` | Server `tdk login` uses without `--server` |
 | `--proj PROJECT` | Default project of project-scoped commands |
 | `--coll COLLECTION` | Default collection (requires a pinned project) |
@@ -800,7 +809,7 @@ signature, and runs every transformer that carries a `SAMPLE` on it. A
 
 `list` filters by `--kind` (`publisher`, `stream_publisher`, `transformer`,
 `subscriber`, `flow`), `--connector` (a connection type id such as
-`postgres-sql-in`) and `--tag`; filters combine. `-o json` uses the list
+`postgres-sql-in`) and `--tag`; filters combine. `-o jsonb` uses the list
 envelope with `{"name", "form": "snippet"|"project", "title", "kind",
 "connectors", "tags", "summary", "source"}` items (`kind` is null for
 projects; `source` is `bundled`). `show` prints a
@@ -869,8 +878,17 @@ of wrapping it. `tdk --version` prints the client version.
 
 ## Machine output
 
-`-o json` and `-o yaml` carry the full objects. A listing is always an object,
-never a bare array: `{"items": [...], "truncated": bool, "next": cursor}`, where
+`-o jsonb` carries the full objects, and so does every document this section and
+the command sections describe. `-o json` and `-o yaml` give the same document but
+for the shapes tdk 2.2 printed, which scripts parse: a listing is the bare array
+of its items, `table data` an array of row objects (`[]` when the table holds no
+data at that version, as for `table schema`), worker logs `{"logs": "Worker
+<id>\n<log>"}`, one block per worker, and `examples list` items also carry
+`description`. A machine run, such as the agent mode of the AI package, always
+gives the `jsonb` document, `-o json` included.
+
+In `jsonb` a listing is always an object, never a bare array:
+`{"items": [...], "truncated": bool, "next": cursor}`, where
 `truncated` says `--max-result` cut it short and `next`, on a paged listing, is
 the `--cursor` that continues it (null otherwise). A cursor continues only the
 command, options, filters and order that returned it; anything else is a usage
@@ -936,10 +954,22 @@ change something:
   "defining_module", "files", "skipped", "truncated"}`, the bundle's text files
   within a size budget.
 
-Under `-o json|yaml`, stdout holds only the rendered document: hints, notices,
+Under `-o json|jsonb|yaml`, stdout holds only the rendered document: hints, notices,
 progress lines and the live monitor table go to stderr.
 
 `--no-prompt` is accepted in any position before `--`.
+
+## Deprecated aliases
+
+These still work, print a warning on stderr naming what replaces them, and are
+left out of `--help` and `--help --full`. The agent mode of the AI package refuses them.
+
+| Alias | Use instead |
+|---|---|
+| `collection connection --name C [-o json\|yaml]` (prints the dehydrated connection document, JSON by default) | `connection get --name C --definition` |
+| `table data --wide` | `table data --max-width 0` |
+| `auth password-change -n NEW` | `--new-password NEW` |
+| `fn trigger --detach` (`-d`) | `fn trigger --no-wait` |
 
 ## Exit codes
 

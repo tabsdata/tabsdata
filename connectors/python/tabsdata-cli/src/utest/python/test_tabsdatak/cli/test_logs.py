@@ -76,7 +76,7 @@ def test_plan_logs_all_is_the_list_envelope(tmp_path):
     client.scope_logs.return_value = ([_entry("W2"), _entry("W1")], True)
     result = _invoke(
         ["plan", "logs", "--plan", "ep20260930-1", "--all", "--tail", "50", "--failed-only"]
-        + ["-o", "json"],
+        + ["-o", "jsonb"],
         client,
         tmp_path,
     )
@@ -143,7 +143,7 @@ def test_failed_only_narrows_the_picker(tmp_path):
         worker.id, attempt=kw["attempt"]
     )
     result = _invoke(
-        ["plan", "logs", "--plan", "ep20260930-1", "--failed-only", "-o", "json"],
+        ["plan", "logs", "--plan", "ep20260930-1", "--failed-only", "-o", "jsonb"],
         client,
         tmp_path,
     )
@@ -178,7 +178,7 @@ def test_worker_logs_tail_and_not_found(tmp_path):
     client = _client()
     client.worker_log_entry.return_value = _entry("W1")
     result = _invoke(
-        ["worker", "logs", "--worker", "wkr20260301-1", "--tail", "5", "-o", "json"],
+        ["worker", "logs", "--worker", "wkr20260301-1", "--tail", "5", "-o", "jsonb"],
         client,
         tmp_path,
     )

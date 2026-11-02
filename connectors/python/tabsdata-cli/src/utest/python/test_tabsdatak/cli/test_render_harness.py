@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 from dataclasses import dataclass
 from typing import Any, Callable
 from unittest.mock import MagicMock, patch
@@ -232,8 +233,8 @@ _TABLES = [
 # ``table schema`` returns a raw list of column dicts.
 _TABLE_SCHEMA = [{"name": "id", "type": "Int64"}, {"name": "label", "type": "String"}]
 
-# ``table data`` returns a polars DataFrame: json/yaml serialize ``.to_dicts()``
-# while the table view just echoes the frame's own repr.
+# ``table data`` returns a polars DataFrame: jsonb gives columns and rows,
+# json/yaml ``.to_dicts()``.
 _TABLE_DATA_DF = pl.DataFrame({"n": [1, 2], "label": ["x", "y"]})
 _TABLE_DATA_TABULAR = {
     "columns": [
@@ -478,6 +479,20 @@ class RenderCase:
     # can match incidentally and give a false pass. Prefer names/ids and values
     # that can't collide with titles, headers or other cells.
     table_values: tuple[str, ...]
+    # What ``-o json|yaml`` give when it is not ``payload``: a listing's bare
+    # items unless set.
+    compat: Any = None
+
+
+_LISTING_KEYS = {"items", "truncated", "next"}
+
+
+def _compat(case: RenderCase) -> Any:
+    if case.compat is not None:
+        return case.compat
+    if isinstance(case.payload, dict) and set(case.payload) == _LISTING_KEYS:
+        return case.payload["items"]
+    return case.payload
 
 
 def _wire_listing(c: MagicMock, name: str, rows: list) -> None:
@@ -993,6 +1008,7 @@ CASES: tuple[RenderCase, ...] = (
         _set_table_data,
         _TABLE_DATA_TABULAR,
         ("tbl-a", "label", "x", "y"),
+        _TABLE_DATA_DF.to_dicts(),
     ),
     RenderCase(
         # rows_in/out are 555/777 -- distinctive values that can't be confused
@@ -1192,21 +1208,30 @@ def _load_yaml(text: str) -> Any:
 
 
 @pytest.mark.parametrize("case", CASES, ids=_IDS)
-def test_json_output_matches_payload(case: RenderCase, tmp_path):
+def test_jsonb_output_matches_payload(case: RenderCase, tmp_path):
     client = _client()
     case.setup(client)
-    result = _invoke(case.argv + ["-o", "json"], client=client, tmp_path=tmp_path)
+    result = _invoke(case.argv + ["-o", "jsonb"], client=client, tmp_path=tmp_path)
     assert result.exit_code == 0, result.output
     assert json.loads(result.output) == _normalize(case.payload)
 
 
 @pytest.mark.parametrize("case", CASES, ids=_IDS)
-def test_yaml_output_matches_payload(case: RenderCase, tmp_path):
+def test_json_output_keeps_the_compat_shape(case: RenderCase, tmp_path):
+    client = _client()
+    case.setup(client)
+    result = _invoke(case.argv + ["-o", "json"], client=client, tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == _normalize(_compat(case))
+
+
+@pytest.mark.parametrize("case", CASES, ids=_IDS)
+def test_yaml_output_keeps_the_compat_shape(case: RenderCase, tmp_path):
     client = _client()
     case.setup(client)
     result = _invoke(case.argv + ["-o", "yaml"], client=client, tmp_path=tmp_path)
     assert result.exit_code == 0, result.output
-    assert _load_yaml(result.output) == _normalize(case.payload)
+    assert _load_yaml(result.output) == _normalize(_compat(case))
 
 
 @pytest.mark.parametrize("case", CASES, ids=_IDS)
@@ -1227,7 +1252,7 @@ def test_table_output_shows_content(case: RenderCase, tmp_path):
 
 
 def test_invalid_output_format_is_rejected(tmp_path):
-    """``-o`` is a fixed Choice(table, json, yaml); anything else is a usage
+    """``-o`` is a fixed Choice(table, json, jsonb, yaml); anything else is a usage
     error caught at parse time, so the command body (get_user) never runs."""
     client = _client()
     _set_user_info(client)
@@ -1255,7 +1280,8 @@ def test_json_and_yaml_agree_across_the_matrix(tmp_path):
 # ``worker/run/plan/trx logs`` -- kept out of the matrix.
 #
 # Their payload is not a DTO: the command renders the SDK's worker log entries
-# as the list envelope ``{"items", "truncated", "next"}``; the table view
+# as the list envelope ``{"items", "truncated", "next"}`` in jsonb and as
+# ``{"logs": text}`` in json and yaml; the table view
 # echoes a "Worker <id> ..." header and the log. Pinning the exact header
 # punctuation would duplicate production formatting and be brittle, so we
 # assert the worker id and log body are *present* in the table view instead.
@@ -1287,7 +1313,17 @@ def _set_worker_log(c: MagicMock) -> None:
 
 
 def test_worker_logs_carries_worker_log_in_every_format(tmp_path):
-    for fmt in ("json", "yaml"):
+    envelope = {
+        "items": [_log_entry("W1", "line-1\nline-2")],
+        "truncated": False,
+        "next": None,
+    }
+    compat = {"logs": f"Worker W1{os.linesep}line-1\nline-2"}
+    for fmt, load, expected in (
+        ("jsonb", json.loads, envelope),
+        ("json", json.loads, compat),
+        ("yaml", _load_yaml, compat),
+    ):
         client = _client()
         _set_worker_log(client)
         result = _invoke(
@@ -1296,14 +1332,7 @@ def test_worker_logs_carries_worker_log_in_every_format(tmp_path):
             tmp_path=tmp_path,
         )
         assert result.exit_code == 0, result.output
-        payload = (
-            json.loads(result.output) if fmt == "json" else _load_yaml(result.output)
-        )
-        assert payload == {
-            "items": [_log_entry("W1", "line-1\nline-2")],
-            "truncated": False,
-            "next": None,
-        }
+        assert load(result.output) == expected, fmt
 
     # the default (table) view echoes the same envelope text.
     client = _client()
@@ -1492,6 +1521,7 @@ def test_settings_renders_settings_store_offline(tmp_path):
         "profile": None,
         "hints": "enabled",
         "prompt": "enabled",
+        "trigger_wait": "enabled",
         "server": None,
         "pins": {"project": "proj-a", "collection": "coll-a"},
     }
@@ -1531,6 +1561,22 @@ def test_table_data_view_options_need_the_table_format(tmp_path, options, named)
     client.sample_table.assert_not_called()
 
 
+def test_table_data_wide_is_a_deprecated_max_width_0(tmp_path):
+    client = _client()
+    _set_table_data(client)
+    argv = ["table", "data", "-c", "coll-a", "--name", "tbl-a", "--wide"]
+
+    with patch("tabsdatak.common._tabular.show") as show:
+        result = _invoke([*argv, "--print"], client=client, tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert show.call_args.args[1].max_width == 0
+    assert "'--wide' is deprecated" in result.stderr
+
+    result = _invoke([*argv, "-o", "json"], client=client, tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == _TABLE_DATA_DF.to_dicts()
+
+
 @pytest.mark.parametrize(
     "argv, call",
     [
@@ -1546,9 +1592,13 @@ def test_table_reads_say_when_the_table_holds_no_data(tmp_path, argv, call):
     assert result.exit_code == 0, result.output
     assert "The table holds no data at that version" in result.output
 
-    result = _invoke([*argv, "-o", "json"], client=client, tmp_path=tmp_path)
+    result = _invoke([*argv, "-o", "jsonb"], client=client, tmp_path=tmp_path)
     assert result.exit_code == 0, result.output
     assert json.loads(result.output) is None
+
+    result = _invoke([*argv, "-o", "json"], client=client, tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == []
 
 
 @pytest.mark.parametrize(
@@ -1564,7 +1614,7 @@ def test_table_data_warns_when_the_version_is_not_committed(tmp_path, rows, serv
     client.list_dataversions.return_value = [MagicMock(status="Failed")]
 
     argv = ["table", "data", "-c", "coll-a", "--name", "tbl-a", "--version", "dv-6"]
-    result = _invoke([*argv, "-o", "json"], client=client, tmp_path=tmp_path)
+    result = _invoke([*argv, "-o", "jsonb"], client=client, tmp_path=tmp_path)
     assert result.exit_code == 0, result.output
     assert f"Warning: version dv-6 failed; {served}" in result.stderr
     expected = (
@@ -1647,7 +1697,7 @@ def test_project_topology_list_passes_paging(tmp_path):
     client = _client()
     _set_topology_versions(client)
     result = _invoke(
-        ["project", "topology", "list", "--max-result", "1", "-o", "json"]
+        ["project", "topology", "list", "--max-result", "1", "-o", "jsonb"]
         + ["--filter", "valid_from:gt:0", "--order-by", "valid_from-"],
         client=client,
         tmp_path=tmp_path,

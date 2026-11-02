@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._machine import machine
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     all_projects_option,
@@ -34,6 +35,7 @@ from tabsdatak.cli.cli_utils import (
     take,
     verify_login_or_prompt,
     view_options,
+    warn_deprecated,
 )
 from tabsdatak.cli.td.tag_commands import tag_group, tags_of, tags_text
 from tabsdatak.common._tabular import Column, Kind, RecordView, TableView
@@ -342,6 +344,50 @@ def get(ctx: click.Context, name: str):
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to display collection: {e}")
+
+
+@capability("analytics", "read", credential="session")
+@collection.command(name="connection", hidden=True)
+@proj_option
+@click.option(
+    "-o",
+    "--format",
+    "fmt",
+    type=click.Choice(("json", "yaml")),
+    default="json",
+    show_default=True,
+    help="Output format.",
+)
+@click.option(
+    "--name",
+    "-n",
+    help="Name of the source/destination collection whose connection to display.",
+)
+@click.pass_context
+def connection_document(ctx: click.Context, fmt: str, name: str):
+    """Display the connection of a source/destination collection, dehydrated:
+    secret and var names are never shown. Deprecated: 'tdk connection get
+    --definition' carries the same document."""
+    warn_deprecated("tdk collection connection", "'tdk connection get --definition'")
+    verify_login_or_prompt(ctx)
+    name = (
+        name
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(
+            ctx, "Name of the collection whose connection to display", option="--name"
+        )
+    )
+    try:
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        conn_read = _public_connection(server.get_collection_connection(name))
+    except Exception as e:
+        hint_common_solutions(ctx, e)
+        raise click.ClickException(f"Failed to display connection: {e}")
+    run = machine()
+    if run is not None:
+        run.emit(conn_read)
+        return
+    click.echo(serialize(conn_read, fmt), nl=(fmt == "json"))
 
 
 @capability("analytics", "read")

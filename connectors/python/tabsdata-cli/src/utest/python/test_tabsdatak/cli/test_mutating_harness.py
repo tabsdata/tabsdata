@@ -983,7 +983,14 @@ def test_set_and_unset_emit_the_resulting_settings(tmp_path):
     after_unset = _machine(["unset", "--hints"], _client(), tmp_path)
     assert after_set["hints"] == "disabled"
     assert after_unset["hints"] == "enabled"
-    assert set(after_set) == {"profile", "hints", "prompt", "server", "pins"}
+    assert set(after_set) == {
+        "profile",
+        "hints",
+        "prompt",
+        "trigger_wait",
+        "server",
+        "pins",
+    }
 
 
 def test_set_json_keeps_its_messages_off_stdout(tmp_path):

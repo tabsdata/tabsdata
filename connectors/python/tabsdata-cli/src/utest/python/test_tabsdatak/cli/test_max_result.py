@@ -149,6 +149,24 @@ def test_json_stays_parseable_and_notice_goes_to_stderr(tmp_path):
     )
 
     assert result.exit_code == 0, result.output
+    assert [row["name"] for row in json.loads(result.stdout)] == [
+        "user-0000",
+        "user-0001",
+        "user-0002",
+    ]
+    assert MORE_RESULTS not in result.stdout
+    assert MORE_RESULTS in result.stderr
+
+
+def test_jsonb_listing_is_the_envelope(tmp_path):
+    client, _ = _counting_users(250)
+    result = _invoke(
+        ["user", "list", "-o", "jsonb", "--max-result", "3"],
+        client=client,
+        tmp_path=tmp_path,
+    )
+
+    assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
     assert [row["name"] for row in payload["items"]] == [
         "user-0000",
@@ -227,7 +245,7 @@ def _names(result) -> list[str]:
 
 def test_next_cursor_continues_the_listing(tmp_path):
     server, requests = _paged_server(10)
-    argv = ["user", "list", "-o", "json", "--max-result", "6"]
+    argv = ["user", "list", "-o", "jsonb", "--max-result", "6"]
     first = _invoke(argv, client=server, tmp_path=tmp_path)
     assert first.exit_code == 0, first.output
     assert _names(first) == [f"user-{index:04d}" for index in range(6)]
@@ -252,7 +270,7 @@ def test_next_cursor_continues_the_listing(tmp_path):
 )
 def test_a_cursor_only_continues_its_own_listing(changed, tmp_path):
     server, requests = _paged_server(10)
-    argv = ["user", "list", "-o", "json", "--max-result", "6"]
+    argv = ["user", "list", "-o", "jsonb", "--max-result", "6"]
     first = _invoke(argv, client=server, tmp_path=tmp_path)
     cursor = json.loads(first.stdout)["next"]
     requests.clear()
@@ -286,7 +304,7 @@ def test_a_cursor_is_bound_to_the_command_options(tmp_path):
         _function("f1"),
         _function("f2"),
     ])
-    argv = ["fn", "list", "-o", "json", "--max-result", "1"]
+    argv = ["fn", "list", "-o", "jsonb", "--max-result", "1"]
     first = _invoke([*argv, "-c", "c1"], client=client, tmp_path=tmp_path)
     assert first.exit_code == 0, first.output
     cursor = json.loads(first.stdout)["next"]

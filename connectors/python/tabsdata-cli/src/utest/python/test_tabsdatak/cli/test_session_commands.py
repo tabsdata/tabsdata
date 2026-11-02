@@ -226,6 +226,7 @@ def test_settings_reports_current_settings(tmp_path):
         "profile": None,
         "hints": "disabled",
         "prompt": "enabled",
+        "trigger_wait": "enabled",
         "server": "http://srv:2457",
         "pins": {"project": "sales", "collection": "orders"},
     }
@@ -271,3 +272,25 @@ def test_status_prints_server_status(tmp_path):
     assert result.exit_code == 0, result.output
     assert "Obtaining server status" in result.output
     assert "SERVER-OK" in result.output
+
+
+def test_trigger_wait_is_stored_and_unset_back_to_true(tmp_path):
+    result = _invoke(
+        ["set", "--trigger-wait", "false"], client=_client(), tmp_path=tmp_path
+    )
+    assert result.exit_code == 0, result.output
+    assert _saved(tmp_path)["trigger_wait"] == "disabled"
+
+    result = _invoke(["unset", "--trigger-wait"], client=_client(), tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert "trigger_wait" not in _saved(tmp_path)
+    assert "back to its default (true)" in result.output
+
+
+def test_password_change_n_is_a_deprecated_new_password(tmp_path):
+    argv = ["auth", "password-change", "http://srv", "-u", "alice", "-p", "old"]
+    with patch("tabsdatak.sdk.tabsdata_server.TabsdataServer") as server:
+        result = _invoke([*argv, "-n", "new"], client=_client(), tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    server.return_value.change_password.assert_called_once_with("alice", "old", "new")
+    assert "'-n' is deprecated" in result.stderr

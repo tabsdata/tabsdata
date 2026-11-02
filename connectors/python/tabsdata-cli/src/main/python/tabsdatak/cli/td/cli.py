@@ -134,7 +134,7 @@ def _print_version(ctx: click.Context, param, value: bool):
 def _full_help_options(command) -> list:
     options = []
     for param in getattr(command, "params", []):
-        if isinstance(param, click.Option):
+        if isinstance(param, click.Option) and not param.hidden:
             options.append({
                 "opts": list(param.opts) + list(param.secondary_opts),
                 "help": param.help or "",
@@ -160,9 +160,13 @@ def _full_help_node(name: str, command, path: str, parent=None) -> dict:
     }
     if isinstance(command, click.Group):
         ctx = click.Context(command, info_name=name, parent=parent)
+        subcommands = {
+            sub: command.get_command(ctx, sub) for sub in command.list_commands(ctx)
+        }
         node["commands"] = [
-            _full_help_node(sub, command.get_command(ctx, sub), f"{path} {sub}", ctx)
-            for sub in sorted(command.list_commands(ctx))
+            _full_help_node(sub, subcommand, f"{path} {sub}", ctx)
+            for sub, subcommand in sorted(subcommands.items())
+            if not subcommand.hidden
         ]
     else:
         words = path.split(" ", 1)[1] if " " in path else ""

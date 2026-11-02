@@ -115,11 +115,77 @@ def test_trigger_returns_the_plan_without_waiting(clock, tmp_path):
     assert clock.sleeps == []
 
 
-def test_trigger_no_longer_takes_detach(clock, tmp_path):
+def _trigger_wait(tmp_path, stored: str) -> None:
+    (tmp_path / "options.json").write_text(json.dumps({"trigger_wait": stored}))
+
+
+def test_no_wait_overrides_the_default_trigger_wait(clock, tmp_path):
     client = _client(_connection(["S"], []))
-    result = _invoke([*_TRIGGER, "--detach"], client, tmp_path)
+    result = _invoke([*_TRIGGER, "--no-wait", "-o", "jsonb"], client, tmp_path)
+    assert result.exit_code == ExitCode.OK, result.output
+    assert json.loads(result.stdout)["status"] == "S"
+    assert "deprecated" not in result.stderr
+    assert clock.sleeps == []
+
+
+@pytest.mark.parametrize("detach", ["--detach", "-d"])
+def test_detach_is_a_deprecated_no_wait(clock, tmp_path, detach):
+    client = _client(_connection(["S"], []))
+    result = _invoke([*_TRIGGER, detach, "-o", "jsonb"], client, tmp_path)
+    assert result.exit_code == ExitCode.OK, result.output
+    assert json.loads(result.stdout)["status"] == "S"
+    assert "Warning: '--detach' is deprecated" in result.stderr
+    assert "'--no-wait'" in result.stderr
+    assert clock.sleeps == []
+
+
+@pytest.mark.parametrize("detach", ["--detach", "-d"])
+def test_wait_and_detach_together_are_a_usage_error(clock, tmp_path, detach):
+    client = _client(_connection(["S"], []))
+    result = _invoke([*_TRIGGER, "--wait", detach], client, tmp_path)
     assert result.exit_code == ExitCode.USAGE
     assert client.trigger_function.call_count == 0
+
+
+def test_trigger_help_shows_wait_no_wait_and_hides_detach(tmp_path):
+    result = _invoke(["fn", "trigger", "-h"], _client(_connection(["S"], [])), tmp_path)
+    assert result.exit_code == ExitCode.OK, result.output
+    assert "--wait/--no-wait" in result.output
+    assert "--detach" not in result.output
+
+
+def test_trigger_waits_by_default(clock, tmp_path):
+    client = _client(_connection(["S", "R", "F"], [_run_row("fr20260930-1", "C")]))
+    result = _invoke([*_TRIGGER, "-o", "jsonb"], client, tmp_path)
+    assert result.exit_code == ExitCode.OK, result.output
+    assert json.loads(result.stdout)["status"] == "F"
+    assert clock.sleeps == [1, 2]
+
+
+def test_the_trigger_wait_setting_false_returns_at_once(clock, tmp_path):
+    _trigger_wait(tmp_path, "disabled")
+    client = _client(_connection(["S"], []))
+    result = _invoke([*_TRIGGER, "-o", "jsonb"], client, tmp_path)
+    assert result.exit_code == ExitCode.OK, result.output
+    assert json.loads(result.stdout)["status"] == "S"
+    assert clock.sleeps == []
+
+
+def test_wait_overrides_the_trigger_wait_setting(clock, tmp_path):
+    _trigger_wait(tmp_path, "disabled")
+    client = _client(_connection(["S", "R", "F"], [_run_row("fr20260930-1", "C")]))
+    result = _invoke([*_TRIGGER, "--wait", "-o", "jsonb"], client, tmp_path)
+    assert result.exit_code == ExitCode.OK, result.output
+    assert json.loads(result.stdout)["status"] == "F"
+
+
+def test_a_machine_run_ignores_the_trigger_wait_setting(clock, tmp_path):
+    _trigger_wait(tmp_path, "enabled")
+    client = _client(_connection(["S"], []))
+    result = _invoke([*_TRIGGER, "--machine"], client, tmp_path)
+    assert result.exit_code == ExitCode.OK, result.output
+    assert _document(result)["status"] == "S"
+    assert clock.sleeps == []
 
 
 def test_timeout_needs_wait(clock, tmp_path):
