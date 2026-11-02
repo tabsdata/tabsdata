@@ -26,6 +26,9 @@ pods:
   # `function` covers the pods created per execution: publishers, transformers,
   # subscribers, crons and streams.
   #
+  # `probe` covers the connection-probe pods: one connector call (check,
+  # metadata, sample) against one connection.
+  #
   # `selectors` chooses which nodes a pod may land on; `tolerations` lets it onto
   # nodes that are otherwise reserved. A tolerations list replaces what tabsdata
   # would apply, so it must be complete.
@@ -72,3 +75,17 @@ pods:
         disk_limit_percent: 80
       abort:
         memory_threshold_percent: 95
+
+  probe:
+    priority: tabsdata-function
+    resources:
+      cpu: 250m
+      memory: 1Gi
+      disk: 2Gi
+    placement:
+      selectors:
+        role: tabsdata-functions
+      tolerations:
+        - key: workload
+          value: batch
+          effect: NoSchedule
