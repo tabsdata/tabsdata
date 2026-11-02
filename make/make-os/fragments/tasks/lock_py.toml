@@ -151,6 +151,7 @@ script = [
     lock_dev_command = array
     array_push ${lock_dev_command} uv pip compile --universal --upgrade --no-header --no-annotate --format requirements.txt --quiet
     array_push ${lock_dev_command} --output-file ./variant/resources/lock/tabsdata-requirements-dev.txt
+    array_push ${lock_dev_command} -c ./variant/resources/lock/tabsdata-requirements.txt
     array_push ${lock_dev_command} -c ./requirements/requirements-third-party-all.txt
     if ${is_tabsdata} or ${is_tabsdata_ee}
         if ${tabsdata_agent_root_exists}
