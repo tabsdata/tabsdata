@@ -49,6 +49,7 @@ fn expected_tables() -> Vec<&'static str> {
         "tags",
         "transactions",
         "triggers",
+        "user_ui_data",
         "users",
         "users_roles",
         "workers",

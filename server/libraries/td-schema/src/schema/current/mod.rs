@@ -32,6 +32,7 @@ mod tables;
 mod tags;
 mod transactions;
 mod triggers;
+mod user_ui_data;
 mod users;
 mod users_roles;
 mod workers;
@@ -46,7 +47,7 @@ use sea_query::{DynIden, IntoIden};
 /// Schema revision within the current major; resets to 1 at each major bump
 /// (cross-major upgrade is refused via `tabsdata_version`). To evolve the
 /// schema, follow the README runbook; `test_schema_ddl_snapshot` gates the DDL.
-pub const VERSION: usize = 21;
+pub const VERSION: usize = 22;
 
 pub use crate::schema::sql::{Changed, Children, Instants, Parent, Physical, RollupArm, RollupDef, Runs};
 pub use executions::rollup as execution_rollup;
@@ -76,6 +77,7 @@ pub(crate) const ENTITIES: &[&dyn Entity] = &[
     &roles::Defs,
     &users_roles::Defs,
     &sessions::Defs,
+    &user_ui_data::Defs,
     &permissions::Defs,
     &bundles::Defs,
     &functions::Defs,

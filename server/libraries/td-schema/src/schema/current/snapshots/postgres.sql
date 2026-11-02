@@ -29,6 +29,8 @@ CREATE TABLE "users_roles" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "user_i
 
 CREATE TABLE "sessions" ( "access_token_id" text NOT NULL PRIMARY KEY COLLATE "C", "refresh_token_id" text NOT NULL UNIQUE COLLATE "C", "user_id" text NOT NULL COLLATE "C", "created_on" timestamp with time zone NOT NULL, "expires_on" timestamp with time zone NOT NULL, "status_change_on" timestamp with time zone NOT NULL, "status" text NOT NULL )
 
+CREATE TABLE "user_ui_data" ( "user_id" text NOT NULL PRIMARY KEY COLLATE "C", "etag" uuid NOT NULL, "modified_on" timestamp with time zone NOT NULL, "data" text NOT NULL, FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
+
 CREATE TABLE "permissions" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "role_id" text NOT NULL COLLATE "C", "permission_type" text NOT NULL, "entity_type" text NOT NULL, "entity_id" text NOT NULL COLLATE "C", "granted_by_id" text NOT NULL COLLATE "C", "granted_on" timestamp with time zone NOT NULL, "fixed" bool NOT NULL, FOREIGN KEY ("role_id") REFERENCES "roles" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
 CREATE TABLE "bundles" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "hash" text NOT NULL, "base_path" text NOT NULL, "status" text NOT NULL, "created_on" timestamp with time zone NOT NULL, "created_by_id" text NOT NULL COLLATE "C" )
