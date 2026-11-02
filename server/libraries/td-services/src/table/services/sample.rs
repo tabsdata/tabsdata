@@ -3,7 +3,7 @@
 //
 
 use crate::table::find_data_version_location_at;
-use crate::table::sample::get_table_sample;
+use crate::table::sample::{TableSample, TableSampler};
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -17,7 +17,6 @@ use td_objects::dxo::table::{
     ExtraColsParam, FileFormatParam, SampleLenParam, SampleOffsetParam, SqlParam, TableParam,
     UncommittedParam,
 };
-use td_objects::types::stream::BoxedSyncStream;
 use td_storage::Storage;
 
 type TableSampleRequest = WithinProject<
@@ -38,9 +37,10 @@ type TableSampleRequest = WithinProject<
 async fn table_sample(
     authz: Ctx<AuthzContext>,
     storage: Ctx<Storage>,
+    table_sampler: Ctx<TableSampler>,
     gated_conn: &mut GatedConnection<RO, InProject>,
     request: TableSampleRequest,
-) -> Result<Option<BoxedSyncStream>, TdError> {
+) -> Result<Option<TableSample>, TdError> {
     let (project, request) = request.into_parts();
     let (ctx, (collection, table, at, uncommitted, offset, len, format, sql, extra_cols)) =
         request.into_parts();
@@ -61,17 +61,19 @@ async fn table_sample(
     };
 
     let table_name = table_db.name.clone();
-    get_table_sample(
-        &storage,
-        &offset.offset,
-        &len.len,
-        &format.format,
-        &sql.sql,
-        &extra_cols.extra_cols,
-        &table_name,
-        &location,
-    )
-    .map(Some)
+    table_sampler
+        .sample(
+            &storage,
+            &offset.offset,
+            &len.len,
+            &format.format,
+            &sql.sql,
+            &extra_cols.extra_cols,
+            &table_name,
+            &location,
+        )
+        .await
+        .map(Some)
 }
 
 #[cfg(test)]
@@ -325,7 +327,7 @@ mod tests {
             let response = service.table_sample(request).await;
             match response {
                 Ok(response) => match response.data {
-                    Some(data) => Ok(Some(data.into_inner().next().await.unwrap()?)),
+                    Some(sample) => Ok(Some(sample.stream.into_inner().next().await.unwrap()?)),
                     None => Ok(None),
                 },
                 Err(err) => Err(err),

@@ -41,7 +41,7 @@ async fn table_download(
     )
     .await?;
     match location {
-        Some(location) => get_table_download(&storage, &location).await.map(Some),
+        Some(location) => get_table_download(&storage, &location.path).await.map(Some),
         None => Ok(None),
     }
 }

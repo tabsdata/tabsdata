@@ -72,7 +72,7 @@ async fn table_state_download(
     )
     .await?;
     match location {
-        Some(location) => get_table_download(&storage, &location).await,
+        Some(location) => get_table_download(&storage, &location.path).await,
         None => Ok(BoxedSyncStream::empty()),
     }
 }

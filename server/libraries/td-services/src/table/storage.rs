@@ -7,7 +7,7 @@ use td_database::access::{AccessMode, DbScope};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
-use td_objects::types::basic::{AtTime, TableId, UncommittedStatus};
+use td_objects::types::basic::{AtTime, ByteCount, TableId, UncommittedStatus};
 use td_queries::Queries;
 use td_storage::SPath;
 use td_storage::location::StorageLocation;
@@ -22,12 +22,18 @@ pub enum StorageServiceError {
     CouldNotGetSchema(#[source] PolarsError) = 5002,
 }
 
+/// `data_bytes` is the size the worker reported, when it did.
+pub struct TableLocation {
+    pub path: SPath,
+    pub data_bytes: Option<ByteCount>,
+}
+
 pub async fn resolve_table_location<S: DbScope, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     triggered_on: Option<&AtTime>,
     table_id: &TableId,
     uncommitted: &UncommittedStatus,
-) -> Result<Option<SPath>, TdError> {
+) -> Result<Option<TableLocation>, TdError> {
     let data_version = if **uncommitted {
         conn.table_data_versions()
             .data_including_uncommitted_at(table_id, triggered_on)
@@ -40,7 +46,10 @@ pub async fn resolve_table_location<S: DbScope, M: AccessMode>(
 
     if let Some(data_version) = data_version {
         let (path, _) = get_spath(&data_version)?;
-        Ok(Some(path))
+        Ok(Some(TableLocation {
+            path,
+            data_bytes: data_version.base.base.base.data_bytes,
+        }))
     } else {
         Ok(None)
     }
@@ -478,6 +487,7 @@ mod tests {
             },
         )
         .await
+        .map(|location| location.map(|l| l.path))
     }
 
     async fn _run_test(

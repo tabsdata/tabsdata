@@ -54,7 +54,7 @@ async fn table_schema(
     )
     .await?;
     location
-        .map(|location| get_table_schema(&storage, &extra_cols.extra_cols, &location))
+        .map(|location| get_table_schema(&storage, &extra_cols.extra_cols, &location.path))
         .transpose()
 }
 

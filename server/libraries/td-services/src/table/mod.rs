@@ -5,7 +5,7 @@
 pub mod services;
 
 use crate::collection::resolve_collection_id;
-use crate::table::storage::resolve_table_location;
+use crate::table::storage::{TableLocation, resolve_table_location};
 use td_database::access::{AccessMode, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
@@ -13,7 +13,6 @@ use td_objects::and;
 use td_objects::dxo::table::TableDBWithNames;
 use td_objects::types::basic::{AtTime, CollectionIdName, TableIdName, UncommittedStatus};
 use td_queries::Queries;
-use td_storage::SPath;
 
 pub mod columns;
 pub mod download;
@@ -32,7 +31,7 @@ pub async fn find_data_version_location_at<S: SeesProjectRows, M: AccessMode>(
     table: &TableIdName,
     at: Option<&AtTime>,
     uncommitted: &UncommittedStatus,
-) -> Result<(TableDBWithNames, Option<SPath>), TdError> {
+) -> Result<(TableDBWithNames, Option<TableLocation>), TdError> {
     let collection_id = resolve_collection_id(conn, collection).await?;
     let condition = and!(&collection_id, table);
     let table_row: TableDBWithNames = match at {
