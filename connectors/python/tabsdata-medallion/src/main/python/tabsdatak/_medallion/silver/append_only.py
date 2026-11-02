@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-from tabsdatak.medallion._constants import (
+from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
     MEDALLION_SYSTEM_COLUMN_OP,
     MEDALLION_SYSTEM_COLUMN_PK,

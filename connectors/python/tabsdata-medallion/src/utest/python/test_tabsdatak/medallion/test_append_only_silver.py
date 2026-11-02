@@ -9,8 +9,8 @@ import pytest
 import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col, lit
-from tabsdatak.medallion import build_append_only_silver
-from tabsdatak.medallion import (
+from tabsdatak._medallion.silver.append_only import build_append_only_silver
+from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_SILVER_TS,
     MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
     MEDALLION_SYSTEM_COLUMN_OP,

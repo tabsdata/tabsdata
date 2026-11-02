@@ -4,7 +4,7 @@
 
 import polars as pl
 
-from tabsdatak.medallion._constants import (
+from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_ENTITY_SK,
     MEDALLION_SYSTEM_COLUMN_PK,
     MEDALLION_SYSTEM_COLUMN_VALID_FROM,

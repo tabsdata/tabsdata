@@ -7,8 +7,8 @@ from datetime import timezone
 
 import polars as pl
 
-from tabsdatak.medallion._bronze.cdc import OP_DELETE, RESET_OPS
-from tabsdatak.medallion._constants import (
+from tabsdatak._medallion.bronze.cdc import OP_DELETE, RESET_OPS
+from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
     MEDALLION_SYSTEM_COLUMN_OP,
     MEDALLION_SYSTEM_COLUMN_PK,

@@ -5,7 +5,7 @@
 import logging
 from datetime import datetime, timezone
 
-from tabsdatak.medallion._constants import (
+from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
     MEDALLION_SYSTEM_COLUMN_PERIOD,
     MEDALLION_SYSTEM_COLUMN_PK,

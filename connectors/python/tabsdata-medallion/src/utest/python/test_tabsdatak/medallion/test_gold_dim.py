@@ -9,13 +9,13 @@ import pytest
 import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col, lit
-from tabsdatak.medallion._gold.dim import (
+from tabsdatak._medallion.gold.dim import (
     _drop_pk,
     build_type1_dim,
     build_type2_dim,
 )
-from tabsdatak.medallion import build_fact
-from tabsdatak.medallion import (
+from tabsdatak._medallion.gold.fact import build_fact
+from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_DATE_SK,
     MEDALLION_SYSTEM_COLUMN_ENTITY_SK,
     MEDALLION_SYSTEM_COLUMN_PK,

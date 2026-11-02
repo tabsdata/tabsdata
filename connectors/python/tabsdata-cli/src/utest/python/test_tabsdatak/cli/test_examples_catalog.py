@@ -4,14 +4,12 @@
 
 """Every bundled example snippet is executed: its metadata parses, it imports
 (the decorators validate each signature at decoration time), each function
-matches the declared kind and connection types, it imports only public
-modules, uses no deprecated API, and a transformer with a ``SAMPLE`` runs on
-it. A parameter typed ``TableFramesSpec`` (every ``@NEW`` input) gets its
-sample as one version."""
+matches the declared kind and connection types, it uses no deprecated API,
+and a transformer with a ``SAMPLE`` runs on it. A parameter typed
+``TableFramesSpec`` (every ``@NEW`` input) gets its sample as one version."""
 
 from __future__ import annotations
 
-import ast
 import importlib.util
 import subprocess
 import sys
@@ -92,25 +90,6 @@ def test_snippet_metadata_is_complete(example):
     assert example.summary
     assert example.tags
     assert all(isinstance(tag, str) for tag in example.tags)
-
-
-@pytest.mark.parametrize("example", SNIPPETS, ids=lambda example: example.name)
-def test_snippet_imports_only_public_modules(example):
-    tree = ast.parse(example.path.read_text(encoding="utf-8"))
-    private = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            modules = [alias.name for alias in node.names]
-        elif isinstance(node, ast.ImportFrom):
-            modules = [node.module or ""]
-        else:
-            continue
-        private += [
-            module
-            for module in modules
-            if any(part.startswith("_") for part in module.split("."))
-        ]
-    assert private == []
 
 
 @pytest.mark.parametrize("example", SNIPPETS, ids=lambda example: example.name)

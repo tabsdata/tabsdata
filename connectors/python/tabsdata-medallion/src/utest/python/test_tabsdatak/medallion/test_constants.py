@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from tabsdatak.medallion import _constants as constants
+from tabsdatak._medallion import constants
 from tabsdatak.conn.common.constants import TD_CONNECTOR_COLUMN_PREFIX
 from tabsdatak.conn.common.sql.cdc.constants import DOT
 

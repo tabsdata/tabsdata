@@ -3,7 +3,7 @@
 #
 
 import tabsdatak.tableframe.datatypes as td_dtypes
-from tabsdatak.medallion._constants import (
+from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_DATE_SK,
     MEDALLION_SYSTEM_COLUMN_PK,
     MEDALLION_SYSTEM_COLUMN_SOURCE_TS,

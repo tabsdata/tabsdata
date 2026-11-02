@@ -19,8 +19,9 @@ summary: >-
   collection.
 """
 
+from tabsdatak._medallion.bronze.append_only_cdc import build_append_only_cdc_bronze
+from tabsdatak._medallion.silver.append_only import build_append_only_silver
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, TablesTrigger, transformer
-from tabsdatak.medallion import build_append_only_cdc_bronze, build_append_only_silver
 from tabsdatak.tableframe import datatypes
 
 

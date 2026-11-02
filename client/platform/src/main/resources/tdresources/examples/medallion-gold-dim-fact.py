@@ -19,8 +19,9 @@ summary: >-
   since the join is inner and the orders are read once (@NEW).
 """
 
+from tabsdatak._medallion.gold.dim import build_type1_dim, build_type2_dim
+from tabsdatak._medallion.gold.fact import build_fact
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, TablesTrigger, transformer
-from tabsdatak.medallion import build_fact, build_type1_dim, build_type2_dim
 
 
 @transformer(

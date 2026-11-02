@@ -8,13 +8,13 @@ from datetime import datetime, timezone
 import polars as pl
 
 import tabsdatak.tableframe.datatypes as td_dtypes
-from tabsdatak.medallion._bronze.cdc import (
+from tabsdatak._medallion.bronze.cdc import (
     OP_DELETE,
     OP_INSERT,
     OP_TOMBSTONE,
     OP_UPDATE,
 )
-from tabsdatak.medallion._constants import (
+from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
     MEDALLION_SYSTEM_COLUMN_OP,
     MEDALLION_SYSTEM_COLUMN_PK,

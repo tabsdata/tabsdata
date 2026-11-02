@@ -9,15 +9,15 @@ import pytest
 import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col
-from tabsdatak.medallion import (
+from tabsdatak._medallion.bronze.cdc import (
     OP_DELETE,
     OP_INSERT,
     OP_LOAD,
     OP_TOMBSTONE,
     OP_UPDATE,
 )
-from tabsdatak.medallion import build_scd2_silver
-from tabsdatak.medallion import (
+from tabsdatak._medallion.silver.scd import build_scd2_silver
+from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
     MEDALLION_SYSTEM_COLUMN_OP,
     MEDALLION_SYSTEM_COLUMN_PK,

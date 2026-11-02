@@ -5,18 +5,18 @@
 from datetime import datetime, timezone
 
 import tabsdatak.tableframe.datatypes as td_dtypes
+from tabsdatak._medallion.constants import (
+    MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
+    MEDALLION_SYSTEM_COLUMN_OP,
+    MEDALLION_SYSTEM_COLUMN_PK,
+    MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
+)
 from tabsdatak.conn.common.sql.cdc.constants import (
     CDC_DATA_COL_NEW_PREFIX,
     CDC_DATA_COL_OLD_PREFIX,
     CDC_META_OP,
     CDC_META_TS,
     DOT,
-)
-from tabsdatak.medallion._constants import (
-    MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
-    MEDALLION_SYSTEM_COLUMN_OP,
-    MEDALLION_SYSTEM_COLUMN_PK,
-    MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
 )
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col, concat, lit

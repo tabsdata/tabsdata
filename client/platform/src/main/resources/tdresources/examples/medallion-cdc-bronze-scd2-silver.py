@@ -20,6 +20,8 @@ summary: >-
   columns from the latest version of each.
 """
 
+from tabsdatak._medallion.bronze.cdc import build_cdc_bronze
+from tabsdatak._medallion.silver.scd import build_scd2_silver, build_scd2_silver_cleanse
 from tabsdatak.api import (
     TableFrameSpec,
     TableFramesSpec,
@@ -28,11 +30,6 @@ from tabsdatak.api import (
     transformer,
 )
 from tabsdatak.conn.postgres import PostgresCdcStreamSrc
-from tabsdatak.medallion import (
-    build_cdc_bronze,
-    build_scd2_silver,
-    build_scd2_silver_cleanse,
-)
 from tabsdatak.tableframe import datatypes
 from tabsdatak.tableframe.functions import concat
 
