@@ -4,42 +4,226 @@
 
 from __future__ import annotations
 
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import rich_click as click
 
+from tabsdatak.cli._capability import capability
+from tabsdatak.cli._errors import TdkException
+from tabsdatak.cli._machine import machine
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     ancestry,
-    collection_label,
+    bundle_confinement,
+    command_failure,
     format_option,
     get_currently_pinned_object,
     hint_common_solutions,
+    list_options,
+    list_params,
     load_info_and_project_root,
     logical_prompt,
     max_result_option,
+    output_format,
     present,
+    progress,
     proj_option,
     render,
+    render_deleted,
+    render_done,
+    render_entity,
+    render_list,
     show_hint,
     take,
     verify_login_or_prompt,
     view_options,
 )
-from tabsdatak.cli.td.execution_utils import live_monitor
-from tabsdatak.cli.td.tag_commands import tag_group
-from tabsdatak.common._tabular import Column, Kind, RecordView, TableView
-from tabsdatak.sdk.status_utils.execution import EXECUTION_FINAL_STATUSES
-from tabsdatak.sdk.status_utils.function_run import (
-    FUNCTION_RUN_SUCCESSFUL_FINAL_STATUSES,
+from tabsdatak.cli.td._wait import (
+    require_wait,
+    timeout_option,
+    wait_execution,
+    wait_option,
 )
-from tabsdatak.sdk.status_utils.transaction import TRANSACTION_FINAL_STATUSES
+from tabsdatak.cli.td.tag_commands import PARENT_TAG, tag_group, tags_of, tags_text
+from tabsdatak.common._datetime import _convert_timestamp_to_string
+from tabsdatak.common._tabular import Column, Kind, RecordView, TableView
+from tabsdatak.sdk.status_utils.groups import Entity, annotate
 
 if TYPE_CHECKING:
-    from tabsdatak.sdk.tabsdata_server import Execution, TabsdataServer, Transaction
+    from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
 
 _FUNCTION_STATUS_LABELS = {"A": "Active", "F": "Frozen", "D": "Deleted"}
+
+
+def _environment_options(command):
+    command = click.option(
+        "--local-pkg",
+        "local_pkg",
+        multiple=True,
+        type=click.Path(),
+        help=(
+            "Path to a local package directory to include in the bundle; "
+            "repeatable. Local packages are pip-installed into the function's "
+            "runtime environment, separately from the '--dir-to-bundle' source "
+            "tree. Import them absolutely ('import mypkg'). If a local package "
+            "shares a name with a module in that tree, the installed package "
+            "wins at runtime."
+        ),
+    )(command)
+    return click.option(
+        "--requirements",
+        type=click.Path(),
+        help=(
+            "Path to a requirements.yaml to embed in the bundle verbatim, "
+            "instead of the snapshot of this machine's Python environment. "
+            "Use it when the runtime environment differs from this one."
+        ),
+    )(command)
+
+
+_dir_to_bundle_option = click.option(
+    "--dir-to-bundle",
+    help=(
+        "Path to the directory that should be stored in the bundle for "
+        "execution in the backend. If not provided, the folder where the "
+        "function file is will be used."
+    ),
+    type=click.Path(),
+)
+
+_path_option = click.option(
+    "--path",
+    help=(
+        "Path to the function file. Must be of the form "
+        "'/path/to/file.py::function_name'. Will be prompted "
+        "for it if not provided."
+    ),
+    type=click.Path(),
+)
+
+_dry_run_option = click.option(
+    "--dry-run",
+    is_flag=True,
+    help=(
+        "Check the function as 'tdk fn check' does and show what would be "
+        "registered, without uploading anything."
+    ),
+)
+
+
+def _collection(ctx: click.Context, coll: str | None) -> str:
+    return (
+        coll
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(
+            ctx,
+            "Name of the collection to which the function belongs",
+            option="--coll",
+            hint=(
+                "Pass --coll. 'tdk fn list --filter name:eq:<name>' shows the "
+                "function's collection."
+            ),
+        )
+    )
+
+
+def _function_path(ctx: click.Context, path: str | None) -> str:
+    return path or logical_prompt(
+        ctx,
+        "Path to the function file. Must be of the form "
+        "'/path/to/file.py::function_name'",
+        option="--path",
+    )
+
+
+def _exists(server: TabsdataServer, coll: str, name: str) -> bool:
+    # noinspection PyProtectedMember
+    from tabsdatak.sdk._apiserver import APIServerError
+
+    try:
+        server.get_function(coll, name)
+    except APIServerError:
+        return False
+    return True
+
+
+def _local_packages(local_pkg: tuple[str, ...]) -> list[str] | None:
+    return list(local_pkg) or None
+
+
+def _checked(
+    ctx: click.Context,
+    path: str,
+    dir_to_bundle: str | None,
+    requirements: str | None,
+    local_pkg: tuple[str, ...],
+    coll: str | None,
+    name: str | None,
+) -> dict:
+    from tabsdatak.cli._fn_check import check_function
+
+    server = ctx.obj["tabsdataserver"] if coll else None
+    with bundle_confinement() as confine_to:
+        return check_function(
+            path,
+            dir_to_bundle,
+            requirements=requirements,
+            local_packages=_local_packages(local_pkg),
+            confine_to=confine_to,
+            server=server,
+            collection=coll,
+            name=name,
+        )
+
+
+def _check_table(result: dict) -> None:
+    function = result["function"]
+    if function is None:
+        click.echo("The function could not be loaded.")
+    else:
+        verdict = "is valid" if result["valid"] else "is not valid"
+        click.echo(f"Function '{function['name']}' ({function['kind']}) {verdict}.")
+        click.echo(f"  Inputs:    {', '.join(function['inputs']) or '-'}")
+        click.echo(f"  Outputs:   {', '.join(function['outputs']) or '-'}")
+        click.echo(f"  Triggers:  {', '.join(function['triggers']) or '-'}")
+        click.echo(f"  Connector: {function['connector'] or '-'}")
+    bundle = result["bundle"]
+    if bundle is not None:
+        click.echo(
+            f"  Bundle:    {bundle['files']} files, {bundle['bytes']} bytes, "
+            f"Python {bundle['python_version'] or '-'}"
+        )
+    for finding in result["findings"]:
+        line = f" (line {finding['line']})" if finding["line"] else ""
+        click.echo(
+            f"{finding['severity']}: {finding['code']}{line}: {finding['message']}"
+        )
+    would = result.get("would")
+    if would is not None:
+        target = f"function '{would['name']}' in collection '{would['collection']}'"
+        click.echo(f"Would {would['action']} {target}; nothing was uploaded.")
+
+
+def _render_check(ctx: click.Context, result: dict, **would) -> None:
+    if would:
+        result["would"] = would
+    if output_format(ctx) == "table":
+        _check_table(result)
+    elif result["valid"]:
+        render(ctx, data=result)
+    if not result["valid"]:
+        errors = [f for f in result["findings"] if f["severity"] == "error"]
+        raise TdkException(
+            "checks_failed",
+            f"The function is not valid: {len(errors)} error(s).",
+            hint="Fix each finding with severity 'error'.",
+            state=result,
+        )
 
 
 @cli_command
@@ -48,8 +232,10 @@ def fn():
     """Function management commands"""
 
 
+@capability("development", "destructive")
 @fn.command()
 @proj_option
+@format_option
 @click.option(
     "--name",
     "-n",
@@ -68,15 +254,15 @@ def fn():
 def delete(ctx: click.Context, name: str, coll: str, confirm: str):
     """Delete a function"""
     verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the function to be deleted")
-    coll = (
-        coll
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to which the function belongs")
+    name = name or logical_prompt(
+        ctx, "Name of the function to be deleted", option="--name"
     )
-    click.echo(f"Deleting function '{name}' in collection '{coll}'")
-    click.echo("-" * 10)
-    confirm = confirm or logical_prompt(ctx, "Please type 'delete' to confirm deletion")
+    coll = _collection(ctx, coll)
+    progress(ctx, f"Deleting function '{name}' in collection '{coll}'")
+    progress(ctx, "-" * 10)
+    confirm = confirm or logical_prompt(
+        ctx, "Please type 'delete' to confirm deletion", option="--confirm delete"
+    )
     if confirm != "delete":
         raise click.ClickException(
             "Deletion not confirmed. The confirmation word is 'delete'."
@@ -84,7 +270,14 @@ def delete(ctx: click.Context, name: str, coll: str, confirm: str):
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         server.delete_function(coll, name)
-        click.echo("Function deleted successfully")
+        render_deleted(
+            ctx,
+            kind="function",
+            name=name,
+            collection=coll,
+            project=server.connection.project,
+            message="Function deleted successfully",
+        )
         show_hint(
             ctx,
             "You do not need to delete and re-register a function to change it. "
@@ -95,6 +288,7 @@ def delete(ctx: click.Context, name: str, coll: str, confirm: str):
         raise click.ClickException(f"Failed to delete function: {e}")
 
 
+@capability("analytics", "read")
 @fn.command()
 @proj_option
 @format_option
@@ -118,12 +312,10 @@ def delete(ctx: click.Context, name: str, coll: str, confirm: str):
 def get(ctx: click.Context, name: str, coll: str, show_history: bool):
     """Display a function"""
     verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the function to be displayed")
-    coll = (
-        coll
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to which the function belongs")
+    name = name or logical_prompt(
+        ctx, "Name of the function to be displayed", option="--name"
     )
+    coll = _collection(ctx, coll)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         if show_history:
@@ -158,15 +350,24 @@ def get(ctx: click.Context, name: str, coll: str, show_history: bool):
                     count="versions",
                 )
 
-            render(ctx, data=lambda: [f._data for f in function_list], view=_view)
+            render_list(
+                ctx,
+                items=lambda: [f._data for f in function_list],
+                truncated=False,
+                view=_view,
+            )
         else:
             # noinspection PyProtectedMember
             from tabsdatak.sdk.tabsdata_server import _function_type_to_mapping
 
             function = server.get_function(coll, name)
+            tags = tags_of(server, collection=coll, function=name)
+            data = {**(function._data or {}), "tags": tags}
+            parent = _parent(server, tags)
+            if parent is not None:
+                data["parent"] = parent
 
             def _view():
-                data = function._data or {}
                 status = data.get("status")
                 return RecordView(
                     title="Function",
@@ -189,27 +390,71 @@ def get(ctx: click.Context, name: str, coll: str, show_history: bool):
                             "Dependencies",
                             present(", ".join(function.dependencies or [])),
                         ),
+                        ("Tags", present(tags_text(tags))),
+                        ("Parent", present(_parent_text(parent))),
                         ("Snippet", present(data.get("snippet"))),
                     ],
                     kinds={"Status": Kind.STATUS},
                 )
 
-            render(ctx, data=lambda: function._data, view=_view)
+            render(ctx, data=lambda: data, view=_view)
 
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to display function: {e}")
 
 
+def _parent(server: TabsdataServer, tags: dict[str, str]) -> dict | None:
+    """The function a ``_parent`` tag names, by collection and name; its id
+    alone when the project no longer lists it."""
+    function_id = tags.get(PARENT_TAG)
+    if function_id is None:
+        return None
+    listing = server.list_project_functions_generator(
+        filter=[f"function_id:eq:{function_id}"]
+    )
+    function = next(iter(listing), None)
+    if function is None:
+        return {"function_id": function_id}
+    return {
+        "function_id": function_id,
+        "collection": (function._data or {}).get("collection"),
+        "name": function.name,
+    }
+
+
+def _parent_text(parent: dict | None) -> str | None:
+    if parent is None:
+        return None
+    if parent.get("name") is None:
+        return parent["function_id"]
+    return f"{parent['collection']}/{parent['name']}"
+
+
+@capability("development", "read", paths={"--file": "write", "--extract": "write"})
 @fn.command()
 @proj_option
+@format_option
 @click.option(
     "--fn-version",
     "fn_version",
     help=(
-        "Function version id (fvid) whose bundle will be downloaded. Use "
+        "Function version id (fvid) whose bundle will be read. Use "
         "'tdk fn get --show-history' to find available fvids."
     ),
+)
+@click.option(
+    "--coll",
+    "-c",
+    help=(
+        "Collection of the function whose current version is read, together "
+        "with '--name'."
+    ),
+)
+@click.option(
+    "--name",
+    "-n",
+    help="Function whose current version is read, instead of '--fn-version'.",
 )
 @click.option(
     "--file",
@@ -219,35 +464,159 @@ def get(ctx: click.Context, name: str, coll: str, show_history: bool):
         "Path to write the downloaded bundle to. The bundle is a "
         "zstandard-compressed tar archive (.tar.zst)."
     ),
+    type=click.Path(),
+)
+@click.option(
+    "--extract",
+    help=(
+        "Directory to unpack the bundle into, instead of writing the archive. "
+        "It must be empty or new, unless '--force' is given."
+    ),
+    type=click.Path(file_okay=False),
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    help="With '--extract', unpack into a directory that is not empty.",
+)
+@click.option(
+    "--print",
+    "print_source",
+    is_flag=True,
+    help=(
+        "Print the module that defines the function. With '-o json', every "
+        "text file of the bundle, within a size budget."
+    ),
 )
 @click.pass_context
-def bundle(ctx: click.Context, fn_version: str, file: str):
-    """Download the bundle of a function version as a tar.zst archive.
+def bundle(
+    ctx: click.Context,
+    fn_version: str,
+    coll: str,
+    name: str,
+    file: str,
+    extract: str,
+    force: bool,
+    print_source: bool,
+):
+    """Download, unpack or print the bundle of a function version.
 
-    The bundle is addressed by its function version id (fvid); only Active or
-    Frozen versions can be downloaded (a version whose function has been
-    deleted is not found).
+    The bundle is addressed by its function version id (fvid), or by
+    '--name' for the function's current version; only Active or Frozen
+    versions can be read (a version whose function has been deleted is not
+    found). It holds the code that actually runs: the whole module tree the
+    function was registered with, and its requirements.
     """
+    if sum(map(bool, (file, extract, print_source))) > 1:
+        raise click.UsageError("Pass only one of '--file', '--extract' and '--print'.")
+    if fn_version and name:
+        raise click.UsageError("Pass either '--fn-version' or '--name', not both.")
+    if force and not extract:
+        raise click.UsageError("'--force' applies only together with '--extract'.")
+    if (
+        extract
+        and not force
+        and Path(extract).is_dir()
+        and any(Path(extract).iterdir())
+    ):
+        raise TdkException(
+            "conflict",
+            f"'{extract}' is not empty.",
+            hint="Extract into a new or empty directory, or pass '--force'.",
+        )
     verify_login_or_prompt(ctx)
-    fn_version = fn_version or logical_prompt(
-        ctx, "Function version id (fvid) whose bundle will be downloaded"
-    )
-    file = file or logical_prompt(
-        ctx, "Path to write the downloaded bundle to (a .tar.zst archive)"
-    )
-    click.echo(f"Downloading bundle of function version '{fn_version}' to '{file}'")
-    click.echo("-" * 10)
+    if name:
+        coll = _collection(ctx, coll)
+    else:
+        fn_version = fn_version or logical_prompt(
+            ctx,
+            "Function version id (fvid) whose bundle will be read",
+            option="--fn-version",
+        )
+    if not (extract or print_source):
+        file = file or logical_prompt(
+            ctx,
+            "Path to write the downloaded bundle to (a .tar.zst archive)",
+            option="--file",
+        )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.download_function_bundle(fn_version, file)
-        click.echo("Bundle downloaded successfully")
+        if name:
+            fn_version = server.get_function(coll, name).id
+        if file:
+            progress(
+                ctx,
+                f"Downloading bundle of function version '{fn_version}' to '{file}'",
+            )
+            progress(ctx, "-" * 10)
+            server.download_function_bundle(fn_version, file)
+            render_done(
+                ctx,
+                action="download",
+                kind="bundle",
+                id=fn_version,
+                details={"file": file},
+                message="Bundle downloaded successfully",
+            )
+            return
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = Path(tmp) / "bundle.tar.zst"
+            server.download_function_bundle(fn_version, str(archive))
+            if extract:
+                _extract_bundle(ctx, archive, fn_version, extract)
+            else:
+                _print_bundle(ctx, archive, fn_version)
     except Exception as e:
         hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to download function bundle: {e}")
+        raise click.ClickException(f"Failed to read function bundle: {e}")
+
+
+def _extract_bundle(ctx: click.Context, archive: Path, fn_version: str, dest: str):
+    # noinspection PyProtectedMember
+    from tabsdatak.common._archive.bundle import extract_bundle
+
+    extract_bundle(archive, Path(dest))
+    render_done(
+        ctx,
+        action="extract",
+        kind="bundle",
+        id=fn_version,
+        details={"dir": dest},
+        message=f"Bundle extracted to '{dest}'",
+    )
+
+
+def _print_bundle(ctx: click.Context, archive: Path, fn_version: str):
+    # noinspection PyProtectedMember
+    from tabsdatak.common._archive.bundle import (
+        read_bundle_sources,
+        read_function_source,
+    )
+
+    if output_format(ctx) == "table":
+        found = read_function_source(archive)
+        if found is None:
+            raise click.ClickException(
+                "The bundle carries no module defining the function."
+            )
+        click.echo(found[1], nl=False)
+        return
+    sources = read_bundle_sources(archive)
+    render(
+        ctx,
+        data={
+            "function_version_id": fn_version,
+            "defining_module": sources.defining_module,
+            "files": sources.files,
+            "skipped": sources.skipped,
+            "truncated": sources.truncated,
+        },
+    )
 
 
 # Registered as "list" but the Python function is NOT named ``list`` to avoid
 # shadowing the ``list`` builtin at module scope.
+@capability("analytics", "read")
 @fn.command("list")
 @proj_option
 @format_option
@@ -255,30 +624,36 @@ def bundle(ctx: click.Context, fn_version: str, file: str):
 @click.option(
     "--coll",
     "-c",
-    help="Name of the collection to which the functions belong.",
+    help=(
+        "Name of the collection to which the functions belong. Default: the "
+        "pinned collection, else every collection of the project."
+    ),
 )
 @max_result_option
+@list_options
 @click.pass_context
 def list_functions(ctx: click.Context, coll: str):
-    """List all functions in a collection"""
+    """List the functions of a collection, or of the whole project"""
     # noinspection PyProtectedMember
     from tabsdatak.sdk.tabsdata_server import _function_type_to_mapping
 
     verify_login_or_prompt(ctx)
-    coll = (
-        coll
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to which the functions belong")
-    )
+    coll = coll or get_currently_pinned_object(ctx, "collection")
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        list_of_functions, truncated = take(ctx, server.list_functions_generator(coll))
+        listing = (
+            server.list_project_functions_generator(**list_params(ctx))
+            if coll is None
+            else server.list_functions_generator(coll, **list_params(ctx))
+        )
+        list_of_functions, truncated = take(ctx, listing)
 
         def _view():
             return TableView(
                 title="Functions",
                 context=ancestry(ctx, collection=coll),
                 columns=[
+                    *([Column("Collection", Kind.ID)] if coll is None else []),
                     Column("Name", Kind.ID),
                     Column("Type"),
                     Column("Description"),
@@ -287,6 +662,11 @@ def list_functions(ctx: click.Context, coll: str):
                 ],
                 rows=[
                     [
+                        *(
+                            [present((function._data or {}).get("collection"))]
+                            if coll is None
+                            else []
+                        ),
                         function.name,
                         _function_type_to_mapping(function.type),
                         present(function.description),
@@ -298,11 +678,11 @@ def list_functions(ctx: click.Context, coll: str):
                 count="functions",
             )
 
-        render(
+        render_list(
             ctx,
-            data=lambda: [f._data for f in list_of_functions],
-            view=_view,
+            items=lambda: [f._data for f in list_of_functions],
             truncated=truncated,
+            view=_view,
         )
 
     except Exception as e:
@@ -310,31 +690,93 @@ def list_functions(ctx: click.Context, coll: str):
         raise click.ClickException(f"Failed to list functions: {e}")
 
 
+@capability(
+    "development",
+    "read",
+    "read",
+    paths={
+        "--path": "read",
+        "--dir-to-bundle": "read",
+        "--requirements": "read",
+        "--local-pkg": "read",
+    },
+)
 @fn.command()
 @proj_option
+@format_option
+@_path_option
+@_dir_to_bundle_option
+@_environment_options
+@click.option(
+    "--coll",
+    "-c",
+    help=(
+        "Collection to check the function against on the server: that it "
+        "exists, that the input tables exist, that no other function "
+        "produces the output tables and that the server accepts the Python "
+        "version. Without it the check is local."
+    ),
+)
+@click.option(
+    "--name",
+    "-n",
+    help=(
+        "Name the function is registered under, if it differs from the "
+        "decorated function's; used by the '--coll' checks."
+    ),
+)
+@click.pass_context
+def check(
+    ctx: click.Context,
+    path: str,
+    dir_to_bundle: str,
+    requirements: str,
+    local_pkg: tuple[str, ...],
+    coll: str,
+    name: str,
+):
+    """Check a function file before registering it. Runs the code of the
+    '--path' file on this machine, since it imports it.
+
+    Imports the function as 'tdk fn register' does, reports what it declares
+    (kind, input and output tables, triggers, connector), builds its bundle
+    and flags calls such as eval, exec or subprocess. Nothing is uploaded.
+    Exits 1 when a finding is an error; warnings do not fail.
+    """
+    path = _function_path(ctx, path)
+    if coll:
+        verify_login_or_prompt(ctx)
+    try:
+        result = _checked(ctx, path, dir_to_bundle, requirements, local_pkg, coll, name)
+    except Exception as e:
+        raise command_failure(ctx, "check function", e)
+    _render_check(ctx, result)
+
+
+@capability(
+    "development",
+    "write",
+    "read",
+    paths={
+        "--path": "read",
+        "--dir-to-bundle": "read",
+        "--requirements": "read",
+        "--local-pkg": "read",
+    },
+    lower={"--dry-run": "read"},
+)
+@fn.command()
+@proj_option
+@format_option
 @click.option(
     "--coll",
     "-c",
     help="Name of the collection to which the function belongs.",
 )
 @click.option("--description", help="Description of the function.")
-@click.option(
-    "--path",
-    help=(
-        "Path to the function file. Must be of the form "
-        "'/path/to/file.py::function_name'. Will be prompted "
-        "for it if not provided."
-    ),
-)
-@click.option(
-    "--dir-to-bundle",
-    help=(
-        "Path to the directory that should be stored in the bundle for "
-        "execution in the backend. If not provided, the folder where the "
-        "function file is will be used."
-    ),
-)
-# --requirements and --local-pkg are temporarily disabled.
+@_path_option
+@_dir_to_bundle_option
+@_environment_options
 @click.option(
     "--reuse-tables",
     is_flag=True,
@@ -373,6 +815,7 @@ def list_functions(ctx: click.Context, coll: str):
         "When omitted, the collection's base_path is used."
     ),
 )
+@_dry_run_option
 @click.pass_context
 def register(
     ctx: click.Context,
@@ -380,12 +823,16 @@ def register(
     description: str,
     path: str,
     dir_to_bundle: str,
+    requirements: str,
+    local_pkg: tuple[str, ...],
     reuse_tables: bool,
     enabled: bool,
     base_path: str = None,
     update: bool = False,
+    dry_run: bool = False,
 ):
-    """Register a function.
+    """Register a function. Runs the code of the '--path' file on this
+    machine, since it imports it.
 
     Dynamically imports the symbol named by ``--path`` (which must be
     a tabsdatak ``PublisherInfo`` / ``TransformerInfo`` /
@@ -395,28 +842,35 @@ def register(
 
     With ``--update``, behaves idempotently: if the function already
     exists in the collection it is updated; otherwise it is registered.
-    """
-    # noinspection PyProtectedMember
-    from tabsdatak.sdk._apiserver import APIServerError
 
+    With ``--dry-run``, checks the function as 'tdk fn check --coll' does and
+    reports what would be registered, uploading nothing.
+    """
     verify_login_or_prompt(ctx)
     description = description or ""
-    click.echo("Registering a function")
-    click.echo("-" * 10)
-    coll = (
-        coll
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to which the function belongs")
-    )
-    path = path or logical_prompt(
-        ctx,
-        "Path to the function file. "
-        "Must be of the form "
-        "'/path/to/file.py::function_name'",
-    )
+    progress(ctx, "Registering a function")
+    progress(ctx, "-" * 10)
+    coll = _collection(ctx, coll)
+    path = _function_path(ctx, path)
     try:
-        info, project_root = load_info_and_project_root(path, dir_to_bundle)
         server: TabsdataServer = ctx.obj["tabsdataserver"]
+        if dry_run:
+            result = _checked(
+                ctx, path, dir_to_bundle, requirements, local_pkg, coll, None
+            )
+            function_name = (result["function"] or {}).get("name")
+            existing = update and function_name and _exists(server, coll, function_name)
+            _render_check(
+                ctx,
+                result,
+                action="update" if existing else "register",
+                collection=coll,
+                name=function_name,
+            )
+            return
+        info, project_root = load_info_and_project_root(path, dir_to_bundle)
+        function_name = getattr(info.func, "__name__", None) or info.__class__.__name__
+        existing = update and _exists(server, coll, function_name)
         if update:
             show_hint(
                 ctx,
@@ -424,130 +878,52 @@ def register(
                 "update'",
                 final_empty_line=True,
             )
-            function_name = (
-                getattr(info.func, "__name__", None) or info.__class__.__name__
+            action = "updating" if existing else "registering"
+            progress(
+                ctx,
+                f"Function '{function_name}' "
+                f"{'exists' if existing else 'does not exist'} in collection "
+                f"'{coll}': {action} it.",
             )
-            try:
-                server.get_function(coll, function_name)
-                click.echo(
-                    f"The function '{function_name}' already exists in collection "
-                    f"'{coll}'. Proceeding to update it."
-                )
-                server.update_function(
+        common = {
+            "description": description,
+            "local_packages": _local_packages(local_pkg),
+            "reuse_tables": reuse_tables,
+            "enabled": enabled,
+            "requirements": requirements,
+            "base_path": base_path,
+        }
+        with bundle_confinement() as confine_to:
+            if existing:
+                function = server.update_function(
                     coll,
                     function_name,
                     info,
                     project_root,
-                    description=description,
-                    local_packages=None,
-                    reuse_tables=reuse_tables,
-                    enabled=enabled,
-                    requirements=None,
-                    base_path=base_path,
+                    confine_to=confine_to,
+                    **common,
                 )
-                click.echo("Function updated successfully")
-                return
-            except APIServerError:
-                click.echo(
-                    f"The function '{function_name}' does not exist in collection "
-                    f"'{coll}'. Proceeding to register it."
+            else:
+                function = server.register_function(
+                    coll, info, project_root, confine_to=confine_to, **common
                 )
-        server.register_function(
-            coll,
-            info,
-            project_root,
-            description=description,
-            local_packages=None,
-            reuse_tables=reuse_tables,
-            enabled=enabled,
-            requirements=None,
-            base_path=base_path,
+        render_entity(
+            ctx,
+            data=lambda: function._data,
+            message=(
+                "Function updated successfully"
+                if existing
+                else "Function registered successfully"
+            ),
         )
-        click.echo("Function registered successfully")
     except Exception as e:
-        hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to register function: {e}")
+        raise command_failure(ctx, "register function", e)
 
 
-# @fn.command()
-# @click.option(
-#     "--name",
-#     "-n",
-#     help="Name of the function to be triggered.",
-# )
-# @click.option(
-#     "--coll",
-#     "-c",
-#     help="Name of the collection to which the function belongs.",
-# )
-# @click.option(
-#     "--plan",
-#     help="ID of the plan to read.",
-# )
-# @click.pass_context
-# def read_run(ctx: click.Context, name: str, coll: str, plan: str):
-#     """Read the information of a function run"""
-#     verify_login_or_prompt(ctx)
-#     name = name or logical_prompt(ctx, "Name of the function the run belongs to")
-#     coll = (
-#         coll
-#         or get_currently_pinned_object(ctx, "collection")
-#         or logical_prompt(ctx, "Name of the collection to which the function belongs")
-#     )
-#     plan = plan or logical_prompt(ctx, "ID of the plan to read")
-#     click.echo(
-#         f"Reading information of plan '{plan}' for function '{name}' in "
-#         f"collection '{coll}'"
-#     )
-#     click.echo("-" * 10)
-#     try:
-#         server: TabsdataServer = ctx.obj["tabsdataserver"]
-#         response = server.read_function_run(coll, name, plan)
-#         data = response.json().get("data")
-#
-#         table = Table(title="Run information")
-#         table.add_column("Status", style="cyan", no_wrap=True)
-#         table.add_column("Triggered on")
-#         table.add_column("Started on")
-#         table.add_column("Ended on")
-#         table.add_column("Triggered by")
-#
-#         status = status_to_mapping(data.get("status"))
-#         triggered_on = (
-#             _convert_timestamp_to_string(data.get("triggered_on"))
-#             if data.get("triggered_on")
-#             else "-"
-#         )
-#         started_on = (
-#             _convert_timestamp_to_string(data.get("started_on"))
-#             if data.get("started_on")
-#             else "-"
-#         )
-#         ended_on = (
-#             _convert_timestamp_to_string(data.get("ended_on"))
-#             if data.get("ended_on")
-#             else "-"
-#         )
-#         triggered_by = data.get("triggered_by")
-#         table.add_row(
-#             status,
-#             triggered_on,
-#             started_on,
-#             ended_on,
-#             triggered_by,
-#         )
-#
-#         click.echo()
-#         console = Console()
-#         console.print(table)
-#
-#     except Exception as e:
-#         hint_common_solutions(ctx, e)
-#         raise click.ClickException(f"Failed to read run information: {e}")
-
-
+@capability("operations", "write")
 @fn.command()
 @proj_option
+@format_option
 @click.option(
     "--name",
     "-n",
@@ -562,31 +938,27 @@ def register(
     "--plan-name",
     help="Name to be given to the plan that will be generated by the trigger.",
 )
-@click.option(
-    "--detach",
-    "-d",
-    is_flag=True,
-    default=False,
-    help="Do not monitor the status of the plan.",
-)
+@wait_option("the plan")
+@timeout_option()
 @click.pass_context
 def trigger(
     ctx: click.Context,
     name: str,
     coll: str,
     plan_name: str,
-    detach: bool,
+    wait: bool,
+    timeout: float | None,
 ):
-    """Trigger a function"""
+    """Trigger a function. Returns the plan at once; '--wait' waits for it to
+    finish."""
+    require_wait(wait, timeout)
     verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the function to be triggered")
-    coll = (
-        coll
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to which the function belongs")
+    name = name or logical_prompt(
+        ctx, "Name of the function to be triggered", option="--name"
     )
-    click.echo(f"Triggering function '{name}' in collection '{coll}'")
-    click.echo("-" * 10)
+    coll = _collection(ctx, coll)
+    progress(ctx, f"Triggering function '{name}' in collection '{coll}'")
+    progress(ctx, "-" * 10)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         execution = server.trigger_function(coll, name, execution_name=plan_name)
@@ -601,127 +973,54 @@ def trigger(
             )
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to trigger function: {e}")
-    click.echo("Function triggered. Execution has started.")
-    click.echo(f"Plan id: {execution.id}")
-    click.echo("")
-    if detach:
+    if not wait:
+        render_entity(
+            ctx,
+            data=lambda: annotate(Entity.EXECUTION, execution._data),
+            message=(
+                f"Function triggered. Execution has started.\nPlan id: {execution.id}\n"
+            ),
+        )
         show_hint(
             ctx,
             "You can check the status of the plan with 'tdk plan get "
-            f"--plan {execution.id}', or monitor the execution of the function "
-            f"with 'tdk plan monitor --plan {execution.id}'",
+            f"--plan {execution.id}', or wait for it to finish with 'tdk plan "
+            f"monitor --plan {execution.id}' (or trigger with '--wait').",
         )
         return
-    show_hint(
-        ctx,
-        "To trigger the function without monitoring the plan, "
-        "use the '--debug' or '-d' option.",
-        final_empty_line=True,
-    )
+    progress(ctx, f"Function triggered. Plan id: {execution.id}")
     try:
-        _monitor_execution_or_transaction(ctx, execution=execution)
+        document = wait_execution(ctx, execution, timeout)
     except click.ClickException:
         raise
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(
-            f"Plan {execution.id} was triggered, but monitoring it failed: {e}. "
+            f"Plan {execution.id} was triggered, but waiting for it failed: {e}. "
             f"Resume with 'tdk plan monitor --plan {execution.id}'"
         )
+    render(ctx, data=document)
 
 
-def _monitor_execution_or_transaction(
-    ctx: click.Context, execution: Execution = None, transaction: Transaction = None
-):
-    """Monitor the execution of a plan or a transaction"""
-    if execution and transaction:
-        raise click.ClickException(
-            "Internal error: _monitor_execution_or_transaction takes either an "
-            "execution or a transaction, but not both."
-        )
-    if not execution and not transaction:
-        raise click.ClickException(
-            "Internal error: _monitor_execution_or_transaction takes either an "
-            "execution or a transaction, but not neither."
-        )
-    if execution:
-        entity_final_statuses = EXECUTION_FINAL_STATUSES
-    else:
-        entity_final_statuses = TRANSACTION_FINAL_STATUSES
-    keyword = "plan" if execution else "transaction"
-    supervised_entity = execution or transaction
-
-    def build_view(function_runs):
-        return TableView(
-            title="Function runs",
-            context=[(keyword.capitalize(), supervised_entity.id)],
-            columns=[
-                Column("Function run ID", Kind.ID),
-                Column("Collection"),
-                Column("Function"),
-                Column("Transaction ID" if execution else "Plan ID", Kind.ID),
-                Column("Started on", Kind.TIME),
-                Column("Ended on", Kind.TIME),
-                Column("Status", Kind.STATUS),
-            ],
-            rows=[
-                [
-                    function_run.id,
-                    collection_label(function_run),
-                    function_run.function.name,
-                    (
-                        function_run.transaction.id
-                        if execution
-                        else function_run.execution.id
-                    ),
-                    present(function_run.started_on_str),
-                    present(function_run.ended_on_str),
-                    present(function_run.status),
-                ]
-                for function_run in function_runs
-            ],
-        )
-
-    def fetch():
-        supervised_entity.refresh()
-        return supervised_entity.function_runs
-
-    # Finality is read from the plan or transaction itself: a run in a status
-    # the client does not know must not keep the watch open.
-    list_of_runs = live_monitor(
-        supervised_entity.function_runs,
-        fetch,
-        build_view,
-        lambda _: supervised_entity.status in entity_final_statuses,
-    )
-
-    click.echo(f"{keyword.capitalize()} finished.")
-
-    failed_runs = [
-        fn_run
-        for fn_run in list_of_runs
-        if fn_run.status not in FUNCTION_RUN_SUCCESSFUL_FINAL_STATUSES
-    ]
-    if failed_runs:
-        click.echo("Some function runs failed:")
-        for fn_run in failed_runs:
-            click.echo(f"- {fn_run.id}")
-        complete_command = (
-            f"'tdk plan logs --plan {supervised_entity.id}'"
-            if execution
-            else f"'tdk trx logs --trx {supervised_entity.id}'"
-        )
-        show_hint(
-            ctx,
-            "You can check their logs with 'tdk fnrun logs --fnrun <RUN-ID>' or with "
-            + complete_command,
-        )
-    else:
-        click.echo("All function runs were successful.")
-
-
+@capability(
+    "development",
+    "write",
+    "read",
+    paths={
+        "--path": "read",
+        "--dir-to-bundle": "read",
+        "--requirements": "read",
+        "--local-pkg": "read",
+    },
+    escalate={
+        "--reset-state": {"effect": "destructive"},
+        "--reset-stage": {"effect": "destructive"},
+    },
+    lower={"--dry-run": "read"},
+)
 @fn.command()
 @proj_option
+@format_option
 @click.option(
     "--name",
     "-n",
@@ -733,23 +1032,9 @@ def _monitor_execution_or_transaction(
     help="Name of the collection to which the function belongs.",
 )
 @click.option("--description", help="Description of the function.")
-@click.option(
-    "--path",
-    help=(
-        "Path to the function file. Must be of the form "
-        "'/path/to/file.py::function_name'. Will be prompted "
-        "for it if not provided."
-    ),
-)
-@click.option(
-    "--dir-to-bundle",
-    help=(
-        "Path to the directory that should be stored in the bundle for "
-        "execution in the backend. If not provided, the folder where the "
-        "function file is will be used."
-    ),
-)
-# --requirements and --local-pkg are temporarily disabled.
+@_path_option
+@_dir_to_bundle_option
+@_environment_options
 @click.option(
     "--reuse-tables",
     is_flag=True,
@@ -795,6 +1080,7 @@ def _monitor_execution_or_transaction(
         "accumulated stage state. The stage's storage prefix is unchanged."
     ),
 )
+@_dry_run_option
 @click.pass_context
 def update(
     ctx: click.Context,
@@ -803,13 +1089,17 @@ def update(
     description: str,
     path: str,
     dir_to_bundle: str,
+    requirements: str,
+    local_pkg: tuple[str, ...],
     reuse_tables: bool,
     enabled: bool,
     base_path: str = None,
     reset_state: bool = False,
     reset_stage: bool = False,
+    dry_run: bool = False,
 ):
-    """Update a function.
+    """Update a function. With '--path', runs the code of that file on this
+    machine, since it imports it.
 
     Dynamically imports the symbol named by ``--path`` (a tabsdatak
     ``*Info`` descriptor) and updates the existing function via the
@@ -821,45 +1111,49 @@ def update(
     patch its version with 'tdk fn patch'.
     """
     verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the function to be updated")
-    coll = (
-        coll
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to which the function belongs")
+    name = name or logical_prompt(
+        ctx, "Name of the function to be updated", option="--name"
     )
-    path = path or logical_prompt(
-        ctx,
-        "Path to the function file. "
-        "Must be of the form "
-        "'/path/to/file.py::function_name'",
-    )
-    click.echo(f"Updating function '{name}' in collection '{coll}'")
-    click.echo("-" * 10)
+    coll = _collection(ctx, coll)
+    path = _function_path(ctx, path)
     try:
+        if dry_run:
+            result = _checked(
+                ctx, path, dir_to_bundle, requirements, local_pkg, coll, name
+            )
+            _render_check(ctx, result, action="update", collection=coll, name=name)
+            return
+        progress(ctx, f"Updating function '{name}' in collection '{coll}'")
+        progress(ctx, "-" * 10)
         info, project_root = load_info_and_project_root(path, dir_to_bundle)
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.update_function(
-            coll,
-            name,
-            info,
-            project_root,
-            description=description,
-            local_packages=None,
-            reuse_tables=reuse_tables,
-            enabled=enabled,
-            requirements=None,
-            base_path=base_path,
-            reset_state=reset_state,
-            reset_stage=reset_stage,
+        with bundle_confinement() as confine_to:
+            function = server.update_function(
+                coll,
+                name,
+                info,
+                project_root,
+                description=description,
+                local_packages=_local_packages(local_pkg),
+                reuse_tables=reuse_tables,
+                enabled=enabled,
+                requirements=requirements,
+                confine_to=confine_to,
+                base_path=base_path,
+                reset_state=reset_state,
+                reset_stage=reset_stage,
+            )
+        render_entity(
+            ctx, data=lambda: function._data, message="Function updated successfully"
         )
-        click.echo("Function updated successfully")
     except Exception as e:
-        hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to update function: {e}")
+        raise command_failure(ctx, "update function", e)
 
 
+@capability("operations", "write")
 @fn.command()
 @proj_option
+@format_option
 @click.option(
     "--name",
     "-n",
@@ -881,17 +1175,17 @@ def enable(
     Enabling an already-enabled function does nothing.
     """
     verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the function to be updated")
-    coll = (
-        coll
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to which the function belongs")
+    name = name or logical_prompt(
+        ctx, "Name of the function to be updated", option="--name"
     )
+    coll = _collection(ctx, coll)
     set_function_enabled(ctx, name, coll, True)
 
 
+@capability("operations", "write")
 @fn.command()
 @proj_option
+@format_option
 @click.option(
     "--name",
     "-n",
@@ -913,12 +1207,10 @@ def disable(
     Disabling an already-disabled function does nothing.
     """
     verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the function to be updated")
-    coll = (
-        coll
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to which the function belongs")
+    name = name or logical_prompt(
+        ctx, "Name of the function to be updated", option="--name"
     )
+    coll = _collection(ctx, coll)
     set_function_enabled(ctx, name, coll, False)
 
 
@@ -931,26 +1223,55 @@ def set_function_enabled(ctx: click.Context, name: str, coll: str, enabled: bool
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         if server.get_function(coll, name).enabled == enabled:
-            click.echo(f"Function '{name}' in collection '{coll}' is already {state}")
+            render_done(
+                ctx,
+                action=action,
+                kind="function",
+                id=name,
+                details={"collection": coll, "changed": False},
+                message=f"Function '{name}' in collection '{coll}' is already {state}",
+            )
             return
-        click.echo(
+        progress(
+            ctx,
             f"{'Enabling' if enabled else 'Disabling'} function '{name}' in "
-            f"collection '{coll}'"
+            f"collection '{coll}'",
         )
-        click.echo("-" * 10)
+        progress(ctx, "-" * 10)
         server.enable_function(
             collection_name=coll,
             function_name=name,
             enabled=enabled,
         )
-        click.echo("Function updated successfully")
+        render_done(
+            ctx,
+            action=action,
+            kind="function",
+            id=name,
+            details={"collection": coll, "changed": True},
+            message="Function updated successfully",
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to {action} function: {e}")
 
 
+@capability(
+    "development",
+    "write",
+    "read",
+    paths={
+        "--path": "read",
+        "--dir-to-bundle": "read",
+        "--requirements": "read",
+        "--local-pkg": "read",
+        "--source": "read",
+    },
+    lower={"--dry-run": "read"},
+)
 @fn.command()
 @proj_option
+@format_option
 @click.option(
     "--name",
     "-n",
@@ -969,24 +1290,30 @@ def set_function_enabled(ctx: click.Context, name: str, coll: str, enabled: bool
         "--show-history' to find available fvids."
     ),
 )
-@click.option(
-    "--path",
-    help=(
-        "Path to the function file. Must be of the form "
-        "'/path/to/file.py::function_name'. Will be prompted "
-        "for it if not provided."
-    ),
-)
+@_path_option
 @click.option("--description", help="Description of the patch.")
+@_dir_to_bundle_option
 @click.option(
-    "--dir-to-bundle",
+    "--source",
     help=(
-        "Path to the directory that should be stored in the bundle for "
-        "execution in the backend. If not provided, the folder where the "
-        "function file is will be used."
+        "Python file that replaces the module defining the function in the "
+        "bundle of '--fn-version'; the rest of that bundle's tree and its "
+        "requirements are kept. Instead of '--path' and '--dir-to-bundle'."
+    ),
+    type=click.Path(),
+)
+@click.option(
+    "--add-package",
+    "add_package",
+    multiple=True,
+    help=(
+        "Package requirement (e.g. 'requests==2.32.3') added to the kept "
+        "requirements, replacing any pin of the same package; repeatable. "
+        "Only with '--source', and not with '--requirements'."
     ),
 )
-# --requirements and --local-pkg are temporarily disabled.
+@_environment_options
+@_dry_run_option
 @click.pass_context
 def patch(
     ctx: click.Context,
@@ -996,12 +1323,24 @@ def patch(
     path: str,
     description: str,
     dir_to_bundle: str,
+    source: str,
+    add_package: tuple[str, ...],
+    requirements: str,
+    local_pkg: tuple[str, ...],
+    dry_run: bool,
 ):
-    """Register a code-only patch of a function version.
+    """Register a code-only patch of a function version. With '--path' or
+    '--source', runs the code of that file on this machine, since it imports
+    it.
 
     A patch shares the parent's topology (tables, dependencies, triggers,
     workers) — only bundle / snippet / runtime values / description can be
     overridden.
+
+    With '--source', the patch is the bundle of '--fn-version' with only the
+    module that defines the function replaced, so its sibling modules, its
+    requirements and its local packages carry over ('--requirements' and
+    '--local-pkg' replace them).
 
     A patch is the only way to change the code a planned run executes:
     both 'tdk fnrun replay' and 'tdk plan recover' / 'tdk fnrun recover'
@@ -1009,41 +1348,77 @@ def patch(
     patch. Registering a new version with 'tdk fn update' does not affect
     runs that are already planned.
     """
-    verify_login_or_prompt(ctx)
-    coll = (
-        coll
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to which the function belongs")
-    )
-    name = name or logical_prompt(ctx, "Name of the function to patch")
-    fn_version = fn_version or logical_prompt(
-        ctx, "Function-version id (fvid) this patch overrides"
-    )
-    path = path or logical_prompt(
-        ctx,
-        "Path to the function file. Must be of the form "
-        "'/path/to/file.py::function_name'",
-    )
-    click.echo(
-        f"Patching function '{name}' in collection '{coll}' (fn_version={fn_version})"
-    )
-    click.echo("-" * 10)
-    try:
-        info, project_root = load_info_and_project_root(path, dir_to_bundle)
-        server: TabsdataServer = ctx.obj["tabsdataserver"]
-        record = server.patch_function(
-            coll,
-            name,
-            info,
-            project_root,
-            patch_of=fn_version,
-            description=description,
-            local_packages=None,
-            requirements=None,
+    if source and (path or dir_to_bundle):
+        raise click.UsageError(
+            "'--source' replaces '--path' and '--dir-to-bundle'; pass one or the other."
         )
-        click.echo("Patch registered successfully")
-        click.echo(f"Patch id: {record.get('id')}")
-        click.echo(f"Patches:  {record.get('parent_function_version_id')}")
+    if add_package and not source:
+        raise click.UsageError("'--add-package' applies only together with '--source'.")
+    if add_package and requirements:
+        raise click.UsageError(
+            "'--add-package' adds to the parent bundle's requirements, which "
+            "'--requirements' replaces; pass one or the other."
+        )
+    verify_login_or_prompt(ctx)
+    coll = _collection(ctx, coll)
+    name = name or logical_prompt(ctx, "Name of the function to patch", option="--name")
+    fn_version = fn_version or logical_prompt(
+        ctx, "Function-version id (fvid) this patch overrides", option="--fn-version"
+    )
+    if not source:
+        path = _function_path(ctx, path)
+    try:
+        with _patch_tree(ctx, fn_version, source, add_package) as tree:
+            if tree is not None:
+                path, dir_to_bundle = tree.path, str(tree.project_root)
+                if requirements is None and tree.requirements is not None:
+                    requirements = str(tree.requirements)
+                if not local_pkg:
+                    local_pkg = tuple(str(p) for p in tree.local_packages)
+            if dry_run:
+                result = _checked(
+                    ctx, path, dir_to_bundle, requirements, local_pkg, coll, name
+                )
+                _render_check(
+                    ctx,
+                    result,
+                    action="patch",
+                    collection=coll,
+                    name=name,
+                    fn_version=fn_version,
+                )
+                return
+            if tree is not None:
+                _require_valid_source(path, source)
+            progress(
+                ctx,
+                f"Patching function '{name}' in collection '{coll}' "
+                f"(fn_version={fn_version})",
+            )
+            progress(ctx, "-" * 10)
+            info, project_root = load_info_and_project_root(path, dir_to_bundle)
+            server: TabsdataServer = ctx.obj["tabsdataserver"]
+            with bundle_confinement() as confine_to:
+                record = server.patch_function(
+                    coll,
+                    name,
+                    info,
+                    project_root,
+                    patch_of=fn_version,
+                    description=description,
+                    local_packages=_local_packages(local_pkg),
+                    requirements=requirements,
+                    confine_to=confine_to,
+                )
+        render_entity(
+            ctx,
+            data=record,
+            message=(
+                "Patch registered successfully\n"
+                f"Patch id: {record.get('id')}\n"
+                f"Patches:  {record.get('parent_function_version_id')}"
+            ),
+        )
         show_hint(
             ctx,
             "Re-run against the latest patch with 'tdk plan recover "
@@ -1052,10 +1427,53 @@ def patch(
             final_empty_line=True,
         )
     except Exception as e:
-        hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to patch function: {e}")
+        raise command_failure(ctx, "patch function", e)
 
 
+@contextmanager
+def _patch_tree(
+    ctx: click.Context,
+    fn_version: str,
+    source: str | None,
+    add_package: tuple[str, ...],
+) -> Iterator:
+    """The bundle of ``fn_version`` with ``source`` spliced in, or ``None``
+    without ``source``. It is built under the machine run's ``confine_to``
+    when there is one, since the bundle made from it is confined there."""
+    if not source:
+        yield None
+        return
+    # noinspection PyProtectedMember
+    from tabsdatak.common._archive.bundle import splice_function_source
+
+    new_source = Path(source).read_text(encoding="utf-8")
+    server: TabsdataServer = ctx.obj["tabsdataserver"]
+    with tempfile.TemporaryDirectory(
+        dir=run.confine_to if (run := machine()) else None
+    ) as tmp:
+        archive = Path(tmp) / "parent.tar.zst"
+        server.download_function_bundle(fn_version, str(archive))
+        yield splice_function_source(
+            archive, new_source, Path(tmp) / "bundle", add_packages=add_package
+        )
+
+
+def _require_valid_source(path: str, source: str) -> None:
+    from tabsdatak.cli._fn_check import check_source
+
+    file_path, _, qualname = path.partition("::")
+    errors = [
+        finding["message"]
+        for finding in check_source(
+            Path(file_path).read_text(encoding="utf-8"), source, qualname
+        )
+        if finding["severity"] == "error"
+    ]
+    if errors:
+        raise click.ClickException("; ".join(errors))
+
+
+@capability("analytics", "read")
 @fn.command("patches")
 @proj_option
 @format_option
@@ -1071,33 +1489,25 @@ def patch(
     help="Name of the collection to which the function belongs.",
 )
 @max_result_option
+@list_options
 @click.pass_context
 def list_patches(ctx: click.Context, name: str, coll: str):
     """List patch versions of a function (latest first)."""
     verify_login_or_prompt(ctx)
-    coll = (
-        coll
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to which the function belongs")
-    )
+    coll = _collection(ctx, coll)
     name = name or logical_prompt(
-        ctx, "Name of the function whose patches will be listed"
+        ctx, "Name of the function whose patches will be listed", option="--name"
     )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         patches, truncated = take(
-            ctx, server.list_function_patches_generator(coll, name)
+            ctx, server.list_function_patches_generator(coll, name, **list_params(ctx))
         )
 
         def _defined_on(patch):
             defined_on = patch.get("defined_on")
             if isinstance(defined_on, (int, float)):
-                # epoch milliseconds -> ISO-ish UTC string
-                from datetime import datetime, timezone
-
-                defined_on = datetime.fromtimestamp(
-                    defined_on / 1000.0, tz=timezone.utc
-                ).strftime("%Y-%m-%dT%H:%M:%SZ")
+                defined_on = _convert_timestamp_to_string(defined_on)
             return present(defined_on)
 
         def _view():
@@ -1130,8 +1540,7 @@ def list_patches(ctx: click.Context, name: str, coll: str):
                 count="patches",
             )
 
-        # `patches` is already the raw list of patch dicts -> full info as-is.
-        render(ctx, data=lambda: patches, view=_view, truncated=truncated)
+        render_list(ctx, items=lambda: patches, truncated=truncated, view=_view)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list patches: {e}")
