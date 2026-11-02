@@ -84,8 +84,8 @@ def table_frame(collection: Collection, table: str) -> pl.DataFrame | None:
         f"The table {table!r} was not found in {collection.name!r}"
     )
     with tempfile.TemporaryDirectory() as tmp:
-        parquet = handle.download(str(Path(tmp) / f"{table}.parquet"))
-        if parquet is None:
+        parquet = Path(tmp) / f"{table}.parquet"
+        if handle.download(str(parquet)) is None:
             return None
         return pl.read_parquet(parquet)
 

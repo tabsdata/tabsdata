@@ -12,11 +12,14 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from tabsdatak.sdk.status_utils.execution import (
+    ExecutionStatus,
+    execution_status_to_mapping,
+)
 from tabsdatak.sdk.status_utils.function_run import (
     FunctionRunStatus,
     function_run_status_to_mapping,
 )
-from tabsdatak.sdk.status_utils.groups import FINAL, Entity, status_name
 from tabsdatak.sdk.status_utils.transaction import (
     TransactionStatus,
     transaction_status_to_mapping,
@@ -40,10 +43,22 @@ TRANSACTION_TERMINALS = {
     )
 }
 TRANSACTION_FINALS = {
-    status_name(Entity.TRANSACTION, code) for code in FINAL[Entity.TRANSACTION]
+    transaction_status_to_mapping(status.value)
+    for status in (
+        TransactionStatus.COMMITTED,
+        TransactionStatus.CANCELED,
+        TransactionStatus.YANKED,
+        TransactionStatus.STALLED,
+        TransactionStatus.UNEXPECTED,
+    )
 }
 EXECUTION_FINALS = {
-    status_name(Entity.EXECUTION, code) for code in FINAL[Entity.EXECUTION]
+    execution_status_to_mapping(status.value)
+    for status in (
+        ExecutionStatus.FINISHED,
+        ExecutionStatus.STALLED,
+        ExecutionStatus.UNEXPECTED,
+    )
 }
 LIVE_WORKERS = {
     worker_status_to_mapping(status.value)

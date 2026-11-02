@@ -28,9 +28,7 @@ from tabsdatax.itest.fixture.monikers import moniker
 
 from tabsdatak.conn.dev import DataGenSrcConn
 from tabsdatak.conn.localfile import LocalFileDestConn
-from tabsdatak.sdk.status_utils.execution import (
-    EXECUTION_SUCCESSFUL_FINAL_STATUSES,
-)
+from tabsdatak.sdk.status_utils.groups import Entity, Health, health
 from testi_tabsdatak.conn.common.function_project import function_module
 
 pytestmark = pytest.mark.sdk
@@ -69,7 +67,7 @@ def test_every_kind_of_function_reads_the_state_its_last_run_left(
 
     for run in range(1, RUNS + 1):
         status = wait_for_completion(publisher.trigger())
-        assert status in EXECUTION_SUCCESSFUL_FINAL_STATUSES, (
+        assert health(Entity.EXECUTION, status) is Health.OK, (
             f"run {run} finished with non-success status {status!r}"
         )
         assert runs(table_frame(source, stateful.PUBLISHED_TABLE)) == [run]
