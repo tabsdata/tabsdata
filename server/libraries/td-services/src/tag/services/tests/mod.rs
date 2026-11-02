@@ -2,6 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+mod catalog;
 mod facets;
 mod lifecycle;
 mod listing;

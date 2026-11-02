@@ -87,7 +87,7 @@ mod tests {
     use axum::extract::Request;
     use http::header::CONTENT_TYPE;
     use http::{Method, StatusCode};
-    use ta_apiserver::router::{RouterStates, named_router};
+    use ta_apiserver::router::{RouterStates, Routes};
     use ta_services::service::Ctx;
     use tower::ServiceExt;
 
@@ -103,7 +103,9 @@ mod tests {
             ..td_services::Services::default()
         };
         let states = RouterStates::default().with(services);
-        named_router(&["get_resource"], &states).into()
+        Routes::new(&[])
+            .named_router(&["get_resource"], &states)
+            .into()
     }
 
     async fn get(app: Router, rel: &str) -> (StatusCode, Option<String>, Vec<u8>) {

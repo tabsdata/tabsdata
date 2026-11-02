@@ -14,11 +14,11 @@
 //! spans every project; its rows carry `project_id`/`project_name` so
 //! same-named collections/groups across projects stay distinguishable.
 
-use crate::extractors::Project;
 use axum::Extension;
 use axum::extract::State;
 use axum_extra::extract::Query;
 use itertools::Itertools;
+use ta_apiserver::project::Project;
 use ta_apiserver::status::error_status::ErrorStatus;
 use ta_apiserver::status::ok_status::GetStatus;
 use td_apiforge::apiserver_path;

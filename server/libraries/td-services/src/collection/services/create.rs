@@ -103,10 +103,9 @@ async fn create_collection(
 
 /// The connection triple of the create payload, as the store consumes it.
 ///
-/// The store keys the connection (and its worker artifact) by the document's
-/// top-level `name`. The connection is 1:1 with its collection and named by
-/// it, so stamp the collection name onto the dehydrated document the client
-/// sent (which carries none) — mirroring [`rename_stored_connection`].
+/// The connection is 1:1 with its collection and named by it, so stamp the
+/// collection name onto the dehydrated document the client sent (which
+/// carries none) — mirroring [`rename_stored_connection`].
 ///
 /// [`rename_stored_connection`]: crate::collection::services::connection::rename_stored_connection
 fn connection_payload(plan: &CollectionCreatePlan) -> Result<ConnectionUpsert, TdError> {
@@ -334,10 +333,6 @@ mod tests {
             ))
             .await
             .unwrap();
-        // The store is written before the TX, so a taken name must be
-        // rejected up front — otherwise this create would overwrite the
-        // existing collection's worker artifact and then delete it on
-        // rollback.
         let err = create
             .create_collection(create_request(
                 p.project_id,
@@ -361,8 +356,7 @@ mod tests {
     async fn test_create_stamps_collection_name_onto_nameless_connection(db: TdPool) {
         // The client sends a dehydrated connection that carries NO name (it is
         // 1:1 with its collection and named by it). The create flow must stamp
-        // the collection name onto the document so the store can key the worker
-        // artifact — mirroring the rename flow.
+        // the collection name onto the document, mirroring the rename flow.
         let p = db.seed().test_project().await.unwrap();
         let bridge = bridge(InMemoryConnectionStore::default());
         let create = Services {

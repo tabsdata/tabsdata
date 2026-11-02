@@ -16,6 +16,7 @@ pub use crate::messaging::message::cron::{CronRequest, CronStartRequest, CronSto
 pub use crate::messaging::message::function::{
     FunctionRequest, FunctionStartRequest, FunctionStopRequest,
 };
+pub use crate::messaging::message::probe::{ProbeRequest, ProbeStartRequest};
 pub use crate::messaging::message::stream::{
     StageTriggerRequest, StageTriggerStartRequest, StageTriggerStopRequest,
 };

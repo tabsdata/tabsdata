@@ -2,13 +2,9 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-// Reference one edition symbol so the linker keeps te-apiserver's route
-// submissions in the final link.
-#[used]
-static _TD_FORCE_EDITION_ROUTES: fn() = te_apiserver::link;
-
 pub(crate) mod auth;
 pub(crate) mod collections;
+pub(crate) mod connection_catalog;
 pub(crate) mod executions;
 pub(crate) mod function_runs;
 pub(crate) mod functions;
@@ -45,8 +41,8 @@ mod tests {
     use http::{Method, StatusCode};
     use std::collections::HashSet;
     use ta_apiserver::router::{
-        Auth, AuthClass, Position, RouterRegistration, RouterStates, Scope, SecurityMode,
-        Server as Listener, Version, mount_router, registered, routes_accepting,
+        Auth, AuthClass, Position, RouterRegistration, RouterStates, Routes, Scope, SecurityMode,
+        Server as Listener, Version,
     };
     use td_database::pool::TdPool;
     use td_objects::dxo::crudl::RequestContext;
@@ -90,6 +86,11 @@ mod tests {
         SecurityMode::ALL,
     );
 
+    /// The routes the edition's td_apiserver serves.
+    fn routes() -> Routes {
+        te_edition::edition().routes()
+    }
+
     fn placement(r: &RouterRegistration) -> Placement {
         (r.server, r.version, r.scope, r.modes)
     }
@@ -122,7 +123,7 @@ mod tests {
     /// registrations (ee's UI fallback).
     #[test]
     fn placements_are_valid() {
-        for route in registered() {
+        for route in routes().registered() {
             route.validate().unwrap();
         }
     }
@@ -131,7 +132,7 @@ mod tests {
     #[test]
     fn every_route_is_composed() {
         let positions = all_positions();
-        for route in registered() {
+        for route in routes().registered() {
             assert!(
                 positions.iter().any(|p| p.selects(route)),
                 "{} is at a position the topology never mounts",
@@ -146,8 +147,9 @@ mod tests {
     #[test]
     fn every_api_route_is_documented() {
         let documented: HashSet<String> = all_doc_paths().into_iter().collect();
-        for route in registered()
-            .into_iter()
+        for route in routes()
+            .registered()
+            .iter()
             .filter(|route| route.version.is_some())
         {
             assert!(
@@ -166,7 +168,7 @@ mod tests {
         let mut paths: Vec<String> = all_positions()
             .into_iter()
             .flat_map(|p| {
-                let (_, api) = mount_router(p, &states).split_for_parts();
+                let (_, api) = routes().mount_router(p, &states).split_for_parts();
                 api.paths.paths.keys().cloned().collect::<Vec<_>>()
             })
             .collect();
@@ -183,7 +185,7 @@ mod tests {
             mode,
             class: AuthClass::Bearer,
         };
-        let (router, openapi) = mount_router(position, states).split_for_parts();
+        let (router, openapi) = routes().mount_router(position, states).split_for_parts();
         let context = RequestContext::with(AccessTokenId::default(), UserId::admin());
         (router.layer(Extension(context)), openapi)
     }
@@ -257,7 +259,7 @@ mod tests {
     #[test]
     fn route_names_are_unique() {
         let mut seen = HashSet::new();
-        for r in registered() {
+        for r in routes().registered() {
             assert!(seen.insert(r.name), "duplicate route name `{}`", r.name);
         }
     }
@@ -290,6 +292,7 @@ mod tests {
             (FLAT, "list_by_function_version"),
             (FLAT, "list_by_table_data_version"),
             (FLAT, "list_collections"),
+            (FLAT, "list_connections"),
             (FLAT, "list_function_runs"),
             (FLAT, "list_projects"),
             (FLAT, "list_transactions"),
@@ -379,6 +382,11 @@ mod tests {
             (PROJECT, "update_group"),
             (PROJECT, "upload"),
             (PROJECT, "upsert_collection_connection"),
+            (PROJECT, "read_connection_catalog"),
+            (PROJECT, "list_connection_entities"),
+            (PROJECT, "submit_connection_probe"),
+            (PROJECT, "read_connection_probe"),
+            (PROJECT, "cancel_connection_probe"),
             (FLAT, "create_service_token"),
             (FLAT, "list_service_tokens"),
             (FLAT, "read_own_service_token"),
@@ -391,8 +399,10 @@ mod tests {
             (INTERNAL, "function_version_execution_status"),
             (INTERNAL, "worker_callback"),
             (INTERNAL, "worker_message"),
+            (INTERNAL, "connection_probe_result"),
         ];
-        let actual: HashSet<_> = registered()
+        let actual: HashSet<_> = routes()
+            .registered()
             .iter()
             .map(|r| (placement(r), r.name))
             .collect();
@@ -429,6 +439,7 @@ mod tests {
             ("GET", "/auth/info"),
             ("GET", "/auth/service-token"),
             ("GET", "/collections"),
+            ("GET", "/connections"),
             ("GET", "/executions"),
             ("GET", "/executions/{execution}"),
             ("GET", "/executions/{execution}/details"),
@@ -444,6 +455,14 @@ mod tests {
             (
                 "GET",
                 "/projects/{project}/collections/{collection}/connection",
+            ),
+            (
+                "GET",
+                "/projects/{project}/collections/{collection}/connection/catalog",
+            ),
+            (
+                "GET",
+                "/projects/{project}/collections/{collection}/connection/entities",
             ),
             (
                 "GET",
@@ -499,6 +518,7 @@ mod tests {
                 "/projects/{project}/collections/{collection}/tables/{table}/tags",
             ),
             ("GET", "/projects/{project}/collections/{collection}/tags"),
+            ("GET", "/projects/{project}/connection-probes/{probe}"),
             ("GET", "/projects/{project}/functions"),
             ("GET", "/projects/{project}/graph"),
             ("GET", "/projects/{project}/groups"),
@@ -516,6 +536,7 @@ mod tests {
             ("GET", "/projects/{project}/topology-versions"),
             ("GET", "/runtime-info"),
             ("GET", "/snapshot"),
+            ("GET", "/status"),
             (
                 "GET",
                 "/table-data-versions/{table_data_version}/executions",
@@ -532,6 +553,10 @@ mod tests {
             ),
             ("POST", "/projects/{project}/collections"),
             ("POST", "/projects/{project}/collections/{collection}"),
+            (
+                "POST",
+                "/projects/{project}/collections/{collection}/connection/probes",
+            ),
             (
                 "POST",
                 "/projects/{project}/collections/{collection}/function-bundle-upload",
@@ -565,10 +590,15 @@ mod tests {
                 "/projects/{project}/collections/{collection}/tables/{table}/tags",
             ),
             ("POST", "/projects/{project}/collections/{collection}/tags"),
+            (
+                "POST",
+                "/projects/{project}/connection-probes/{probe}/cancel",
+            ),
             ("POST", "/transactions/{transaction}/cancel"),
             ("POST", "/transactions/{transaction}/recover"),
         ];
-        let own: Vec<_> = routes_accepting(Auth::ServiceToken)
+        let own: Vec<_> = routes()
+            .routes_accepting(Auth::ServiceToken)
             .into_iter()
             .filter(|(_, path)| {
                 !te_apiserver::EDITION_PATH_PREFIXES
@@ -592,7 +622,7 @@ mod tests {
             .with(ExtendedServices::default());
         let mut checked = 0;
         for position in all_positions() {
-            let (_, api) = mount_router(position, &states).split_for_parts();
+            let (_, api) = routes().mount_router(position, &states).split_for_parts();
             for (path, item) in api.paths.paths.iter() {
                 // `{*path}` is axum's greedy wildcard; the parameter it
                 // documents is named without the star.
@@ -654,6 +684,7 @@ mod tests {
             "/auth/service-tokens",
             "/auth/service-tokens/{slot}",
             "/collections",
+            "/connections",
             "/executions",
             "/executions/{execution}",
             "/executions/{execution}/cancel",
@@ -664,6 +695,7 @@ mod tests {
             "/function-versions/{function_version}/executions",
             "/inflight",
             "/instance",
+            "/internal/connection-probes/{probe}/result",
             "/internal/function-runs/{function_run}/workers/{worker}",
             "/internal/function-versions/{function_version}/download-state",
             "/internal/function-versions/{function_version}/execute",
@@ -681,6 +713,9 @@ mod tests {
             "/projects/{project}/collections",
             "/projects/{project}/collections/{collection}",
             "/projects/{project}/collections/{collection}/connection",
+            "/projects/{project}/collections/{collection}/connection/catalog",
+            "/projects/{project}/collections/{collection}/connection/entities",
+            "/projects/{project}/collections/{collection}/connection/probes",
             "/projects/{project}/collections/{collection}/function-bundle-upload",
             "/projects/{project}/collections/{collection}/function-runs/{function_run}/inputs/{input_idx}/landing-data",
             "/projects/{project}/collections/{collection}/functions",
@@ -698,6 +733,8 @@ mod tests {
             "/projects/{project}/collections/{collection}/tables/{table}/flow",
             "/projects/{project}/collections/{collection}/tables/{table}/sample",
             "/projects/{project}/collections/{collection}/tables/{table}/schema",
+            "/projects/{project}/connection-probes/{probe}",
+            "/projects/{project}/connection-probes/{probe}/cancel",
             "/projects/{project}/functions",
             "/projects/{project}/graph",
             "/projects/{project}/groups",

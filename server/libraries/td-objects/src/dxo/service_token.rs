@@ -12,7 +12,8 @@ use crate::types::basic::{
     UserId, UserIdName, UserName,
 };
 use ta_objects::FromDao;
-use td_error::TdError;
+use td_error::{ApiError, TdError, api_error};
+use td_security::token;
 
 #[ta_objects::Dao]
 #[dao(
@@ -34,6 +35,36 @@ pub struct ServiceTokenDB {
     pub last_used_on: Option<LastUsed<AtTime>>,
     pub scope: TokenScope,
     pub system: TokenSystem,
+}
+
+impl ServiceTokenDB {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        user_id: UserId,
+        slot: TokenSlot,
+        token: &ServiceToken,
+        comment: Option<TokenComment>,
+        created_on: AtTime,
+        expires_on: TokenExpiresOn,
+        scope: TokenScope,
+        system: TokenSystem,
+    ) -> Result<Self, TdError> {
+        let hint = token::hint(token)
+            .ok_or_else(|| api_error!(ApiError::InternalError, "a service token has no hint"))?;
+        Ok(Self {
+            id: ServiceTokenId::default(),
+            user_id,
+            slot,
+            digest: TokenDigest::try_from(token::digest(token))?,
+            hint: TokenHint::try_from(hint)?,
+            comment,
+            created_on: Created::from(created_on),
+            expires_on,
+            last_used_on: None,
+            scope,
+            system,
+        })
+    }
 }
 
 /// Carries the owner's enabled flag for verification.

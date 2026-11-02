@@ -12,10 +12,7 @@ use td_error::{ApiError, TdError, api_error};
 use td_objects::and;
 use td_objects::dxo::crudl::CreateRequest;
 use td_objects::dxo::service_token::{ServiceTokenDB, TokenCreate, TokenCreated, TokenSlotParam};
-use td_objects::types::basic::{
-    Created, ServiceToken, ServiceTokenId, TokenDigest, TokenHint, TokenScope, TokenSlot,
-    TokenSystem,
-};
+use td_objects::types::basic::{ServiceToken, TokenScope, TokenSlot, TokenSystem};
 use td_queries::Queries;
 use td_security::token;
 use td_security::token::config::ServiceTokenConfig;
@@ -34,25 +31,16 @@ async fn create_service_token(
     let expires_on = expires_on(&settings, &ctx.time, &create.expires_in_days)?;
 
     let token = ServiceToken::try_from(token::generate())?;
-    let hint = token::hint(&token).ok_or_else(|| {
-        api_error!(
-            ApiError::InternalError,
-            "a freshly generated token has no hint"
-        )
-    })?;
-    let row = ServiceTokenDB {
-        id: ServiceTokenId::default(),
-        user_id: ctx.user_id,
-        slot: param.slot,
-        digest: TokenDigest::try_from(token::digest(&token))?,
-        hint: TokenHint::try_from(hint)?,
-        comment: create.comment,
-        created_on: Created::from(ctx.time),
+    let row = ServiceTokenDB::new(
+        ctx.user_id,
+        param.slot,
+        &token,
+        create.comment,
+        ctx.time,
         expires_on,
-        last_used_on: None,
-        scope: TokenScope::Delegated,
-        system: TokenSystem::FALSE,
-    };
+        TokenScope::Delegated,
+        TokenSystem::FALSE,
+    )?;
 
     // A concurrent create of the slot fails to serialize with this one, and
     // its retry finds the slot taken.
@@ -110,7 +98,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::service_token::{ServiceTokenDB, TokenCreate, TokenSlotParam};
     use td_objects::types::basic::{
-        AccessTokenId, ExpiresInDays, TokenComment, TokenExpiresOn, TokenScope, TokenSlot,
+        AccessTokenId, Created, ExpiresInDays, TokenComment, TokenExpiresOn, TokenScope, TokenSlot,
         TokenSystem, UserId,
     };
     use td_queries::Queries;
@@ -147,11 +135,17 @@ mod tests {
         );
 
         let row: ServiceTokenDB = db.fetch_one(&created.id).await.unwrap();
+        assert_eq!(row.id, created.id);
         assert_eq!(row.user_id, UserId::admin());
+        assert_eq!(*row.slot, 1);
         assert_eq!(row.digest.as_str(), token::digest(&plaintext));
+        assert_eq!(row.hint.as_str(), token::hint(&plaintext).unwrap());
+        assert_eq!(row.comment, Some(TokenComment::try_from("ci").unwrap()));
+        assert_eq!(row.created_on, Created::from(at));
+        assert_eq!(row.expires_on, created.expires_on);
+        assert!(row.last_used_on.is_none());
         assert_eq!(row.scope, TokenScope::Delegated);
         assert_eq!(row.system, TokenSystem::FALSE);
-        assert!(row.last_used_on.is_none());
     }
 
     #[td_test::test(db)]

@@ -23,6 +23,7 @@
 //! Membership is unconstrained: representability depends only on the role
 //! *definitions*, not on who is in which role.
 
+use crate::rbac::{GrantedPermission, SystemPermission};
 use std::collections::HashMap;
 use td_database::access::{AccessMode, DbScope};
 use td_database::domain::{Apiserver, DomainConnection};
@@ -210,9 +211,19 @@ fn check_sys_admin(
 
 /// Condition 3: the `default` role may only hold system rows drawn from
 /// `{(system, create_projects)}` and/or `project:__all__` rows; NO
-/// specific-project rows.
+/// specific-project rows. The other roles of the same kind are the service
+/// identities' fixed roles, which may also hold the service-only system
+/// permissions; the Simple surface never shows those.
 fn check_default(role: &RoleDB, perms: &[&PermissionDB], reasons: &mut Vec<String>) {
+    let service_identity = role.id != RoleId::default_role();
+    let service_only = |p: &PermissionDB| {
+        SystemPermission::from_name(p.permission_type.as_str())
+            .is_some_and(SystemPermission::is_service_only)
+    };
     for p in perms {
+        if service_identity && is_system_row(p) && service_only(p) {
+            continue;
+        }
         if is_specific_project_row(p) {
             reasons.push(format!(
                 "the 'default' role holds a specific-project permission {} on role '{}'; the \
@@ -484,6 +495,57 @@ mod tests {
             "expected a project_creator specific-project violation, got: {reasons:?}"
         );
         Ok(())
+    }
+
+    fn default_kind_role(id: RoleId, name: &str) -> RoleDB {
+        let context = admin_context();
+        RoleDB {
+            id,
+            name: RoleName::try_from(name).unwrap(),
+            description: Description::try_from("d").unwrap(),
+            created_on: context.time.into(),
+            created_by_id: context.user_id.into(),
+            modified_on: context.time.into(),
+            modified_by_id: context.user_id.into(),
+            kind: RoleKind::Default,
+            project_id: None,
+            fixed: Fixed::TRUE,
+        }
+    }
+
+    fn system_row(role: &RoleDB, permission: PermissionType) -> PermissionDB {
+        PermissionDB {
+            id: PermissionId::default(),
+            role_id: role.id,
+            permission_type: permission,
+            entity_type: PermissionEntityType::system(),
+            entity_id: EntityId::all_entities(),
+            granted_by_id: UserId::system(),
+            granted_on: admin_context().time,
+            fixed: Fixed::TRUE,
+        }
+    }
+
+    /// A service identity's fixed role may hold `maintain_catalog`; the
+    /// built-in `default` role may not, and neither may hold another system
+    /// permission.
+    #[test]
+    fn test_service_only_permission_on_a_service_identity_role() {
+        let maintainer = default_kind_role(RoleId::default(), "catalog_maintainer");
+        let default = default_kind_role(RoleId::default_role(), "default");
+        let roles = [maintainer.clone(), default.clone()];
+
+        let held = [system_row(&maintainer, PermissionType::maintain_catalog())];
+        assert!(evaluate(&roles, &held, &[]).is_empty());
+
+        let held = [
+            system_row(&default, PermissionType::maintain_catalog()),
+            system_row(&maintainer, PermissionType::manage_access()),
+        ];
+        let reasons = evaluate(&roles, &held, &[]);
+        assert_eq!(reasons.len(), 2, "{reasons:?}");
+        assert!(reasons.iter().any(|r| r.contains("maintain_catalog")));
+        assert!(reasons.iter().any(|r| r.contains("manage_access")));
     }
 
     /// A system row on the `default` role other than `create_projects` violates

@@ -3,32 +3,39 @@
 //
 
 //! Resolves the `{project}` URL path segment to a [`ProjectId`] request
-//! extension: a real registry id (unknown → 404 here, before any
-//! project-scoped table is touched). The `Project` extractor reads it
-//! downstream.
+//! extension: a real registry id the requester may see (unknown or hidden →
+//! the same 404 here, before any project-scoped table is touched). The
+//! `Project` extractor reads it downstream.
 //!
 //! The lookup reads the open project versions (a deleted project has none),
 //! which are NOT under RLS — so no GUC manipulation is needed to read them.
 
+use axum::Extension;
 use axum::extract::{Path, Request, State};
 use axum::middleware::Next;
 use axum::response::Response;
 use std::collections::HashMap;
 use std::str::FromStr;
+use ta_apiserver::project::ProjectExtractError;
 use ta_apiserver::status::error_status::ErrorStatus;
+use ta_services::service::Ctx;
+use td_authz::AuthzContext;
 use td_database::access::{AccessMode, DbPool, DbScope, Global, Grant};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
+use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::project::ProjectDB;
+use td_objects::errors::SqlError;
 use td_objects::types::basic::{ProjectId, ProjectIdName};
 use td_queries::Queries;
-use td_services::project::ProjectError;
 
 /// Path-param key used by the `/projects/{project}/...` URLs.
 const PROJECT_PARAM: &str = "project";
 
 pub async fn project_resolver_layer(
     State(db): State<DbPool<Global>>,
+    State(authz): State<Ctx<AuthzContext>>,
+    Extension(context): Extension<RequestContext>,
     Path(params): Path<HashMap<String, String>>,
     request: Request,
     next: Next,
@@ -36,18 +43,22 @@ pub async fn project_resolver_layer(
     let raw = params
         .get(PROJECT_PARAM)
         .filter(|s| !s.is_empty())
-        .cloned()
-        .ok_or_else(|| TdError::from(ProjectError::MissingProjectSegment))?;
+        .ok_or_else(|| TdError::from(ProjectExtractError::MissingProjectSegment))?;
 
-    let id_name = ProjectIdName::from_str(&raw)
-        .map_err(|_| TdError::from(ProjectError::ProjectNotFound(raw.clone())))?;
+    let not_found = || TdError::from(SqlError::not_found::<ProjectDB>());
+    let id_name = ProjectIdName::from_str(raw).map_err(|_| not_found())?;
     // Released before the handler runs: a slow request body must not keep a
     // pooled connection checked out.
     let resolved_id = {
         let mut conn = db.read().await?;
-        resolve(conn.get(Grant::asserted("project resolution")), &id_name).await?
-    }
-    .ok_or_else(|| TdError::from(ProjectError::ProjectNotFound(raw.clone())))?;
+        let id = resolve(conn.get(Grant::asserted("project resolution")), &id_name)
+            .await?
+            .ok_or_else(not_found)?;
+        authz
+            .project_visible_or_not_found(&mut conn, &context, &id)
+            .await?;
+        id
+    };
 
     let mut request = request;
     request.extensions_mut().insert(resolved_id);
@@ -71,9 +82,10 @@ mod tests {
     use axum::routing::get;
     use std::sync::Arc;
     use std::time::Duration;
-    use td_database::domain::DomainPools;
     use td_database::pool::TdPool;
+    use td_objects::types::basic::{AccessTokenId, UserId};
     use td_queries::test_utils::SeedEntry;
+    use td_services::Services;
     use tokio::sync::Notify;
     use tower::ServiceExt;
 
@@ -100,9 +112,13 @@ mod tests {
                 }),
             )
             .layer(from_fn_with_state(
-                DbPool::new(DomainPools::of_apiserver(db.clone()), Global),
+                Services::with_defaults(db.clone()),
                 project_resolver_layer,
-            ));
+            ))
+            .layer(Extension(RequestContext::with(
+                AccessTokenId::default(),
+                UserId::admin(),
+            )));
         let request = tokio::spawn(
             router.oneshot(
                 Request::builder()

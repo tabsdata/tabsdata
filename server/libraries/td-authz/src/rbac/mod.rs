@@ -14,7 +14,8 @@
 //! all entities of a type, current and future.
 //!
 //! - `system` permissions ([`SystemPermission`]): `manage_access`,
-//!   `create_projects`, `manage_roles` — independent flags.
+//!   `create_projects`, `manage_roles` — independent flags — and
+//!   `maintain_catalog`, held only by a fixed service identity.
 //! - `project` permissions ([`ProjectPermission`]): `manage_project` >
 //!   `develop_project` > `view_project` — ordered; holding a higher one
 //!   satisfies a lower requirement, so a user's effective permission on an
@@ -99,6 +100,11 @@
 //! - **Projects are silos.** Access within a project is governed by the
 //!   project permission alone — there are no inter-collection checks.
 //! - **Trigger / replay requires effective ≥ `develop_project`.**
+//! - **A hidden project is a missing one.** A requester who may not see a
+//!   project ([`SeesProject`]) gets the missing-project 404 for it, never a
+//!   403 naming it: the `{project}` resolver gates every route under
+//!   `/projects/{project}/`, and [`project_visible_or_not_found`] every
+//!   project named elsewhere (the project routes themselves, a grant's target).
 
 pub mod enforce;
 pub mod model;
@@ -107,9 +113,9 @@ pub mod source;
 pub mod sql_source;
 
 pub use enforce::{
-    CreateProjects, DevelopProject, Enforce, ManageAccess, ManageProject, ManageRoles,
-    OnAnyProject, RbacError, Requirement, Scope, SelfUser, ViewProject, VisibleProjectsResolver,
-    enforce,
+    CreateProjects, DevelopProject, Enforce, MaintainCatalog, ManageAccess, ManageProject,
+    ManageRoles, OnAnyProject, RbacError, Requirement, Scope, SeesProject, SelfUser, ViewProject,
+    VisibleProjectsResolver, enforce, project_visible_or_not_found,
 };
 pub use model::{
     EffectiveGrants, EntityKind, FromGrants, GrantedPermission, Grants, IdentityClaim, On, Project,

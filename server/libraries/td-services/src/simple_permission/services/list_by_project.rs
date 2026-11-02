@@ -24,6 +24,9 @@ async fn list_simple_permission_by_project(
     // OR manage_project on the project (a project admin can see the roster).
     let conn = gated_conn.get(authz.none());
     let project: ProjectDB = conn.scd2().fetch_one(&request.project).await?;
+    authz
+        .project_visible_or_not_found(conn, &request.context, &project.project_id)
+        .await?;
     let _grant = authz
         .require::<Project, (ManageAccess, ManageProject)>(
             conn,

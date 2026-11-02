@@ -75,6 +75,7 @@ url = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
+sqlx = { workspace = true, features = ["postgres"] }
 td-test = { workspace = true, features = ["td-test"] }
 temp-env = { workspace = true }
 

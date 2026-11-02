@@ -85,6 +85,11 @@ impl MountsStorage {
         mount.exists(path).await
     }
 
+    pub async fn size(&self, path: &SPath) -> Result<u64> {
+        let mount = self.find_mount(path);
+        mount.size(path).await
+    }
+
     pub async fn delete(&self, path: &SPath) -> Result<()> {
         let mount = self.find_mount(path);
         mount.delete(path).await

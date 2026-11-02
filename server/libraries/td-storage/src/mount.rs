@@ -328,6 +328,20 @@ impl Mount {
         }
     }
 
+    pub async fn size(&self, path: &SPath) -> Result<u64> {
+        let external_path = self.to_external_path(&path.0)?;
+        match self.store.head(&external_path).await {
+            Ok(meta) => Ok(meta.size),
+            Err(object_store::Error::NotFound { .. }) => {
+                Err(StorageError::NotFound(path.to_string()))
+            }
+            Err(e) => Err(StorageError::CouldNotReadFromObjectStore(
+                path.to_string(),
+                e,
+            )),
+        }
+    }
+
     pub async fn delete(&self, path: &SPath) -> Result<()> {
         let external_path = self.to_external_path(&path.0)?;
         match self.store.delete(&external_path).await {
@@ -598,6 +612,26 @@ mod tests {
             .await
             .unwrap();
         assert!(matches!(mount.exists(&file_in_mount).await, Ok(true)));
+
+        // size()
+        let file_in_mount = SPath::parse(mount_path).unwrap().child("size").unwrap();
+        let path_in_store = Path::parse(uri.abs_path()).unwrap().child("size");
+        store
+            .put(
+                &path_in_store,
+                object_store::PutPayload::from(vec![1, 2, 3]),
+            )
+            .await
+            .unwrap();
+        assert_eq!(mount.size(&file_in_mount).await.unwrap(), 3);
+        let file_in_mount = SPath::parse(mount_path)
+            .unwrap()
+            .child("size_not_there")
+            .unwrap();
+        assert!(matches!(
+            mount.size(&file_in_mount).await,
+            Err(StorageError::NotFound(_))
+        ));
 
         // delete()
         let file_in_mount = SPath::parse(mount_path).unwrap().child("delete").unwrap();

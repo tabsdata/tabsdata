@@ -44,17 +44,19 @@
 //!   unit tests need no database or pool.
 
 use crate::rbac::model::{
-    EffectiveGrants, EntityKind, FromGrants, Grants, IdentityClaim, On, Project, ProjectPermission,
-    Requires, SystemPermission, User,
+    EffectiveGrants, EntityKind, FromGrants, GrantedPermission, Grants, IdentityClaim, On, Project,
+    ProjectId, ProjectPermission, Requires, SystemPermission, User,
 };
 use crate::rbac::source::{RbacSource, identity_grants};
 use crate::rbac::sql_source::SqlRbacSource;
-use std::any::type_name;
 use std::marker::PhantomData;
 use td_database::access::{AccessMode, DbScope, Gated, Grant};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::{Provenance, RequestContext};
+use td_objects::dxo::project::ProjectDB;
+use td_objects::errors::SqlError;
+use td_objects::types::basic::TokenScope;
 use td_objects::types::visible_projects::VisibleProjects;
 
 /// Errors raised by the enforcement layer.
@@ -72,8 +74,8 @@ pub enum RbacError {
     #[error("This operation cannot be performed with a session")]
     SessionUnsupported = 3002,
     /// The requester's effective grants do not satisfy the requirement
-    /// (requirement type, scope) of the operation.
-    #[error("Forbidden: requester does not satisfy {0} on {1}")]
+    /// (the permissions it names, scope) of the operation.
+    #[error("Forbidden: this needs {0} on {1}")]
     Forbidden(String, String) = 3000,
 }
 
@@ -106,6 +108,9 @@ impl<E: EntityKind> Scope<E> {
 pub trait Requirement<E: EntityKind>: Send + Sync + 'static {
     /// Whether the effective grants satisfy this requirement for the scope.
     fn allowed(grants: &EffectiveGrants<'_>, scope: &On<E>) -> bool;
+
+    /// The requirement as the permissions it names, for a refusal.
+    fn describe() -> String;
 }
 
 // --- system permission requirements (scope-independent) --------------------
@@ -119,6 +124,10 @@ macro_rules! system_requirement {
         impl<E: EntityKind> Requirement<E> for $name {
             fn allowed(grants: &EffectiveGrants<'_>, _scope: &On<E>) -> bool {
                 grants.allows(&Requires::system($permission))
+            }
+
+            fn describe() -> String {
+                $permission.name().to_owned()
             }
         }
     };
@@ -135,6 +144,10 @@ system_requirement!(
 system_requirement!(
     /// Requires `(system:__system__, manage_roles)`.
     ManageRoles => SystemPermission::ManageRoles
+);
+system_requirement!(
+    /// Requires `(system:__system__, maintain_catalog)`.
+    MaintainCatalog => SystemPermission::MaintainCatalog
 );
 
 // --- project permission requirements (scope-dependent) ---------------------
@@ -159,6 +172,10 @@ macro_rules! project_requirement {
             fn allowed(grants: &EffectiveGrants<'_>, scope: &On<Project>) -> bool {
                 grants.allows(&Requires::at(*scope, $level))
             }
+
+            fn describe() -> String {
+                $level.name().to_owned()
+            }
         }
     };
 }
@@ -176,6 +193,10 @@ project_requirement!(
     ViewProject => ProjectPermission::ViewProject
 );
 
+/// Who may learn a project exists: its viewers, and those who administer
+/// access or the catalog across projects.
+pub type SeesProject = (ViewProject, ManageAccess, MaintainCatalog);
+
 /// Requires the project permission of `R` on *at least one* project
 /// (specific or `__all__`), regardless of scope.
 ///
@@ -191,6 +212,10 @@ impl<E: EntityKind, R: ProjectLevel> Requirement<E> for OnAnyProject<R> {
     fn allowed(grants: &EffectiveGrants<'_>, _scope: &On<E>) -> bool {
         grants.allows_somewhere::<Project>(R::LEVEL)
     }
+
+    fn describe() -> String {
+        format!("{} on some project", R::LEVEL.name())
+    }
 }
 
 // --- identity requirements (scope-dependent) --------------------------------
@@ -204,6 +229,10 @@ impl Requirement<User> for SelfUser {
     fn allowed(grants: &EffectiveGrants<'_>, scope: &On<User>) -> bool {
         grants.allows(&Requires::at(*scope, IdentityClaim::Requester))
     }
+
+    fn describe() -> String {
+        "being that user".to_owned()
+    }
 }
 
 // --- any-of composition ------------------------------------------------------
@@ -213,6 +242,10 @@ macro_rules! any_of_tuple {
         impl<E: EntityKind, $($r: Requirement<E>),+> Requirement<E> for ($($r,)+) {
             fn allowed(grants: &EffectiveGrants<'_>, scope: &On<E>) -> bool {
                 false $(|| $r::allowed(grants, scope))+
+            }
+
+            fn describe() -> String {
+                [$($r::describe()),+].join(" or ")
             }
         }
     };
@@ -241,6 +274,20 @@ pub fn enforce<E: EntityKind, R: Requirement<E>>(
     )
 }
 
+/// A project the requester may not see ([`SeesProject`]) answers exactly as
+/// one that does not exist.
+pub fn project_visible_or_not_found(
+    user: &Grants,
+    request: &Grants,
+    id: &ProjectId,
+) -> Result<(), TdError> {
+    if enforce::<Project, SeesProject>(user, request, &On::Entity(*id)) {
+        Ok(())
+    } else {
+        Err(SqlError::not_found::<ProjectDB>())?
+    }
+}
+
 /// Service authorization enforcer: checks a requirement against the
 /// requester's effective grants for the given scope.
 pub struct Enforce<S: RbacSource, E: EntityKind, R: Requirement<E>> {
@@ -260,13 +307,31 @@ impl<S: RbacSource, E: EntityKind, R: Requirement<E>> Enforce<S, E, R> {
         request: &RequestContext,
         scope: &Scope<E>,
     ) -> Result<(), TdError> {
+        if Self::allowed(source, conn, request, scope).await? {
+            Ok(())
+        } else {
+            Err(RbacError::Forbidden(
+                R::describe(),
+                format!("{} {}", E::NAME, scope.0),
+            ))?
+        }
+    }
+
+    /// [`Self::authorize`] as a decision: `false` where it is forbidden. An
+    /// entity its source no longer knows is still an error.
+    pub async fn allowed<Sc: DbScope, M: AccessMode>(
+        source: &S,
+        conn: &mut DomainConnection<Apiserver, Sc, M>,
+        request: &RequestContext,
+        scope: &Scope<E>,
+    ) -> Result<bool, TdError> {
         // Internal-token callers bypass RBAC: the token itself binds
         // `(method, scope, bindings)` and the system user holds no role
         // grants, so RBAC on top would 403 every internal call. The bypass
         // keys on the validated-token provenance, never on identity — a
         // context merely carrying the system user gets no special treatment.
         if request.provenance == Provenance::InternalToken {
-            return Ok(());
+            return Ok(true);
         }
         if let On::Entity(id) = &scope.0
             && !source.is_current::<E, _, _>(conn, id).await?
@@ -283,14 +348,7 @@ impl<S: RbacSource, E: EntityKind, R: Requirement<E>> Enforce<S, E, R> {
             request: &request_grants,
             provenance: request.provenance,
         };
-        if R::allowed(&grants, &scope.0) {
-            Ok(())
-        } else {
-            Err(RbacError::Forbidden(
-                type_name::<R>().to_string(),
-                format!("{}:{}", E::NAME, scope.0),
-            ))?
-        }
+        Ok(R::allowed(&grants, &scope.0))
     }
 }
 
@@ -313,6 +371,24 @@ impl<S: RbacSource> VisibleProjectsResolver<S> {
         let user_grants = source.user_grants(conn, &request.user_id).await?;
         Ok(VisibleProjects::from_grants(&user_grants))
     }
+
+    /// The projects on which the requester satisfies `R`. A delegated
+    /// service token reaches none through a permission it cannot carry.
+    pub async fn resolve_at<R: ProjectLevel, Sc: DbScope, M: AccessMode>(
+        source: &S,
+        conn: &mut DomainConnection<Apiserver, Sc, M>,
+        request: &RequestContext,
+    ) -> Result<VisibleProjects, TdError> {
+        if matches!(
+            request.provenance,
+            Provenance::ServiceToken(TokenScope::Delegated)
+        ) && !R::LEVEL.usable_by_token()
+        {
+            return Ok(VisibleProjects::Only(Default::default()));
+        }
+        let user_grants = source.user_grants(conn, &request.user_id).await?;
+        Ok(VisibleProjects::from_grants_at(&user_grants, R::LEVEL))
+    }
 }
 
 /// The service authorization vocabulary. Every connection a service body
@@ -322,7 +398,9 @@ impl<S: RbacSource> VisibleProjectsResolver<S> {
 /// | call | meaning | audit grep |
 /// |---|---|---|
 /// | [`require`](Self::require) | the requester must satisfy `R` on the entity | `require::<` |
+/// | [`satisfies`](Self::satisfies) | whether it does, to narrow what a `require`d call may do | `satisfies::<` |
 /// | [`visible_projects`](Self::visible_projects) | narrow a cross-project read to what the requester may view | `visible_projects(` |
+/// | [`projects_with`](Self::projects_with) | narrow a cross-project read to where the requester satisfies `R` | `projects_with::<` |
 /// | [`none`](Self::none) | this connection carries NO entity check | `.none(` |
 ///
 /// Where no requester exists at all (credential verification, scheduler
@@ -341,6 +419,37 @@ impl SqlRbacSource {
         Ok(grant)
     }
 
+    /// Whether the requester satisfies `R` on the entity `id`, for a service
+    /// that narrows what it does instead of refusing. Gates nothing on its
+    /// own: a `require` unlocks the connection.
+    pub async fn satisfies<E: EntityKind, R: Requirement<E>>(
+        &self,
+        conn: &mut impl Gated<Apiserver>,
+        request: &RequestContext,
+        id: &E::Id,
+    ) -> Result<bool, TdError> {
+        let grant = Grant::asserted("rbac decision");
+        Enforce::<Self, E, R>::allowed(self, conn.get(grant), request, &Scope::of(id)).await
+    }
+
+    /// [`project_visible_or_not_found`] for the requester, on a project its
+    /// caller has already resolved.
+    pub async fn project_visible_or_not_found(
+        &self,
+        conn: &mut impl Gated<Apiserver>,
+        request: &RequestContext,
+        id: &ProjectId,
+    ) -> Result<(), TdError> {
+        if self
+            .satisfies::<Project, SeesProject>(conn, request, id)
+            .await?
+        {
+            Ok(())
+        } else {
+            Err(SqlError::not_found::<ProjectDB>())?
+        }
+    }
+
     /// The requester's viewable-project set, for global cross-project reads,
     /// together with the [`Grant`] its resolution earned.
     pub async fn visible_projects(
@@ -351,6 +460,20 @@ impl SqlRbacSource {
         let grant = Grant::asserted("rbac visible-projects resolution");
         let projects =
             VisibleProjectsResolver::<Self>::resolve(self, conn.get(grant), request).await?;
+        Ok((grant, projects))
+    }
+
+    /// The projects on which the requester satisfies `R`, for cross-project
+    /// reads gated above viewing: `authz.projects_with::<DevelopProject>(..)`.
+    pub async fn projects_with<R: ProjectLevel>(
+        &self,
+        conn: &mut impl Gated<Apiserver>,
+        request: &RequestContext,
+    ) -> Result<(Grant, VisibleProjects), TdError> {
+        let grant = Grant::asserted("rbac projects-with resolution");
+        let projects =
+            VisibleProjectsResolver::<Self>::resolve_at::<R, _, _>(self, conn.get(grant), request)
+                .await?;
         Ok((grant, projects))
     }
 
@@ -415,6 +538,22 @@ mod tests {
         let none = Grants::new();
         let orphan = On::<Project>::Entity(ProjectId::default());
         assert!(enforce::<Project, ManageProject>(&admin, &none, &orphan));
+    }
+
+    #[test]
+    fn test_a_requirement_reads_as_the_permissions_it_names() {
+        assert_eq!(
+            <DevelopProject as Requirement<Project>>::describe(),
+            "develop_project"
+        );
+        assert_eq!(
+            <(ManageAccess, ManageProject) as Requirement<Project>>::describe(),
+            "manage_access or manage_project"
+        );
+        assert_eq!(
+            <OnAnyProject<ManageProject> as Requirement<System>>::describe(),
+            "manage_project on some project"
+        );
     }
 
     #[test]
@@ -597,6 +736,55 @@ mod tests {
         ));
     }
 
+    /// `maintain_catalog` gates under any scope, rides only an identity token
+    /// or a session, and implies no project permission.
+    #[test]
+    fn test_maintain_catalog_is_scope_independent_and_identity_only() {
+        let p = ProjectId::default();
+        let project = On::Entity(p);
+        let system = On::Entity(SystemEntity);
+        let maintainer = Grants::new().with(RoleGrant::system(SystemPermission::MaintainCatalog));
+        let none = Grants::new();
+
+        assert!(enforce::<Project, MaintainCatalog>(
+            &maintainer,
+            &none,
+            &project
+        ));
+        assert!(enforce::<System, MaintainCatalog>(
+            &maintainer,
+            &none,
+            &system
+        ));
+        assert!(enforce::<Project, (DevelopProject, MaintainCatalog)>(
+            &maintainer,
+            &none,
+            &project
+        ));
+        assert!(!enforce::<Project, ViewProject>(
+            &maintainer,
+            &none,
+            &project
+        ));
+        assert!(!enforce::<System, OnAnyProject<ViewProject>>(
+            &maintainer,
+            &none,
+            &system
+        ));
+        assert!(!enforce::<Project, MaintainCatalog>(
+            &SystemRole::SysAdmin.grants(),
+            &none,
+            &project
+        ));
+
+        assert!(as_scoped_token::<Project, MaintainCatalog>(
+            TokenScope::Identity,
+            &maintainer,
+            &project
+        ));
+        assert!(!as_token::<Project, MaintainCatalog>(&maintainer, &project));
+    }
+
     #[test]
     fn test_service_tuple_passes_only_through_a_carriable_alternative() {
         let p = ProjectId::default();
@@ -608,6 +796,29 @@ mod tests {
         assert!(!as_token::<Project, (ManageProject, ManageProject)>(
             &admin, &scope
         ));
+    }
+
+    #[test]
+    fn test_project_visible_or_not_found() {
+        let p = ProjectId::default();
+        let none = Grants::new();
+        let visible = |user: &Grants| project_visible_or_not_found(user, &none, &p);
+        visible(&ProjectRole::View.grants(p)).unwrap();
+        visible(&SystemRole::SysAdmin.grants()).unwrap();
+        visible(&Grants::new().with(RoleGrant::system(SystemPermission::ManageAccess))).unwrap();
+        visible(&Grants::new().with(RoleGrant::system(SystemPermission::MaintainCatalog))).unwrap();
+        for hidden in [
+            Grants::new(),
+            SystemRole::Default.grants(),
+            ProjectRole::Admin.grants(ProjectId::default()),
+        ] {
+            let err = visible(&hidden).unwrap_err();
+            assert!(matches!(
+                err.domain_err(),
+                SqlError::RowNotFound(entity, _) if entity == "Project"
+            ));
+            assert_eq!(err.api_error(), td_error::ApiError::NotFound);
+        }
     }
 
     // ---- integration tests: authorize wired like a real service ----
@@ -657,8 +868,8 @@ mod tests {
         let RbacError::Forbidden(requirement, scope_str) = rbac_err else {
             panic!("expected Forbidden, got {rbac_err:?}");
         };
-        assert!(requirement.contains("ManageProject"));
-        assert_eq!(scope_str, &format!("project:{p}"));
+        assert_eq!(requirement, "manage_project");
+        assert_eq!(scope_str, &format!("project {p}"));
 
         // manage_access OR manage_project: still forbidden for this user
         Enforce::<FixedRbacSource, Project, (ManageAccess, ManageProject)>::authorize(
@@ -697,6 +908,50 @@ mod tests {
         )
         .await
         .unwrap_err();
+    }
+
+    #[td_test::test(db)]
+    async fn test_resolve_at_narrows_to_the_level_and_the_token(db: TdPool) {
+        let user_id = UserId::default();
+        let (viewed, developed) = (ProjectId::default(), ProjectId::default());
+        let source = FixedRbacSource::new().with_user_roles(
+            user_id,
+            [
+                ProjectRole::View.grants(viewed),
+                ProjectRole::Dev.grants(developed),
+            ],
+        );
+        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+
+        let develop =
+            VisibleProjectsResolver::<FixedRbacSource>::resolve_at::<DevelopProject, _, _>(
+                &source,
+                &mut conn,
+                &request(user_id),
+            )
+            .await
+            .unwrap();
+        assert!(develop.contains(&developed));
+        assert!(!develop.contains(&viewed));
+
+        let token = service_token_request(user_id);
+        let by_token =
+            VisibleProjectsResolver::<FixedRbacSource>::resolve_at::<DevelopProject, _, _>(
+                &source, &mut conn, &token,
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            by_token, develop,
+            "a delegated token carries develop_project"
+        );
+        let managed =
+            VisibleProjectsResolver::<FixedRbacSource>::resolve_at::<ManageProject, _, _>(
+                &source, &mut conn, &token,
+            )
+            .await
+            .unwrap();
+        assert_eq!(managed, VisibleProjects::Only(Default::default()));
     }
 
     #[td_test::test(db)]
@@ -869,7 +1124,7 @@ mod tests {
         let RbacError::Forbidden(requirement, scope_str) = rbac_err else {
             panic!("expected Forbidden, got {rbac_err:?}");
         };
-        assert!(requirement.contains("ViewProject"));
-        assert_eq!(scope_str, &format!("project:{p}"));
+        assert_eq!(requirement, "view_project");
+        assert_eq!(scope_str, &format!("project {p}"));
     }
 }

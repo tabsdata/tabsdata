@@ -3,12 +3,13 @@
 //
 
 use crate::apiserver::BASE_URL;
-use axum::extract::{MatchedPath, Request, State};
+use axum::extract::{FromRef, MatchedPath, Request, State};
 use axum::http;
 use axum::middleware::Next;
 use axum::response::Response;
 use std::string::ToString;
-use ta_apiserver::router::{Auth, route_auth};
+use std::sync::Arc;
+use ta_apiserver::router::{Auth, Routes};
 use ta_apiserver::status::error_status::ErrorStatus;
 use ta_services::service::Ctx;
 use td_authz::rbac::enforce::RbacError;
@@ -21,8 +22,30 @@ use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::service_token::ServiceTokenDBWithNames;
 use td_objects::types::basic::{AccessToken, AccessTokenId, TokenDigest};
 use td_security::token;
+use td_services::Services;
 use td_services::auth::AuthError;
 use tracing::{Instrument, Level, Span, debug, error, span, warn};
+
+/// What the authorization layer reads: the services' credential stores and
+/// the routes, for what each accepts.
+#[derive(Clone, FromRef)]
+pub struct AuthorizationState {
+    db: DbPool<Global>,
+    jwt_config: Ctx<JwtConfig>,
+    tokens: Ctx<ServiceTokens>,
+    routes: Arc<Routes>,
+}
+
+impl AuthorizationState {
+    pub fn new(services: &Services, routes: Arc<Routes>) -> Self {
+        Self {
+            db: FromRef::from_ref(services),
+            jwt_config: FromRef::from_ref(services),
+            tokens: FromRef::from_ref(services),
+            routes,
+        }
+    }
+}
 
 /// Reads the bearer and hands it to the credential's own path, told apart by
 /// prefix so neither falls through to the other. Both paths run the same
@@ -31,14 +54,15 @@ pub async fn authorization_layer(
     State(db): State<DbPool<Global>>,
     State(jwt_config): State<Ctx<JwtConfig>>,
     State(tokens): State<Ctx<ServiceTokens>>,
+    State(routes): State<Arc<Routes>>,
     request: Request,
     next: Next,
 ) -> Result<Response, ErrorStatus> {
     let bearer = bearer(&request)?;
     if bearer.starts_with(token::PREFIX) {
-        service_token(db, tokens, bearer, request, next).await
+        service_token(db, tokens, &routes, bearer, request, next).await
     } else {
-        session(db, jwt_config, bearer, request, next).await
+        session(db, jwt_config, &routes, bearer, request, next).await
     }
 }
 
@@ -72,11 +96,17 @@ fn bearer(request: &Request) -> Result<String, TdError> {
 async fn session(
     db: DbPool<Global>,
     jwt_config: Ctx<JwtConfig>,
+    routes: &Routes,
     bearer: String,
     request: Request,
     next: Next,
 ) -> Result<Response, ErrorStatus> {
-    route_gate(&request, Auth::Session, RbacError::SessionUnsupported)?;
+    route_gate(
+        routes,
+        &request,
+        Auth::Session,
+        RbacError::SessionUnsupported,
+    )?;
 
     let access_token = AccessToken::try_from(bearer.as_str())?;
     let token = decode_token(&jwt_config, access_token.as_str()).map_err(|e| {
@@ -114,11 +144,13 @@ async fn session(
 async fn service_token(
     db: DbPool<Global>,
     tokens: Ctx<ServiceTokens>,
+    routes: &Routes,
     bearer: String,
     request: Request,
     next: Next,
 ) -> Result<Response, ErrorStatus> {
     route_gate(
+        routes,
         &request,
         Auth::ServiceToken,
         RbacError::ServiceTokenUnsupported,
@@ -219,7 +251,12 @@ fn service_token_span(token: &ServiceTokenDBWithNames) -> Span {
 /// Fails closed without a matched path, as the internal-token layer does.
 /// A path some route answers, called with a method none answers there, is
 /// 405 whatever the credential: the credential is not what is wrong.
-fn route_gate(request: &Request, auth: Auth, refused: RbacError) -> Result<(), TdError> {
+fn route_gate(
+    routes: &Routes,
+    request: &Request,
+    auth: Auth,
+    refused: RbacError,
+) -> Result<(), TdError> {
     let matched = request
         .extensions()
         .get::<MatchedPath>()
@@ -228,7 +265,7 @@ fn route_gate(request: &Request, auth: Auth, refused: RbacError) -> Result<(), T
         .as_deref()
         .and_then(|matched| matched.strip_prefix(BASE_URL));
     let method = request.method().as_str();
-    match route.map(|route| route_auth(method, route)) {
+    match route.map(|route| routes.route_auth(method, route)) {
         Some(Some(accepted)) if accepted.contains(&auth) => Ok(()),
         Some(None) => Err(api_error!(
             status = http::StatusCode::METHOD_NOT_ALLOWED,
@@ -251,7 +288,7 @@ mod tests {
     use std::io::{self, Write};
     use std::str::FromStr;
     use std::sync::{Arc, Mutex};
-    use ta_apiserver::router::{RouterStates, named_router};
+    use ta_apiserver::router::RouterStates;
     use td_database::pool::TdPool;
     use td_objects::dxo::auth::{Login, SessionDB};
     use td_objects::dxo::service_token::{TokenCreate, TokenCreated, TokenSlotParam};
@@ -286,18 +323,23 @@ mod tests {
     fn build(db: TdPool) -> (Router, Services) {
         let services = Services::with_defaults(db);
         let states = RouterStates::default().with(services.clone());
-        let inner: Router = named_router(
-            &[
-                "list_collections",
-                "create_user",
-                "list_service_tokens",
-                "read_own_service_token",
-                "logout",
-            ],
-            &states,
-        )
-        .into();
-        let inner = inner.layer(from_fn_with_state(services.clone(), authorization_layer));
+        let routes = Arc::new(Routes::new(&[]));
+        let inner: Router = routes
+            .named_router(
+                &[
+                    "list_collections",
+                    "create_user",
+                    "list_service_tokens",
+                    "read_own_service_token",
+                    "logout",
+                ],
+                &states,
+            )
+            .into();
+        let inner = inner.layer(from_fn_with_state(
+            AuthorizationState::new(&services, routes),
+            authorization_layer,
+        ));
         (Router::new().nest(BASE_URL, inner), services)
     }
 

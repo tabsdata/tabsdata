@@ -3,6 +3,7 @@
 //
 
 use crate::apiserver::BASE_URL;
+use crate::router::connection_catalog::CONNECTION_PROBE_RESULT_PATH;
 use axum::Extension;
 use axum::extract::{Path, State};
 use axum_extra::extract::Query;
@@ -155,5 +156,6 @@ pub fn internal_routes() -> InternalRoutes {
         function_version_execute: Route::new(FUNCTION_VERSION_EXECUTE_PATH),
         function_version_execution_status: Route::new(FUNCTION_VERSION_EXECUTION_STATUS_PATH),
         download_function_state: Route::new(DOWNLOAD_STATE_PATH),
+        probe_result: Route::new(CONNECTION_PROBE_RESULT_PATH),
     }
 }

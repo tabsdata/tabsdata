@@ -620,7 +620,7 @@ pub struct Function {
     #[dto(list(filter, filter_like, order_by))]
     pub connection: Option<ConnectionKind>,
     pub runtime_values: FunctionRuntimeValues,
-    #[dto(list(tags))]
+    #[dto(list(filter, tags))]
     pub function_id: FunctionId,
     pub base_path: Option<BasePath>,
     pub stage_id: StageId,

@@ -212,6 +212,15 @@ impl Storage {
         res
     }
 
+    pub async fn size(&self, path: &SPath) -> Result<u64> {
+        let res = self.storage.size(path).await;
+        match &res {
+            Ok(size) => trace!("size({}) -> {}", path, size),
+            Err(e) => warn!("size({}) error: {}", path, e),
+        }
+        res
+    }
+
     pub async fn delete(&self, path: &SPath) -> Result<()> {
         let res = self.storage.delete(path).await;
         match &res {

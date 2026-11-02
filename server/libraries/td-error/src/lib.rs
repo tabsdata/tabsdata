@@ -9,6 +9,7 @@ pub use {display_vec::DisplayVec, display_vec_macro as display_vec, tm_error::td
 use derive_builder::UninitializedFieldError;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
+use std::time::Duration;
 use strum::AsRefStr;
 
 /// Error class enum for conversion to API errors.
@@ -113,6 +114,7 @@ pub struct TdError {
     domain: String,
     code: String,
     api_error: ApiError,
+    retry_after: Option<Duration>,
     td_error: anyhow::Error,
 }
 
@@ -129,8 +131,20 @@ impl TdError {
             domain: error.domain().to_string(),
             code: error.code(),
             api_error: error.api_error(),
+            retry_after: None,
             td_error: anyhow::Error::new(error),
         }
+    }
+
+    /// Tells the caller how long to wait before retrying, when the producer knows it.
+    pub fn with_retry_after(mut self, retry_after: Duration) -> Self {
+        self.retry_after = Some(retry_after);
+        self
+    }
+
+    /// How long the caller should wait before retrying, if known.
+    pub fn retry_after(&self) -> Option<Duration> {
+        self.retry_after
     }
 
     /// Returns the domain of the error.
@@ -190,6 +204,7 @@ impl From<UninitializedFieldError> for TdError {
             domain: "UninitializedFieldError".to_string(),
             code: "UninitializedFieldError::0000".to_string(),
             api_error: ApiError::InternalError,
+            retry_after: None,
             td_error: anyhow::Error::new(ufe),
         }
     }

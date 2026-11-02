@@ -25,6 +25,13 @@ pub fn password() -> String {
         .collect()
 }
 
+/// `len` random bytes from the thread-local RNG.
+pub fn bytes(len: usize) -> Vec<u8> {
+    let mut buffer = vec![0u8; len];
+    rand::rng().fill(buffer.as_mut_slice());
+    buffer
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -42,6 +49,12 @@ mod tests {
                 .chars()
                 .all(|character| character.is_ascii_alphanumeric())
         );
+    }
+
+    #[test]
+    fn bytes_have_the_length_asked_for_and_vary() {
+        assert_eq!(bytes(32).len(), 32);
+        assert_ne!(bytes(32), bytes(32));
     }
 
     #[test]

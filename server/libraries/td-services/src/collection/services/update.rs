@@ -8,8 +8,8 @@
 //!
 //! 1. resolve (read-only): authz, validate, build the update row and detect
 //!    the rename — nothing persisted.
-//! 2. store rename (rename only): rewrite the stored document's `name`, which
-//!    also moves the worker artifact. No DB connection held across it.
+//! 2. store rename (rename only): rewrite the stored document's `name`. No DB
+//!    connection held across it.
 //! 3. update (short TX): apply the row update. If this fails, the store is
 //!    put back under the old name best-effort and the error surfaces.
 //!
@@ -122,17 +122,20 @@ pub fn update_collection_validate(update: &CollectionUpdate) -> Result<(), TdErr
 /// Everything the update transaction persists, resolved up front, plus the
 /// store rename the orchestrator must perform before it (a
 /// source/destination collection's name is its connection's name — the
-/// connection follows the rename).
+/// connection follows the rename). A connected collection's name and
+/// description are part of its catalog's texts, so `connection_id` has those
+/// refreshed with them.
 #[derive(Debug, Clone)]
 pub struct CollectionUpdatePlan {
     pub collection_id: CollectionId,
+    pub connection_id: Option<ConnectionId>,
     pub update: CollectionUpdate,
     pub rename: Option<ConnectionRename>,
 }
 
-/// A rename of a connected collection: the stored document's `name` and the
-/// worker artifact must move with it. `old_name` is kept so a failed
-/// transaction can put the store back.
+/// A rename of a connected collection: the stored document's `name` must
+/// follow it. `old_name` is kept so a failed transaction can put the store
+/// back.
 #[derive(Debug, Clone)]
 pub struct ConnectionRename {
     pub collection_id: CollectionId,
@@ -149,9 +152,6 @@ pub async fn plan_collection_update<S: SeesProjectRows, M: AccessMode>(
     // A rename to a name already taken is rejected up front with a clean
     // "already exists" error for every collection flavour (not just connected),
     // instead of the raw unique-constraint violation from the update write.
-    // Connected collections additionally need this before the store rename:
-    // otherwise the existing owner's worker artifact would be overwritten (and
-    // deleted by the revert). Renaming to the current name is a no-op.
     if let Some(name) = &update.name
         && *name != collection.name
     {
@@ -168,13 +168,14 @@ pub async fn plan_collection_update<S: SeesProjectRows, M: AccessMode>(
     };
     Ok(CollectionUpdatePlan {
         collection_id: collection.collection_id,
+        connection_id: collection.connection_id,
         update: update.clone(),
         rename,
     })
 }
 
-/// The update transaction: open the (store-confirmed) update's version and
-/// read the result back.
+/// The update transaction: open the (store-confirmed) update's version, mark
+/// the connection's catalog texts written, and read the result back.
 pub async fn apply_collection_update<M: WriteMode>(
     conn: &mut DomainConnection<Apiserver, InProject, M>,
     ctx: &RequestContext,
@@ -188,6 +189,11 @@ pub async fn apply_collection_update<M: WriteMode>(
         .open(&current.updated(&plan.update, ctx), at)
         .await
         .map_err(SqlError::already_exists)?;
+    if let Some(connection_id) = &plan.connection_id {
+        conn.connection_catalogs()
+            .texts_written(connection_id)
+            .await?;
+    }
     let with_names: CollectionDBWithNames = conn.scd2().fetch_one(plan.collection_id).await?;
     CollectionRead::from_dao(with_names)
 }
@@ -212,6 +218,7 @@ mod tests {
     use td_objects::dxo::bundle::BundleDB;
     use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::collection::CollectionParam;
+    use td_objects::dxo::connection_catalog::ConnectionCatalogDB;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionVersionParam;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
@@ -219,7 +226,8 @@ mod tests {
     use td_objects::dxo::topology::ProjectTopologyDB;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BasePath, CollectionName, Decorator, Description, FunctionName,
-        FunctionRuntimeValues, FunctionStatus, GroupName, ProjectId, UserId, UserLabel, UserName,
+        FunctionRuntimeValues, FunctionStatus, GroupName, ProjectId, TextRevision, UserId,
+        UserLabel, UserName,
     };
     use td_objects::types::basic::{CollectionIdName, ReuseFrozen};
     use td_queries::Queries;
@@ -630,6 +638,52 @@ mod tests {
             .unwrap();
         assert_eq!(stored.connection["name"], "src1");
         assert_eq!(stored.secret_names, vec!["CREDENTIALS_PASSWORD"]);
+    }
+
+    /// A connected collection has its catalog row from creation, before any
+    /// probe, and every update gives it a later text revision.
+    #[td_test::test(db)]
+    async fn test_connected_collection_has_a_catalog_row_from_creation(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
+        let bridge = bridge(InMemoryConnectionStore::default());
+        let services = || Services {
+            bridge: bridge.clone(),
+            ..Services::with_defaults(db.clone())
+        };
+        services()
+            .create_collection(create_request(
+                p.project_id,
+                "src0",
+                Some(GroupName::source()),
+            ))
+            .await
+            .unwrap();
+        let collection: CollectionDB = db
+            .scoped(p.project_id)
+            .scd2()
+            .fetch_one(&CollectionName::try_from("src0").unwrap())
+            .await
+            .unwrap();
+        let connection_id = collection.connection_id.unwrap();
+        let created: ConnectionCatalogDB = db
+            .scoped(p.project_id)
+            .fetch_one(&connection_id)
+            .await
+            .unwrap();
+        assert!(created.text_revision > TextRevision::default());
+        assert_eq!(created.collection_id, collection.collection_id);
+        assert!(created.schema_hash.is_none() && created.last_probe_id.is_none());
+
+        services()
+            .update_collection(update_request(p.project_id, "src0", rename_to("src1")))
+            .await
+            .unwrap();
+        let renamed: ConnectionCatalogDB = db
+            .scoped(p.project_id)
+            .fetch_one(&connection_id)
+            .await
+            .unwrap();
+        assert!(renamed.text_revision > created.text_revision);
     }
 
     #[td_test::test(db)]

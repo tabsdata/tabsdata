@@ -5,6 +5,7 @@
 pub mod basic;
 
 pub mod addresses;
+pub mod catalog;
 pub mod composed;
 pub mod json;
 pub mod label;

@@ -32,28 +32,6 @@ impl ConnectionStore for InMemoryConnectionStore {
         connection: &ConnectionUpsert,
     ) -> Result<ConnectionRead, TdError> {
         let mut entries = self.entries.lock().unwrap();
-        let name = connection
-            .connection
-            .as_ref()
-            .and_then(|d| d.get("name"))
-            .and_then(|n| n.as_str());
-        if let Some(name) = name
-            && entries.iter().any(|((p, id), stored)| {
-                p == project_id
-                    && id != connection_id
-                    && stored
-                        .connection
-                        .as_ref()
-                        .and_then(|d| d.get("name"))
-                        .and_then(|n| n.as_str())
-                        == Some(name)
-            })
-        {
-            return Err(api_error!(
-                ApiError::InputError,
-                "the connection name '{name}' belongs to another collection's connection"
-            ));
-        }
         let merged = merge_kept(connection, entries.get(&(*project_id, *connection_id)))?;
         let read = read_of(&merged);
         entries.insert((*project_id, *connection_id), merged);

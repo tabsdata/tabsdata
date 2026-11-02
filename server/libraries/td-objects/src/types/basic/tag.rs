@@ -131,7 +131,7 @@ impl SystemTagKey {
     }
 }
 
-#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[typed(
     regex = "^[a-z0-9][a-z0-9._/-]{0,62}$",
     expected = "a lowercase [a-z0-9._/-] key of up to 63 characters, starting with a letter or digit"

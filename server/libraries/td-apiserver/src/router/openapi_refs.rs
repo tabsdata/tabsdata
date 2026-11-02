@@ -4,15 +4,16 @@
 
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
-use ta_apiserver::router::{AuthClass, Position, RouterStates, mount_router, registered};
+use ta_apiserver::router::{AuthClass, Position, RouterStates, Routes};
 use td_services::Services;
 use te_services::ExtendedServices;
 
 const SCHEMA_REF: &str = "#/components/schemas/";
 
-fn positions() -> BTreeMap<String, Position> {
-    registered()
-        .into_iter()
+fn positions(routes: &Routes) -> BTreeMap<String, Position> {
+    routes
+        .registered()
+        .iter()
         .flat_map(|r| {
             r.modes.iter().map(move |mode| Position {
                 server: r.server,
@@ -75,8 +76,9 @@ fn every_schema_ref_resolves() {
         .with(Services::default())
         .with(ExtendedServices::default());
     let mut failures = Vec::new();
-    for (label, position) in positions() {
-        let (_, api) = mount_router(position, &states).split_for_parts();
+    let routes = Routes::new(&[]);
+    for (label, position) in positions(&routes) {
+        let (_, api) = routes.mount_router(position, &states).split_for_parts();
         let doc = serde_json::to_value(api).unwrap();
         for (name, paths) in dangling_refs(&doc) {
             let first = paths.iter().next().unwrap();

@@ -9,12 +9,12 @@
 
 use td_database::access::{DbScope, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
-use td_error::{ApiError, TdError, api_error, td_error};
+use td_error::{TdError, td_error};
 use td_objects::and;
 use td_objects::dxo::service_token::ServiceTokenDB;
 use td_objects::types::basic::{
-    AtTime, Created, ServiceToken, ServiceTokenId, TokenComment, TokenDigest, TokenExpiresOn,
-    TokenHint, TokenScope, TokenSlot, TokenSystem, UserId,
+    AtTime, ServiceToken, TokenComment, TokenDigest, TokenExpiresOn, TokenScope, TokenSlot,
+    TokenSystem, UserId,
 };
 use td_queries::Queries;
 use td_security::token;
@@ -74,25 +74,16 @@ pub async fn seed_system_token<S: DbScope, M: WriteMode>(
     {
         Err(SystemTokenError::SlotTaken(*owner, slot))?
     }
-    let hint = token::hint(value).ok_or_else(|| {
-        api_error!(
-            ApiError::InternalError,
-            "a parsed service token has no hint"
-        )
-    })?;
-    let row = ServiceTokenDB {
-        id: ServiceTokenId::default(),
-        user_id: *owner,
+    let row = ServiceTokenDB::new(
+        *owner,
         slot,
-        digest,
-        hint: TokenHint::try_from(hint)?,
-        comment: Some(comment.clone()),
-        created_on: Created::from(AtTime::default()),
-        expires_on: TokenExpiresOn::never(),
-        last_used_on: None,
-        scope: TokenScope::Identity,
-        system: TokenSystem::TRUE,
-    };
+        value,
+        Some(comment.clone()),
+        AtTime::default(),
+        TokenExpiresOn::never(),
+        TokenScope::Identity,
+        TokenSystem::TRUE,
+    )?;
     conn.insert(&row).await?;
     info!(user_id = %owner, slot = %row.slot, token_id = %row.id, "system token seeded");
     Ok(())
@@ -108,8 +99,8 @@ mod tests {
     use td_objects::and;
     use td_objects::dxo::service_token::ServiceTokenDB;
     use td_objects::types::basic::{
-        AtTime, Created, ServiceToken, ServiceTokenId, TokenComment, TokenDigest, TokenExpiresOn,
-        TokenHint, TokenScope, TokenSlot, TokenSystem, UserId,
+        AtTime, Created, ServiceToken, TokenComment, TokenExpiresOn, TokenScope, TokenSlot,
+        TokenSystem, UserId,
     };
     use td_queries::Queries;
     use td_security::token;
@@ -140,15 +131,23 @@ mod tests {
     #[td_test::test(db)]
     async fn test_seed_inserts_an_identity_token_that_never_expires(db: TdPool) {
         let configured = fresh();
+        let before = Created::from(AtTime::default());
         seed(&db, Some(&configured)).await;
+        let after = Created::from(AtTime::default());
 
         let rows = held(&db, &UserId::admin()).await;
         assert_eq!(rows.len(), 1);
         let row = &rows[0];
-        assert_eq!(row.digest.as_str(), token::digest(&configured));
+        assert_eq!(row.user_id, UserId::admin());
         assert_eq!(*row.slot, 1);
-        assert_eq!(row.scope, TokenScope::Identity);
+        assert_eq!(row.digest.as_str(), token::digest(&configured));
+        assert_eq!(row.hint.as_str(), token::hint(&configured).unwrap());
+        assert_eq!(row.comment, Some(comment()));
+        assert!(before <= row.created_on && row.created_on <= after);
         assert_eq!(row.expires_on, TokenExpiresOn::never());
+        assert!(row.last_used_on.is_none());
+        assert_eq!(row.scope, TokenScope::Identity);
+        assert_eq!(row.system, TokenSystem::TRUE);
     }
 
     #[td_test::test(db)]
@@ -190,20 +189,19 @@ mod tests {
     #[td_test::test(db)]
     async fn test_seed_refuses_a_slot_held_by_a_delegated_token(db: TdPool) {
         let mut conn = DomainConnection::<Apiserver, Global, RW>::new(db.begin().await.unwrap());
-        let delegated = fresh();
-        conn.insert(&ServiceTokenDB {
-            id: ServiceTokenId::default(),
-            user_id: UserId::admin(),
-            slot: TokenSlot::try_from(1).unwrap(),
-            digest: TokenDigest::try_from(token::digest(&delegated)).unwrap(),
-            hint: TokenHint::try_from(token::hint(&delegated).unwrap()).unwrap(),
-            comment: None,
-            created_on: Created::from(AtTime::default()),
-            expires_on: TokenExpiresOn::never(),
-            last_used_on: None,
-            scope: TokenScope::Delegated,
-            system: TokenSystem::FALSE,
-        })
+        conn.insert(
+            &ServiceTokenDB::new(
+                UserId::admin(),
+                TokenSlot::try_from(1).unwrap(),
+                &fresh(),
+                None,
+                AtTime::default(),
+                TokenExpiresOn::never(),
+                TokenScope::Delegated,
+                TokenSystem::FALSE,
+            )
+            .unwrap(),
+        )
         .await
         .unwrap();
 

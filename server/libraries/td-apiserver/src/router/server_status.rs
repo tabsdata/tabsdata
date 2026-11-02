@@ -14,7 +14,7 @@ const SYSTEM_TAG: &str = "System";
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/status",
     tag(SYSTEM_TAG),
@@ -45,7 +45,7 @@ mod tests {
     use axum::extract::Request;
     use axum::{Extension, Router};
     use http::{Method, StatusCode};
-    use ta_apiserver::router::{RouterStates, named_router};
+    use ta_apiserver::router::{RouterStates, Routes};
     use td_database::pool::TdPool;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::system::{ApiStatus, HealthStatus};
@@ -62,7 +62,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_status(db: TdPool) {
         let states = RouterStates::default().with(Services::with_defaults(db));
-        let router = named_router(&["status", "info"], &states);
+        let router = Routes::new(&[]).named_router(&["status", "info"], &states);
 
         let response = to_route(&router)
             .await

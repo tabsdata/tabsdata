@@ -567,7 +567,8 @@ mod tests {
             | OrchestratorMessagePayload::OrchestratorExceptionMessagePayload(_)
             | OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(_)
             | OrchestratorMessagePayload::OrchestratorStageTriggerRequestMessagePayload(_)
-            | OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(_) => {
+            | OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(_)
+            | OrchestratorMessagePayload::OrchestratorProbeRequestMessagePayload(_) => {
                 panic!("Unexpected OrchestratorMessagePayload")
             }
         };

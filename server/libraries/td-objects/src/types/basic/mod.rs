@@ -4,6 +4,7 @@
 
 mod bool;
 mod brand;
+mod catalog;
 mod i16;
 mod i32;
 mod i64;
@@ -17,6 +18,7 @@ mod typed_enum;
 
 pub use bool::*;
 pub use brand::*;
+pub use catalog::*;
 pub use i16::*;
 pub use i32::*;
 pub use i64::*;

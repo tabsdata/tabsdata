@@ -126,6 +126,7 @@ mod tests {
             method: method.to_string(),
             scope: scope.to_string(),
             bindings: params(bindings),
+            expires: None,
         }
     }
 
@@ -221,7 +222,7 @@ mod tests {
             ("function_run".to_string(), "F".to_string()),
             ("worker".to_string(), "W".to_string()),
         ]);
-        let token = encode_internal_token(&jwt, "GET", &scope, bindings).unwrap();
+        let token = encode_internal_token(&jwt, "GET", &scope, bindings, None).unwrap();
 
         let inner = Router::new()
             .route(FUNCTION_RUN_CALLBACK_PATH, get(|| async { StatusCode::OK }))
@@ -253,7 +254,7 @@ mod tests {
             ("function_run".to_string(), "F".to_string()),
             ("worker".to_string(), "W".to_string()),
         ]);
-        let token = encode_internal_token(&jwt, "GET", &scope, bindings).unwrap();
+        let token = encode_internal_token(&jwt, "GET", &scope, bindings, None).unwrap();
 
         let inner = Router::new()
             .route(FUNCTION_RUN_CALLBACK_PATH, get(|| async { StatusCode::OK }))

@@ -2,10 +2,10 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::extractors::Project;
 use axum::Extension;
 use axum::extract::{Path, State};
 use axum_extra::extract::Query;
+use ta_apiserver::project::Project;
 use ta_apiserver::status::error_status::ErrorStatus;
 use ta_apiserver::status::extractors::Json;
 use ta_apiserver::status::ok_status::{

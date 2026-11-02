@@ -53,6 +53,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::permission::PermissionCreate;
     use td_objects::dxo::role::RoleParam;
+    use td_objects::errors::SqlError;
     use td_objects::types::basic::RoleIdName;
     use td_objects::types::basic::{
         AccessTokenId, Description, EntityId, EntityName, PermissionType, ProjectName, RoleName,
@@ -183,8 +184,8 @@ mod tests {
 
         let service = Services::with_defaults(db.clone());
         assert_service_error(service.create_permission(request).await, |err| match err {
-            RbacError::Forbidden(_, _) => {}
-            other => panic!("expected Forbidden, got {other:?}"),
+            SqlError::RowNotFound(entity, _) if entity == "Project" => {}
+            other => panic!("expected the missing-project error, got {other:?}"),
         });
         Ok(())
     }
@@ -378,8 +379,8 @@ mod tests {
         let service = Services::with_defaults(db.clone());
 
         assert_service_error(service.delete_permission(request).await, |err| match err {
-            RbacError::Forbidden(_, _) => {}
-            other => panic!("expected Forbidden, got {other:?}"),
+            SqlError::RowNotFound(entity, _) if entity == "Project" => {}
+            other => panic!("expected the missing-project error, got {other:?}"),
         });
         Ok(())
     }

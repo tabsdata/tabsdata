@@ -305,7 +305,12 @@ mod tests {
 
         assert_eq!(
             registry.permissions("system").unwrap(),
-            ["manage_access", "create_projects", "manage_roles"]
+            [
+                "manage_access",
+                "create_projects",
+                "manage_roles",
+                "maintain_catalog"
+            ]
         );
         assert_eq!(
             registry.permissions("project").unwrap(),

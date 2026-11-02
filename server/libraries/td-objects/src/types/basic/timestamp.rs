@@ -102,3 +102,19 @@ impl TokenExpiresOn {
         }
     }
 }
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd)]
+#[typed(try_from = AtTime)]
+pub struct CheckedOn(Timestamp);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd)]
+#[typed(try_from = AtTime)]
+pub struct MetadataOn(Timestamp);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd)]
+#[typed(try_from = AtTime)]
+pub struct CatalogUpdatedOn(Timestamp);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd)]
+#[typed(try_from = AtTime)]
+pub struct ProbeRequestedOn(Timestamp);

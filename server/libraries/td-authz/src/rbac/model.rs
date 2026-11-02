@@ -252,6 +252,24 @@ pub enum SystemPermission {
     /// CRUD roles and role permissions. Internal capability bit in v1 — no
     /// public API exposes role CRUD.
     ManageRoles,
+    /// Maintain the connection catalog of every project: read catalogs,
+    /// entities and the collection and table names around them, and sample a
+    /// few rows. Held only by a fixed service identity; never granted through
+    /// the API.
+    MaintainCatalog,
+}
+
+impl SystemPermission {
+    /// Whether the permission is held only by fixed service identities, so no
+    /// grant API may confer it.
+    pub fn is_service_only(self) -> bool {
+        match self {
+            SystemPermission::MaintainCatalog => true,
+            SystemPermission::ManageAccess
+            | SystemPermission::CreateProjects
+            | SystemPermission::ManageRoles => false,
+        }
+    }
 }
 
 impl GrantedPermission for SystemPermission {
@@ -260,6 +278,7 @@ impl GrantedPermission for SystemPermission {
             SystemPermission::ManageAccess => "manage_access",
             SystemPermission::CreateProjects => "create_projects",
             SystemPermission::ManageRoles => "manage_roles",
+            SystemPermission::MaintainCatalog => "maintain_catalog",
         }
     }
 
@@ -267,7 +286,8 @@ impl GrantedPermission for SystemPermission {
         match self {
             SystemPermission::ManageAccess
             | SystemPermission::CreateProjects
-            | SystemPermission::ManageRoles => false,
+            | SystemPermission::ManageRoles
+            | SystemPermission::MaintainCatalog => false,
         }
     }
 
@@ -276,6 +296,7 @@ impl GrantedPermission for SystemPermission {
             SystemPermission::ManageAccess,
             SystemPermission::CreateProjects,
             SystemPermission::ManageRoles,
+            SystemPermission::MaintainCatalog,
         ]
     }
 }
@@ -657,13 +678,20 @@ pub trait FromGrants {
     /// on, or [`VisibleProjects::All`] for a `project:__all__` grant. The
     /// data-filter counterpart of the [`ViewProject`](super::ViewProject) gate.
     fn from_grants(grants: &Grants) -> Self;
+
+    /// [`from_grants`](Self::from_grants) at another minimum permission.
+    fn from_grants_at(grants: &Grants, level: ProjectPermission) -> Self;
 }
 
 impl FromGrants for VisibleProjects {
     fn from_grants(grants: &Grants) -> Self {
+        Self::from_grants_at(grants, ProjectPermission::ViewProject)
+    }
+
+    fn from_grants_at(grants: &Grants, level: ProjectPermission) -> Self {
         let mut ids = std::collections::HashSet::new();
         for grant in grants.of::<Project>() {
-            if !grant.permission.satisfies(ProjectPermission::ViewProject) {
+            if !grant.permission.satisfies(level) {
                 continue;
             }
             match grant.on {
@@ -871,6 +899,24 @@ mod tests {
         assert!(visible_projects.contains(&p1));
         assert!(!visible_projects.contains(&ProjectId::default()));
         assert_ne!(visible_projects, VisibleProjects::All);
+    }
+
+    #[test]
+    fn test_projects_at_a_level_drop_the_weaker_grants() {
+        let (p0, p1) = (ProjectId::default(), ProjectId::default());
+        let grants = ProjectRole::View
+            .grants(p0)
+            .union(&ProjectRole::Dev.grants(p1));
+        let develop = VisibleProjects::from_grants_at(&grants, ProjectPermission::DevelopProject);
+        assert!(develop.contains(&p1));
+        assert!(!develop.contains(&p0));
+        assert_eq!(
+            VisibleProjects::from_grants_at(
+                &SystemRole::SysAdmin.grants(),
+                ProjectPermission::ManageProject
+            ),
+            VisibleProjects::All
+        );
     }
 
     #[test]

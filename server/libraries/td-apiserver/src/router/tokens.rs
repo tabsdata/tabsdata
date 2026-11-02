@@ -7,8 +7,6 @@
 //! `/users/{user}/service-tokens` is the administrator's view of another account's
 //! slots.
 
-const TOKENS_TAG: &str = "Service Tokens";
-
 use axum::Extension;
 use axum::extract::{Path, State};
 use axum_extra::extract::Query;
@@ -24,6 +22,8 @@ use td_objects::dxo::service_token::{
 };
 use td_objects::dxo::user::UserParam;
 use td_services::Services;
+
+const TOKENS_TAG: &str = "Service Tokens";
 
 #[apiserver_path(
     version(v1),

@@ -77,7 +77,7 @@ mod tests {
     use td_database::domain::DomainPools;
     use td_database::pool::TdPool;
 
-    const EXTRAS: &[(&str, &str)] = &[("ai", "manage_ai")];
+    const EXTRAS: &[(&str, &str)] = &[("widget", "manage_widget")];
 
     fn pools(db: &TdPool) -> DbPool<Global> {
         DbPool::new(DomainPools::of_apiserver(db.clone()), Global)
@@ -94,7 +94,7 @@ mod tests {
         .await
     }
 
-    async fn count_ai(db: &TdPool) -> Result<usize, TdError> {
+    async fn count_extra(db: &TdPool) -> Result<usize, TdError> {
         let mut conn = pools(db).read().await?;
         let perms = conn
             .get(Grant::asserted("count"))
@@ -104,19 +104,19 @@ mod tests {
             .iter()
             .filter(|p| {
                 p.role_id == RoleId::sys_admin()
-                    && p.entity_type.as_str() == "ai"
-                    && p.permission_type.as_str() == "manage_ai"
+                    && p.entity_type.as_str() == "widget"
+                    && p.permission_type.as_str() == "manage_widget"
             })
             .count())
     }
 
     #[td_test::test(db)]
     async fn test_ensure_sys_admin_permissions_is_idempotent(db: TdPool) -> Result<(), TdError> {
-        assert_eq!(count_ai(&db).await?, 0);
+        assert_eq!(count_extra(&db).await?, 0);
         reconcile(&db).await?;
-        assert_eq!(count_ai(&db).await?, 1);
+        assert_eq!(count_extra(&db).await?, 1);
         reconcile(&db).await?;
-        assert_eq!(count_ai(&db).await?, 1);
+        assert_eq!(count_extra(&db).await?, 1);
         Ok(())
     }
 
@@ -145,7 +145,7 @@ mod tests {
 
         let second = second.await.expect("second reconcile");
         assert!(second.is_ok(), "the second boot failed: {second:?}");
-        assert_eq!(count_ai(&db).await?, 1);
+        assert_eq!(count_extra(&db).await?, 1);
         Ok(())
     }
 }

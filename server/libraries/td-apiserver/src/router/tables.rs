@@ -2,10 +2,11 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::extractors::Project;
 use axum::Extension;
 use axum::extract::{Path, State};
 use axum_extra::extract::Query;
+use http::{HeaderName, HeaderValue};
+use ta_apiserver::project::Project;
 use ta_apiserver::status::error_status::ErrorStatus;
 use ta_apiserver::status::ok_status::{DeleteStatus, GetStatus, ListStatus, NoContent};
 use td_apiforge::apiserver_path;
@@ -23,6 +24,9 @@ use td_objects::dxo::topology::TopologyReadParam;
 use td_services::Services;
 
 const TABLES_TAG: &str = "Tables";
+
+const SAMPLE_TRUNCATED_HEADER: HeaderName = HeaderName::from_static("x-td-truncated");
+const SAMPLE_ROW_COUNT_HEADER: HeaderName = HeaderName::from_static("x-td-row-count");
 
 #[apiserver_path(
     version(v1),
@@ -156,7 +160,9 @@ pub async fn list_data_versions(
     path = "/projects/{project}/collections/{collection}/tables/{table}/sample",
     tag(TABLES_TAG),
     content_type = "text/csv",
-    doc = "Get a sample of a table; 204 when the table has no data at that version"
+    doc = "Get a sample of a table; 204 when the table has no data at that version. With `sql`, \
+           `offset` and `len` page the query's result. `X-Td-Truncated` tells whether rows past \
+           the page exist, `X-Td-Row-Count` how many the page holds"
 )]
 #[allow(clippy::too_many_arguments)]
 pub async fn sample(
@@ -187,7 +193,12 @@ pub async fn sample(
         ))
         .in_project(project_id);
     Ok(match state.table_sample(request).await?.data {
-        Some(stream) => DownloadResponse::csv(stream),
+        Some(sample) => DownloadResponse::csv(sample.stream)
+            .header(
+                SAMPLE_TRUNCATED_HEADER,
+                HeaderValue::from_static(if sample.truncated { "true" } else { "false" }),
+            )
+            .header(SAMPLE_ROW_COUNT_HEADER, HeaderValue::from(sample.rows)),
         None => DownloadResponse::no_content(),
     })
 }
@@ -241,4 +252,34 @@ pub async fn graph(
         .in_project(project_id);
     let response = state.table_flow_graph(request).await?;
     Ok(GetStatus::OK(response))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn list_openapi_describes_order_by_and_filter_fields() {
+        let routes = ta_apiserver::router::Routes::new(&[]);
+        let registration = routes
+            .registered()
+            .iter()
+            .find(|r| r.name == "list_data_versions")
+            .unwrap();
+        let operation = (registration.operation)();
+        let description = |name: &str| {
+            operation
+                .parameters
+                .iter()
+                .flatten()
+                .find_map(|p| match p {
+                    utoipa::openapi::RefOr::T(p) if p.name == name => p.description.clone(),
+                    _ => None,
+                })
+                .unwrap()
+        };
+
+        let order_by = description("order_by");
+        assert!(order_by.contains("created_at"), "{order_by}");
+        assert!(!order_by.contains("defined_on"), "{order_by}");
+        assert!(description("filter").contains("status"));
+    }
 }

@@ -35,6 +35,9 @@ async fn update_project(
         let mut connection = db.read().await?;
         let connection = connection.get(authz.none());
         let current: ProjectDB = connection.scd2().fetch_one(&param.project).await?;
+        authz
+            .project_visible_or_not_found(connection, &ctx, &current.project_id)
+            .await?;
         let _grant = authz
             .require::<Project, ManageProject>(connection, &ctx, &current.project_id)
             .await?;

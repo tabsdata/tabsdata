@@ -6,10 +6,10 @@
 //! are top-level: their ids are globally unique, so the services resolve the
 //! owning project from the row.
 
-use crate::extractors::Project;
 use axum::Extension;
 use axum::extract::{Path, State};
 use axum_extra::extract::Query;
+use ta_apiserver::project::Project;
 use ta_apiserver::status::error_status::ErrorStatus;
 use ta_apiserver::status::ok_status::{ListStatus, NoContent, UpdateStatus};
 use td_apiforge::apiserver_path;

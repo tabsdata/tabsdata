@@ -2,18 +2,9 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! The supervisor-mode connection store: files under the instance
-//! repository. Two artifacts per connection:
-//!
-//! - the authoritative record `connections/.store/<project_id>/<connection_id>.yaml`
-//!   (the full upsert triple + the connection name) serving id-keyed
-//!   fetch/delete;
-//! - the worker artifact `connections/<project_id>/<name>.lower().json` — the
-//!   dehydrated document verbatim, at the exact path locally-run function
-//!   workers resolve `NamedConn(name)` references from (the worker takes its
-//!   project from the request yaml; env refs are hydrated from the WORKER's
-//!   process env at load, untouched here). Project-namespacing keeps
-//!   same-named collections in different projects from colliding.
+//! The supervisor-mode connection store: one record per connection under the
+//! instance repository, `connections/.store/<project_id>/<connection_id>.yaml`,
+//! holding the full upsert triple and serving id-keyed fetch/delete.
 //!
 //! Writes are atomic (tmp + rename) with 0700/0600 perms. Secrets are
 //! plaintext at rest, matching the local instance trust model (the embedded
@@ -33,11 +24,10 @@ use tokio::fs;
 pub const CONNECTIONS_FOLDER: &str = "connections";
 const STORE_FOLDER: &str = ".store";
 
-/// The on-disk record behind a connection: the name (worker-artifact key) and
-/// the effective triple, values included.
+/// The on-disk record behind a connection: the effective triple, values
+/// included.
 #[derive(Serialize, Deserialize)]
 struct ConnectionRecord {
-    name: String,
     upsert: ConnectionUpsert,
 }
 
@@ -46,9 +36,8 @@ pub struct FileConnectionStore {
 }
 
 impl FileConnectionStore {
-    /// Roots at `$TD_URI_REPOSITORY/connections/` — the same env the function
-    /// workers resolve their `NamedConn` lookups from, so both sides agree by
-    /// construction. Falls back to the current dir (dev/tests).
+    /// Roots at `$TD_URI_REPOSITORY/connections/`. Falls back to the current
+    /// dir (dev/tests).
     pub fn new() -> Self {
         let root = match std::env::var(REPOSITORY_URI_ENV) {
             Ok(repository) if !repository.trim().is_empty() => PathBuf::from(repository),
@@ -71,45 +60,6 @@ impl FileConnectionStore {
             .join(STORE_FOLDER)
             .join(project_id.to_string())
             .join(format!("{connection_id}.yaml"))
-    }
-
-    fn worker_path(&self, project_id: &ProjectId, name: &str) -> PathBuf {
-        self.root
-            .join(project_id.to_string())
-            .join(format!("{}.json", name.to_lowercase()))
-    }
-
-    /// Whether a record OTHER than `connection_id`'s already holds `name` —
-    /// the worker artifact path is derived from the name, so a second owner
-    /// would hijack the first one's artifact.
-    async fn name_owned_by_other(
-        &self,
-        project_id: &ProjectId,
-        connection_id: &ConnectionId,
-        name: &str,
-    ) -> Result<bool, TdError> {
-        let dir = self.root.join(STORE_FOLDER).join(project_id.to_string());
-        let own = format!("{connection_id}.yaml");
-        let mut entries = match fs::read_dir(&dir).await {
-            Ok(entries) => entries,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-            Err(e) => return Err(io_error(&dir, &e)),
-        };
-        while let Some(entry) = entries.next_entry().await.map_err(|e| io_error(&dir, &e))? {
-            if entry.file_name().to_string_lossy() == own {
-                continue;
-            }
-            let raw = match fs::read_to_string(entry.path()).await {
-                Ok(raw) => raw,
-                Err(_) => continue, // not a record; best-effort scan
-            };
-            if let Ok(record) = serde_yaml::from_str::<ConnectionRecord>(&raw)
-                && record.name == name
-            {
-                return Ok(true);
-            }
-        }
-        Ok(false)
     }
 
     async fn read_record(
@@ -150,47 +100,16 @@ impl ConnectionStore for FileConnectionStore {
         connection_id: &ConnectionId,
         connection: &ConnectionUpsert,
     ) -> Result<ConnectionRead, TdError> {
-        let document = connection.connection.as_ref().ok_or_else(|| {
-            api_error!(
-                ApiError::InputError,
-                "a connection upsert must include the dehydrated connection"
-            )
-        })?;
-        let name = document
-            .get("name")
-            .and_then(|n| n.as_str())
-            .ok_or_else(|| {
-                api_error!(
-                    ApiError::InputError,
-                    "the dehydrated connection must carry a top-level 'name'"
-                )
-            })?
-            .to_string();
-
-        if self
-            .name_owned_by_other(project_id, connection_id, &name)
-            .await?
-        {
+        if connection.connection.is_none() {
             return Err(api_error!(
                 ApiError::InputError,
-                "the connection name '{name}' belongs to another collection's connection"
+                "a connection upsert must include the dehydrated connection"
             ));
         }
-
         let previous = self.read_record(project_id, connection_id).await?;
         let record = ConnectionRecord {
-            name: name.clone(),
             upsert: merge_kept(connection, previous.as_ref().map(|p| &p.upsert))?,
         };
-
-        // A rename (the collection's name changed and the connection follows)
-        // moves the worker artifact: drop the one under the previous name.
-        if let Some(previous) = &previous
-            && previous.name != record.name
-        {
-            let _ = fs::remove_file(self.worker_path(project_id, &previous.name)).await;
-        }
-
         let payload = serde_yaml::to_string(&record)
             .map_err(|e| api_error!(ApiError::InternalError, "cannot serialize the record: {e}"))?;
         write_atomic(
@@ -198,18 +117,6 @@ impl ConnectionStore for FileConnectionStore {
             payload.as_bytes(),
         )
         .await?;
-        let artifact = serde_json::to_string_pretty(document).map_err(|e| {
-            api_error!(
-                ApiError::InternalError,
-                "cannot serialize the document: {e}"
-            )
-        })?;
-        write_atomic(
-            &self.worker_path(project_id, &record.name),
-            artifact.as_bytes(),
-        )
-        .await?;
-
         Ok(read_of(&record.upsert))
     }
 
@@ -246,23 +153,13 @@ impl ConnectionStore for FileConnectionStore {
         project_id: &ProjectId,
         connection_id: &ConnectionId,
     ) -> Result<(), TdError> {
-        let Some(record) = self.read_record(project_id, connection_id).await? else {
-            return Ok(()); // idempotent: deleting a never-stored id succeeds
-        };
-        let worker = self.worker_path(project_id, &record.name);
-        if let Err(e) = fs::remove_file(&worker).await
-            && e.kind() != std::io::ErrorKind::NotFound
-        {
-            return Err(io_error(&worker, &e));
-        }
         let path = self.record_path(project_id, connection_id);
-        if let Err(e) = fs::remove_file(&path).await
-            && e.kind() != std::io::ErrorKind::NotFound
-        {
-            return Err(io_error(&path, &e));
+        match fs::remove_file(&path).await {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(io_error(&path, &e)),
         }
-        // Best-effort: drop the per-project dirs once empty.
-        for dir in [worker.parent(), path.parent()].into_iter().flatten() {
+        if let Some(dir) = path.parent() {
             let _ = fs::remove_dir(dir).await;
         }
         Ok(())
@@ -398,27 +295,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_worker_artifact_is_the_document_at_the_lookup_path() {
-        let store = store();
-        let project = ProjectId::default();
-        let id = ConnectionId::default();
-        let payload = upsert("Finance", Some("hunter2"));
-
-        upsert_conn(&store, &project, &id, &payload).await.unwrap();
-
-        // The exact path + content `NamedConn("Finance")` resolution reads —
-        // project-namespaced, so same-named collections in other projects
-        // cannot collide.
-        let artifact = store.worker_path(&project, "Finance");
-        assert!(artifact.ends_with(format!("{project}/finance.json")));
-        let raw = std::fs::read_to_string(&artifact).unwrap();
-        let document: serde_json::Value = serde_json::from_str(&raw).unwrap();
-        assert_eq!(document, payload.connection.unwrap());
-        // The dehydrated document carries env refs, never values.
-        assert!(!raw.contains("hunter2"));
-    }
-
-    #[tokio::test]
     async fn test_kept_value_merges_from_previous_record() {
         let store = store();
         let project = ProjectId::default();
@@ -448,42 +324,15 @@ mod tests {
         upsert_conn(&store, &p2, &id2, &upsert("fin", Some("two")))
             .await
             .unwrap();
-        assert!(store.worker_path(&p1, "fin").exists());
-        assert!(store.worker_path(&p2, "fin").exists());
 
-        // Deleting one project's connection leaves the other's artifact.
         store.delete(&p1, &id1).await.unwrap();
-        assert!(!store.worker_path(&p1, "fin").exists());
-        assert!(store.worker_path(&p2, "fin").exists());
+        assert!(!store.record_path(&p1, &id1).exists());
+        let hydrated = store.fetch_hydrated(&p2, &id2).await.unwrap();
+        assert_eq!(hydrated.secrets[0].value.as_deref(), Some("two"));
     }
 
     #[tokio::test]
-    async fn test_name_owned_by_another_connection_is_rejected() {
-        let store = store();
-        let project = ProjectId::default();
-        let (id1, id2) = (ConnectionId::default(), ConnectionId::default());
-
-        upsert_conn(&store, &project, &id1, &upsert("fin", Some("hunter2")))
-            .await
-            .unwrap();
-        // A different connection taking the name would hijack id1's artifact.
-        let err = upsert_conn(&store, &project, &id2, &upsert("fin", Some("x")))
-            .await
-            .expect_err("name is taken");
-        assert!(err.to_string().contains("another collection"), "got: {err}");
-        assert!(store.worker_path(&project, "fin").exists());
-
-        // The owner itself can re-upsert and rename; a released name is free.
-        upsert_conn(&store, &project, &id1, &upsert("fin2", None))
-            .await
-            .unwrap();
-        upsert_conn(&store, &project, &id2, &upsert("fin", Some("x")))
-            .await
-            .unwrap();
-    }
-
-    #[tokio::test]
-    async fn test_rename_moves_the_worker_artifact() {
+    async fn test_upsert_writes_only_the_id_keyed_record() {
         let store = store();
         let project = ProjectId::default();
         let id = ConnectionId::default();
@@ -491,18 +340,11 @@ mod tests {
         upsert_conn(&store, &project, &id, &upsert("fin", Some("hunter2")))
             .await
             .unwrap();
-        // Same id, new document name — the collection was renamed.
-        upsert_conn(&store, &project, &id, &upsert("fin2", None))
-            .await
-            .unwrap();
-
-        assert!(!store.worker_path(&project, "fin").exists());
-        let raw = std::fs::read_to_string(store.worker_path(&project, "fin2")).unwrap();
-        let document: serde_json::Value = serde_json::from_str(&raw).unwrap();
-        assert_eq!(document["name"], "fin2");
-        // Kept values survive the rename.
-        let record = std::fs::read_to_string(store.record_path(&project, &id)).unwrap();
-        assert!(record.contains("hunter2"));
+        let entries: Vec<_> = std::fs::read_dir(&store.root)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(entries, vec![STORE_FOLDER]);
     }
 
     #[tokio::test]
@@ -518,7 +360,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_delete_is_idempotent_and_removes_both_artifacts() {
+    async fn test_delete_is_idempotent_and_removes_the_record() {
         let store = store();
         let project = ProjectId::default();
         let id = ConnectionId::default();
@@ -527,7 +369,6 @@ mod tests {
             .await
             .unwrap();
         store.delete(&project, &id).await.unwrap();
-        assert!(!store.worker_path(&project, "fin").exists());
         assert!(!store.record_path(&project, &id).exists());
 
         // Deleting again (or a never-stored id) succeeds — contract.
@@ -538,7 +379,7 @@ mod tests {
 
     #[cfg(unix)]
     #[tokio::test]
-    async fn test_artifacts_are_private() {
+    async fn test_records_are_private() {
         use std::os::unix::fs::PermissionsExt;
         let store = store();
         let project = ProjectId::default();

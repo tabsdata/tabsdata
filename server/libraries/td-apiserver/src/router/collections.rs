@@ -2,10 +2,10 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::extractors::Project;
 use axum::Extension;
 use axum::extract::{Path, State};
 use axum_extra::extract::Query;
+use ta_apiserver::project::Project;
 use ta_apiserver::status::error_status::ErrorStatus;
 use ta_apiserver::status::extractors::Json;
 use ta_apiserver::status::ok_status::ListStatus;
@@ -185,9 +185,7 @@ mod tests {
     use axum::{Extension, Router};
     use http::method::Method;
     use serde_json::json;
-    use ta_apiserver::router::{RouterStates, named_router};
-    use td_database::access::{DbPool, Global};
-    use td_database::domain::{Apiserver, DomainPools};
+    use ta_apiserver::router::{RouterStates, Routes};
     use td_database::pool::TdPool;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{AccessTokenId, UserId};
@@ -208,7 +206,7 @@ mod tests {
         let router = router.clone().into();
         router
             .layer(from_fn_with_state(
-                DbPool::new(DomainPools::default().with::<Apiserver>(db), Global),
+                Services::with_defaults(db),
                 project_resolver_layer,
             ))
             .layer(Extension(context))
@@ -232,7 +230,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_unknown_project_segment_yields_404(db: TdPool) {
         let states = RouterStates::default().with(Services::with_defaults(db.clone()));
-        let router = named_router(
+        let router = Routes::new(&[]).named_router(
             &[
                 "get_collection",
                 "create_collection",
@@ -269,18 +267,19 @@ mod tests {
     #[td_test::test(db)]
     async fn test_openapi_documents_project_path_param(db: TdPool) {
         let states = RouterStates::default().with(Services::with_defaults(db.clone()));
-        let api = named_router(
-            &[
-                "get_collection",
-                "create_collection",
-                "update_collection",
-                "delete_collection",
-                "upsert_collection_connection",
-                "get_collection_connection",
-            ],
-            &states,
-        )
-        .into_openapi();
+        let api = Routes::new(&[])
+            .named_router(
+                &[
+                    "get_collection",
+                    "create_collection",
+                    "update_collection",
+                    "delete_collection",
+                    "upsert_collection_connection",
+                    "get_collection_connection",
+                ],
+                &states,
+            )
+            .into_openapi();
 
         let has_path_param = |op: &Operation, name: &str| {
             op.parameters.as_ref().is_some_and(|ps| {
@@ -330,7 +329,7 @@ mod tests {
         db.seed().test_project().await.unwrap();
         let services = Services::with_defaults(db.clone());
         let states = RouterStates::default().with(services);
-        let router = named_router(
+        let router = Routes::new(&[]).named_router(
             &[
                 "get_collection",
                 "create_collection",
@@ -341,7 +340,7 @@ mod tests {
             ],
             &states,
         );
-        let list_router = named_router(&["list_collections"], &states);
+        let list_router = Routes::new(&[]).named_router(&["list_collections"], &states);
 
         let response = to_list_route(&list_router)
             .oneshot(
@@ -514,7 +513,7 @@ mod tests {
     async fn test_collection_connection_endpoints(db: TdPool) {
         db.seed().test_project().await.unwrap();
         let states = RouterStates::default().with(Services::with_defaults(db.clone()));
-        let router = named_router(
+        let router = Routes::new(&[]).named_router(
             &[
                 "get_collection",
                 "create_collection",

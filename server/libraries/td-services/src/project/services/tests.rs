@@ -153,6 +153,62 @@ async fn test_list_filters_to_visible_projects(db: TdPool) -> Result<(), TdError
     Ok(())
 }
 
+/// Reading, updating or deleting a project hidden from the requester answers
+/// exactly as for a name that does not exist; a viewer is refused with 403.
+#[td_test::test(db)]
+async fn test_a_hidden_project_answers_as_a_missing_one(db: TdPool) -> Result<(), TdError> {
+    let project = db
+        .seed()
+        .project(ProjectName::try_from("payments")?)
+        .await?;
+    let viewer = td_queries::test_utils::seed_project_viewer(&db, project.project_id).await?;
+    let stranger = db
+        .seed()
+        .user(&UserName::try_from("stranger")?, &UserEnabled::TRUE)
+        .await?;
+    let as_user = |user| RequestContext::with(AccessTokenId::default(), user);
+    let services = Services::with_defaults(db.clone());
+    let update = || ProjectUpdate {
+        name: None,
+        description: Some(Description::try_from("d").unwrap()),
+        secrets: None,
+    };
+
+    for name in ["payments", "nope"] {
+        let errors = [
+            services
+                .read_project(as_user(stranger.id).read(project_param(name)))
+                .await
+                .unwrap_err(),
+            services
+                .update_project(as_user(stranger.id).update(project_param(name), update()))
+                .await
+                .unwrap_err(),
+            services
+                .delete_project(as_user(stranger.id).delete(project_param(name)))
+                .await
+                .unwrap_err(),
+        ];
+        for err in errors {
+            assert!(
+                matches!(err.domain_err(), SqlError::RowNotFound(entity, _) if entity == "Project"),
+                "{name}: {err}"
+            );
+            assert_eq!(err.code(), "SqlError::1001");
+        }
+    }
+
+    services
+        .read_project(as_user(viewer.id).read(project_param("payments")))
+        .await?;
+    let err = services
+        .update_project(as_user(viewer.id).update(project_param("payments"), update()))
+        .await
+        .unwrap_err();
+    assert_eq!(err.api_error(), td_error::ApiError::Forbidden);
+    Ok(())
+}
+
 /// Live project names are unique within the registry (DB-level constraint):
 /// a second create with the same name fails. A delete closes the project's
 /// timeline, which frees the name.

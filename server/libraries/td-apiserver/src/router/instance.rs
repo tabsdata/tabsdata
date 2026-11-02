@@ -31,7 +31,7 @@ mod tests {
     use axum::extract::Request;
     use axum::{Extension, Router};
     use http::{Method, StatusCode};
-    use ta_apiserver::router::{RouterStates, named_router};
+    use ta_apiserver::router::{RouterStates, Routes};
     use ta_services::service::Ctx;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::system::Instance;
@@ -47,7 +47,7 @@ mod tests {
             ..Services::default()
         };
         let states = RouterStates::default().with(services);
-        let app: Router = named_router(&["instance"], &states).into();
+        let app: Router = Routes::new(&[]).named_router(&["instance"], &states).into();
         let response = app
             .layer(Extension(RequestContext::with(
                 AccessTokenId::default(),

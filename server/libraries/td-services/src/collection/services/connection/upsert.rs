@@ -348,8 +348,7 @@ mod tests {
     }
 
     /// The "supervisor mode works" pin: collection creation and the
-    /// upsert/read pipelines against the real repository-file store, worker
-    /// artifact included.
+    /// upsert/read pipelines against the real repository-file store.
     #[td_test::test(db)]
     async fn test_supervisor_file_store_end_to_end(db: TdPool) {
         use crate::collection::services::connection::test_support::create_request;
@@ -376,16 +375,6 @@ mod tests {
         .await
         .expect("supervisor-mode create must work");
 
-        // The worker artifact is in place for `NamedConn("srcw")` resolution,
-        // under the run's project.
-        assert!(
-            dir.join("connections")
-                .join(p.project_id.to_string())
-                .join("srcw.json")
-                .is_file()
-        );
-
-        // The update pipeline overwrites it...
         let response = Services {
             bridge: bridge(),
             ..Services::with_defaults(db.clone())
@@ -395,7 +384,6 @@ mod tests {
         .expect("supervisor-mode upsert must work");
         assert_eq!(response.secret_names, vec!["CREDENTIALS_PASSWORD"]);
 
-        // ...and the read pipeline serves it back, names only.
         let read = Services {
             bridge: bridge(),
             ..Services::with_defaults(db.clone())

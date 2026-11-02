@@ -4,6 +4,7 @@
 
 pub mod columns;
 pub mod filter;
+pub mod openapi;
 pub mod params;
 pub mod response;
 pub mod sort;

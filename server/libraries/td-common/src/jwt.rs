@@ -95,6 +95,8 @@ pub enum JwtError {
     JwtDecodingError(jsonwebtoken::errors::Error) = 1001,
     #[error("Internal token has unexpected kind: {0}")]
     InternalTokenKind(String) = 1002,
+    #[error("Internal token expired")]
+    InternalTokenExpired = 1003,
 }
 
 /// Discriminator carried in `InternalTokenClaims.kind`, kept distinct from user
@@ -106,8 +108,8 @@ pub const INTERNAL_TOKEN_KIND: &str = "internal";
 /// Claims for a generic internal-endpoint token. Authorizes one internal
 /// endpoint (`scope` = its route pattern) for one set of resource ids
 /// (`bindings` = its path-param name → value), under one `method`. The
-/// internal router validates these against the actual request. No expiration:
-/// a worker may call back long after it was scheduled.
+/// internal router validates these against the actual request. Most carry no
+/// expiration, as a worker may call back long after it was scheduled.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InternalTokenClaims {
     /// Unique token id (audit/logging).
@@ -121,15 +123,20 @@ pub struct InternalTokenClaims {
     pub scope: String,
     /// Path-param name → value bindings the request must match exactly.
     pub bindings: BTreeMap<String, String>,
+    /// Unix seconds after which the token is refused; none never expires. Not
+    /// the registered `exp`, which would let it pass as a user token.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires: Option<i64>,
 }
 
-/// Mint a no-expiration internal-endpoint token bound to `(method, scope,
-/// bindings)`.
+/// Mint an internal-endpoint token bound to `(method, scope, bindings)`,
+/// refused after `expires` (Unix seconds) when one is given.
 pub fn encode_internal_token(
     jwt_settings: &JwtConfig,
     method: &str,
     scope: &str,
     bindings: BTreeMap<String, String>,
+    expires: Option<i64>,
 ) -> Result<String, JwtError> {
     let claims = InternalTokenClaims {
         jti: id::id(),
@@ -137,6 +144,7 @@ pub fn encode_internal_token(
         method: method.to_string(),
         scope: scope.to_string(),
         bindings,
+        expires,
     };
     let encoded = encode(
         &jsonwebtoken::Header::default(),
@@ -148,9 +156,9 @@ pub fn encode_internal_token(
     Ok(encoded)
 }
 
-/// Verify an internal token's signature (no expiration check) and `kind`.
-/// Binding the claims to the actual request (`method`/`scope`/`bindings`) is
-/// the caller's job.
+/// Verify an internal token's signature, `kind` and `expires`. Binding the
+/// claims to the actual request (`method`/`scope`/`bindings`) is the
+/// caller's job.
 pub fn decode_internal_token(
     jwt_settings: &JwtConfig,
     token: &str,
@@ -166,6 +174,13 @@ pub fn decode_internal_token(
         .claims;
     if claims.kind != INTERNAL_TOKEN_KIND {
         return Err(JwtError::InternalTokenKind(claims.kind));
+    }
+    let now = chrono::Utc::now().timestamp();
+    if claims
+        .expires
+        .is_some_and(|expires| expires + (validation.leeway as i64) < now)
+    {
+        return Err(JwtError::InternalTokenExpired);
     }
     Ok(claims)
 }
@@ -206,9 +221,14 @@ mod internal_token_tests {
     fn round_trip() {
         let jwt = config();
         let scope = "/api/v1/internal/function-versions/{function_version}/execute";
-        let token =
-            encode_internal_token(&jwt, "POST", scope, bindings(&[("function_version", "FV")]))
-                .unwrap();
+        let token = encode_internal_token(
+            &jwt,
+            "POST",
+            scope,
+            bindings(&[("function_version", "FV")]),
+            None,
+        )
+        .unwrap();
         let claims = decode_internal_token(&jwt, &token).unwrap();
         assert_eq!(claims.kind, INTERNAL_TOKEN_KIND);
         assert_eq!(claims.method, "POST");
@@ -219,7 +239,8 @@ mod internal_token_tests {
     #[test]
     fn rejects_wrong_signature() {
         let token =
-            encode_internal_token(&config(), "GET", "/s", bindings(&[("worker", "W")])).unwrap();
+            encode_internal_token(&config(), "GET", "/s", bindings(&[("worker", "W")]), None)
+                .unwrap();
         let other = JwtConfig::new("different-secret".to_string(), 3600);
         assert!(decode_internal_token(&other, &token).is_err());
     }
@@ -237,7 +258,28 @@ mod internal_token_tests {
         // And an internal token (no `exp`) must not verify as a user token.
         let jwt = config();
         let internal =
-            encode_internal_token(&jwt, "GET", "/s", bindings(&[("worker", "W")])).unwrap();
+            encode_internal_token(&jwt, "GET", "/s", bindings(&[("worker", "W")]), None).unwrap();
         assert!(decode_token(&jwt, &internal).is_err());
+        let expiring =
+            encode_internal_token(&jwt, "GET", "/s", BTreeMap::new(), Some(i64::MAX)).unwrap();
+        assert!(decode_token(&jwt, &expiring).is_err());
+    }
+
+    #[test]
+    fn an_expiring_token_decodes_until_it_expires() {
+        let jwt = config();
+        let now = chrono::Utc::now().timestamp();
+        let live =
+            encode_internal_token(&jwt, "GET", "/s", BTreeMap::new(), Some(now + 60)).unwrap();
+        assert_eq!(
+            decode_internal_token(&jwt, &live).unwrap().expires,
+            Some(now + 60)
+        );
+        let expired =
+            encode_internal_token(&jwt, "GET", "/s", BTreeMap::new(), Some(now - 60)).unwrap();
+        assert!(matches!(
+            decode_internal_token(&jwt, &expired),
+            Err(JwtError::InternalTokenExpired)
+        ));
     }
 }

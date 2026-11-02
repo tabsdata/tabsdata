@@ -116,7 +116,7 @@ mod tests {
     use axum::{Extension, Router};
     use http::method::Method;
     use serde_json::json;
-    use ta_apiserver::router::{RouterStates, named_router};
+    use ta_apiserver::router::{RouterStates, Routes};
     use td_database::pool::TdPool;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{AccessTokenId, UserId};
@@ -132,7 +132,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_users_lifecycle(db: TdPool) {
         let states = RouterStates::default().with(Services::with_defaults(db));
-        let router = named_router(
+        let router = Routes::new(&[]).named_router(
             &[
                 "list_users",
                 "get_user",

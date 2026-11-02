@@ -23,7 +23,7 @@ async fn cert_download(ssl_folder: Ctx<PathBuf>, _request: ()) -> Result<BoxedSy
 #[td_error]
 enum CertDownloadError {
     #[error("Certificate PEM file not found in server")]
-    NotFound = 0,
+    NotFound = 1000,
     #[error("Error opening certificate PEM file: {0}")]
     Open(std::io::Error) = 5000,
     #[error("Error reading certificate PEM file: {0}")]

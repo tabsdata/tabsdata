@@ -22,12 +22,14 @@ pub enum PermissionError {
         "Permission '{0}' is not registered in the authorization registry (no built-in or extension entity kind declares it)"
     )]
     UnknownPermission(td_objects::types::basic::PermissionType) = 3,
+    #[error("Permission '{0}' is held only by a system service identity and cannot be granted")]
+    ServiceOnlyPermission(td_objects::types::basic::PermissionType) = 4,
 }
 
 use td_authz::AuthzContext;
 use td_authz::rbac::{
-    ManageAccess, ManageProject, On, Project, RbacError, RbacSource, System, SystemEntity, enforce,
-    identity_grants,
+    GrantedPermission, ManageAccess, ManageProject, On, Project, RbacError, RbacSource, System,
+    SystemEntity, SystemPermission, enforce, identity_grants, project_visible_or_not_found,
 };
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
@@ -53,6 +55,13 @@ pub async fn build_permission_db<S: DbScope, M: AccessMode>(
     permission_create: &PermissionCreate,
 ) -> Result<PermissionDB, TdError> {
     let permission_type = &permission_create.permission_type;
+    if SystemPermission::from_name(permission_type.as_str())
+        .is_some_and(SystemPermission::is_service_only)
+    {
+        Err(PermissionError::ServiceOnlyPermission(
+            permission_type.clone(),
+        ))?
+    }
     let entity_name = &permission_create.entity_name;
     let entity_type = source
         .registry()
@@ -169,7 +178,8 @@ impl PermissionTarget for PermissionDBWithNames {
 /// - a permission on `__all__` / a system entity: `manage_access` on the system.
 ///
 /// The decision is the pure [`enforce`] over the requester's effective grants,
-/// so no [`Scope`](td_authz::rbac::Scope) is involved.
+/// so no [`Scope`](td_authz::rbac::Scope) is involved. A project hidden from
+/// the requester answers as a missing one.
 pub async fn authorize_permission_target<P, S: DbScope, M: AccessMode>(
     source: &AuthzContext,
     conn: &mut DomainConnection<Apiserver, S, M>,
@@ -182,15 +192,18 @@ where
     let user_grants = source.user_grants(conn, &request.user_id).await?;
     let request_grants = identity_grants(request);
     let (allowed, requirement, scope) = match permission.target_scope()? {
-        PermissionTargetScope::Project(project_id) => (
-            enforce::<Project, (ManageAccess, ManageProject)>(
-                &user_grants,
-                &request_grants,
-                &On::Entity(project_id),
-            ),
-            "(ManageAccess, ManageProject)",
-            format!("project:{project_id}"),
-        ),
+        PermissionTargetScope::Project(project_id) => {
+            project_visible_or_not_found(&user_grants, &request_grants, &project_id)?;
+            (
+                enforce::<Project, (ManageAccess, ManageProject)>(
+                    &user_grants,
+                    &request_grants,
+                    &On::Entity(project_id),
+                ),
+                "(ManageAccess, ManageProject)",
+                format!("project:{project_id}"),
+            )
+        }
         PermissionTargetScope::Global => (
             enforce::<System, ManageAccess>(
                 &user_grants,

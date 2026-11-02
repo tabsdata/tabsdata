@@ -14,11 +14,12 @@ use td_database::test_utils::MultiTestDb;
 pub mod postgres;
 
 /// Test setup carrying the components the test asked for (defaulting to the
-/// apiserver component): provision each on its own schema and hand the test
-/// their serving pools.
+/// apiserver component) and the domain it named, if any: provision each
+/// component on its own schema and hand the test their serving pools.
 pub struct DbTestSetup {
     test_name: &'static str,
     components: &'static [&'static dyn SchemaComponent],
+    domain: Option<&'static str>,
 }
 
 impl DbTestSetup {
@@ -26,10 +27,12 @@ impl DbTestSetup {
     pub fn new(
         test_name: &'static str,
         components: &'static [&'static dyn SchemaComponent],
+        domain: Option<&'static str>,
     ) -> Self {
         Self {
             test_name,
             components,
+            domain,
         }
     }
 }
@@ -42,7 +45,7 @@ impl TestSetup<Vec<TdPool>> for DbTestSetup {
         // test body. `None` declines the test — the database it needs is out of
         // reach and the policy says skip rather than fail.
         let Some(MultiTestDb { serving, cleanup }) =
-            postgres::provision(self.test_name, self.components).await
+            postgres::provision(self.test_name, self.components, self.domain).await
         else {
             return TestSetupExecution::Skip;
         };

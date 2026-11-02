@@ -7,10 +7,10 @@
 //! nests under, so the project is named in the URL and resolved by the project
 //! resolver layer before any project-scoped table is touched.
 
-use crate::extractors::Project;
 use axum::Extension;
 use axum::extract::{Path, State};
 use axum_extra::extract::Query;
+use ta_apiserver::project::Project;
 use ta_apiserver::status::error_status::ErrorStatus;
 use ta_apiserver::status::extractors::Json;
 use ta_apiserver::status::ok_status::{

@@ -44,6 +44,12 @@ impl CollectionId {
 pub struct ConnectionId(Id);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct ProbeId(Id);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct ConnectionEntityId(Id);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
 #[typed(try_from = EntityId)]
 pub struct ProjectId(Id);
 

@@ -52,11 +52,11 @@ mod tests {
     use super::*;
     use crate::Services;
     use std::str::FromStr;
-    use td_authz::rbac::RbacError;
     use td_database::pool::TdPool;
     use td_error::{TdError, assert_service_error};
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::permission::PermissionDB;
+    use td_objects::errors::SqlError;
     use td_objects::types::basic::RoleIdName;
     use td_objects::types::basic::{
         AccessTokenId, Description, EntityId, EntityName, PermissionType, ProjectName, RoleName,
@@ -95,6 +95,32 @@ mod tests {
         assert_eq!(response.granted_by_id, found.granted_by_id);
         assert_eq!(response.granted_on, found.granted_on);
         assert_eq!(response.fixed, found.fixed);
+        Ok(())
+    }
+
+    /// `maintain_catalog` belongs to a service identity: not even an admin
+    /// grants it, on the editable `default` role or a custom one.
+    #[td_test::test(db)]
+    async fn test_maintain_catalog_cannot_be_granted(db: TdPool) -> Result<(), TdError> {
+        db.seed()
+            .role(RoleName::try_from("r0")?, Description::try_from("d")?)
+            .await?;
+        let service = Services::with_defaults(db.clone());
+        for role in [RoleName::default_role().to_string(), "r0".to_string()] {
+            let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
+                RoleParam {
+                    role: RoleIdName::from_str(&role)?,
+                },
+                PermissionCreate {
+                    permission_type: PermissionType::maintain_catalog(),
+                    entity_name: None,
+                },
+            );
+            assert_service_error(service.create_permission(request).await, |err| match err {
+                crate::permission::PermissionError::ServiceOnlyPermission(_) => {}
+                other => panic!("Expected 'ServiceOnlyPermission', got {other:?}"),
+            });
+        }
         Ok(())
     }
 
@@ -191,8 +217,8 @@ mod tests {
         let service = Services::with_defaults(db.clone());
 
         assert_service_error(service.create_permission(request).await, |err| match err {
-            RbacError::Forbidden(_, _) => {}
-            other => panic!("expected Forbidden, got {other:?}"),
+            SqlError::RowNotFound(entity, _) if entity == "Project" => {}
+            other => panic!("expected the missing-project error, got {other:?}"),
         });
         Ok(())
     }

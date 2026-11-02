@@ -23,6 +23,9 @@ async fn read_project(
     let id_name = param.project;
     let conn = gated_conn.get(authz.none());
     let row: ProjectDBWithNames = conn.scd2().fetch_one(&id_name).await?;
+    authz
+        .project_visible_or_not_found(conn, &ctx, &row.project_id)
+        .await?;
     // Reading a project's metadata requires `view_project` on that project.
     let _grant = authz
         .require::<Project, ViewProject>(conn, &ctx, &row.project_id)

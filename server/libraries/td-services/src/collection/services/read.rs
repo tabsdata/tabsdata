@@ -5,7 +5,7 @@
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Project, ViewProject};
+use td_authz::rbac::{MaintainCatalog, Project, ViewProject};
 use td_database::access::{GatedConnection, InProject, RO};
 use td_error::TdError;
 use td_objects::FromDao;
@@ -23,7 +23,7 @@ async fn read_collection(
     let (project, request) = request.into_parts();
     let (ctx, param) = request.into_parts();
     let grant = authz
-        .require::<Project, ViewProject>(gated_conn, &ctx, &project)
+        .require::<Project, (ViewProject, MaintainCatalog)>(gated_conn, &ctx, &project)
         .await?;
     let conn = gated_conn.get(grant);
     let id_name = param.collection;

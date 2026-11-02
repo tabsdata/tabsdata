@@ -393,12 +393,9 @@ pub async fn plan_collection_create<S: SeesProjectRows, M: AccessMode>(
     })
 }
 
-/// The store is written BEFORE the insert (store-first), so when a connection
-/// rides along the name must be known free up front: the worker artifact path
-/// is derived from the name, and a duplicate would overwrite the existing
-/// collection's artifact before the TX uniqueness check fires (the failure
-/// cleanup would then delete it). The store's own name-ownership guard covers
-/// the remaining race.
+/// The store is written BEFORE the insert (store-first), so a taken name is
+/// rejected up front, before the store is touched, with a clean "already
+/// exists" error rather than the unique-constraint violation of the TX.
 pub(crate) async fn ensure_collection_name_free<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     name: &CollectionName,
@@ -429,7 +426,7 @@ pub struct CollectionCreatePlan {
 }
 
 /// The create transaction: insert the (store-confirmed) connection row, then
-/// the collection pointing at it, and read the result back.
+/// the collection pointing at it and its catalog row, and read the result back.
 pub async fn insert_collection_with_connection(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     request_context: &RequestContext,
@@ -454,6 +451,11 @@ pub async fn insert_collection_with_connection(
         .open(&collection, at)
         .await
         .map_err(SqlError::already_exists)?;
+    if let Some(connection_id) = &collection.connection_id {
+        conn.connection_catalogs()
+            .texts_written(connection_id)
+            .await?;
+    }
     let with_names: CollectionDBWithNames = conn.scd2().fetch_one(collection.collection_id).await?;
     CollectionRead::from_dao(with_names)
 }

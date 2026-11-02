@@ -30,6 +30,9 @@ async fn delete_project(
         let id_name = &param.project;
         let conn = trx.get(authz.none());
         let current = conn.scd2().fetch_one::<ProjectDB>(&id_name).await?;
+        authz
+            .project_visible_or_not_found(conn, &ctx, &current.project_id)
+            .await?;
         let _grant = authz
             .require::<Project, ManageProject>(conn, &ctx, &current.project_id)
             .await?;

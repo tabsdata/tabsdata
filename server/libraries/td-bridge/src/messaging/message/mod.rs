@@ -4,10 +4,12 @@
 
 pub mod cron;
 pub mod function;
+pub mod probe;
 pub mod stream;
 
 use crate::messaging::message::cron::CronRequest;
 use crate::messaging::message::function::FunctionRequest;
+use crate::messaging::message::probe::ProbeRequest;
 use crate::messaging::message::stream::StageTriggerRequest;
 use derive_new::new;
 use serde::{Deserialize, Serialize};
@@ -51,4 +53,7 @@ where
     /// request, never written to the supervisor file queue — only the
     /// kubernetes gateway produces/accepts it.
     OrchestratorCronRequestMessagePayload(CronRequest),
+    /// Kubernetes connection-probe request. Like the function request, never
+    /// written to the supervisor file queue.
+    OrchestratorProbeRequestMessagePayload(ProbeRequest),
 }

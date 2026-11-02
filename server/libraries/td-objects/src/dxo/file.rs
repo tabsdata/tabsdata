@@ -4,15 +4,15 @@
 
 //! [`DownloadResponse`] — the standard streaming response for download
 //! endpoints. Carries the byte stream plus optional `Content-Disposition`
-//! filename, `ETag`, `Cache-Control`, and the request's `If-None-Match` for
-//! a `304 Not Modified` short-circuit. RFC 7232 / 6266 / 8246 details come
-//! from the `headers` crate.
+//! filename, `ETag`, `Cache-Control`, endpoint-specific headers, and the
+//! request's `If-None-Match` for a `304 Not Modified` short-circuit. RFC
+//! 7232 / 6266 / 8246 details come from the `headers` crate.
 
 use crate::types::stream::BoxedSyncStream;
 use axum::response::{IntoResponse, Response};
 use headers::{CacheControl, ETag, HeaderMapExt, IfNoneMatch};
 use http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
-use http::{HeaderValue, StatusCode};
+use http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::str::FromStr;
@@ -33,6 +33,7 @@ pub struct DownloadResponse {
     disposition: Option<HeaderValue>,
     etag: Option<ETag>,
     cache_control: Option<CacheControl>,
+    headers: HeaderMap,
     if_none_match: Option<IfNoneMatch>,
 }
 
@@ -44,6 +45,7 @@ impl DownloadResponse {
             disposition: None,
             etag: None,
             cache_control: None,
+            headers: HeaderMap::new(),
             if_none_match: None,
         }
     }
@@ -55,6 +57,7 @@ impl DownloadResponse {
             disposition: None,
             etag: None,
             cache_control: None,
+            headers: HeaderMap::new(),
             if_none_match: None,
         }
     }
@@ -113,6 +116,11 @@ impl DownloadResponse {
         )
     }
 
+    pub fn header(mut self, name: HeaderName, value: HeaderValue) -> Self {
+        self.headers.insert(name, value);
+        self
+    }
+
     pub fn with_if_none_match(mut self, if_none_match: Option<IfNoneMatch>) -> Self {
         self.if_none_match = if_none_match;
         self
@@ -159,6 +167,7 @@ impl IntoResponse for DownloadResponse {
         if let Some(c) = self.cache_control {
             h.typed_insert(c);
         }
+        h.extend(self.headers);
         resp
     }
 }
@@ -204,6 +213,17 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::NO_CONTENT);
         assert!(resp.headers().get(CONTENT_TYPE).is_none());
         assert!(body_bytes(resp).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn header_is_sent() {
+        let resp = DownloadResponse::csv(payload_stream(b""))
+            .header(
+                HeaderName::from_static("x-td-truncated"),
+                HeaderValue::from_static("true"),
+            )
+            .into_response();
+        assert_eq!(resp.headers().get("x-td-truncated").unwrap(), "true");
     }
 
     #[tokio::test]

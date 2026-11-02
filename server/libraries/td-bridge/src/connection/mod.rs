@@ -24,11 +24,6 @@ pub trait ConnectionStore: Send + Sync {
     /// Create or update the connection; returns what is now stored (names only).
     /// Idempotent: re-running with the same id overwrites.
     ///
-    /// The document's `name` is exclusive within the project: the store MUST
-    /// reject an upsert whose name is already stored under a different
-    /// connection id — the worker artifact path is derived from the name, so
-    /// a second owner would hijack the first one's artifact.
-    ///
     /// Secret entries with `value: None` mean "keep the stored value": the
     /// store MUST substitute the value it already holds for that key, and MUST
     /// reject the write if it holds none. The server pre-validates kept keys

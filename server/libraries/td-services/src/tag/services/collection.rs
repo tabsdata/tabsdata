@@ -7,7 +7,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project, ViewProject};
-use td_database::access::{AccessMode, GatedConnection, InProject, RO, RW};
+use td_database::access::{AccessMode, GatedConnection, InProject, RO, RW, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::collection::{CollectionDB, CollectionParam};
@@ -19,9 +19,21 @@ use td_queries::Queries;
 async fn collection<M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, InProject, M>,
     collection: &CollectionParam,
-) -> Result<TagEntity, TdError> {
-    let collection: CollectionDB = conn.scd2().fetch_one(&collection.collection).await?;
-    Ok(TagEntity::from(collection.collection_id))
+) -> Result<CollectionDB, TdError> {
+    Ok(conn.scd2().fetch_one(&collection.collection).await?)
+}
+
+/// A connected collection's tags are part of its catalog's texts.
+async fn tags_written<M: WriteMode>(
+    conn: &mut DomainConnection<Apiserver, InProject, M>,
+    collection: &CollectionDB,
+) -> Result<(), TdError> {
+    if let Some(connection_id) = &collection.connection_id {
+        conn.connection_catalogs()
+            .texts_written(connection_id)
+            .await?;
+    }
+    Ok(())
 }
 
 #[service_factory]
@@ -36,8 +48,8 @@ async fn list_collection_tags(
         .require::<Project, ViewProject>(gated_conn, &ctx, &project)
         .await?;
     let conn = gated_conn.get(grant);
-    let entity = collection(conn, &collection_param).await?;
-    entity_tags(conn, entity).await
+    let collection = collection(conn, &collection_param).await?;
+    entity_tags(conn, TagEntity::from(collection.collection_id)).await
 }
 
 #[service_factory]
@@ -53,8 +65,17 @@ async fn set_collection_tag(
         .await?;
     let at = gated_trx.locked_at();
     let conn = gated_trx.get(grant);
-    let entity = collection(conn, &collection_param).await?;
-    set_user_tag(conn, &ctx, entity, set, at).await
+    let collection = collection(conn, &collection_param).await?;
+    let tag = set_user_tag(
+        conn,
+        &ctx,
+        TagEntity::from(collection.collection_id),
+        set,
+        at,
+    )
+    .await?;
+    tags_written(conn, &collection).await?;
+    Ok(tag)
 }
 
 #[service_factory]
@@ -70,6 +91,7 @@ async fn delete_collection_tag(
         .await?;
     let at = gated_trx.locked_at();
     let conn = gated_trx.get(grant);
-    let entity = collection(conn, &collection_param).await?;
-    delete_user_tag(conn, entity, tag.key, at).await
+    let collection = collection(conn, &collection_param).await?;
+    delete_user_tag(conn, TagEntity::from(collection.collection_id), tag.key, at).await?;
+    tags_written(conn, &collection).await
 }

@@ -2,16 +2,15 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::token::TokenError;
+use crate::token::delete_token_in_slot;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{ManageAccess, System, SystemEntity};
 use td_database::access::{DbPool, Global, retrying};
 use td_error::TdError;
-use td_objects::and;
 use td_objects::dxo::crudl::DeleteRequest;
-use td_objects::dxo::service_token::{ServiceTokenDB, UserSlotParam};
+use td_objects::dxo::service_token::UserSlotParam;
 use td_objects::dxo::user::UserDB;
 use td_queries::Queries;
 use tracing::info;
@@ -31,14 +30,7 @@ async fn revoke_user_service_token(
         let conn = trx.get(grant);
 
         let user: UserDB = conn.fetch_one(&param.user).await?;
-        let row: ServiceTokenDB = conn
-            .fetch_optional(and!(&user.id, &param.slot))
-            .await?
-            .ok_or(TokenError::NotFound)?;
-        if *row.system {
-            Err(TokenError::SystemManaged)?
-        }
-        conn.delete::<ServiceTokenDB>(row.id).await?;
+        let row = delete_token_in_slot(conn, &user.id, &param.slot).await?;
         trx.commit().await?;
         Ok(row)
     })

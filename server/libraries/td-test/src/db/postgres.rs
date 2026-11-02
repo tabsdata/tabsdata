@@ -24,10 +24,14 @@ use td_database::test_utils::MultiTestDb;
 pub const DEFAULT_DOMAIN: &str = "apiserver_postgres";
 
 /// Points the db tests at a different domain — for a developer running against
-/// one of their own.
+/// one of their own. Only the tests that name no domain move: a test's
+/// `db(domain = ...)` states what the test needs, so it outranks this.
 pub const DOMAIN_ENV: &str = "TD_TEST_DB_DOMAIN";
 
-fn domain_name() -> String {
+fn domain_name(explicit: Option<&str>) -> String {
+    if let Some(name) = explicit {
+        return name.to_string();
+    }
     std::env::var(DOMAIN_ENV)
         .map(|name| name.trim().to_string())
         .ok()
@@ -50,14 +54,16 @@ fn admin_connect(domain: &PostgresDomain) -> Result<PostgresConnect, String> {
 }
 
 /// Provision the given components — each on its own schema of the resolved
-/// domain's database — and return a serving pool per component. `None`
-/// declines the test: the domain is out of reach and the policy says skip
-/// rather than fail. `test_name` only labels the diagnostic.
+/// domain's database (`domain`, else [`DOMAIN_ENV`], else [`DEFAULT_DOMAIN`]) —
+/// and return a serving pool per component. `None` declines the test: the
+/// domain is out of reach and the policy says skip rather than fail.
+/// `test_name` only labels the diagnostic.
 pub async fn provision(
     test_name: &'static str,
     components: &'static [&'static dyn SchemaComponent],
+    domain: Option<&'static str>,
 ) -> Option<MultiTestDb> {
-    let name = domain_name();
+    let name = domain_name(domain);
     let domain = resolve_domain::<PostgresDomain>(&name, test_name)?;
     let admin = admin_connect(&domain).unwrap_or_else(|why| {
         panic!("Database not usable, test: {test_name}. domain '{name}': {why}")
@@ -71,15 +77,22 @@ mod tests {
 
     #[test]
     fn test_domain_name_defaults_and_overrides() {
+        const OWN_DOMAIN: &str = "apiserver_postgres_own";
         temp_env::with_var_unset(DOMAIN_ENV, || {
-            assert_eq!(domain_name(), DEFAULT_DOMAIN);
+            assert_eq!(domain_name(None), DEFAULT_DOMAIN);
+            assert_eq!(domain_name(Some(OWN_DOMAIN)), OWN_DOMAIN);
         });
         temp_env::with_var(DOMAIN_ENV, Some("  mine  "), || {
-            assert_eq!(domain_name(), "mine");
+            assert_eq!(domain_name(None), "mine");
+            assert_eq!(
+                domain_name(Some(OWN_DOMAIN)),
+                OWN_DOMAIN,
+                "a test's own domain outranks the override"
+            );
         });
         // A blank override is an unset one, not a nameless domain.
         temp_env::with_var(DOMAIN_ENV, Some("  "), || {
-            assert_eq!(domain_name(), DEFAULT_DOMAIN);
+            assert_eq!(domain_name(None), DEFAULT_DOMAIN);
         });
     }
 

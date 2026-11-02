@@ -279,6 +279,24 @@ pub struct ToCollectionName(String);
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
 pub struct TokenType(String);
 
+/// Shown once, at creation; the row keeps a [`TokenDigest`].
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(secret)]
+pub struct ServiceToken(String);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+#[typed(len = 64)]
+pub struct TokenDigest(String);
+
+/// Head of the token body, to match a found token to its slot.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(len = HINT_LENGTH)]
+pub struct TokenHint(String);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(max_len = 200)]
+pub struct TokenComment(String);
+
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
 #[typed(default = "F")]
 pub struct TransactionByStr(String);
@@ -409,21 +427,3 @@ mod tests {
         assert_eq!(BasePath::default().0, "/");
     }
 }
-
-/// Shown once, at creation; the row keeps a [`TokenDigest`].
-#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
-#[typed(secret)]
-pub struct ServiceToken(String);
-
-#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
-#[typed(len = 64)]
-pub struct TokenDigest(String);
-
-/// Head of the token body, to match a found token to its slot.
-#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
-#[typed(len = HINT_LENGTH)]
-pub struct TokenHint(String);
-
-#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
-#[typed(max_len = 200)]
-pub struct TokenComment(String);

@@ -74,6 +74,7 @@ derive-new = { workspace = true }
 futures = { workspace = true }
 headers = { workspace = true }
 http = { workspace = true }
+humantime = { workspace = true }
 itertools = { workspace = true }
 nonempty = { workspace = true }
 polars = { workspace = true }

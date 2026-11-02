@@ -29,6 +29,7 @@ pub(crate) fn dispatch_services(db: &TdPool) -> Services {
             td_apiserver::FUNCTION_VERSION_EXECUTION_STATUS_PATH,
         ),
         download_function_state: Route::new(td_apiserver::DOWNLOAD_STATE_PATH),
+        probe_result: Route::new(td_apiserver::CONNECTION_PROBE_RESULT_PATH),
     };
     services.internal_api = Ctx::new(InternalApi::new(
         routes,

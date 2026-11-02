@@ -412,7 +412,7 @@ pub enum GlobalStatus {
 /// `(entity_type, entity_id)` pair.
 ///
 /// An open string (not a closed enum): the built-in OS entity types are
-/// `system` and `project`, but extensions register their own (e.g. `ai`) in the
+/// `system` and `project`, but extensions register their own in the
 /// authorization registry. The set of *valid* values is whatever the registry
 /// has registered — validated at the grant-create boundary, not by this type.
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
@@ -433,8 +433,8 @@ impl PermissionEntityType {
 /// A permission name, stored in `permissions.permission_type`. The stored value
 /// is the exact user-facing symbol — no internal/external translation layer.
 ///
-/// An open string (not a closed enum): the six built-in OS permissions are
-/// listed below, but extensions register their own (e.g. `manage_ai`) in the
+/// An open string (not a closed enum): the seven built-in OS permissions are
+/// listed below, but extensions register their own in the
 /// authorization registry. The set of *valid* `(entity_type, permission)` pairs
 /// is whatever the registry has registered — validated at the grant-create
 /// boundary, not by this type.
@@ -451,6 +451,9 @@ impl PermissionType {
     }
     pub fn manage_roles() -> Self {
         Self::try_from("manage_roles").expect("built-in permission")
+    }
+    pub fn maintain_catalog() -> Self {
+        Self::try_from("maintain_catalog").expect("built-in permission")
     }
     // project permissions (entity `project:<id>` or `project:__all__`)
     pub fn view_project() -> Self {
@@ -470,7 +473,7 @@ impl PermissionType {
     /// OS-core create/translation paths handle.
     pub fn on_entity_type(&self) -> Option<PermissionEntityType> {
         match self.as_str() {
-            "manage_access" | "create_projects" | "manage_roles" => {
+            "manage_access" | "create_projects" | "manage_roles" | "maintain_catalog" => {
                 Some(PermissionEntityType::system())
             }
             "view_project" | "develop_project" | "manage_project" => {

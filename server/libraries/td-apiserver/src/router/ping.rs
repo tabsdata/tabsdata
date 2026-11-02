@@ -34,14 +34,14 @@ mod tests {
     use axum::body::Body;
     use axum::extract::Request;
     use http::{Method, StatusCode};
-    use ta_apiserver::router::{RouterStates, named_router};
+    use ta_apiserver::router::{RouterStates, Routes};
     use td_services::Services;
     use tower::ServiceExt;
 
     #[tokio::test]
     async fn ping_returns_200_without_a_request_context() {
         let states = RouterStates::default().with(Services::default());
-        let app: Router = named_router(&["ping"], &states).into();
+        let app: Router = Routes::new(&[]).named_router(&["ping"], &states).into();
         let response = app
             .oneshot(
                 Request::builder()
