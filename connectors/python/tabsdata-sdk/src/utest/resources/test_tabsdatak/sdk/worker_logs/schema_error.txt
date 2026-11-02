@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/work/bundle/user_code/join.py", line 21, in join_orders
+    return left.join(right, on="id")
+polars.exceptions.SchemaError: datatypes of join keys don't match - `id`: i64 on left does not match `id`: str on right

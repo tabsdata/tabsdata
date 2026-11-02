@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/work/bundle/user_code/agg.py", line 9, in rollup
+    big = [row for row in rows for _ in range(10**9)]
+MemoryError

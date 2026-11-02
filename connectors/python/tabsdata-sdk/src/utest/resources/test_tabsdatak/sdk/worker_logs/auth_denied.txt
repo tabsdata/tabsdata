@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/opt/tabsdata/connectors/s3.py", line 140, in read
+    obj = client.get_object(Bucket=bucket, Key=key)
+botocore.exceptions.ClientError: An error occurred (AccessDenied) when calling the GetObject operation: Access Denied

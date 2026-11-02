@@ -53,23 +53,6 @@ def execution_status_to_mapping(status: str) -> str:
     return EXECUTION_STATUS_MAPPING.get(status, status)
 
 
-EXECUTION_FAILED_FINAL_STATUSES = {
-    execution_status_to_mapping(ExecutionStatus.STALLED.value),
-    execution_status_to_mapping(ExecutionStatus.UNEXPECTED.value),
-}
-
-# Final classification of statuses is pending consideration of the counters. For now,
-# successful just means "the user does not have to examine the logs to see what went
-# wrongs, and doesn't have to take any action".
-EXECUTION_SUCCESSFUL_FINAL_STATUSES = {
-    execution_status_to_mapping(ExecutionStatus.FINISHED.value),
-}
-
-
-EXECUTION_FINAL_STATUSES = (
-    EXECUTION_FAILED_FINAL_STATUSES | EXECUTION_SUCCESSFUL_FINAL_STATUSES
-)
-
 EXECUTION_VALID_USER_PROVIDED_STATUSES = ", ".join([
     f"{long}/{short}" for short, long in EXECUTION_STATUS_MAPPING.items()
 ])

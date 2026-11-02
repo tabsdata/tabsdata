@@ -27,10 +27,12 @@ from tabsdatak.api import (
 )
 
 # noinspection PyProtectedMember
-from tabsdatak.sdk import _apiserver as a
-
 # noinspection PyProtectedMember
-from tabsdatak.sdk import tabsdata_server as ts
+from tabsdatak.sdk import (
+    _apiserver as a,
+    _function_archive as fa,
+    tabsdata_server as ts,
+)
 
 # ---------------------------------------------------------------------------
 # Duck-typed FunctionInfo stand-ins for the metadata extractor tests.
@@ -90,9 +92,9 @@ def _stub_connector_registry(monkeypatch):
     def get_stream_src(cls):
         raise KeyError(cls)
 
-    monkeypatch.setattr(ts._connectors, "get_src", get_src)
-    monkeypatch.setattr(ts._connectors, "get_dest", get_dest)
-    monkeypatch.setattr(ts._connectors, "get_stream_src", get_stream_src)
+    monkeypatch.setattr(fa._connectors, "get_src", get_src)
+    monkeypatch.setattr(fa._connectors, "get_dest", get_dest)
+    monkeypatch.setattr(fa._connectors, "get_stream_src", get_stream_src)
 
 
 def _decorated(name: str):
@@ -188,64 +190,64 @@ def test_kind_to_api_type_maps_publisher_to_p():
         KIND_TRANSFORMER_DEF,
     )
 
-    assert ts._KIND_TO_API_TYPE[KIND_PUBLISHER_DEF] == "P"
-    assert ts._KIND_TO_API_TYPE[KIND_STREAM_PUBLISHER_DEF] == "P"
-    assert ts._KIND_TO_API_TYPE[KIND_TRANSFORMER_DEF] == "T"
-    assert ts._KIND_TO_API_TYPE[KIND_SUBSCRIBER_DEF] == "S"
+    assert fa._KIND_TO_API_TYPE[KIND_PUBLISHER_DEF] == "P"
+    assert fa._KIND_TO_API_TYPE[KIND_STREAM_PUBLISHER_DEF] == "P"
+    assert fa._KIND_TO_API_TYPE[KIND_TRANSFORMER_DEF] == "T"
+    assert fa._KIND_TO_API_TYPE[KIND_SUBSCRIBER_DEF] == "S"
 
 
 def test_input_tables_returns_publisher_empty_list():
-    assert ts._input_tables(_publisher_info()) == []
+    assert fa._input_tables(_publisher_info()) == []
 
 
 def test_input_tables_returns_transformer_input_tables():
     info = _transformer_info(input_tables=["c/a", "c/b"])
-    assert ts._input_tables(info) == ["c/a", "c/b"]
+    assert fa._input_tables(info) == ["c/a", "c/b"]
 
 
 def test_input_tables_returns_subscriber_input_tables():
     info = _subscriber_info(input_tables=["c/x"])
-    assert ts._input_tables(info) == ["c/x"]
+    assert fa._input_tables(info) == ["c/x"]
 
 
 def test_output_tables_returns_publisher_outputs():
     info = _publisher_info(output_tables=["t1", "t2"])
-    assert ts._output_tables(info) == ["t1", "t2"]
+    assert fa._output_tables(info) == ["t1", "t2"]
 
 
 def test_output_tables_returns_empty_for_subscriber():
-    assert ts._output_tables(_subscriber_info()) == []
+    assert fa._output_tables(_subscriber_info()) == []
 
 
 def test_connector_for_publisher_returns_source_class_fqn():
-    assert ts._connector(_publisher_info()) == qualified_class(_FakeSrc)
+    assert fa._connector(_publisher_info()) == qualified_class(_FakeSrc)
 
 
 def test_connector_for_subscriber_returns_destination_class_fqn():
-    assert ts._connector(_subscriber_info()) == qualified_class(_FakeDest)
+    assert fa._connector(_subscriber_info()) == qualified_class(_FakeDest)
 
 
 def test_connector_for_transformer_is_none():
-    assert ts._connector(_transformer_info()) is None
+    assert fa._connector(_transformer_info()) is None
 
 
 def test_connection_for_publisher_comes_from_registry_not_decorator():
     # The registry binds the source to ``_FakeSrcConn``; ``_connection``
     # reports that Conn class's FQN, not anything from the decorator.
-    assert ts._connection(_publisher_info()) == qualified_class(_FakeSrcConn)
+    assert fa._connection(_publisher_info()) == qualified_class(_FakeSrcConn)
 
 
 def test_connection_for_subscriber_comes_from_registry_not_decorator():
-    assert ts._connection(_subscriber_info()) == qualified_class(_FakeDestConn)
+    assert fa._connection(_subscriber_info()) == qualified_class(_FakeDestConn)
 
 
 def test_connection_for_transformer_is_none():
-    assert ts._connection(_transformer_info()) is None
+    assert fa._connection(_transformer_info()) is None
 
 
 def test_cron_workers_returns_ct_payload_for_cron_trigger():
     info = _publisher_info(trigger_by=CronTrigger(mask="0 * * * *"))
-    workers = ts._workers(info)
+    workers = fa._workers(info)
     assert workers is not None
     assert "CT" in workers
     assert "0 * * * *" in workers["CT"]
@@ -253,11 +255,11 @@ def test_cron_workers_returns_ct_payload_for_cron_trigger():
 
 def test_cron_workers_returns_none_for_non_cron_trigger():
     info = _transformer_info(trigger_by=TablesTrigger(tables=["c/a"]))
-    assert ts._workers(info) is None
+    assert fa._workers(info) is None
 
 
 def test_cron_workers_returns_none_for_none_trigger():
-    assert ts._workers(_publisher_info(trigger_by=None)) is None
+    assert fa._workers(_publisher_info(trigger_by=None)) is None
 
 
 def test_workers_returns_st_payload_for_stream_publisher():
@@ -276,7 +278,7 @@ def test_workers_returns_st_payload_for_stream_publisher():
         trigger_by=None,
     )
 
-    workers = ts._workers(info)
+    workers = fa._workers(info)
     assert workers is not None
     assert list(workers) == ["ST"]
     # StageTriggerConfig fields all carry serde defaults Rust-side
@@ -285,35 +287,29 @@ def test_workers_returns_st_payload_for_stream_publisher():
     assert json.loads(workers["ST"]) == {}
 
 
-def test_workers_backcompat_alias_preserved():
-    """The old name ``_cron_workers`` is kept as an alias for any
-    out-of-tree caller -- both names resolve to the same function."""
-    assert ts._cron_workers is ts._workers
-
-
 def test_trigger_string_list_returns_table_list_for_tables_trigger():
     info = _transformer_info(trigger_by=TablesTrigger(tables=["c/a", "c/b"]))
-    assert ts._trigger_string_list(info) == ["c/a", "c/b"]
+    assert fa._trigger_string_list(info) == ["c/a", "c/b"]
 
 
 def test_trigger_string_list_has_no_tables_for_cron_trigger():
     info = _transformer_info(trigger_by=CronTrigger(mask="0 * * * *"))
-    assert ts._trigger_string_list(info) == []
+    assert fa._trigger_string_list(info) == []
 
 
 def test_trigger_string_list_leaves_all_tables_trigger_to_the_server():
     info = _transformer_info(trigger_by=AllTablesTrigger())
-    assert ts._trigger_string_list(info) is None
+    assert fa._trigger_string_list(info) is None
 
 
 def test_trigger_string_list_leaves_no_trigger_to_the_server():
-    assert ts._trigger_string_list(_transformer_info(trigger_by=None)) is None
-    assert ts._trigger_string_list(_publisher_info(trigger_by=None)) is None
+    assert fa._trigger_string_list(_transformer_info(trigger_by=None)) is None
+    assert fa._trigger_string_list(_publisher_info(trigger_by=None)) is None
 
 
 def test_trigger_string_list_has_no_tables_for_a_manual_function():
     info = _transformer_info(trigger_by=TablesTrigger(tables=[]))
-    assert ts._trigger_string_list(info) == []
+    assert fa._trigger_string_list(info) == []
 
 
 # ---------------------------------------------------------------------------
@@ -347,8 +343,8 @@ def _no_op_bundle(monkeypatch):
         Path(output_path).write_bytes(b"stub")
         return output_path
 
-    monkeypatch.setattr(ts, "build_bundle", fake_build)
-    monkeypatch.setattr(ts, "capture_source_snippet", lambda info: "<source>")
+    monkeypatch.setattr(fa, "build_bundle", fake_build)
+    monkeypatch.setattr(fa, "capture_source_snippet", lambda info: "<source>")
     return captured
 
 
@@ -357,7 +353,7 @@ def test_create_archive_calls_build_bundle_and_returns_path(
 ):
     info = _publisher_info()
     with tempfile.TemporaryDirectory() as tmp:
-        archive = ts._create_archive("coll", info, project_root, tmp)
+        archive = fa._create_archive("coll", info, project_root, tmp)
         assert Path(archive.context_location).exists()
         # The bundle was written under the supplied tmp dir.
         assert Path(archive.context_location).parent == Path(tmp)
@@ -373,7 +369,7 @@ def test_create_archive_publisher_cron_extracts_metadata(project_root, _no_op_bu
         trigger_by=CronTrigger(mask="*/5 * * * *"),
     )
     with tempfile.TemporaryDirectory() as tmp:
-        archive = ts._create_archive("coll", info, project_root, tmp)
+        archive = fa._create_archive("coll", info, project_root, tmp)
 
     assert archive.function_name == "pub_fn"
     assert archive.function_type == "P"
@@ -408,7 +404,7 @@ def test_create_archive_parents_each_derived_table_on_its_output(
         ),
     ]
     with tempfile.TemporaryDirectory() as tmp:
-        archive = ts._create_archive("coll", info, project_root, tmp)
+        archive = fa._create_archive("coll", info, project_root, tmp)
 
     # One map for the owner's summaries and its trend transformers' tables:
     # each derives from the table its action is declared on.
@@ -430,7 +426,7 @@ def test_create_archive_transformer_tables_trigger(project_root, _no_op_bundle):
         trigger_by=TablesTrigger(tables=["coll/trig"]),
     )
     with tempfile.TemporaryDirectory() as tmp:
-        archive = ts._create_archive("coll", info, project_root, tmp)
+        archive = fa._create_archive("coll", info, project_root, tmp)
     assert archive.function_type == "T"
     assert archive.string_dependencies == ["coll/a", "coll/b"]
     assert archive.tables == ["out"]
@@ -443,7 +439,7 @@ def test_create_archive_transformer_tables_trigger(project_root, _no_op_bundle):
 def test_create_archive_subscriber_no_outputs(project_root, _no_op_bundle):
     info = _subscriber_info(input_tables=["coll/x", "coll/y"])
     with tempfile.TemporaryDirectory() as tmp:
-        archive = ts._create_archive("coll", info, project_root, tmp)
+        archive = fa._create_archive("coll", info, project_root, tmp)
     assert archive.function_type == "S"
     assert archive.tables == []
     assert archive.string_dependencies == ["coll/x", "coll/y"]
@@ -458,7 +454,7 @@ def test_create_archive_accepts_temporary_directory_object(project_root, _no_op_
     info = _publisher_info()
     td = tempfile.TemporaryDirectory()
     try:
-        archive = ts._create_archive("coll", info, project_root, td)
+        archive = fa._create_archive("coll", info, project_root, td)
         assert Path(archive.context_location).exists()
     finally:
         td.cleanup()
@@ -469,7 +465,7 @@ def test_create_archive_forwards_local_packages_and_python_versions(
 ):
     info = _publisher_info()
     with tempfile.TemporaryDirectory() as tmp:
-        ts._create_archive(
+        fa._create_archive(
             "coll",
             info,
             project_root,
@@ -493,7 +489,7 @@ def test_create_archive_forwards_requirements_to_build_bundle(
     requirements_file.write_text("publicPackages: []\n", encoding="utf-8")
     info = _publisher_info()
     with tempfile.TemporaryDirectory() as tmp:
-        ts._create_archive(
+        fa._create_archive(
             "coll",
             info,
             project_root,
@@ -509,7 +505,7 @@ def test_create_archive_passes_none_requirements_yaml_when_not_set(
 ):
     info = _publisher_info()
     with tempfile.TemporaryDirectory() as tmp:
-        ts._create_archive("coll", info, project_root, tmp)
+        fa._create_archive("coll", info, project_root, tmp)
     assert _no_op_bundle["kw"]["requirements_yaml"] is None
 
 
@@ -528,10 +524,10 @@ def test_function_info_alias_covers_all_kinds():
         TransformerInfo,
     )
 
-    assert PublisherInfo in ts.FunctionInfo.__args__
-    assert StreamPublisherInfo in ts.FunctionInfo.__args__
-    assert TransformerInfo in ts.FunctionInfo.__args__
-    assert SubscriberInfo in ts.FunctionInfo.__args__
+    assert PublisherInfo in fa.FunctionInfo.__args__
+    assert StreamPublisherInfo in fa.FunctionInfo.__args__
+    assert TransformerInfo in fa.FunctionInfo.__args__
+    assert SubscriberInfo in fa.FunctionInfo.__args__
 
 
 # ---------------------------------------------------------------------------
@@ -624,6 +620,15 @@ def test_download_function_bundle_writes_response_content(tmp_path):
     assert seen["fvid"] == "fv-123"
     assert seen["raise_for_status"] is True
     assert dest.read_bytes() == b"TGZ-BYTES"
+
+
+def test_from_token_authenticates_with_the_bearer_token_alone():
+    server = ts.TabsdataServer.from_token("127.0.0.1", "tok")
+
+    assert isinstance(server, ts.TabsdataServer)
+    assert server.connection.url == a.process_url("127.0.0.1")
+    assert server.connection.authentication_header == {"Authorization": "Bearer tok"}
+    assert server.connection.refresh_token is None
 
 
 def test_collection_stores_explicit_base_path_in_both_slots():
@@ -949,18 +954,26 @@ def test_child_functions_pass_packaging_options_through():
 # ---------------------------------------------------------------------------
 
 
+def _streamed(content: bytes):
+    from unittest.mock import MagicMock
+
+    response = MagicMock()
+    response.iter_content.side_effect = lambda size: iter([content] if content else [])
+    return response
+
+
 def _table_downloading(content: bytes):
     from unittest.mock import MagicMock
 
     connection = MagicMock()
-    connection.table_download.return_value = MagicMock(content=content)
+    connection.table_download.return_value = _streamed(content)
     return ts.Table(connection, "coll", "orders"), connection
 
 
-def test_download_writes_the_table_and_returns_its_path(tmp_path):
+def test_download_writes_the_table_and_returns_its_size(tmp_path):
     table, _ = _table_downloading(b"PAR1-data-PAR1")
     destination = tmp_path / "orders.parquet"
-    assert table.download(str(destination)) == destination
+    assert table.download(str(destination)) == len(b"PAR1-data-PAR1")
     assert destination.read_bytes() == b"PAR1-data-PAR1"
 
 
@@ -971,11 +984,20 @@ def test_download_of_a_version_without_data_writes_nothing(tmp_path):
     assert not destination.exists()
 
 
+def test_download_of_a_version_without_data_keeps_an_existing_destination(tmp_path):
+    table, _ = _table_downloading(b"")
+    destination = tmp_path / "orders.parquet"
+    destination.write_bytes(b"kept")
+    assert table.download(str(destination)) is None
+    assert destination.read_bytes() == b"kept"
+    assert list(tmp_path.iterdir()) == [destination]
+
+
 def test_download_table_forwards_what_the_table_download_returns(tmp_path):
     from unittest.mock import MagicMock
 
     connection = MagicMock()
-    connection.table_download.return_value = MagicMock(content=b"")
+    connection.table_download.return_value = _streamed(b"")
     server = ts.TabsdataServer.__new__(ts.TabsdataServer)
     server.connection = connection
     destination = tmp_path / "orders.parquet"
@@ -1109,6 +1131,31 @@ def test_list_tag_keys_and_values_pass_their_narrowing():
     connection.tag_values.assert_called_once_with(
         "team", None, "U", None, None, raise_for_status=True
     )
+
+
+def test_project_graph_converts_a_textual_at():
+    server, connection = _tag_server()
+    connection.project_graph.return_value.json.return_value = {"data": {"v": 1}}
+    assert server.project_graph(at="1750074554472") == {"v": 1}
+    connection.project_graph.assert_called_once_with(
+        topology_version=None, at=1750074554472, raise_for_status=True
+    )
+
+
+def test_list_topology_versions_walks_every_page():
+    server, connection = _tag_server()
+    pages = [
+        {"data": {"data": [{"id": "a"}], "next_pagination_id": "p", "next": "n"}},
+        {"data": {"data": [{"id": "b"}], "next_pagination_id": None, "next": None}},
+    ]
+    connection.topology_version_list.return_value.json.side_effect = pages
+    assert server.list_topology_versions(order_by="valid_from-") == [
+        {"id": "a"},
+        {"id": "b"},
+    ]
+    second = connection.topology_version_list.call_args_list[1].kwargs
+    assert (second["pagination_id"], second["next_step"]) == ("p", "n")
+    assert second["order_by"] == "valid_from-"
 
 
 def test_list_tags_of_the_project_walks_every_page_with_the_filter():

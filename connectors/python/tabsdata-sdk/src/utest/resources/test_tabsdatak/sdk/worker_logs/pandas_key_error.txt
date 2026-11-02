@@ -1,0 +1,7 @@
+INFO running transformer
+Traceback (most recent call last):
+  File "/work/bundle/user_code/pipeline/transform.py", line 17, in enrich
+    df["region"] = df["country"].map(REGIONS)
+  File "/opt/venv/lib/python3.12/site-packages/pandas/core/frame.py", line 4102, in __getitem__
+    indexer = self.columns.get_loc(key)
+KeyError: 'country'

@@ -1,0 +1,4 @@
+2026-09-01 10:00:00 ERROR Traceback (most recent call last):
+  File "/work/bundle/user_code/fx.py", line 5, in convert
+    rate = RATES[currency]
+KeyError: 'XYZ'

@@ -17,7 +17,6 @@ class FunctionRunStatus(Enum):
     SCHEDULED = "S"
     CANCELED = "X"
     YANKED = "Y"
-    UNEXPECTED = "U"
 
 
 FUNCTION_RUN_STATUS_MAPPING = {
@@ -32,8 +31,23 @@ FUNCTION_RUN_STATUS_MAPPING = {
     FunctionRunStatus.SCHEDULED.value: "Scheduled",
     FunctionRunStatus.CANCELED.value: "Canceled",
     FunctionRunStatus.YANKED.value: "Yanked",
-    FunctionRunStatus.UNEXPECTED.value: "Unexpected",
 }
+
+
+class PhysicalFunctionRunStatus(Enum):
+    REQUESTED = "RR"
+    DISPATCHED = "DP"
+    RUNNING = "R"
+    DONE = "D"
+    ERROR = "E"
+    FAILED = "F"
+
+
+PHYSICAL_FUNCTION_RUN_ENDED_STATUSES = frozenset({
+    PhysicalFunctionRunStatus.DONE.value,
+    PhysicalFunctionRunStatus.ERROR.value,
+    PhysicalFunctionRunStatus.FAILED.value,
+})
 
 
 def function_run_status_to_mapping(status: str) -> str:
@@ -44,26 +58,6 @@ def function_run_status_to_mapping(status: str) -> str:
     """
     return FUNCTION_RUN_STATUS_MAPPING.get(status, status)
 
-
-FUNCTION_RUN_FAILED_FINAL_STATUSES = {
-    function_run_status_to_mapping(FunctionRunStatus.FAILED.value),
-    function_run_status_to_mapping(FunctionRunStatus.ON_HOLD.value),
-    function_run_status_to_mapping(FunctionRunStatus.UNEXPECTED.value),
-}
-
-# Final classification of statuses is pending consideration of the counters. For now,
-# successful just means "the user does not have to examine the logs to see what went
-# wrongs, and doesn't have to take any action".
-FUNCTION_RUN_SUCCESSFUL_FINAL_STATUSES = {
-    function_run_status_to_mapping(FunctionRunStatus.CANCELED.value),
-    function_run_status_to_mapping(FunctionRunStatus.COMMITTED.value),
-    function_run_status_to_mapping(FunctionRunStatus.YANKED.value),
-}
-
-
-FUNCTION_RUN_FINAL_STATUSES = (
-    FUNCTION_RUN_FAILED_FINAL_STATUSES | FUNCTION_RUN_SUCCESSFUL_FINAL_STATUSES
-)
 
 FUNCTION_RUN_VALID_USER_PROVIDED_STATUSES = ", ".join([
     f"{long}/{short}" for short, long in FUNCTION_RUN_STATUS_MAPPING.items()

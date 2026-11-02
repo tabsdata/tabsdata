@@ -1,0 +1,3 @@
+2026-09-01 10:00:00 INFO starting
+2026-09-01 10:00:05 INFO wrote 1200 rows to 'orders_clean'
+2026-09-01 10:00:05 INFO done

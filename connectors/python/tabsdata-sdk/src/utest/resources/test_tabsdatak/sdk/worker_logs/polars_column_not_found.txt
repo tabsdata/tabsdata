@@ -1,0 +1,11 @@
+2026-09-01 10:00:00,001 INFO Starting function 'clean_orders'
+2026-09-01 10:00:00,120 INFO Loading input table 'orders'
+Traceback (most recent call last):
+  File "/opt/tabsdata/runner/run_function.py", line 211, in execute
+    result = function(*inputs)
+  File "/work/bundle/user_code/clean.py", line 42, in clean_orders
+    return orders.select(td.col("amount"))
+  File "/opt/venv/lib/python3.12/site-packages/polars/lazyframe/frame.py", line 2055, in collect
+    return wrap_df(ldf.collect(callback))
+polars.exceptions.ColumnNotFoundError: unable to find column "amount"; valid columns: ["id", "total"]
+2026-09-01 10:00:00,300 ERROR Function 'clean_orders' failed

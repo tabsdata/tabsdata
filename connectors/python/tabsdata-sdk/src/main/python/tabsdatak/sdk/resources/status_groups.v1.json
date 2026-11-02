@@ -1,0 +1,140 @@
+{
+  "version": 1,
+  "entities": {
+    "execution": {
+      "groups": {
+        "running": [
+          "R",
+          "S"
+        ],
+        "warning": [],
+        "error": [
+          "L",
+          "U"
+        ],
+        "ok": [
+          "F"
+        ]
+      },
+      "final": [
+        "F",
+        "L",
+        "U"
+      ]
+    },
+    "transaction": {
+      "groups": {
+        "running": [
+          "R",
+          "S"
+        ],
+        "warning": [
+          "Y"
+        ],
+        "error": [
+          "L",
+          "U"
+        ],
+        "ok": [
+          "C",
+          "X"
+        ]
+      },
+      "final": [
+        "C",
+        "L",
+        "U",
+        "X",
+        "Y"
+      ]
+    },
+    "function_run": {
+      "groups": {
+        "running": [
+          "D",
+          "R",
+          "RR",
+          "RS",
+          "S"
+        ],
+        "warning": [
+          "E",
+          "H",
+          "Y"
+        ],
+        "error": [
+          "F"
+        ],
+        "ok": [
+          "C",
+          "X"
+        ]
+      },
+      "final": [
+        "C",
+        "F",
+        "H",
+        "X",
+        "Y"
+      ]
+    },
+    "data_version": {
+      "groups": {
+        "running": [
+          "D",
+          "R",
+          "RR",
+          "RS",
+          "S"
+        ],
+        "warning": [
+          "E",
+          "H",
+          "Y"
+        ],
+        "error": [
+          "F"
+        ],
+        "ok": [
+          "C",
+          "X"
+        ]
+      },
+      "final": [
+        "C",
+        "F",
+        "H",
+        "X",
+        "Y"
+      ]
+    },
+    "worker": {
+      "groups": {
+        "running": [
+          "R",
+          "RR",
+          "S",
+          "SPR",
+          "SPS"
+        ],
+        "warning": [
+          "E"
+        ],
+        "error": [
+          "F"
+        ],
+        "ok": [
+          "D",
+          "SP",
+          "X"
+        ]
+      },
+      "final": [
+        "D",
+        "F",
+        "SP",
+        "X"
+      ]
+    }
+  }
+}

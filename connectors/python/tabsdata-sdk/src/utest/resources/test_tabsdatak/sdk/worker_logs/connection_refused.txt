@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/opt/tabsdata/connectors/mysql.py", line 51, in open
+    self._conn = mysql.connector.connect(**options)
+mysql.connector.errors.InterfaceError: 2003: Can't connect to MySQL server on 'db:3306' (111 Connection refused)

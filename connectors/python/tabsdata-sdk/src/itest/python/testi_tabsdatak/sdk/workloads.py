@@ -9,11 +9,11 @@ from pathlib import Path
 from tabsdatax.itest.fixture.functions.harness import CollectionFactory
 
 from tabsdatak.conn.dev import DataGenSrcConn
-from tabsdatak.sdk.status_utils.execution import EXECUTION_FINAL_STATUSES
 from tabsdatak.sdk.status_utils.function_run import (
     FunctionRunStatus,
     function_run_status_to_mapping,
 )
+from tabsdatak.sdk.status_utils.groups import Entity, is_final
 from tabsdatak.sdk.status_utils.worker import WorkerStatus, worker_status_to_mapping
 from tabsdatak.sdk.tabsdata_server import Collection, Execution, Function, Worker
 from testi_tabsdatak.conn.common.cluster import (
@@ -77,7 +77,7 @@ def current_status(execution: Execution, worker_id: str) -> str:
 
 def finish(execution: Execution) -> None:
     execution.refresh()
-    if execution.status not in EXECUTION_FINAL_STATUSES:
+    if not is_final(Entity.EXECUTION, execution.status):
         execution.cancel()
 
 

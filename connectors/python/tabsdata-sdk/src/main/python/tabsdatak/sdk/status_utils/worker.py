@@ -41,20 +41,6 @@ def worker_status_to_mapping(status: str) -> str:
     return WORKER_STATUS_MAPPING.get(status, status)
 
 
-WORKER_FAILED_FINAL_STATUSES = {
-    worker_status_to_mapping(WorkerStatus.FAILED.value),
-}
-
-# Final classification of statuses is pending consideration of the counters. For now,
-# successful just means "the user does not have to examine the logs to see what went
-# wrongs, and doesn't have to take any action".
-WORKER_SUCCESSFUL_FINAL_STATUSES = {
-    worker_status_to_mapping(WorkerStatus.CANCELED.value),
-}
-
-
-WORKER_FINAL_STATUSES = WORKER_FAILED_FINAL_STATUSES | WORKER_SUCCESSFUL_FINAL_STATUSES
-
 WORKER_VALID_USER_PROVIDED_STATUSES = ", ".join([
     f"{long}/{short}" for short, long in WORKER_STATUS_MAPPING.items()
 ])

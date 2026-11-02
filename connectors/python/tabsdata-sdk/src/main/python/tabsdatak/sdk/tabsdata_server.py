@@ -23,37 +23,18 @@ module and assembled the bundle from scratch is gone — bring an
 
 from __future__ import annotations
 
-import json
+import os
+import re
+import secrets
 import tempfile
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Generator, List, Union
+from typing import TYPE_CHECKING, Callable, Iterator, List, TypeVar
 
-import polars as pl
 import requests
-
-# noinspection PyProtectedMember
-from tabsdatak import _connectors
-
-# noinspection PyProtectedMember
-from tabsdatak._api import qualified_class
-from tabsdatak._info import (
-    KIND_PUBLISHER_DEF,
-    KIND_STREAM_PUBLISHER_DEF,
-    KIND_SUBSCRIBER_DEF,
-    KIND_TRANSFORMER_DEF,
-    PublisherInfo,
-    StreamPublisherInfo,
-    SubscriberInfo,
-    TransformerInfo,
-)
-from tabsdatak.api import AllTablesTrigger, CronTrigger, TablesTrigger
-from tabsdatak.common._archive.bundle import build_bundle, capture_source_snippet
-
-if TYPE_CHECKING:
-    from tabsdatak.common._actions.dataquality.processor import TrendTransformerInfo
 
 # noinspection PyProtectedMember
 from tabsdatak.common._datetime import _convert_timestamp_to_string
@@ -62,20 +43,245 @@ from tabsdatak.common._datetime import _convert_timestamp_to_string
 from tabsdatak.common._temps import tabsdata_temp_folder
 
 # noinspection PyProtectedMember
-from tabsdatak.sdk._apiserver import APIServer, obtain_connection
+from tabsdatak.sdk import _diagnose, _tables
+
+# noinspection PyProtectedMember
+from tabsdatak.sdk._apiserver import (
+    APIServer,
+    NotFound,
+    _path_segment,
+    obtain_connection,
+)
 from tabsdatak.sdk._project_secret import SecretsSpec, from_read, to_payload
 from tabsdatak.sdk.status_utils.data_version import data_version_status_to_mapping
 from tabsdatak.sdk.status_utils.execution import (
     execution_status_to_mapping,
     execution_trigger_type_to_mapping,
 )
-from tabsdatak.sdk.status_utils.function_run import function_run_status_to_mapping
+from tabsdatak.sdk.status_utils.function_run import (
+    PHYSICAL_FUNCTION_RUN_ENDED_STATUSES,
+    function_run_status_to_mapping,
+)
+from tabsdatak.sdk.status_utils.groups import Entity, is_final
 from tabsdatak.sdk.status_utils.transaction import transaction_status_to_mapping
 from tabsdatak.sdk.status_utils.worker import worker_status_to_mapping
 
-FunctionInfo = Union[
-    PublisherInfo, StreamPublisherInfo, TransformerInfo, SubscriberInfo
-]
+if TYPE_CHECKING:
+    import polars as pl
+
+    from tabsdatak.common._actions.dataquality.processor import TrendTransformerInfo
+
+    # noinspection PyProtectedMember
+    from tabsdatak.sdk._function_archive import FunctionInfo, _FunctionArchive
+
+
+T = TypeVar("T")
+
+WAIT_FIRST_INTERVAL = 1.0
+WAIT_POLL_INTERVAL = 5.0
+WAIT_MIN_READ_TIMEOUT = 1.0
+WAIT_OUTAGE_GRACE = 120.0
+DOWNLOAD_CHUNK_BYTES = 1024 * 1024
+PROBE_MAX_WAIT_SECONDS = 55
+PROBE_WAIT_MARGIN_SECONDS = 5
+PROBE_FINAL_STATUSES = frozenset({"succeeded", "failed", "timeout", "cancelled"})
+
+
+class WaitTimeout(TimeoutError):
+    """A wait ran out of time before its object reached a final status.
+    ``last`` is the object as last refreshed."""
+
+    def __init__(self, last, timeout: float):
+        super().__init__(f"{last!r} did not finish within {timeout:g} s.")
+        self.last = last
+        self.timeout = timeout
+
+
+class DownloadTooLarge(Exception):
+    """A download passed the byte cap it was given; nothing is kept of it."""
+
+    def __init__(self, table: str, max_bytes: int):
+        super().__init__(f"Table '{table}' is larger than {max_bytes} bytes.")
+        self.table = table
+        self.max_bytes = max_bytes
+
+
+class AttemptSuperseded(Exception):
+    """A newer attempt of a function run replaced the attempt waited for."""
+
+    def __init__(self, attempt: str, current: str):
+        super().__init__(f"Attempt {attempt!r} was superseded by {current!r}.")
+        self.attempt = attempt
+        self.current = current
+
+
+def poll_until(
+    refresh: Callable[[], T],
+    done: Callable[[T], bool],
+    *,
+    connection: APIServer,
+    timeout: float | None = None,
+    poll_interval: float = WAIT_POLL_INTERVAL,
+    on_update: Callable[[T], None] | None = None,
+    outage_grace: float = WAIT_OUTAGE_GRACE,
+    on_outage: Callable[[Exception | None], None] | None = None,
+) -> T:
+    """Call ``refresh`` until ``done`` holds for its result, and return that
+    result. Polls back off from one second to ``poll_interval``. With a
+    ``timeout``, no request reads for longer than the time left (but at least
+    a second), and running out of time raises :class:`WaitTimeout`.
+
+    Waiting only reads, so a server that drops away for a moment (a restarted
+    apiserver, a dropped port-forward) does not end the wait: polling resumes
+    when it answers again, and only an outage longer than ``outage_grace``
+    seconds is raised. ``on_outage`` is called with the error when an outage
+    starts and with ``None`` when it ends."""
+    deadline = None if timeout is None else time.monotonic() + timeout
+    base_timeout = connection.timeout
+    interval = min(WAIT_FIRST_INTERVAL, poll_interval)
+    last = None
+    down_since = None
+    try:
+        while True:
+            remaining = None if deadline is None else deadline - time.monotonic()
+            clamped = remaining is not None and remaining < base_timeout[1]
+            if clamped:
+                connection.timeout = (
+                    base_timeout[0],
+                    max(remaining, WAIT_MIN_READ_TIMEOUT),
+                )
+            try:
+                fresh = refresh()
+                finished = done(fresh)
+            except (
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+            ) as error:
+                if clamped and isinstance(error, requests.exceptions.ReadTimeout):
+                    raise WaitTimeout(last, timeout) from None
+                now = time.monotonic()
+                if down_since is None:
+                    down_since = now
+                    if on_outage is not None:
+                        on_outage(error)
+                if now - down_since > outage_grace:
+                    raise
+            else:
+                last = fresh
+                if down_since is not None:
+                    down_since = None
+                    if on_outage is not None:
+                        on_outage(None)
+                if on_update is not None:
+                    on_update(last)
+                if finished:
+                    return last
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise WaitTimeout(last, timeout)
+                time.sleep(min(interval, remaining))
+            else:
+                time.sleep(interval)
+            interval = min(interval * 2, poll_interval)
+    finally:
+        connection.timeout = base_timeout
+
+
+@dataclass(frozen=True)
+class ListCursor:
+    """Where a listing resumes: the request of the page (both ``None`` for the
+    first one) and how many of that page's items to skip."""
+
+    pagination_id: str | None = None
+    next_step: str | None = None
+    skip: int = 0
+
+
+class Listing(Iterator[T]):
+    """The items of a paged server listing, fetching each page as it is
+    consumed. ``position`` is the :class:`ListCursor` of the item yielded
+    last: passing it as ``cursor`` lists again from that item on."""
+
+    def __init__(
+        self,
+        fetch: Callable[[str | None, str | None], requests.Response],
+        build: Callable[[dict], T],
+        cursor: ListCursor | None = None,
+    ):
+        start = cursor or ListCursor()
+        self._fetch = fetch
+        self._build = build
+        self._pending = (start.pagination_id, start.next_step)
+        self._skip = start.skip
+        self._request = self._pending
+        self._page: list = []
+        self._index = 0
+        self._last_page = False
+        self.position: ListCursor | None = None
+
+    def __iter__(self) -> Listing[T]:
+        return self
+
+    def __next__(self) -> T:
+        while self._index >= len(self._page):
+            if self._last_page:
+                raise StopIteration
+            self._load()
+        self.position = ListCursor(*self._request, self._index)
+        raw = self._page[self._index]
+        self._index += 1
+        return self._build(raw)
+
+    def _load(self) -> None:
+        self._request = self._pending
+        data = self._fetch(*self._request).json().get("data") or {}
+        self._page = data.get("data") or []
+        self._index, self._skip = self._skip, 0
+        self._pending = (data.get("next_pagination_id"), data.get("next"))
+        self._last_page = None in self._pending
+
+
+def _listed(connection: APIServer, cls: type[T], row: dict, *args) -> T:
+    """``cls(connection, *args, **row)``, keeping the listing row as its
+    payload so ``-o json/yaml`` renders every field without a per-item
+    fetch."""
+    built = cls(connection, *args, **row)
+    built._data = row
+    return built
+
+
+def _listed_function_run(connection: APIServer, row: dict) -> FunctionRun:
+    function_run = FunctionRun(connection, **row)
+    function_run._data = {"id": function_run.id, **row}
+    return function_run
+
+
+def connection_compatibility(kind: str | None) -> dict:
+    """What the locally installed connectors offer a connection of ``kind``
+    (its ``module:qualname`` Conn class): their ``types`` and the
+    ``publishers`` and ``subscribers`` that take it. Computed here, not by
+    the server, which has no connector registry."""
+    # noinspection PyProtectedMember
+    from tabsdatak import _connectors
+
+    compatible = {"types": [], "publishers": [], "subscribers": []}
+    bindings = [
+        *((d, d.src, "publishers") for d in _connectors.avail_srcs().values()),
+        *((d, d.src, "publishers") for d in _connectors.avail_stream_srcs().values()),
+        *((d, d.dest, "subscribers") for d in _connectors.avail_dests().values()),
+    ]
+    for defx, api_cls, role in bindings:
+        if f"{defx.conn.__module__}:{defx.conn.__qualname__}" != kind:
+            continue
+        compatible["types"].append(defx.type_)
+        if api_cls.__name__ not in compatible[role]:
+            compatible[role].append(api_cls.__name__)
+    return compatible
+
+
+def _with_compatibility(row: dict) -> dict:
+    return {**row, "compatible": connection_compatibility(row.get("kind"))}
 
 
 class FunctionType(Enum):
@@ -244,7 +450,7 @@ class Collection:
         for table in self.tables:
             if table.name == table_name:
                 return table
-        raise ValueError(f"Table {table_name} not found in collection {self.name}")
+        raise NotFound(f"Table {table_name} not found in collection {self.name}")
 
     def list_functions(
         self,
@@ -265,33 +471,32 @@ class Collection:
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
-    ) -> Generator[Function]:
-        first_page = True
-        next_pagination_id = None
-        next_step = None
-        while first_page or (next_pagination_id is not None and next_step is not None):
-            response = self.connection.function_in_collection_list(
-                collection_name=self.name,
-                request_filter=filter,
-                order_by=order_by,
-                pagination_id=next_pagination_id,
-                next_step=next_step,
-                raise_for_status=raise_for_status,
-            )
-            data = response.json().get("data")
-            next_pagination_id = data.get("next_pagination_id")
-            next_step = data.get("next")
-            raw_functions = data.get("data") or []
-            for raw_function in raw_functions:
-                # The server payload carries a `connection` field (the Conn
-                # FQN); set it to the APIServer here so it does not collide with
-                # the `connection` positional when splatting (matches the
-                # `get_function` pattern above).
-                raw_function["connection"] = self.connection
-                if "collection" not in raw_function:
-                    raw_function["collection"] = self
-                yield Function(**raw_function)
-            first_page = False
+        cursor: ListCursor | None = None,
+    ) -> Listing[Function]:
+        def build(raw_function):
+            # The server payload carries a `connection` field (the Conn
+            # FQN); set it to the APIServer here so it does not collide with
+            # the `connection` positional when splatting (matches the
+            # `get_function` pattern above).
+            raw_function["connection"] = self.connection
+            if "collection" not in raw_function:
+                raw_function["collection"] = self
+            return Function(**raw_function)
+
+        return Listing(
+            lambda pagination_id, next_step: (
+                self.connection.function_in_collection_list(
+                    collection_name=self.name,
+                    request_filter=filter,
+                    order_by=order_by,
+                    pagination_id=pagination_id,
+                    next_step=next_step,
+                    raise_for_status=raise_for_status,
+                )
+            ),
+            build,
+            cursor,
+        )
 
     def list_tables(
         self,
@@ -305,6 +510,9 @@ class Collection:
         List the tables in a collection.
 
         Args:
+            at (int | str, optional): List the tables as they were at this time.
+            at_trx (Transaction | str, optional): List the tables as they were
+                at the end of this transaction.
 
         Returns:
             List[Table]: The requested list of tables in the collection.
@@ -326,9 +534,9 @@ class Collection:
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
-    ) -> Generator[Table]:
-        provided = [x is not None for x in (at, at_trx)]
-        if sum(provided) > 1:
+        cursor: ListCursor | None = None,
+    ) -> Listing[Table]:
+        if at is not None and at_trx is not None:
             raise ValueError("Only one of 'at' or 'at_trx' can be provided at a time.")
         if at:
             at = _top_and_convert_to_timestamp(at)
@@ -338,28 +546,19 @@ class Collection:
             else:
                 transaction = Transaction(self.connection, at_trx)
             at = transaction.ended_on
-
-        first_page = True
-        next_pagination_id = None
-        next_step = None
-        while first_page or (next_pagination_id is not None and next_step is not None):
-            response = self.connection.table_list(
+        return Listing(
+            lambda pagination_id, next_step: self.connection.table_list(
                 collection_name=self.name,
                 at=at,
                 request_filter=filter,
                 order_by=order_by,
-                pagination_id=next_pagination_id,
+                pagination_id=pagination_id,
                 next_step=next_step,
                 raise_for_status=raise_for_status,
-            )
-            data = response.json().get("data")
-            next_pagination_id = data.get("next_pagination_id")
-            next_step = data.get("next")
-            raw_tables = data.get("data") or []
-            for raw_table in raw_tables:
-                raw_table = Table(self.connection, self, **raw_table)
-                yield raw_table
-            first_page = False
+            ),
+            lambda raw_table: _listed(self.connection, Table, raw_table, self),
+            cursor,
+        )
 
     def read_function_run(
         self,
@@ -401,6 +600,7 @@ class Collection:
         local_packages: list[str] | None,
         raise_for_status: bool,
         requirements: str | Path | None = None,
+        confine_to: str | Path | None = None,
     ) -> tuple[_FunctionArchive, str]:
         """Bundle ``info`` + ``project_root`` and upload it to the
         apiserver. Returns the populated ``_FunctionArchive`` (carrying
@@ -416,6 +616,9 @@ class Collection:
         ``requirements.yaml`` file the caller wants embedded verbatim
         in the bundle (overriding the auto-synthesised env snapshot).
         """
+        # noinspection PyProtectedMember
+        from tabsdatak.sdk._function_archive import _create_archive
+
         temporary_directory = tempfile.TemporaryDirectory(dir=tabsdata_temp_folder())
         try:
             valid_python_versions = (
@@ -433,6 +636,7 @@ class Collection:
                 local_packages=local_packages,
                 valid_python_versions=valid_python_versions,
                 requirements=requirements,
+                confine_to=confine_to,
             )
             with open(archive.context_location, "rb") as file:
                 bundle = file.read()
@@ -491,6 +695,7 @@ class Collection:
         enabled: bool = True,
         raise_for_status: bool = True,
         requirements: str | Path | None = None,
+        confine_to: str | Path | None = None,
         base_path: str | None = None,
     ) -> Function:
         """Register a function in this collection from a tabsdatak ``FunctionInfo``.
@@ -521,6 +726,9 @@ class Collection:
                 the active Python interpreter. Use this when the
                 build env differs from the runtime env (e.g.
                 cross-platform deployment).
+            confine_to: Optional directory every bundled file must
+                resolve (symlinks followed) inside of; a file outside it
+                fails the bundle before anything is uploaded.
 
         Returns:
             A :class:`Function` handle for the newly-registered function.
@@ -528,12 +736,16 @@ class Collection:
         Raises:
             APIServerError: If the function could not be created.
         """
+        # noinspection PyProtectedMember
+        from tabsdatak.sdk._function_archive import _cleanup_trend_roots
+
         archive, bundle_id = self._build_and_upload_bundle(
             info,
             project_root,
             local_packages,
             raise_for_status,
             requirements,
+            confine_to,
         )
         try:
             function_name = function_name or archive.function_name
@@ -587,6 +799,7 @@ class Collection:
         local_packages: List[str] | None = None,
         raise_for_status: bool = True,
         requirements: str | Path | None = None,
+        confine_to: str | Path | None = None,
     ) -> dict:
         """Register a code-only patch of an existing function version.
 
@@ -609,6 +822,7 @@ class Collection:
                 ``requirements.yaml`` to embed in the bundle verbatim
                 (overriding the env-synthesised one). See
                 :meth:`register_function` for details.
+            confine_to: See :meth:`register_function`.
 
         Returns:
             The created FunctionPatchRecord (id, parent_function_version_id,
@@ -617,8 +831,16 @@ class Collection:
         Raises:
             APIServerError: If the patch could not be created.
         """
+        # noinspection PyProtectedMember
+        from tabsdatak.sdk._function_archive import _cleanup_trend_roots
+
         archive, bundle_id = self._build_and_upload_bundle(
-            info, project_root, local_packages, raise_for_status, requirements
+            info,
+            project_root,
+            local_packages,
+            raise_for_status,
+            requirements,
+            confine_to,
         )
         _cleanup_trend_roots(archive.trend_transformers_info)
 
@@ -665,26 +887,21 @@ class Collection:
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
-    ) -> Generator[dict]:
-        first_page = True
-        next_pagination_id = None
-        next_step = None
-        while first_page or (next_pagination_id is not None and next_step is not None):
-            response = self.connection.function_list_patches(
+        cursor: ListCursor | None = None,
+    ) -> Listing[dict]:
+        return Listing(
+            lambda pagination_id, next_step: self.connection.function_list_patches(
                 self.name,
                 function_name,
                 request_filter=filter,
                 order_by=order_by,
-                pagination_id=next_pagination_id,
+                pagination_id=pagination_id,
                 next_step=next_step,
                 raise_for_status=raise_for_status,
-            )
-            data = response.json().get("data") or {}
-            next_pagination_id = data.get("next_pagination_id")
-            next_step = data.get("next")
-            for raw_patch in data.get("data") or []:
-                yield raw_patch
-            first_page = False
+            ),
+            lambda raw_patch: raw_patch,
+            cursor,
+        )
 
     def update(
         self,
@@ -738,6 +955,7 @@ class Collection:
         enabled: bool = True,
         raise_for_status: bool = True,
         requirements: str | Path | None = None,
+        confine_to: str | Path | None = None,
         base_path: str | None = None,
         reset_state: bool = False,
         reset_stage: bool = False,
@@ -768,16 +986,21 @@ class Collection:
             requirements: Optional path to a user-supplied
                 ``requirements.yaml`` to embed in the bundle verbatim.
                 See :meth:`register_function` for details.
+            confine_to: See :meth:`register_function`.
 
         Raises:
             APIServerError: If the function could not be updated.
         """
+        # noinspection PyProtectedMember
+        from tabsdatak.sdk._function_archive import _cleanup_trend_roots
+
         archive, bundle_id = self._build_and_upload_bundle(
             info,
             project_root,
             local_packages,
             raise_for_status,
             requirements,
+            confine_to,
         )
         try:
             new_function_name = new_function_name or archive.function_name
@@ -903,7 +1126,7 @@ class DataVersion:
             try:
                 self._data = response.json().get("data").get("data")[0]
             except IndexError:
-                raise ValueError(
+                raise NotFound(
                     f"Data version with ID {self.id} not found in collection "
                     f"{self.collection.name} for table {self.table.name}."
                 )
@@ -1084,7 +1307,7 @@ class Execution:
             try:
                 self._data = response.json().get("data").get("data")[0]
             except IndexError:
-                raise ValueError(f"Execution with ID {self.id} not found.")
+                raise NotFound(f"Execution with ID {self.id} not found.")
         return self._data_dict
 
     @_data.setter
@@ -1141,7 +1364,7 @@ class Execution:
             .get("data")
         )
         return [
-            FunctionRun(**{**function_run, "connection": self.connection})
+            _listed_function_run(self.connection, function_run)
             for function_run in raw_function_runs
         ]
 
@@ -1213,7 +1436,7 @@ class Execution:
         for worker in self.workers:
             if worker.id == worker_id:
                 return worker
-        raise ValueError(f"Worker {worker_id} not found for execution {self.id}")
+        raise NotFound(f"Worker {worker_id} not found for execution {self.id}")
 
     def recover(self) -> requests.Response:
         """
@@ -1246,6 +1469,42 @@ class Execution:
         self.kwargs = None
         self._data = None
         return self
+
+    def wait(
+        self,
+        timeout: float | None = None,
+        poll_interval: float = WAIT_POLL_INTERVAL,
+        on_update: Callable[[Execution], None] | None = None,
+        on_outage: Callable[[Exception | None], None] | None = None,
+    ) -> Execution:
+        """
+        Refresh the execution until its status is final.
+
+        Args:
+            timeout (float, optional): Seconds to wait at most; no limit when
+                omitted.
+            poll_interval (float): The longest pause between refreshes.
+            on_update (Callable, optional): Called with the execution after
+                every refresh.
+            on_outage (Callable, optional): Called with the error when the
+                server stops answering, and with ``None`` once it answers
+                again; an outage longer than two minutes is raised.
+
+        Returns:
+            Execution: The execution, refreshed.
+
+        Raises:
+            WaitTimeout: If ``timeout`` passes first.
+        """
+        return poll_until(
+            self.refresh,
+            lambda execution: is_final(Entity.EXECUTION, execution.status),
+            connection=self.connection,
+            timeout=timeout,
+            poll_interval=poll_interval,
+            on_update=on_update,
+            on_outage=on_outage,
+        )
 
     def __eq__(self, other):
         if not isinstance(other, Execution):
@@ -1474,13 +1733,13 @@ class Function:
         for table in self.tables:
             if table.name == table_name:
                 return table
-        raise ValueError(f"Table {table_name} not found for function {self.name}")
+        raise NotFound(f"Table {table_name} not found for function {self.name}")
 
     def get_worker(self, worker_id: str):
         for worker in self.workers:
             if worker.id == worker_id:
                 return worker
-        raise ValueError(f"Worker {worker_id} not found for function {self.name}")
+        raise NotFound(f"Worker {worker_id} not found for function {self.name}")
 
     def list_history(
         self,
@@ -1499,37 +1758,32 @@ class Function:
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
-    ) -> Generator[Function]:
-        first_page = True
-        next_pagination_id = None
-        next_step = None
-        while first_page or (next_pagination_id is not None and next_step is not None):
-            response = self.connection.function_list_history(
+        cursor: ListCursor | None = None,
+    ) -> Listing[Function]:
+        def build(raw_function):
+            version_data = dict(raw_function)
+            # See list_functions.
+            raw_function["connection"] = self.connection
+            raw_function["collection"] = self.collection
+            built_function = Function(**raw_function)
+            # Each row is a past version; without its own payload `_data`
+            # would lazily fetch the current one.
+            built_function._data = version_data
+            return built_function
+
+        return Listing(
+            lambda pagination_id, next_step: self.connection.function_list_history(
                 self.collection.name,
                 self.name,
                 request_filter=filter,
                 order_by=order_by,
-                pagination_id=next_pagination_id,
+                pagination_id=pagination_id,
                 next_step=next_step,
                 raise_for_status=raise_for_status,
-            )
-            data = response.json().get("data")
-            next_pagination_id = data.get("next_pagination_id")
-            next_step = data.get("next")
-            raw_functions = data.get("data") or []
-            for raw_function in raw_functions:
-                version_data = dict(raw_function)
-                # See list_functions: set `connection` to the APIServer so the
-                # server's `connection` (Conn FQN) field doesn't collide with
-                # the positional when splatting.
-                raw_function["connection"] = self.connection
-                raw_function["collection"] = self.collection
-                built_function = Function(**raw_function)
-                # Each row is a past version; without its own payload `_data`
-                # would lazily fetch the current one.
-                built_function._data = version_data
-                yield built_function
-            first_page = False
+            ),
+            build,
+            cursor,
+        )
 
     def read_run(
         self, execution: Execution | str, raise_for_status: bool = True
@@ -1728,6 +1982,18 @@ class Function:
         return string_representation
 
 
+_LOGICAL_ID = re.compile(r"([a-z]{1,3}[0-9]{8})-([0-9]{1,10})", re.IGNORECASE)
+
+
+def _id_order(id_: str) -> tuple[str, int]:
+    """The sort key of an id: a logical id ``<key><YYYYMMDD>-<counter>`` orders
+    by its date and numeric counter, however the counter is padded."""
+    match = _LOGICAL_ID.fullmatch(id_)
+    if match is None:
+        return id_.lower(), 0
+    return match[1].lower(), int(match[2])
+
+
 class FunctionRun:
     """
     This class represents a function run in the TabsdataServer.
@@ -1795,7 +2061,7 @@ class FunctionRun:
                         0
                     ]
             except IndexError:
-                raise ValueError(f"Function run with ID {self.id} not found.")
+                raise NotFound(f"Function run with ID {self.id} not found.")
             self._data = run.kwargs
         return self._data_dict
 
@@ -1895,6 +2161,95 @@ class FunctionRun:
                 "Transaction must be a string, a Transaction object or None; got"
                 f"{type(transaction)} instead."
             )
+
+    def refresh(self) -> FunctionRun:
+        self.collection = None
+        self.function = None
+        self.transaction = None
+        self.execution = None
+        self.status = None
+        self.ended_on = None
+        self.ended_on_str = None
+        self.started_on = None
+        self.started_on_str = None
+        self._data = None
+        return self
+
+    def attempt_ended(self, attempt: str) -> bool:
+        """Whether ``attempt`` (a physical function run id) is this run's
+        current attempt and has ended."""
+        current = self._data.get("physical_function_run_id")
+        return (
+            current is not None
+            and _id_order(current) == _id_order(attempt)
+            and self._data.get("physical_status")
+            in PHYSICAL_FUNCTION_RUN_ENDED_STATUSES
+        )
+
+    def attempt_superseded(self, attempt: str) -> bool:
+        """Whether a newer attempt than ``attempt`` is this run's current one.
+        Physical function run ids are time-ordered, so a newer one sorts
+        after."""
+        current = self._data.get("physical_function_run_id")
+        return current is not None and _id_order(current) > _id_order(attempt)
+
+    def wait(
+        self,
+        timeout: float | None = None,
+        poll_interval: float = WAIT_POLL_INTERVAL,
+        attempt: str | None = None,
+        on_update: Callable[[FunctionRun], None] | None = None,
+        on_outage: Callable[[Exception | None], None] | None = None,
+    ) -> FunctionRun:
+        """
+        Refresh the function run until its status is final or, given an
+        ``attempt``, until that attempt ends.
+
+        Args:
+            timeout (float, optional): Seconds to wait at most; no limit when
+                omitted.
+            poll_interval (float): The longest pause between refreshes.
+            attempt (str, optional): A physical function run id, such as the
+                ``new_function_run_id`` of a replay. The wait ends once it is
+                the current attempt and its physical status is Done, Error or
+                Failed; the logical status of a replayed run can stay final
+                while its new attempt runs.
+            on_update (Callable, optional): Called with the function run after
+                every refresh.
+            on_outage (Callable, optional): Called with the error when the
+                server stops answering, and with ``None`` once it answers
+                again; an outage longer than two minutes is raised.
+
+        Returns:
+            FunctionRun: The function run, refreshed.
+
+        Raises:
+            WaitTimeout: If ``timeout`` passes first.
+            AttemptSuperseded: If a newer attempt replaces ``attempt``.
+        """
+        if attempt is None:
+
+            def done(function_run: FunctionRun) -> bool:
+                return is_final(Entity.FUNCTION_RUN, function_run.status)
+
+        else:
+
+            def done(function_run: FunctionRun) -> bool:
+                if function_run.attempt_superseded(attempt):
+                    raise AttemptSuperseded(
+                        attempt, function_run._data["physical_function_run_id"]
+                    )
+                return function_run.attempt_ended(attempt)
+
+        return poll_until(
+            self.refresh,
+            done,
+            connection=self.connection,
+            timeout=timeout,
+            poll_interval=poll_interval,
+            on_update=on_update,
+            on_outage=on_outage,
+        )
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, FunctionRun):
@@ -2075,10 +2430,13 @@ class Role:
 
         Returns:
             RolePermission: The permission object.
+
+        Raises:
+            NotFound: If the role has no permission with that ID.
         """
         permissions = self.list_permissions(filter=f"id:eq:{permission_id}")
         if not permissions:
-            raise ValueError(f"Permission with ID {permission_id} not found.")
+            raise NotFound(f"Permission with ID {permission_id} not found.")
         return permissions[0]
 
     def list_permissions(
@@ -2100,30 +2458,20 @@ class Role:
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
-    ) -> Generator[RolePermission]:
-        first_page = True
-        next_pagination_id = None
-        next_step = None
-        while first_page or (next_pagination_id is not None and next_step is not None):
-            response = self.connection.role_permission_list(
+        cursor: ListCursor | None = None,
+    ) -> Listing[RolePermission]:
+        return Listing(
+            lambda pagination_id, next_step: self.connection.role_permission_list(
                 self.name,
                 request_filter=filter,
                 order_by=order_by,
-                pagination_id=next_pagination_id,
+                pagination_id=pagination_id,
                 next_step=next_step,
                 raise_for_status=raise_for_status,
-            )
-            data = response.json().get("data")
-            next_pagination_id = data.get("next_pagination_id")
-            next_step = data.get("next")
-            raw_permissions = data.get("data") or []
-            for raw_permission in raw_permissions:
-                built_permission = RolePermission(
-                    self.connection,
-                    **raw_permission,
-                )
-                yield built_permission
-            first_page = False
+            ),
+            lambda raw_permission: RolePermission(self.connection, **raw_permission),
+            cursor,
+        )
 
     def list_users(
         self,
@@ -2144,32 +2492,25 @@ class Role:
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
-    ) -> Generator[User]:
-        first_page = True
-        next_pagination_id = None
-        next_step = None
-        while first_page or (next_pagination_id is not None and next_step is not None):
-            response = self.connection.role_user_list(
+        cursor: ListCursor | None = None,
+    ) -> Listing[User]:
+        def build(raw_user):
+            if "name" not in raw_user:
+                raw_user["name"] = raw_user.get("user")
+            return User(self.connection, **raw_user)
+
+        return Listing(
+            lambda pagination_id, next_step: self.connection.role_user_list(
                 self.name,
                 request_filter=filter,
                 order_by=order_by,
-                pagination_id=next_pagination_id,
+                pagination_id=pagination_id,
                 next_step=next_step,
                 raise_for_status=raise_for_status,
-            )
-            data = response.json().get("data")
-            next_pagination_id = data.get("next_pagination_id")
-            next_step = data.get("next")
-            raw_users = data.get("data") or []
-            for raw_user in raw_users:
-                if "name" not in raw_user:
-                    raw_user["name"] = raw_user.get("user")
-                built_user = User(
-                    self.connection,
-                    **raw_user,
-                )
-                yield built_user
-            first_page = False
+            ),
+            build,
+            cursor,
+        )
 
     def refresh(self) -> Role:
         self.created_by = None
@@ -2556,7 +2897,7 @@ class RolePermission:
             try:
                 run = self.role.list_permissions(filter=f"id:eq:{self.id}")[0]
             except IndexError:
-                raise ValueError(f"Role permission with ID {self.id} not found.")
+                raise NotFound(f"Role permission with ID {self.id} not found.")
             self._data = run.kwargs
         return self._data_dict
 
@@ -2708,7 +3049,7 @@ class Table:
                     .get("data")[0]
                 )
             except IndexError:
-                raise ValueError(
+                raise NotFound(
                     f"Table with name {self.name} not found in collection "
                     f"{self.collection.name}."
                 )
@@ -2770,10 +3111,12 @@ class Table:
         at_trx: Transaction | str | None = None,
         version: DataVersion | str | None = None,
         raise_for_status: bool = True,
-    ) -> Path | None:
+        max_bytes: int | None = None,
+    ) -> int | None:
         """
-        Download a table for a given version as a parquet file. The version can
-            be a fixed version or a relative one (HEAD, HEAD^, and HEAD~## syntax).
+        Download a table for a given version as a parquet file, streaming it
+            to disk. The version can be a fixed version or a relative one
+            (HEAD, HEAD^, and HEAD~## syntax).
 
         Args:
             destination_file (str): The path to the destination file.
@@ -2785,13 +3128,17 @@ class Table:
                 and HEAD~## syntax). Defaults to "HEAD".
             raise_for_status (bool, optional): Whether to raise an exception if the
                 request was not successful. Defaults to True.
+            max_bytes (int, optional): Stop the download and raise
+                DownloadTooLarge once it passes this many bytes.
 
         Returns:
-            Path | None: The path of the downloaded file, or None when the version
-                holds no data, in which case no file is written.
+            int | None: The bytes written, or None when the version holds no
+                data. The destination is replaced only by a complete download;
+                otherwise it is left as it was.
 
         Raises:
             APIServerError: If the table could not be downloaded.
+            DownloadTooLarge: If the table is larger than max_bytes.
         """
         provided = [x is not None for x in (at, at_trx, version)]
         if sum(provided) > 1:
@@ -2823,11 +3170,24 @@ class Table:
             at=at,
             raise_for_status=raise_for_status,
         )
-        if not response.content:
-            return None
-        with open(destination_file, "wb") as file:
-            file.write(response.content)
-        return Path(destination_file)
+        destination = Path(destination_file)
+        written = 0
+        with response:
+            partial = destination.with_name(
+                f".{destination.name}.{secrets.token_hex(6)}"
+            )
+            try:
+                with open(partial, "xb") as handle:
+                    for chunk in response.iter_content(DOWNLOAD_CHUNK_BYTES):
+                        written += len(chunk)
+                        if max_bytes is not None and written > max_bytes:
+                            raise DownloadTooLarge(self.name, max_bytes)
+                        handle.write(chunk)
+                if written:
+                    os.replace(partial, destination)
+            finally:
+                partial.unlink(missing_ok=True)
+        return written or None
 
     def list_dataversions(
         self,
@@ -2862,33 +3222,24 @@ class Table:
         order_by: str = None,
         raise_for_status: bool = True,
         at: int | None = None,
-    ) -> Generator[DataVersion]:
-        first_page = True
-        next_pagination_id = None
-        next_step = None
-        while first_page or (next_pagination_id is not None and next_step is not None):
-            response = self.connection.dataversion_list(
+        cursor: ListCursor | None = None,
+    ) -> Listing[DataVersion]:
+        return Listing(
+            lambda pagination_id, next_step: self.connection.dataversion_list(
                 self.collection.name,
                 self.name,
                 request_filter=filter,
                 order_by=order_by,
-                pagination_id=next_pagination_id,
+                pagination_id=pagination_id,
                 next_step=next_step,
                 raise_for_status=raise_for_status,
                 at=at,
-            )
-            data = response.json().get("data")
-            next_pagination_id = data.get("next_pagination_id")
-            next_step = data.get("next")
-            raw_dataversions = data.get("data") or []
-            for raw_dataversion in raw_dataversions:
-                built_dataversion = DataVersion(
-                    self.connection,
-                    table=self,
-                    **raw_dataversion,
-                )
-                yield built_dataversion
-            first_page = False
+            ),
+            lambda raw_dataversion: DataVersion(
+                self.connection, table=self, **raw_dataversion
+            ),
+            cursor,
+        )
 
     def get_schema(
         self,
@@ -2958,6 +3309,106 @@ class Table:
         self._data = None
         return self
 
+    def stats(
+        self,
+        version: DataVersion | str | None = None,
+        at: int | str = None,
+        at_trx: Transaction | str | None = None,
+    ) -> dict:
+        """
+        Size and schema of a committed data version of the table: the newest
+            one, the one pinned by ``version`` (an id, or HEAD, HEAD^ and
+            HEAD~## counted back over the committed versions), or the newest
+            one as of ``at`` or the end of ``at_trx``.
+        """
+        return _tables.stats(self, version=version, at=at, at_trx=at_trx)
+
+    def profile(
+        self,
+        columns: List[str] | None = None,
+        version: DataVersion | str | None = None,
+        at: int | str = None,
+        at_trx: Transaction | str | None = None,
+        approx: bool = False,
+        sample_rows: int = 1000,
+    ) -> dict:
+        """
+        Per-column non-null and distinct counts, min, max and mean of a
+            committed data version (pinned as in :meth:`stats`). Exact by
+            default, from aggregate queries the server runs over the whole
+            version. With ``approx``, or when the server refuses the full scan
+            (``reason`` says why), the stats come from random windows of
+            ``sample_rows`` rows in all and are ``approximate`` unless the
+            sample holds every row.
+        """
+        return _tables.profile(
+            self,
+            columns=columns,
+            version=version,
+            at=at,
+            at_trx=at_trx,
+            approx=approx,
+            sample_rows=sample_rows,
+        )
+
+    def flow(
+        self,
+        direction: str = "both",
+        depth: int | None = None,
+        at: int | str = None,
+        include_system: bool = False,
+        topology_version: str = None,
+    ) -> dict:
+        """
+        What feeds the table and what consumes it: the functions and tables
+            reachable from it upstream, downstream or both (``direction``),
+            at most ``depth`` edges away, in the flow graph at
+            ``topology_version`` or as of ``at``, the latest by default.
+        """
+        at = _top_and_convert_to_timestamp(at) if isinstance(at, str) else at
+        graph = (
+            self.connection
+            .table_flow(
+                self.collection.name,
+                self.name,
+                at=at,
+                topology_version=topology_version,
+            )
+            .json()
+            .get("data")
+        )
+        return _tables.flow(
+            graph,
+            self.collection.name,
+            self.name,
+            direction=direction,
+            depth=depth,
+            include_system=include_system,
+        )
+
+    def schema_history(self, max_events: int = 10) -> dict:
+        """
+        The schema changes over the committed data versions of the table,
+            newest first, each with the columns it added, removed or retyped;
+            at most ``max_events``, and ``capped`` when older ones exist.
+        """
+        return _tables.schema_history(self, max_events=max_events)
+
+    def schema_diff(
+        self,
+        other: Table | None = None,
+        from_version: DataVersion | str | None = None,
+        to_version: DataVersion | str | None = None,
+    ) -> dict:
+        """
+        The columns added, removed and retyped from this table's schema at
+            ``from_version`` to that of ``other`` (this table when omitted) at
+            ``to_version``; each version defaults to the newest committed one.
+        """
+        return _tables.schema_diff(
+            self, other=other, from_version=from_version, to_version=to_version
+        )
+
     def sample(
         self,
         at: int | str = None,
@@ -2979,8 +3430,8 @@ class Table:
                 server-side, and cannot be greater than 1000.
             sql (str, optional): A SQL query run server-side on the table, which
                 is the only queryable relation and is referenced by its own
-                name. The offset is applied before the query and the length caps
-                its result.
+                name. The offset and the length page the query's result, and the
+                server bounds the query's time and the bytes it may scan.
             extra_cols (str, optional): Which non-user columns to return on top
                 of the user ones: 'none' (the server default), 'meta' (the
                 '@td.' connector metadata), 'sys' (the '$td.' system columns)
@@ -2988,6 +3439,8 @@ class Table:
         Raises:
             APIServerError: If the sample could not be obtained.
         """
+        import polars as pl
+
         provided = [x is not None for x in (at, at_trx, version)]
         if sum(provided) > 1:
             raise ValueError(
@@ -3099,7 +3552,7 @@ class Transaction:
                         filter=f"id:eq:{self.id}"
                     )[0]
                 except IndexError:
-                    raise ValueError(f"Transaction with ID {self.id} not found.")
+                    raise NotFound(f"Transaction with ID {self.id} not found.")
             self._data = transaction.kwargs
         return self._data_dict
 
@@ -3157,7 +3610,7 @@ class Transaction:
             .get("data")
         )
         return [
-            FunctionRun(**{**function_run, "connection": self.connection})
+            _listed_function_run(self.connection, function_run)
             for function_run in raw_function_runs
         ]
 
@@ -3207,7 +3660,7 @@ class Transaction:
         for worker in self.workers:
             if worker.id == worker_id:
                 return worker
-        raise ValueError(f"Worker {worker_id} not found for transaction {self.id}")
+        raise NotFound(f"Worker {worker_id} not found for transaction {self.id}")
 
     def recover(self) -> requests.Response:
         """
@@ -3236,6 +3689,42 @@ class Transaction:
         self.kwargs = None
         self._data = None
         return self
+
+    def wait(
+        self,
+        timeout: float | None = None,
+        poll_interval: float = WAIT_POLL_INTERVAL,
+        on_update: Callable[[Transaction], None] | None = None,
+        on_outage: Callable[[Exception | None], None] | None = None,
+    ) -> Transaction:
+        """
+        Refresh the transaction until its status is final.
+
+        Args:
+            timeout (float, optional): Seconds to wait at most; no limit when
+                omitted.
+            poll_interval (float): The longest pause between refreshes.
+            on_update (Callable, optional): Called with the transaction after
+                every refresh.
+            on_outage (Callable, optional): Called with the error when the
+                server stops answering, and with ``None`` once it answers
+                again; an outage longer than two minutes is raised.
+
+        Returns:
+            Transaction: The transaction, refreshed.
+
+        Raises:
+            WaitTimeout: If ``timeout`` passes first.
+        """
+        return poll_until(
+            self.refresh,
+            lambda transaction: is_final(Entity.TRANSACTION, transaction.status),
+            connection=self.connection,
+            timeout=timeout,
+            poll_interval=poll_interval,
+            on_update=on_update,
+            on_outage=on_outage,
+        )
 
     def __eq__(self, other):
         if not isinstance(other, Transaction):
@@ -3495,7 +3984,7 @@ class Worker:
                 with tabsdata_server._spanning():
                     worker = tabsdata_server.list_workers(filter=f"id:eq:{self.id}")[0]
             except IndexError:
-                raise ValueError(f"Worker with ID {self.id} not found.")
+                raise NotFound(f"Worker with ID {self.id} not found.")
             self._data = worker.kwargs
         return self._data_dict
 
@@ -3638,6 +4127,25 @@ class TabsdataServer:
             password (str): The password of the user.
         """
         self.connection = obtain_connection(url, username, password)
+
+    @classmethod
+    def from_token(cls, url: str, token: str) -> TabsdataServer:
+        """
+        Create a TabsdataServer object that authenticates with a bearer token
+            instead of logging in. No request is made.
+
+        Args:
+            url (str): The url of the server.
+            token (str): The bearer token sent with every request.
+
+        Returns:
+            TabsdataServer: The server object.
+        """
+        connection = APIServer(url)
+        connection.bearer_token = token
+        server = cls.__new__(cls)
+        server.connection = connection
+        return server
 
     @property
     def collections(self) -> List[Collection]:
@@ -3859,29 +4367,19 @@ class TabsdataServer:
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
-    ) -> Generator[Collection]:
-        first_page = True
-        next_pagination_id = None
-        next_step = None
-        while first_page or (next_pagination_id is not None and next_step is not None):
-            response = self.connection.collection_list(
+        cursor: ListCursor | None = None,
+    ) -> Listing[Collection]:
+        return Listing(
+            lambda pagination_id, next_step: self.connection.collection_list(
                 request_filter=filter,
                 order_by=order_by,
-                pagination_id=next_pagination_id,
+                pagination_id=pagination_id,
                 next_step=next_step,
                 raise_for_status=raise_for_status,
-            )
-            data = response.json().get("data")
-            next_pagination_id = data.get("next_pagination_id")
-            next_step = data.get("next")
-            raw_collections = data.get("data") or []
-            for raw_collection in raw_collections:
-                built_collection = Collection(self.connection, **raw_collection)
-                # Retain the list item's full DTO so `-o json/yaml` renders all
-                # fields without a per-item fetch.
-                built_collection._data = raw_collection
-                yield built_collection
-            first_page = False
+            ),
+            lambda raw_collection: _listed(self.connection, Collection, raw_collection),
+            cursor,
+        )
 
     def list_functions(
         self,
@@ -3914,7 +4412,8 @@ class TabsdataServer:
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
-    ) -> Generator[Function]:
+        cursor: ListCursor | None = None,
+    ) -> Listing[Function]:
         """
         Yield the functions in a collection, fetching pages as they are consumed.
 
@@ -3922,7 +4421,7 @@ class TabsdataServer:
             collection_name (str): The name of the collection.
 
         Returns:
-            Generator[Function]: The functions in the collection.
+            Listing[Function]: The functions in the collection.
 
         Raises:
             APIServerError: If the functions could not be listed.
@@ -3931,6 +4430,36 @@ class TabsdataServer:
             filter=filter,
             order_by=order_by,
             raise_for_status=raise_for_status,
+            cursor=cursor,
+        )
+
+    def list_project_functions_generator(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        cursor: ListCursor | None = None,
+    ) -> Listing[Function]:
+        """
+        Yield the functions of every collection in the active project,
+        fetching pages as they are consumed.
+
+        Returns:
+            Listing[Function]: The functions of the project.
+        """
+
+        def build(raw_function):
+            raw_function["connection"] = self.connection
+            return Function(**raw_function)
+
+        return Listing(
+            lambda pagination_id, next_step: self.connection.project_function_list(
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=pagination_id,
+                next_step=next_step,
+            ),
+            build,
+            cursor,
         )
 
     def update_collection(
@@ -4018,6 +4547,156 @@ class TabsdataServer:
         collection = Collection(self.connection, name)
         return collection.get_connection(raise_for_status=raise_for_status)
 
+    def list_connections_generator(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        cursor: ListCursor | None = None,
+    ) -> Listing[dict]:
+        """
+        Yield the connections of the active project, or of every project the
+        caller views when none is active, each with its ``compatible``
+        connectors (see :func:`connection_compatibility`).
+
+        Raises:
+            APIServerError: If the connections could not be listed.
+        """
+        return Listing(
+            lambda pagination_id, next_step: self.connection.connection_list(
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=pagination_id,
+                next_step=next_step,
+            ),
+            _with_compatibility,
+            cursor,
+        )
+
+    def get_connection_catalog(self, name: str) -> dict:
+        """
+        Read the catalog of a collection's connection: its probe status and
+        schema fingerprint, with its ``compatible`` connectors.
+
+        Raises:
+            APIServerError: If the catalog could not be read.
+        """
+        response = self.connection.connection_catalog_get(name)
+        return _with_compatibility(response.json()["data"])
+
+    def list_connection_entities_generator(
+        self,
+        name: str,
+        fields: bool = False,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        cursor: ListCursor | None = None,
+    ) -> Listing[dict]:
+        """
+        Yield the entities the last metadata probe of a collection's
+        connection found; ``fields`` adds each entity's document.
+
+        Raises:
+            APIServerError: If the entities could not be listed.
+        """
+        return Listing(
+            lambda pagination_id, next_step: self.connection.connection_entity_list(
+                name,
+                fields=fields,
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=pagination_id,
+                next_step=next_step,
+            ),
+            lambda row: row,
+            cursor,
+        )
+
+    def submit_connection_probe(
+        self,
+        name: str,
+        kind: str,
+        entity: str = None,
+        limit: int = None,
+        entities: list[str] = None,
+    ) -> dict:
+        """
+        Submit a ``check``, ``metadata`` or ``sample`` probe of a collection's
+        connection. An identical probe still active is joined instead: its
+        ``probe_id`` comes back.
+
+        Args:
+            name (str): The name of the collection.
+            kind (str): ``check``, ``metadata`` or ``sample``.
+            entity (str, optional): The catalog entity a sample reads.
+            limit (int, optional): The rows a sample reads (1 to 100), per
+                entity.
+            entities (list[str], optional): The catalog entities (1 to 10) one
+                sample reads, in place of ``entity``; its result is
+                ``{"samples": [...]}``, one per entity.
+
+        Raises:
+            APIServerError: If the probe was refused (``429`` past the
+                submission limits, ``404`` for an entity not in the catalog).
+        """
+        response = self.connection.connection_probe_submit(
+            name, kind, entity=entity, limit=limit, entities=entities
+        )
+        return response.json()["data"]
+
+    def get_connection_probe(self, probe_id: str, wait: int = None) -> dict:
+        """
+        Read a probe; with ``wait``, the server holds the request up to that
+        many seconds (at most 55) for it to end.
+
+        Raises:
+            APIServerError: If the probe could not be read.
+        """
+        response = self.connection.connection_probe_get(probe_id, wait=wait)
+        return response.json()["data"]
+
+    def wait_connection_probe(
+        self,
+        probe_id: str,
+        timeout: float | None = None,
+        on_update: Callable[[dict], None] | None = None,
+    ) -> dict:
+        """
+        Long-poll a probe until it reaches a final status and return it. Each
+        poll holds for the time left, at most 55 seconds and always under the
+        connection's read timeout.
+
+        Raises:
+            WaitTimeout: ``timeout`` seconds passed first; ``last`` is the
+                probe as last read.
+            APIServerError: If the probe could not be read.
+        """
+        deadline = None if timeout is None else time.monotonic() + timeout
+        read_timeout = self.connection.timeout[1]
+        while True:
+            wait = PROBE_MAX_WAIT_SECONDS
+            if deadline is not None:
+                wait = min(wait, max(deadline - time.monotonic(), 0))
+            wait = int(min(wait, max(read_timeout - PROBE_WAIT_MARGIN_SECONDS, 0)))
+            last = self.get_connection_probe(probe_id, wait=wait)
+            if on_update is not None:
+                on_update(last)
+            if last.get("status") in PROBE_FINAL_STATUSES:
+                return last
+            if deadline is not None and time.monotonic() >= deadline:
+                raise WaitTimeout(last, timeout)
+            if wait == 0:
+                time.sleep(WAIT_FIRST_INTERVAL)
+
+    def cancel_connection_probe(self, probe_id: str) -> dict:
+        """
+        Cancel an active probe: your own, or any with ``manage_project``.
+
+        Raises:
+            APIServerError: If the probe could not be cancelled.
+        """
+        response = self.connection.connection_probe_cancel(probe_id)
+        return response.json()["data"]
+
     def list_dataversions(
         self,
         collection_name: str,
@@ -4052,7 +4731,8 @@ class TabsdataServer:
         order_by: str = None,
         raise_for_status: bool = True,
         at: int | None = None,
-    ) -> Generator[DataVersion]:
+        cursor: ListCursor | None = None,
+    ) -> Listing[DataVersion]:
         """
         Yield the data versions of a table in a collection, fetching pages as
         they are consumed.
@@ -4061,14 +4741,18 @@ class TabsdataServer:
             collection_name (str): The name of the collection.
 
         Returns:
-            Generator[DataVersion]: The data versions of the table.
+            Listing[DataVersion]: The data versions of the table.
 
         Raises:
             APIServerError: If the data versions could not be listed.
         """
         table = Table(self.connection, collection_name, table_name)
         return table.list_dataversions_generator(
-            filter=filter, order_by=order_by, raise_for_status=raise_for_status, at=at
+            filter=filter,
+            order_by=order_by,
+            raise_for_status=raise_for_status,
+            at=at,
+            cursor=cursor,
         )
 
     def cancel_execution(self, execution_id: str) -> requests.Response:
@@ -4105,12 +4789,13 @@ class TabsdataServer:
 
         Raises:
             APIServerError: If the execution could not be obtained.
+            NotFound: If there is no execution with that ID.
         """
         try:
             with self._spanning():
                 return self.list_executions(filter=f"id:eq:{execution_id}")[0]
         except IndexError:
-            raise ValueError(f"Execution with ID {execution_id} not found.")
+            raise NotFound(f"Execution with ID {execution_id} not found.")
 
     def get_execution_graph(self, execution_id: str) -> dict:
         """
@@ -4124,6 +4809,61 @@ class TabsdataServer:
         """
         response = self.connection.execution_read(execution_id)
         return response.json().get("data") or {}
+
+    def diagnose_execution(
+        self,
+        execution_id: str,
+        max_runs: int = 5,
+        log_lines: int = 200,
+        logs: bool = True,
+    ) -> _diagnose.Diagnosis:
+        """
+        Diagnose an execution: its failed and retrying function runs, first
+        failure first, each with its repair handles and, from its latest
+        worker's log, its error signature; its held runs with the failed runs
+        that block them; and the root cause, the earliest failure.
+
+        Args:
+            execution_id (str): The ID of the execution.
+            max_runs (int): At most this many failed runs, 0 for all.
+            log_lines (int): The lines of each log excerpt.
+            logs (bool): Read the workers' logs; without them the diagnosis
+                rests on statuses alone.
+
+        Returns:
+            Diagnosis: The diagnosis; ``to_dict()`` gives its JSON document.
+
+        Raises:
+            NotFound: If the execution is not found.
+        """
+        return _diagnose.diagnose_execution(
+            self, execution_id, max_runs=max_runs, log_lines=log_lines, logs=logs
+        )
+
+    def diagnose_function_run(
+        self,
+        function_run_id: str,
+        log_lines: int = 200,
+        logs: bool = True,
+    ) -> _diagnose.Diagnosis:
+        """
+        Diagnose one function run like :meth:`diagnose_execution` does each
+        of an execution's runs.
+
+        Args:
+            function_run_id (str): The ID of the function run.
+            log_lines (int): The lines of the log excerpt.
+            logs (bool): Read the latest worker's log.
+
+        Returns:
+            Diagnosis: The diagnosis; ``to_dict()`` gives its JSON document.
+
+        Raises:
+            NotFound: If the function run is not found.
+        """
+        return _diagnose.diagnose_function_run(
+            self, function_run_id, log_lines=log_lines, logs=logs
+        )
 
     def list_executions(
         self,
@@ -4144,26 +4884,19 @@ class TabsdataServer:
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
-    ) -> Generator[Execution]:
-        first_page = True
-        next_pagination_id = None
-        next_step = None
-        while first_page or (next_pagination_id is not None and next_step is not None):
-            response = self.connection.execution_list(
+        cursor: ListCursor | None = None,
+    ) -> Listing[Execution]:
+        return Listing(
+            lambda pagination_id, next_step: self.connection.execution_list(
                 request_filter=filter,
                 order_by=order_by,
-                pagination_id=next_pagination_id,
+                pagination_id=pagination_id,
                 next_step=next_step,
                 raise_for_status=raise_for_status,
-            )
-            data = response.json().get("data")
-            next_pagination_id = data.get("next_pagination_id")
-            next_step = data.get("next")
-            raw_executions = data.get("data") or []
-            for raw_execution in raw_executions:
-                built_execution = Execution(self.connection, **raw_execution)
-                yield built_execution
-            first_page = False
+            ),
+            lambda raw_execution: Execution(self.connection, **raw_execution),
+            cursor,
+        )
 
     def recover_execution(self, execution_id: str) -> requests.Response:
         """
@@ -4195,6 +4928,7 @@ class TabsdataServer:
         enabled: bool = True,
         raise_for_status: bool = True,
         requirements: str | Path | None = None,
+        confine_to: str | Path | None = None,
         base_path: str | None = None,
     ) -> Function:
         """Register a function in ``collection_name`` from a tabsdatak
@@ -4221,6 +4955,7 @@ class TabsdataServer:
             enabled=enabled,
             raise_for_status=raise_for_status,
             requirements=requirements,
+            confine_to=confine_to,
             base_path=base_path,
         )
 
@@ -4311,7 +5046,7 @@ class TabsdataServer:
             with self._spanning():
                 return self.list_function_runs(filter=f"id:eq:{function_run_id}")[0]
         except IndexError:
-            raise ValueError(f"Function Run with ID {function_run_id} not found.")
+            raise NotFound(f"Function Run with ID {function_run_id} not found.")
 
     def list_function_runs(
         self,
@@ -4332,26 +5067,19 @@ class TabsdataServer:
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
-    ) -> Generator[FunctionRun]:
-        first_page = True
-        next_pagination_id = None
-        next_step = None
-        while first_page or (next_pagination_id is not None and next_step is not None):
-            response = self.connection.function_list_runs(
+        cursor: ListCursor | None = None,
+    ) -> Listing[FunctionRun]:
+        return Listing(
+            lambda pagination_id, next_step: self.connection.function_list_runs(
                 request_filter=filter,
                 order_by=order_by,
-                pagination_id=next_pagination_id,
+                pagination_id=pagination_id,
                 next_step=next_step,
                 raise_for_status=raise_for_status,
-            )
-            data = response.json().get("data")
-            next_pagination_id = data.get("next_pagination_id")
-            next_step = data.get("next")
-            raw_function_runs = data.get("data") or []
-            for raw_function_run in raw_function_runs:
-                built_function_run = FunctionRun(self.connection, **raw_function_run)
-                yield built_function_run
-            first_page = False
+            ),
+            lambda raw_function_run: FunctionRun(self.connection, **raw_function_run),
+            cursor,
+        )
 
     def read_function_run(
         self,
@@ -4422,6 +5150,7 @@ class TabsdataServer:
         enabled: bool = True,
         raise_for_status: bool = True,
         requirements: str | Path | None = None,
+        confine_to: str | Path | None = None,
         base_path: str | None = None,
         reset_state: bool = False,
         reset_stage: bool = False,
@@ -4451,6 +5180,7 @@ class TabsdataServer:
             enabled=enabled,
             raise_for_status=raise_for_status,
             requirements=requirements,
+            confine_to=confine_to,
             base_path=base_path,
             reset_state=reset_state,
             reset_stage=reset_stage,
@@ -4468,6 +5198,7 @@ class TabsdataServer:
         local_packages: List[str] | None = None,
         raise_for_status: bool = True,
         requirements: str | Path | None = None,
+        confine_to: str | Path | None = None,
     ) -> dict:
         """Register a code-only patch of an existing function version.
 
@@ -4490,6 +5221,7 @@ class TabsdataServer:
             local_packages=local_packages,
             raise_for_status=raise_for_status,
             requirements=requirements,
+            confine_to=confine_to,
         )
 
     def list_function_patches(
@@ -4516,7 +5248,8 @@ class TabsdataServer:
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
-    ) -> Generator[dict]:
+        cursor: ListCursor | None = None,
+    ) -> Listing[dict]:
         """Yield patch versions for a function (latest first), fetching pages as
         they are consumed."""
         collection = Collection(self.connection, collection_name)
@@ -4525,6 +5258,7 @@ class TabsdataServer:
             filter=filter,
             order_by=order_by,
             raise_for_status=raise_for_status,
+            cursor=cursor,
         )
 
     def replay_logical_function_run(
@@ -4700,7 +5434,7 @@ class TabsdataServer:
         if group is not None:
             if collection or function or table:
                 raise ValueError("A group tag names no collection, function or table.")
-            return f"/groups/{group}"
+            return f"/groups/{_path_segment(group)}"
         if function is not None and table is not None:
             raise ValueError("Name a function or a table, not both.")
         if (function is not None or table is not None) and collection is None:
@@ -4708,10 +5442,16 @@ class TabsdataServer:
         if collection is None:
             return ""
         if function is not None:
-            return f"/collections/{collection}/functions/{function}"
+            return (
+                f"/collections/{_path_segment(collection)}"
+                f"/functions/{_path_segment(function)}"
+            )
         if table is not None:
-            return f"/collections/{collection}/tables/{table}"
-        return f"/collections/{collection}"
+            return (
+                f"/collections/{_path_segment(collection)}"
+                f"/tables/{_path_segment(table)}"
+            )
+        return f"/collections/{_path_segment(collection)}"
 
     def list_tags(
         self,
@@ -4859,27 +5599,19 @@ class TabsdataServer:
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
-    ) -> Generator[Group]:
-        first_page = True
-        next_pagination_id = None
-        next_step = None
-        while first_page or (next_pagination_id is not None and next_step is not None):
-            response = self.connection.group_list(
+        cursor: ListCursor | None = None,
+    ) -> Listing[Group]:
+        return Listing(
+            lambda pagination_id, next_step: self.connection.group_list(
                 request_filter=filter,
                 order_by=order_by,
-                pagination_id=next_pagination_id,
+                pagination_id=pagination_id,
                 next_step=next_step,
                 raise_for_status=raise_for_status,
-            )
-            data = response.json().get("data")
-            next_pagination_id = data.get("next_pagination_id")
-            next_step = data.get("next")
-            raw_groups = data.get("data") or []
-            for raw_group in raw_groups:
-                built_group = Group(self.connection, **raw_group)
-                built_group._data = raw_group
-                yield built_group
-            first_page = False
+            ),
+            lambda raw_group: _listed(self.connection, Group, raw_group),
+            cursor,
+        )
 
     def update_group(
         self,
@@ -5158,32 +5890,25 @@ class TabsdataServer:
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
-    ) -> Generator[Role]:
+        cursor: ListCursor | None = None,
+    ) -> Listing[Role]:
         """
         List the roles in the server.
 
         Returns:
             List[Role]: The list of roles in the server.
         """
-        first_page = True
-        next_pagination_id = None
-        next_step = None
-        while first_page or (next_pagination_id is not None and next_step is not None):
-            response = self.connection.role_list(
+        return Listing(
+            lambda pagination_id, next_step: self.connection.role_list(
                 request_filter=filter,
                 order_by=order_by,
-                pagination_id=next_pagination_id,
+                pagination_id=pagination_id,
                 next_step=next_step,
                 raise_for_status=raise_for_status,
-            )
-            data = response.json().get("data")
-            next_pagination_id = data.get("next_pagination_id")
-            next_step = data.get("next")
-            raw_roles = data.get("data") or []
-            for raw_role in raw_roles:
-                built_role = Role(self.connection, **raw_role)
-                yield built_role
-            first_page = False
+            ),
+            lambda raw_role: Role(self.connection, **raw_role),
+            cursor,
+        )
 
     def update_role(
         self,
@@ -5264,27 +5989,72 @@ class TabsdataServer:
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
-    ) -> Generator[Project]:
-        first_page = True
-        next_pagination_id = None
-        next_step = None
-        while first_page or (next_pagination_id is not None and next_step is not None):
-            response = self.connection.project_list(
+        cursor: ListCursor | None = None,
+    ) -> Listing[Project]:
+        return Listing(
+            lambda pagination_id, next_step: self.connection.project_list(
                 request_filter=filter,
                 order_by=order_by,
-                pagination_id=next_pagination_id,
+                pagination_id=pagination_id,
                 next_step=next_step,
                 raise_for_status=raise_for_status,
-            )
-            data = response.json().get("data")
-            next_pagination_id = data.get("next_pagination_id")
-            next_step = data.get("next")
-            raw_projects = data.get("data") or []
-            for raw_project in raw_projects:
-                built_project = Project(self.connection, **raw_project)
-                built_project._data = raw_project
-                yield built_project
-            first_page = False
+            ),
+            lambda raw_project: _listed(self.connection, Project, raw_project),
+            cursor,
+        )
+
+    def project_graph(
+        self,
+        topology_version: str = None,
+        at: int | str = None,
+        raise_for_status: bool = True,
+    ) -> dict:
+        """The active project's whole graph at ``topology_version`` or as of
+        ``at``, the latest when neither is given: its ``version`` and ``at``,
+        ``all_functions`` and ``all_tables`` keyed by version id (each with
+        its topology ``tags``), ``system_tables``, ``user_tables``, the
+        ``relations`` (``function_version_id``, ``table_version_id`` and an
+        ``Output``, ``Dependency`` or ``Trigger`` ``edge``) and the current
+        ``collections`` and ``groups`` labels."""
+        at = _top_and_convert_to_timestamp(at) if isinstance(at, str) else at
+        response = self.connection.project_graph(
+            topology_version=topology_version,
+            at=at,
+            raise_for_status=raise_for_status,
+        )
+        return response.json().get("data")
+
+    def list_topology_versions(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[dict]:
+        """The active project's topology versions, each an ``id`` with the
+        ``valid_from`` and ``valid_to`` (null while open) it was current
+        between, in epoch milliseconds."""
+        return list(
+            self.list_topology_versions_generator(filter, order_by, raise_for_status)
+        )
+
+    def list_topology_versions_generator(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+        cursor: ListCursor | None = None,
+    ) -> Listing[dict]:
+        return Listing(
+            lambda pagination_id, next_step: self.connection.topology_version_list(
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=pagination_id,
+                next_step=next_step,
+                raise_for_status=raise_for_status,
+            ),
+            lambda row: row,
+            cursor,
+        )
 
     def update_project(
         self,
@@ -5399,7 +6169,8 @@ class TabsdataServer:
         at_trx: Transaction | str | None = None,
         version: DataVersion | str | None = None,
         raise_for_status: bool = True,
-    ) -> Path | None:
+        max_bytes: int | None = None,
+    ) -> int | None:
         """
         Download a table for a given version as a parquet file. The version can
             be a fixed version or a relative one (HEAD, HEAD^, and HEAD~## syntax).
@@ -5410,13 +6181,17 @@ class TabsdataServer:
             destination_file (str): The path to the destination file.
             raise_for_status (bool, optional): Whether to raise an exception if the
                 request was not successful. Defaults to True.
+            max_bytes (int, optional): Stop the download and raise
+                DownloadTooLarge once it passes this many bytes.
 
         Returns:
-            Path | None: The path of the downloaded file, or None when the version
-                holds no data, in which case no file is written.
+            int | None: The bytes written, or None when the version holds no
+                data. The destination is replaced only by a complete download;
+                otherwise it is left as it was.
 
         Raises:
             APIServerError: If the table could not be downloaded.
+            DownloadTooLarge: If the table is larger than max_bytes.
         """
         table = Table(self.connection, collection_name, table_name)
         return table.download(
@@ -5425,6 +6200,7 @@ class TabsdataServer:
             at_trx=at_trx,
             version=version,
             raise_for_status=raise_for_status,
+            max_bytes=max_bytes,
         )
 
     def get_table_schema(
@@ -5473,8 +6249,6 @@ class TabsdataServer:
 
         Args:
             collection_name (str): The name of the collection.
-            offset (int, optional): The offset of the list.
-            len (int, optional): The length of the list.
 
         Returns:
             List[Table]: The requested list of tables in the collection.
@@ -5491,19 +6265,70 @@ class TabsdataServer:
         at_trx: Transaction | str | None = None,
         filter: List[str] | str = None,
         order_by: str = None,
-    ) -> Generator[Table]:
+        cursor: ListCursor | None = None,
+    ) -> Listing[Table]:
         """
         Yield the tables in a collection, fetching pages as they are consumed.
 
         Args:
             collection_name (str): The name of the collection.
+            at (int | str, optional): List the tables as they were at this time.
+            at_trx (Transaction | str, optional): List the tables as they were
+                at the end of this transaction.
 
         Returns:
-            Generator[Table]: The tables in the collection.
+            Listing[Table]: The tables in the collection.
         """
         collection = Collection(self.connection, collection_name)
         return collection.list_tables_generator(
-            at=at, at_trx=at_trx, filter=filter, order_by=order_by
+            at=at,
+            at_trx=at_trx,
+            filter=filter,
+            order_by=order_by,
+            cursor=cursor,
+        )
+
+    def list_project_tables(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+    ) -> List[Table]:
+        """
+        List the current tables of every collection in the active project.
+
+        Args:
+            filter (List[str] | str, optional): Conditions on the listing's
+                fields, such as 'name:lk:cust*' or 'collection:eq:sales'.
+
+        Returns:
+            List[Table]: The tables of the project.
+        """
+        return list(
+            self.list_project_tables_generator(filter=filter, order_by=order_by)
+        )
+
+    def list_project_tables_generator(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        cursor: ListCursor | None = None,
+    ) -> Listing[Table]:
+        """
+        Yield the current tables of every collection in the active project,
+        fetching pages as they are consumed.
+
+        Returns:
+            Listing[Table]: The tables of the project.
+        """
+        return Listing(
+            lambda pagination_id, next_step: self.connection.project_table_list(
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=pagination_id,
+                next_step=next_step,
+            ),
+            lambda row: _listed(self.connection, Table, row, row["collection"]),
+            cursor,
         )
 
     def sample_table(
@@ -5531,8 +6356,8 @@ class TabsdataServer:
                 server-side, and cannot be greater than 1000.
             sql (str, optional): A SQL query run server-side on the table, which
                 is the only queryable relation and is referenced by its own
-                name. The offset is applied before the query and the length caps
-                its result.
+                name. The offset and the length page the query's result, and the
+                server bounds the query's time and the bytes it may scan.
             extra_cols (str, optional): Which non-user columns to return on top
                 of the user ones: 'none' (the server default), 'meta' (the
                 '@td.' connector metadata), 'sys' (the '$td.' system columns)
@@ -5580,12 +6405,13 @@ class TabsdataServer:
 
         Raises:
             APIServerError: If the transaction could not be obtained.
+            NotFound: If there is no transaction with that ID.
         """
         try:
             with self._spanning():
                 return self.list_transactions(filter=f"id:eq:{transaction_id}")[0]
         except IndexError:
-            raise ValueError(f"Transaction with ID {transaction_id} not found.")
+            raise NotFound(f"Transaction with ID {transaction_id} not found.")
 
     def list_transactions(
         self,
@@ -5606,26 +6432,19 @@ class TabsdataServer:
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
-    ) -> Generator[Transaction]:
-        first_page = True
-        next_pagination_id = None
-        next_step = None
-        while first_page or (next_pagination_id is not None and next_step is not None):
-            response = self.connection.transaction_list(
+        cursor: ListCursor | None = None,
+    ) -> Listing[Transaction]:
+        return Listing(
+            lambda pagination_id, next_step: self.connection.transaction_list(
                 request_filter=filter,
                 order_by=order_by,
-                pagination_id=next_pagination_id,
+                pagination_id=pagination_id,
                 next_step=next_step,
                 raise_for_status=raise_for_status,
-            )
-            data = response.json().get("data")
-            next_pagination_id = data.get("next_pagination_id")
-            next_step = data.get("next")
-            raw_transactions = data.get("data") or []
-            for raw_transaction in raw_transactions:
-                built_transaction = Transaction(self.connection, **raw_transaction)
-                yield built_transaction
-            first_page = False
+            ),
+            lambda raw_transaction: Transaction(self.connection, **raw_transaction),
+            cursor,
+        )
 
     def recover_transaction(self, transaction_id: str) -> requests.Response:
         """
@@ -5765,27 +6584,19 @@ class TabsdataServer:
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
-    ) -> Generator[User]:
-        first_page = True
-        next_pagination_id = None
-        next_step = None
-        while first_page or (next_pagination_id is not None and next_step is not None):
-            response = self.connection.users_list(
+        cursor: ListCursor | None = None,
+    ) -> Listing[User]:
+        return Listing(
+            lambda pagination_id, next_step: self.connection.users_list(
                 request_filter=filter,
                 order_by=order_by,
-                pagination_id=next_pagination_id,
+                pagination_id=pagination_id,
                 next_step=next_step,
                 raise_for_status=raise_for_status,
-            )
-            data = response.json().get("data")
-            next_pagination_id = data.get("next_pagination_id")
-            next_step = data.get("next")
-            raw_users = data.get("data") or []
-            for raw_user in raw_users:
-                built_user = User(self.connection, **raw_user)
-                built_user._data = raw_user
-                yield built_user
-            first_page = False
+            ),
+            lambda raw_user: _listed(self.connection, User, raw_user),
+            cursor,
+        )
 
     def update_user(
         self,
@@ -5833,6 +6644,66 @@ class TabsdataServer:
             worker = Worker(self.connection, worker)
         return worker.log
 
+    def worker_log_entry(
+        self,
+        worker: str | Worker,
+        tail: int | None = None,
+        attempt: int | None = None,
+    ) -> dict:
+        """
+        Get a worker's log with what it says went wrong.
+
+        Args:
+            worker (str | Worker): The worker or its ID.
+            tail (int, optional): Keep only the last ``tail`` lines.
+            attempt (int, optional): The worker's attempt number within its
+                function run, reported as given.
+
+        Returns:
+            dict: ``worker_id``, ``function_run_id``, ``collection``,
+                ``function``, the annotated ``status``, ``attempt``,
+                ``lines_total``, ``log_truncated``, ``log``, the error
+                ``signature`` of a worker that did not succeed and, instead
+                of the log, ``log_unavailable`` when reading it is forbidden.
+
+        Raises:
+            NotFound: If the worker is not found.
+        """
+        if isinstance(worker, str):
+            worker = self.get_worker(worker)
+        return _diagnose.log_entry(self, worker, tail, attempt)
+
+    def scope_logs(
+        self,
+        plan: str | None = None,
+        trx: str | None = None,
+        fnrun: str | None = None,
+        tail: int | None = None,
+        failed_only: bool = False,
+        max_workers: int | None = 20,
+    ) -> tuple[List[dict], bool]:
+        """
+        Get the logs of every worker of a plan, a transaction or a function
+        run, newest first, each as :meth:`worker_log_entry` gives it.
+
+        Args:
+            plan (str, optional): The ID of the plan.
+            trx (str, optional): The ID of the transaction.
+            fnrun (str, optional): The ID of the function run.
+            tail (int, optional): Keep only the last ``tail`` lines of each log.
+            failed_only (bool): Keep only the workers whose health is
+                ``warning`` or ``error``.
+            max_workers (int, optional): At most this many workers; no
+                limit when 0 or ``None``.
+
+        Returns:
+            tuple[list[dict], bool]: The entries, and whether ``max_workers``
+                cut them short.
+        """
+        return _diagnose.scope_logs(
+            self, plan, trx, fnrun, tail, failed_only, max_workers
+        )
+
     def get_worker(self, worker_id: str) -> Worker:
         """
         Get a worker in the server.
@@ -5842,12 +6713,15 @@ class TabsdataServer:
 
         Returns:
             Worker: The worker.
+
+        Raises:
+            NotFound: If there is no worker with that ID.
         """
         try:
             with self._spanning():
                 return self.list_workers(filter=f"id:eq:{worker_id}")[0]
         except IndexError:
-            raise ValueError(f"Worker with ID {worker_id} not found.")
+            raise NotFound(f"Worker with ID {worker_id} not found.")
 
     def list_workers(
         self,
@@ -5868,333 +6742,19 @@ class TabsdataServer:
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
-    ) -> Generator[Worker]:
-        first_page = True
-        next_pagination_id = None
-        next_step = None
-        while first_page or (next_pagination_id is not None and next_step is not None):
-            response = self.connection.workers_list(
+        cursor: ListCursor | None = None,
+    ) -> Listing[Worker]:
+        return Listing(
+            lambda pagination_id, next_step: self.connection.workers_list(
                 request_filter=filter,
                 order_by=order_by,
-                pagination_id=next_pagination_id,
+                pagination_id=pagination_id,
                 next_step=next_step,
                 raise_for_status=raise_for_status,
-            )
-            data = response.json().get("data")
-            next_pagination_id = data.get("next_pagination_id")
-            next_step = data.get("next")
-            raw_workers = data.get("data") or []
-            for raw_worker in raw_workers:
-                built_worker = Worker(self.connection, **raw_worker)
-                yield built_worker
-            first_page = False
-
-
-@dataclass
-class _FunctionArchive:
-    """Result of bundling a :class:`FunctionInfo` for registration.
-
-    Mirrors the legacy ``TabsdataFunctionArchive`` shape so the
-    ``function_register`` / ``function_patch`` apiserver calls keep
-    their existing payload schema unchanged. The v2 difference: every
-    field is derived from the :class:`FunctionInfo` rather than from
-    legacy ``TabsdataFunction`` attributes, and the bundle itself is
-    produced by :func:`tabsdatak.common._archive.bundle.build_bundle`.
-    """
-
-    tables: list[str]
-    table_types: dict[str, str]
-    parent_tables: dict[str, str]
-    string_dependencies: list[str]
-    trigger_string_list: list[str] | None
-    function_snippet: str
-    context_location: str
-    function_name: str
-    function_type: str
-    connector: str | None
-    connection: str | None
-    workers: dict[str, str] | None
-    trend_transformers_info: list[TrendTransformerInfo] | None = None
-
-
-# Maps each ``FunctionInfo.__kind__`` to the API discriminator the
-# server's ``function_register`` endpoint expects (P/S/T). Stream
-# publishers register as publishers from the server's perspective
-# (the runtime decides how to drive them based on the bundle's
-# ``function_def.json``).
-_KIND_TO_API_TYPE: dict[str, str] = {
-    KIND_PUBLISHER_DEF: "P",
-    KIND_STREAM_PUBLISHER_DEF: "P",
-    KIND_TRANSFORMER_DEF: "T",
-    KIND_SUBSCRIBER_DEF: "S",
-}
-
-
-def _workers(info: FunctionInfo) -> dict[str, str] | None:
-    """Return the workers payload the server's ``function_register``
-    endpoint stores on the function (later materialized into a row in
-    ``workers`` by ``build_workers`` in
-    ``td-services/.../function/layers/register.rs``):
-
-    * ``CronTrigger`` → ``{"CT": json.dumps({"mask": ...})}``. Matches
-      the ``CronTriggerConfig`` Rust struct in
-      ``td-objects/.../dxo/worker.rs``; ``start``/``end`` are
-      ``Option<DateTime>`` and omitted.
-    * ``@stream_publisher`` (any) → ``{"ST": json.dumps({})}``. The
-      ``StageTriggerConfig`` struct's fields all carry serde defaults
-      (``TimeoutThresholdMin``/``SizeThreshold`` are typed-int wrappers
-      with built-in defaults; ``start``/``end`` are ``Option``); an
-      empty JSON object is enough to enqueue the long-running
-      stream-publisher worker. The function-level batch settings
-      live in the bundle's ``function_def.json`` and are consumed by
-      the ``streamer`` command in the pod, not via this worker config.
-    * Anything else → ``None`` (no orchestrator-managed worker).
-
-    Stream-publisher MUST emit ``"ST"``; otherwise the apiserver never
-    enqueues a ``WorkerType::StageTrigger`` row, the orchestrator's
-    ``StageTriggersToSchedule`` filter finds nothing, and the
-    long-running stream-publisher pod never gets scheduled (the
-    per-trigger function-publisher pod still runs, but with an empty
-    stage and the user function gets no rows).
-    """
-    trigger_by = getattr(info, "trigger_by", None)
-    if isinstance(trigger_by, CronTrigger):
-        return {"CT": json.dumps({"mask": trigger_by.mask})}
-    if getattr(info, "__kind__", None) == KIND_STREAM_PUBLISHER_DEF:
-        return {"ST": json.dumps({})}
-    return None
-
-
-# Kept under the old name so any out-of-tree caller (and the
-# follow-on test file) keeps importing without a breaking rename.
-_cron_workers = _workers
-
-
-def _trigger_string_list(info: FunctionInfo) -> list[str] | None:
-    """Extract the ``trigger_string_list`` field the legacy
-    ``function_register`` payload expects.
-
-    ``None`` for ``trigger_by=None`` or :class:`AllTablesTrigger`, which
-    leaves the server to derive the triggers from the function's input
-    tables; the explicit table list, possibly empty, for
-    :class:`TablesTrigger`; and no tables for a :class:`CronTrigger`,
-    whose schedule travels in the workers map."""
-    trigger_by = getattr(info, "trigger_by", None)
-    if trigger_by is None or isinstance(trigger_by, AllTablesTrigger):
-        return None
-    if isinstance(trigger_by, TablesTrigger):
-        return list(trigger_by.tables)
-    return []
-
-
-def _connector(info: FunctionInfo) -> str | None:
-    """The function's source/destination class FQN -- the ``Src`` /
-    ``StreamSrc`` / ``Dest`` the function binds to -- as a
-    ``"module:qualname"`` string (e.g. ``"tabsdatak.conn.mysql:MySQLSrc"``).
-
-    Discriminates on ``info.__kind__`` rather than ``isinstance`` so
-    duck-typed Info objects (used in tests) work the same way. ``None`` for
-    transformers (no connector).
-    """
-    kind = getattr(info, "__kind__", None)
-    if kind in (KIND_PUBLISHER_DEF, KIND_STREAM_PUBLISHER_DEF):
-        source = getattr(info, "source", None)
-        return qualified_class(type(source)) if source is not None else None
-    if kind == KIND_SUBSCRIBER_DEF:
-        destination = getattr(info, "destination", None)
-        return qualified_class(type(destination)) if destination is not None else None
-    return None
-
-
-def _connection(info: FunctionInfo) -> str | None:
-    """The function's connection class FQN -- the concrete :class:`Conn`
-    subclass its source/destination binds to -- as a ``"module:qualname"``
-    string (e.g. ``"tabsdatak.conn.mysql:MySQLSrcConn"``).
-
-    Resolved from the connector registry by the source/destination type
-    (``def.conn``), *not* from a ``conn`` declared on the decorator. The
-    server matches it against the collection's connection on register/update.
-    ``None`` for transformers (no connection)."""
-    kind = getattr(info, "__kind__", None)
-    if kind == KIND_PUBLISHER_DEF:
-        source = getattr(info, "source", None)
-        conn_cls = (
-            _connectors.get_src(type(source)).conn if source is not None else None
+            ),
+            lambda raw_worker: Worker(self.connection, **raw_worker),
+            cursor,
         )
-    elif kind == KIND_STREAM_PUBLISHER_DEF:
-        source = getattr(info, "source", None)
-        conn_cls = (
-            _connectors.get_stream_src(type(source)).conn
-            if source is not None
-            else None
-        )
-    elif kind == KIND_SUBSCRIBER_DEF:
-        destination = getattr(info, "destination", None)
-        conn_cls = (
-            _connectors.get_dest(type(destination)).conn
-            if destination is not None
-            else None
-        )
-    else:
-        conn_cls = None
-    return qualified_class(conn_cls) if conn_cls is not None else None
-
-
-def _input_tables(info: FunctionInfo) -> list[str]:
-    """For transformers / subscribers, the cross-collection
-    ``"collection/table"`` references. For publishers, an empty list."""
-    return list(getattr(info, "input_tables", []) or [])
-
-
-def _output_tables(info: FunctionInfo) -> list[str]:
-    """For publishers / transformers, the declared output table
-    names. For subscribers (no outputs), an empty list."""
-    return list(getattr(info, "output_tables", []) or [])
-
-
-def _dq_derived(
-    collection: str, info: FunctionInfo
-) -> tuple[list[str], dict[str, str], dict[str, str], list[TrendTransformerInfo]]:
-    """Derive everything a function's data-quality actions imply.
-
-    Returns the derived table names, their catalog type codes (so
-    registration records each derived table under its ``TableType``), the
-    output table each derived table derives from -- summaries and the trend
-    tables alike, so registration parents them -- and the system transformers
-    that maintain the summary trend tables. All four are empty when the
-    function declares no data-quality action.
-
-    One :class:`DataQualityProcessor` serves all four, so the action set is
-    resolved and validated exactly once per registration.
-    """
-    from tabsdatak.common._actions.dataquality.processor import (
-        DataQualityProcessor,
-    )
-    from tabsdatak.dataquality import DataQuality
-    from tabsdatak.dataquality._tableinfo import TableKind
-
-    on_tables = getattr(info, "on_tables", None) or []
-    actions = [action for action in on_tables if isinstance(action, DataQuality)]
-    if not actions:
-        return [], {}, {}, []
-
-    processor = DataQualityProcessor.from_actions(
-        collection=collection,
-        output_tables=_output_tables(info),
-        actions=actions,
-    )
-    _, output_table_infos = processor.table_names()
-    names = [table_info.table for table_info in output_table_infos]
-    types = {
-        table_info.table: table_info.kind.type.value
-        for table_info in output_table_infos
-    }
-    trends = processor.build_trend_transformers_info()
-    parents = {
-        table_info.table: table_info.from_table
-        for table_info in output_table_infos
-        if table_info.kind is TableKind.DQ_SUMMARY
-    } | {
-        table: trend.parent_table
-        for trend in trends
-        for table in trend.info.output_tables
-    }
-    return names, types, parents, trends
-
-
-def _cleanup_trend_roots(trend_transformers) -> None:
-    """Discard the generated-module directories built for trend transformers.
-
-    ``build_bundle`` copies each generated module into its bundle's
-    ``user_code/`` during registration, so once registration has been attempted
-    the directories are dead weight. Called from a ``finally`` so a failed
-    registration leaves nothing behind either.
-    """
-    from tabsdatak.common._actions.dataquality.trend import cleanup_trend_tfr_mod
-
-    for trend in trend_transformers or []:
-        cleanup_trend_tfr_mod(trend.project_root)
-
-
-def _create_archive(
-    collection: str,
-    info: FunctionInfo,
-    project_root: str | Path,
-    temporary_directory: tempfile.TemporaryDirectory | str,
-    local_packages: list[str] | None = None,
-    valid_python_versions: list[str] | None = None,
-    requirements: str | Path | None = None,
-) -> _FunctionArchive:
-    """Bundle ``info`` (a :class:`FunctionInfo`) for registration.
-
-    Calls :func:`tabsdatak.common._archive.bundle.build_bundle` to produce the
-    ``.tar.zst`` and assembles the metadata fields the legacy
-    ``function_register`` API still expects from the SDK side.
-
-    Data-quality actions declared in ``info.on_tables`` contribute their
-    derived tables to ``tables`` and their catalog kinds to ``table_types``
-    (see :func:`_dq_tables`), so a data-quality function's derived outputs are
-    registered under the right :class:`TableType`.
-
-    .. note::
-
-       One piece of legacy ``_create_archive`` behaviour is currently NOT
-       carried over from the v1 SDK and remains as deferred work:
-
-       * **StageTrigger workers payload.** The legacy code inspected
-         ``function.trigger_by`` for a :class:`StageTrigger`
-         instance and emitted ``workers={"ST": <json>}`` so the
-         server would route the function via the stage-trigger
-         apparatus. ``StageTrigger`` lives in the legacy
-         ``tabsdata._io.stage_trigger`` module, which is in an
-         excluded subtree, and there is no v2 tabsdatak equivalent
-         yet. Functions whose v2 ``Info`` carries a stage trigger
-         will register with ``workers=None`` until the v2 stage
-         trigger story is designed. TODO(tabsdatak-migration).
-    """
-    save_location = (
-        temporary_directory.name
-        if isinstance(temporary_directory, tempfile.TemporaryDirectory)
-        else temporary_directory
-    )
-    bundle_path = Path(save_location) / "bundle.tar.zst"
-
-    build_bundle(
-        info,
-        Path(project_root),
-        bundle_path,
-        local_packages=[Path(p) for p in local_packages] if local_packages else None,
-        valid_python_versions=valid_python_versions,
-        requirements_yaml=Path(requirements) if requirements else None,
-    )
-
-    function_name = getattr(info.func, "__name__", "<anonymous>")
-    function_type = _KIND_TO_API_TYPE.get(info.__kind__, "U")
-    function_snippet = capture_source_snippet(info)
-
-    dq_names, dq_types, dq_parents, trend_transformers = _dq_derived(collection, info)
-
-    return _FunctionArchive(
-        tables=_output_tables(info) + dq_names,
-        table_types=dq_types,
-        parent_tables=dq_parents,
-        string_dependencies=_input_tables(info),
-        trigger_string_list=_trigger_string_list(info),
-        function_snippet=function_snippet,
-        context_location=str(bundle_path),
-        function_name=function_name,
-        function_type=function_type,
-        connector=_connector(info),
-        connection=_connection(info),
-        # ``_workers`` emits ``CT`` for ``CronTrigger`` and ``ST`` for
-        # ``@stream_publisher``; ``None`` otherwise. The ``ST`` branch
-        # is what makes the apiserver enqueue the long-running
-        # stream-publisher worker on register (TD-2569). Without it
-        # the orchestrator's ``StageTriggersToSchedule`` filter found
-        # nothing and the stream-publisher pod never spawned.
-        workers=_workers(info),
-        trend_transformers_info=trend_transformers,
-    )
 
 
 _UTC_FORMATS = [

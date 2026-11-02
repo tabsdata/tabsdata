@@ -41,7 +41,6 @@ from tabsdatax.itest.fixture.instances.tabsdata import Instance, tabsdata_instan
 from tabsdatak.conn.dev import DataGenSrcConn, TrashDestConn
 from tabsdatak.extensions.variant.edition import ENTERPRISE
 from tabsdatak.sdk.status_utils.execution import (
-    EXECUTION_FINAL_STATUSES,
     ExecutionStatus,
     execution_status_to_mapping,
 )
@@ -49,6 +48,7 @@ from tabsdatak.sdk.status_utils.function_run import (
     FunctionRunStatus,
     function_run_status_to_mapping,
 )
+from tabsdatak.sdk.status_utils.groups import FINAL, Entity, status_name
 from tabsdatak.sdk.status_utils.transaction import (
     TransactionStatus,
     transaction_status_to_mapping,
@@ -101,6 +101,10 @@ POLL_SECONDS = 5
 ROUNDS = int(os.environ.get("SETTLEMENT_ROUNDS", "20"))
 SEED = os.environ.get("SETTLEMENT_SEED")
 RECENT = 3
+
+FINAL_EXECUTION = {
+    status_name(Entity.EXECUTION, code) for code in FINAL[Entity.EXECUTION]
+}
 
 
 def register(factory: CollectionFactory, names: list[str]) -> dict[str, Function]:
@@ -217,7 +221,7 @@ def test_a_failing_transformer_stalls_until_its_transaction_is_canceled(
         assert runs_of(destinations)["after_failing"] == CANCELED, describe(execution)
     finally:
         execution.refresh()
-        if execution.status not in EXECUTION_FINAL_STATUSES:
+        if execution.status not in FINAL_EXECUTION:
             execution.cancel()
 
 
@@ -251,7 +255,7 @@ def test_recovering_a_stalled_transaction_runs_the_failing_function_again(
         assert runs_of(transaction_holding(execution, "failing"))["failing"] == FAILED
     finally:
         execution.refresh()
-        if execution.status not in EXECUTION_FINAL_STATUSES:
+        if execution.status not in FINAL_EXECUTION:
             execution.cancel()
 
 
@@ -266,7 +270,7 @@ def test_canceling_an_execution_does_not_half_cancel_a_later_one(
     functions = register(collection_factory, ["ticks", "left", "right"])
     first, second = cancel_one_while_a_later_one_reads_its_state(functions)
     try:
-        wait_for_status(first, EXECUTION_FINAL_STATUSES, STALL_TIMEOUT)
+        wait_for_status(first, FINAL_EXECUTION, STALL_TIMEOUT)
         deadline = time.monotonic() + SETTLE_TIMEOUT
         stuck_since = None
         while True:
@@ -276,7 +280,7 @@ def test_canceling_an_execution_does_not_half_cancel_a_later_one(
                 TRANSACTION_RUNNING,
                 TRANSACTION_UNEXPECTED,
             )
-            if second.status in EXECUTION_FINAL_STATUSES and not unsettled:
+            if second.status in FINAL_EXECUTION and not unsettled:
                 break
             finished = set(runs_of(transformers).values()) <= FINISHED_RUNS
             if unsettled and finished:
@@ -307,7 +311,7 @@ def test_a_finished_run_beside_a_canceled_one_is_published_or_discarded(
     functions = register(collection_factory, ["ticks", "left", "right"])
     first, second = cancel_one_while_a_later_one_reads_its_state(functions)
     try:
-        wait_for_status(first, EXECUTION_FINAL_STATUSES, STALL_TIMEOUT)
+        wait_for_status(first, FINAL_EXECUTION, STALL_TIMEOUT)
         deadline = time.monotonic() + SETTLE_TIMEOUT
         done_since = None
         while True:
@@ -381,7 +385,7 @@ def cancel_one_while_a_later_one_reads_its_state(
 def cancel_unfinished(*executions: Execution) -> None:
     for execution in executions:
         execution.refresh()
-        if execution.status not in EXECUTION_FINAL_STATUSES:
+        if execution.status not in FINAL_EXECUTION:
             execution.cancel()
 
 
@@ -460,7 +464,7 @@ def test_cancels_never_leave_a_transaction_running(
     while pending and time.monotonic() < deadline:
         for execution in pending:
             execution.refresh()
-        still = [e for e in pending if e.status not in EXECUTION_FINAL_STATUSES]
+        still = [e for e in pending if e.status not in FINAL_EXECUTION]
         if len(still) != len(pending):
             last_change = time.monotonic()
         pending = still
@@ -476,7 +480,7 @@ def test_cancels_never_leave_a_transaction_running(
             stuck = transaction.status in (TRANSACTION_RUNNING, TRANSACTION_UNEXPECTED)
             if stuck and set(runs.values()) <= FINISHED_RUNS:
                 problems.append((execution, transaction))
-    unfinished = [e for e in executions if e.status not in EXECUTION_FINAL_STATUSES]
+    unfinished = [e for e in executions if e.status not in FINAL_EXECUTION]
 
     if problems or unfinished:
         report = [f"seed {seed}, {ROUNDS} rounds"]

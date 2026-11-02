@@ -37,9 +37,7 @@ from tabsdatax.itest.fixture.instances.tabsdata import Instance, tabsdata_instan
 
 from tabsdatak.conn.dev import DataGenSrcConn
 from tabsdatak.dataquality._symbols import FunctionType, TableType
-from tabsdatak.sdk.status_utils.execution import (
-    EXECUTION_SUCCESSFUL_FINAL_STATUSES,
-)
+from tabsdatak.sdk.status_utils.groups import Entity, Health, health
 from tabsdatak.sdk.tabsdata_server import Collection
 from testi_tabsdatak.conn.common.function_project import function_module
 
@@ -622,7 +620,7 @@ def test_a_trend_with_data_versions_keeps_its_parent_table(
     owner = register(collection, publisher.pub_with_default_trend)
 
     execution = owner.trigger()
-    assert wait_for_completion(execution) in EXECUTION_SUCCESSFUL_FINAL_STATUSES
+    assert health(Entity.EXECUTION, wait_for_completion(execution)) is Health.OK
 
     assert collection.get_table(publisher.DEFAULT_TREND_TABLE).list_dataversions()
     assert collection.get_table(publisher.PUBLISHED_TABLE).list_dataversions()
@@ -646,7 +644,7 @@ def test_executing_the_owner_runs_its_trend_function(
     execution = owner.trigger()
     status = wait_for_completion(execution)
 
-    assert status in EXECUTION_SUCCESSFUL_FINAL_STATUSES
+    assert health(Entity.EXECUTION, status) is Health.OK
     assert {run.function.name for run in execution.function_runs} == {
         OWNER,
         DEFAULT_TREND_FUNCTION,

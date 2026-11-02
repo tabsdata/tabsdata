@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "/work/bundle/user_code/parse.py", line 12, in parse
+    return int(value)
+ValueError: invalid literal for int() with base 10: 'n/a'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/tabsdata/runner/run_function.py", line 211, in execute
+    result = function(*inputs)
+  File "/work/bundle/user_code/parse.py", line 14, in parse
+    raise RuntimeError("could not parse the amount column") from None
+RuntimeError: could not parse the amount column

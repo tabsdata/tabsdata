@@ -179,11 +179,7 @@ def progress() -> Iterator[Progress]:
 
 def environment(owner: PythonEnvironment, release_side: bool) -> dict[str, str]:
     path = f"{owner.scripts()}{os.pathsep}{os.environ.get('PATH', '')}"
-    base = dict(
-        os.environ,
-        PATH=path,
-        TDK_IN_AGENT="1",
-    )
+    base = dict(os.environ, PATH=path)
     if not release_side:
         return release.utf8_environment(base)
     variables = release.isolated_environment(base)

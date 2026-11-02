@@ -85,6 +85,8 @@ def test_raise_for_status_falls_back_to_text_on_non_json_body():
     import requests
 
     class _Resp:
+        status_code = 400
+        headers = {}
         text = "expected: Collection name, a [A-Za-z0-9] word"
 
         def raise_for_status(self):
@@ -386,6 +388,16 @@ def test_scoped_prefixes_the_active_project():
         s._scoped("/collections/c1/functions")
         == "/projects/acme/collections/c1/functions"
     )
+
+
+def test_a_name_is_one_path_segment_and_never_reaches_another_route(monkeypatch):
+    server = a.APIServer("host")
+    capture = _CaptureGet()
+    monkeypatch.setattr(server, "get", capture)
+    server.project_get_by_name("../users")
+    assert capture.seen["path"] == "/projects/..%2Fusers"
+    server.project = "a/b"
+    assert server._scoped("/collections") == "/projects/a%2Fb/collections"
 
 
 def test_project_narrow_appends_filter_when_project_set(monkeypatch):
@@ -711,3 +723,90 @@ def test_a_write_gives_up_on_a_server_busy_for_over_five_minutes(monkeypatch, me
 def test_a_write_is_not_repeated_after_another_server_error(monkeypatch, method):
     monkeypatch.setattr(time, "sleep", lambda seconds: None)
     assert write_against(method, [500, 200]) == (500, 1)
+
+
+# ---------------------------------------------------------------------------
+# HTTP status, Retry-After, timeouts, the Tabsdata directory
+# ---------------------------------------------------------------------------
+
+
+class _ErrorResponse:
+    def __init__(self, status_code, body, headers=None):
+        self.status_code = status_code
+        self._body = body
+        self.headers = headers or {}
+        self.text = str(body)
+
+    def raise_for_status(self):
+        import requests
+
+        raise requests.exceptions.HTTPError(str(self.status_code))
+
+    def json(self):
+        if isinstance(self._body, dict):
+            return self._body
+        raise ValueError("not json")
+
+
+def test_raise_for_status_carries_http_status():
+    response = _ErrorResponse(404, {"code": "FunctionError::1003"})
+    with pytest.raises(a.APIServerError) as excinfo:
+        a.APIServer.raise_for_status(response)
+    assert excinfo.value.status == 404
+    assert excinfo.value.code == "FunctionError::1003"
+    assert excinfo.value.retry_after is None
+
+
+def test_raise_for_status_reads_retry_after_seconds():
+    response = _ErrorResponse(429, {"code": "X"}, {"Retry-After": "7"})
+    with pytest.raises(a.APIServerError) as excinfo:
+        a.APIServer.raise_for_status(response)
+    assert excinfo.value.status == 429
+    assert excinfo.value.retry_after == 7.0
+
+
+def test_raise_for_status_reads_retry_after_http_date(monkeypatch):
+    monkeypatch.setattr(a.time, "time", lambda: 1_700_000_000.0)
+    response = _ErrorResponse(
+        503, "busy", {"Retry-After": "Tue, 14 Nov 2023 22:13:50 GMT"}
+    )
+    with pytest.raises(a.APIServerError) as excinfo:
+        a.APIServer.raise_for_status(response)
+    assert excinfo.value.retry_after == pytest.approx(30.0)
+
+
+@pytest.mark.parametrize("value", ["soon", "inf", "nan"])
+def test_raise_for_status_ignores_malformed_retry_after(value):
+    response = _ErrorResponse(503, "busy", {"Retry-After": value})
+    with pytest.raises(a.APIServerError) as excinfo:
+        a.APIServer.raise_for_status(response)
+    assert excinfo.value.retry_after is None
+
+
+def test_login_failure_with_non_json_body_raises_api_error(monkeypatch):
+    server = a.APIServer("http://localhost:2457")
+    monkeypatch.setattr(
+        server, "post", lambda *args, **kwargs: _ErrorResponse(502, "bad gateway")
+    )
+    with pytest.raises(a.APIServerError) as excinfo:
+        server.authentication_login("admin", "wrong")
+    assert excinfo.value.status == 502
+    assert "bad gateway" in str(excinfo.value)
+
+
+def test_requests_use_the_configured_timeout(monkeypatch):
+    seen = {}
+
+    def fake_get(url, **kwargs):
+        seen["timeout"] = kwargs["timeout"]
+        return object()
+
+    monkeypatch.setattr(a.GET_HTTP_SESSION, "get", fake_get)
+    server = a.APIServer("http://localhost:2457", timeout=(10, 60))
+    server.get("/x", refresh_if_needed=False)
+    assert seen["timeout"] == (10, 60)
+
+
+def test_default_timeout_is_unchanged():
+    server = a.APIServer("http://localhost:2457")
+    assert server.timeout == (a.CONNECTION_TIMEOUT, a.READ_TIMEOUT)

@@ -1,0 +1,173 @@
+2026-09-01 10:00:00,001 INFO Loading input table 'orders' slice 1
+2026-09-01 10:00:00,002 INFO Loading input table 'orders' slice 2
+2026-09-01 10:00:00,003 INFO Loading input table 'orders' slice 3
+2026-09-01 10:00:00,004 INFO Loading input table 'orders' slice 4
+2026-09-01 10:00:00,005 INFO Loading input table 'orders' slice 5
+2026-09-01 10:00:00,120 INFO Invoking user function 'broken_margin' with 2 positional arg(s)
+2026-09-01 10:00:00,300 ERROR Handled exception caught by command
+Traceback (most recent call last):
+  File "/opt/tabsdata/runner/run_function/runner.py", line 325, in _invoke_user_function
+    result = func(*call_args)
+             ^^^^^^^^^^^^^^^^
+  File "/work/bundle/user_code/salesops.py", line 85, in broken_margin
+    return joined.with_columns((col("amount") * col("margin_pct")).alias("margin"))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/tabsdatak/tableframe/_core/translate.py", line 105, in validate_schema
+    for dtype in lf.collect_schema().values():
+                 ^^^^^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/polars/lazyframe/frame.py", line 2760, in collect_schema
+    return Schema(self._ldf.collect_schema(), check_dtypes=False)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+polars.exceptions.ColumnNotFoundError: unable to find column "margin_pct"; valid columns: ["order_id", "customer_id", "product_id", "quantity", "amount", "order_date", "name", "region", "tier", "unit_cost", "@td.file.path", "$td.id", "$td.row", "$td.src", "$td.ver.execution", "$td.ver.timestamp", "$td.ver.transaction", "$td.ver.version"]
+
+Resolved plan until failure:
+
+	---> FAILED HERE RESOLVING 'with_columns' <---
+SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row"), col("$td.src"), col("$td.ver.execution"), col("$td.ver.timestamp"), col("$td.ver.transaction"), col("$td.ver.version")]
+  SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row"), col("$td.src"), col("$td.ver.execution"), col("$td.ver.timestamp"), col("$td.ver.transaction")]
+     WITH_COLUMNS:
+     [col("$td.src").list.concat([col("$td.src_right")]).list.eval(element().unique()).list.sort()] 
+      LEFT JOIN:
+      LEFT PLAN ON: [col("product_id")]
+        SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row"), col("$td.src")]
+           WITH_COLUMNS:
+           ["tx20260901-0000000000".alias("$td.ver.transaction")] 
+            SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row")]
+               WITH_COLUMNS:
+               ["tx20260901-0000000001".alias("$td.ver.transaction")] 
+                SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id")]
+                   WITH_COLUMNS:
+                   ["tx20260901-0000000002".alias("$td.ver.transaction")] 
+                    SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row"), col("$td.src")]
+                       WITH_COLUMNS:
+                       ["tx20260901-0000000003".alias("$td.ver.transaction")] 
+                        SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row")]
+                           WITH_COLUMNS:
+                           ["tx20260901-0000000004".alias("$td.ver.transaction")] 
+                            SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id")]
+                               WITH_COLUMNS:
+                               ["tx20260901-0000000005".alias("$td.ver.transaction")] 
+                                SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row"), col("$td.src")]
+                                   WITH_COLUMNS:
+                                   ["tx20260901-0000000006".alias("$td.ver.transaction")] 
+                                    SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row")]
+                                       WITH_COLUMNS:
+                                       ["tx20260901-0000000007".alias("$td.ver.transaction")] 
+                                        Parquet SCAN [/work/shared/in/orders.parquet]
+                                        PROJECT */9 COLUMNS
+                                        ESTIMATED ROWS: 120
+      RIGHT PLAN ON: [col("product_id")]
+        SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity")]
+          Parquet SCAN [/work/shared/in/products.parquet]
+          PROJECT */7 COLUMNS
+      END LEFT JOIN
+
+This error occurred with the following context stack:
+	[1] 'with_columns'
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/tabsdata/runner/command.py", line 315, in main
+    result = body(parsed)
+             ^^^^^^^^^^^^
+  File "/opt/tabsdata/runner/run_function/runner.py", line 489, in run
+    result = _invoke_user_function(func, call_args, output_tables)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tabsdata/runner/run_function/runner.py", line 327, in _invoke_user_function
+    raise RunFunctionErrorCode.RF_12.exception(cause=exc, detail=str(exc))
+tabsdatak.server._tdrunner.function.commands.run_function.error.UserFunctionFailedError: RF_12: user function raised: unable to find column "margin_pct"; valid columns: ["order_id", "customer_id", "product_id", "quantity", "amount", "order_date", "name", "region", "tier", "unit_cost", "@td.file.path", "$td.id", "$td.row", "$td.src", "$td.ver.execution", "$td.ver.timestamp", "$td.ver.transaction", "$td.ver.version"]
+
+Resolved plan until failure:
+
+	---> FAILED HERE RESOLVING 'with_columns' <---
+SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row"), col("$td.src"), col("$td.ver.execution"), col("$td.ver.timestamp"), col("$td.ver.transaction"), col("$td.ver.version")]
+  SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row"), col("$td.src"), col("$td.ver.execution"), col("$td.ver.timestamp"), col("$td.ver.transaction")]
+     WITH_COLUMNS:
+     [col("$td.src").list.concat([col("$td.src_right")]).list.eval(element().unique()).list.sort()] 
+      LEFT JOIN:
+      LEFT PLAN ON: [col("product_id")]
+        SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row"), col("$td.src")]
+           WITH_COLUMNS:
+           ["tx20260901-0000000000".alias("$td.ver.transaction")] 
+            SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row")]
+               WITH_COLUMNS:
+               ["tx20260901-0000000001".alias("$td.ver.transaction")] 
+                SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id")]
+                   WITH_COLUMNS:
+                   ["tx20260901-0000000002".alias("$td.ver.transaction")] 
+                    SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row"), col("$td.src")]
+                       WITH_COLUMNS:
+                       ["tx20260901-0000000003".alias("$td.ver.transaction")] 
+                        SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row")]
+                           WITH_COLUMNS:
+                           ["tx20260901-0000000004".alias("$td.ver.transaction")] 
+                            SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id")]
+                               WITH_COLUMNS:
+                               ["tx20260901-0000000005".alias("$td.ver.transaction")] 
+                                SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row"), col("$td.src")]
+                                   WITH_COLUMNS:
+                                   ["tx20260901-0000000006".alias("$td.ver.transaction")] 
+                                    SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row")]
+                                       WITH_COLUMNS:
+                                       ["tx20260901-0000000007".alias("$td.ver.transaction")] 
+                                        Parquet SCAN [/work/shared/in/orders.parquet]
+                                        PROJECT */9 COLUMNS
+                                        ESTIMATED ROWS: 120
+      RIGHT PLAN ON: [col("product_id")]
+        SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity")]
+          Parquet SCAN [/work/shared/in/products.parquet]
+          PROJECT */7 COLUMNS
+      END LEFT JOIN
+
+This error occurred with the following context stack:
+	[1] 'with_columns'
+: unable to find column "margin_pct"; valid columns: ["order_id", "customer_id", "product_id", "quantity", "amount", "order_date", "name", "region", "tier", "unit_cost", "@td.file.path", "$td.id", "$td.row", "$td.src", "$td.ver.execution", "$td.ver.timestamp", "$td.ver.transaction", "$td.ver.version"]
+
+Resolved plan until failure:
+
+	---> FAILED HERE RESOLVING 'with_columns' <---
+SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row"), col("$td.src"), col("$td.ver.execution"), col("$td.ver.timestamp"), col("$td.ver.transaction"), col("$td.ver.version")]
+  SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row"), col("$td.src"), col("$td.ver.execution"), col("$td.ver.timestamp"), col("$td.ver.transaction")]
+     WITH_COLUMNS:
+     [col("$td.src").list.concat([col("$td.src_right")]).list.eval(element().unique()).list.sort()] 
+      LEFT JOIN:
+      LEFT PLAN ON: [col("product_id")]
+        SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row"), col("$td.src")]
+           WITH_COLUMNS:
+           ["tx20260901-0000000000".alias("$td.ver.transaction")] 
+            SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row")]
+               WITH_COLUMNS:
+               ["tx20260901-0000000001".alias("$td.ver.transaction")] 
+                SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id")]
+                   WITH_COLUMNS:
+                   ["tx20260901-0000000002".alias("$td.ver.transaction")] 
+                    SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row"), col("$td.src")]
+                       WITH_COLUMNS:
+                       ["tx20260901-0000000003".alias("$td.ver.transaction")] 
+                        SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row")]
+                           WITH_COLUMNS:
+                           ["tx20260901-0000000004".alias("$td.ver.transaction")] 
+                            SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id")]
+                               WITH_COLUMNS:
+                               ["tx20260901-0000000005".alias("$td.ver.transaction")] 
+                                SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row"), col("$td.src")]
+                                   WITH_COLUMNS:
+                                   ["tx20260901-0000000006".alias("$td.ver.transaction")] 
+                                    SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity"), col("amount"), col("order_date"), col("name"), col("region"), col("tier"), col("unit_cost"), col("@td.file.path"), col("$td.id"), col("$td.row")]
+                                       WITH_COLUMNS:
+                                       ["tx20260901-0000000007".alias("$td.ver.transaction")] 
+                                        Parquet SCAN [/work/shared/in/orders.parquet]
+                                        PROJECT */9 COLUMNS
+                                        ESTIMATED ROWS: 120
+      RIGHT PLAN ON: [col("product_id")]
+        SELECT [col("order_id"), col("customer_id"), col("product_id"), col("quantity")]
+          Parquet SCAN [/work/shared/in/products.parquet]
+          PROJECT */7 COLUMNS
+      END LEFT JOIN
+
+This error occurred with the following context stack:
+	[1] 'with_columns'
+ at /opt/venv/bin/td_run_function:12: sys.exit(main())
+2026-09-01 10:00:00,320 INFO Posted responder Failed for worker 'wkr20260901-0000000006'

@@ -1,0 +1,5 @@
+INFO connecting to postgres at db.internal:5432
+Traceback (most recent call last):
+  File "/opt/tabsdata/connectors/postgres.py", line 88, in connect
+    conn = psycopg.connect(dsn, connect_timeout=10)
+psycopg.OperationalError: connection to server at "db.internal" (10.0.0.4), port 5432 failed: timeout expired

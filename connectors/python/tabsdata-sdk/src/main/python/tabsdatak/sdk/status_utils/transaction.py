@@ -35,25 +35,6 @@ def transaction_status_to_mapping(status: str) -> str:
     return TRANSACTION_STATUS_MAPPING.get(status, status)
 
 
-TRANSACTION_FAILED_FINAL_STATUSES = {
-    transaction_status_to_mapping(TransactionStatus.STALLED.value),
-    transaction_status_to_mapping(TransactionStatus.UNEXPECTED.value),
-}
-
-# Final classification of statuses is pending consideration of the counters. For now,
-# successful just means "the user does not have to examine the logs to see what went
-# wrongs, and doesn't have to take any action".
-TRANSACTION_SUCCESSFUL_FINAL_STATUSES = {
-    transaction_status_to_mapping(TransactionStatus.CANCELED.value),
-    transaction_status_to_mapping(TransactionStatus.COMMITTED.value),
-    transaction_status_to_mapping(TransactionStatus.YANKED.value),
-}
-
-
-TRANSACTION_FINAL_STATUSES = (
-    TRANSACTION_FAILED_FINAL_STATUSES | TRANSACTION_SUCCESSFUL_FINAL_STATUSES
-)
-
 TRANSACTION_VALID_USER_PROVIDED_STATUSES = ", ".join([
     f"{long}/{short}" for short, long in TRANSACTION_STATUS_MAPPING.items()
 ])

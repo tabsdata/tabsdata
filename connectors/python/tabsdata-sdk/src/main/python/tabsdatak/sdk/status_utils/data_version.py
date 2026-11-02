@@ -17,7 +17,6 @@ class DataVersionStatus(Enum):
     SCHEDULED = "S"
     CANCELED = "X"
     YANKED = "Y"
-    UNEXPECTED = "U"
 
 
 DATA_VERSION_STATUS_MAPPING = {
@@ -32,7 +31,6 @@ DATA_VERSION_STATUS_MAPPING = {
     DataVersionStatus.SCHEDULED.value: "Scheduled",
     DataVersionStatus.CANCELED.value: "Canceled",
     DataVersionStatus.YANKED.value: "Yanked",
-    DataVersionStatus.UNEXPECTED.value: "Unexpected",
 }
 
 
@@ -44,26 +42,6 @@ def data_version_status_to_mapping(status: str) -> str:
     """
     return DATA_VERSION_STATUS_MAPPING.get(status, status)
 
-
-DATA_VERSION_FAILED_FINAL_STATUSES = {
-    data_version_status_to_mapping(DataVersionStatus.FAILED.value),
-    data_version_status_to_mapping(DataVersionStatus.ON_HOLD.value),
-    data_version_status_to_mapping(DataVersionStatus.UNEXPECTED.value),
-}
-
-# Final classification of statuses is pending consideration of the counters. For now,
-# successful just means "the user does not have to examine the logs to see what went
-# wrongs, and doesn't have to take any action".
-DATA_VERSION_SUCCESSFUL_FINAL_STATUSES = {
-    data_version_status_to_mapping(DataVersionStatus.CANCELED.value),
-    data_version_status_to_mapping(DataVersionStatus.COMMITTED.value),
-    data_version_status_to_mapping(DataVersionStatus.YANKED.value),
-}
-
-
-DATA_VERSION_FINAL_STATUSES = (
-    DATA_VERSION_FAILED_FINAL_STATUSES | DATA_VERSION_SUCCESSFUL_FINAL_STATUSES
-)
 
 DATA_VERSION_VALID_USER_PROVIDED_STATUSES = ", ".join([
     f"{long}/{short}" for short, long in DATA_VERSION_STATUS_MAPPING.items()

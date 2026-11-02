@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/opt/tabsdata/runner/storage.py", line 30, in write
+    handle.write(data)
+OSError: [Errno 28] No space left on device
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/tabsdata/runner/run_function.py", line 240, in store
+    storage.write(frame)
+tabsdatak.server.StorageError: could not store the output table
