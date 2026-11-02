@@ -101,7 +101,6 @@ class Responder:
             self.journal_file,
             strict=True,
         )
-        logger.debug(f"Done report output: {output}")
         self.report(
             CallbackRequest(
                 status=WorkerCallbackStatus.DONE,

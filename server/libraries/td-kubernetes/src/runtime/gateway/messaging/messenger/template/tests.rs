@@ -38,7 +38,7 @@ fn every_provider_ships_a_connection_probe_job() {
             .find(|container| container.name == "1000-probe")
             .expect("the probe container");
         assert!(
-            probe.command.as_ref().unwrap()[0].contains("td_probe"),
+            probe.command.as_ref().unwrap()[0].contains("td-probe-connection"),
             "{provider}"
         );
         let secrets: Vec<_> = probe

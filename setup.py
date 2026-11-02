@@ -188,6 +188,7 @@ LIBEXEC_COMMANDS_SOURCES: list[LibexecCommandsSource] = [
             "server",
             "_tdrunner",
             "probe",
+            "commands",
         ),
     ),
 ]
