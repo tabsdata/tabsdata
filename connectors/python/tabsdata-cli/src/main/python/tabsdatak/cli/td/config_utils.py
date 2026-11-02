@@ -7,10 +7,6 @@ from __future__ import annotations
 import logging
 import os
 
-from ruamel.yaml import YAML
-
-from tabsdatak.common._resources.reader import td_resource
-
 logger = logging.getLogger(__name__)
 
 ACTIONS_DIRECTORY = "resources/cli/actions"
@@ -70,6 +66,10 @@ def load_actions_from_config(config: dict) -> list[Action]:
 
 
 def load_actions_config_for_command(command_name: str) -> dict:
+    from ruamel.yaml import YAML
+
+    from tabsdatak.common._resources.reader import td_resource
+
     config_path = os.path.join(td_resource(ACTIONS_DIRECTORY), f"{command_name}.yaml")
     try:
         with open(config_path, "r") as f:

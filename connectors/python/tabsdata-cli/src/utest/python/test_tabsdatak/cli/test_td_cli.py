@@ -14,8 +14,10 @@ import json
 from unittest.mock import patch
 
 import pytest
+import rich_click as click
 from click.testing import CliRunner
 
+from tabsdatak.cli.td import cli as cli_module
 from tabsdatak.cli.td.cli import cli
 
 # ---------------------------------------------------------------------------
@@ -100,9 +102,8 @@ def test_subcommand_help_loads_without_error(subcommand):
 
 
 # ---------------------------------------------------------------------------
-# `tdk fn register` surface (--path / --dir-to-bundle / --storage-path /
-# --update). --requirements and --local-pkg are temporarily disabled, and
-# --base-path was renamed to --storage-path.
+# `tdk fn register` surface (--path / --dir-to-bundle / --requirements /
+# --local-pkg / --storage-path / --update / --dry-run).
 # ---------------------------------------------------------------------------
 
 
@@ -115,10 +116,10 @@ def test_fn_register_help_advertises_flags():
     assert "--dir-to-bundle" in out
     assert "--update" in out
     assert "--storage-path" in out
-    # Renamed / temporarily disabled options must not surface.
+    assert "--requirements" in out
+    assert "--local-pkg" in out
+    assert "--dry-run" in out
     assert "--base-path" not in out
-    assert "--requirements" not in out
-    assert "--local-pkg" not in out
 
 
 def test_fn_update_help_describes_v2_command():
@@ -207,6 +208,72 @@ def test_full_help_marks_options_required_or_optional():
     assert required_values == {True, False}
 
 
+class _LazyStubGroup(click.RichGroup):
+    def __init__(self, **kwargs):
+        self.materialized = False
+        super().__init__(**kwargs)
+
+    def _real(self):
+        self.materialized = True
+
+        @click.group()
+        def real():
+            pass
+
+        @real.command()
+        def leaf():
+            """A lazily loaded leaf."""
+
+        return real
+
+    def make_context(self, info_name, args, parent=None, **extra):
+        return self._real().make_context(info_name, args, parent=parent, **extra)
+
+    def get_command(self, ctx, cmd_name):
+        return self._real().get_command(ctx, cmd_name)
+
+    def list_commands(self, ctx):
+        return self._real().list_commands(ctx)
+
+
+def _root_with_lazy_stub():
+    @click.group(cls=cli_module._RootGroup)
+    def root():
+        pass
+
+    lazy = _LazyStubGroup(name="lazy")
+    root.add_command(lazy)
+    cli_module._attach_profile_option(root)
+    return root, lazy
+
+
+def test_profile_option_does_not_materialize_lazy_groups():
+    _, lazy = _root_with_lazy_stub()
+    assert lazy.materialized is False
+
+
+def test_full_help_walks_lazy_groups_and_gives_them_profile():
+    root, _ = _root_with_lazy_stub()
+    tree = json.loads(cli_module.build_full_help(root, "json"))
+    lazy = next(c for c in tree["commands"] if c["name"] == "lazy")
+    leaf = next(c for c in lazy["commands"] if c["name"] == "leaf")
+    assert leaf["path"] == "tdk lazy leaf"
+    assert ["--profile"] in [opt["opts"] for opt in leaf["options"]]
+
+
+def test_invoked_lazy_leaf_takes_profile():
+    root, _ = _root_with_lazy_stub()
+    result = CliRunner().invoke(root, ["lazy", "leaf", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "--profile" in result.output
+
+
+def test_non_tty_help_is_not_padded():
+    result = CliRunner().invoke(cli, ["fn", "--help"])
+    assert result.exit_code == 0, result.output
+    assert max(len(line) for line in result.output.splitlines()) <= 100
+
+
 # ---------------------------------------------------------------------------
 # projects / multitenancy surface
 # ---------------------------------------------------------------------------
@@ -240,7 +307,7 @@ def test_config_pin_and_hints_are_not_commands():
         assert cli.commands.get(name) is None
 
 
-def test_project_group_has_crud_secrets_and_tags_only():
+def test_project_group_has_crud_secrets_graph_topology_and_tags_only():
     # pin/unpin/pinned moved to `tdk set --proj`.
     project = cli.commands.get("project")
     assert project is not None
@@ -248,9 +315,11 @@ def test_project_group_has_crud_secrets_and_tags_only():
         "create",
         "delete",
         "get",
+        "graph",
         "list",
         "secrets",
         "tag",
+        "topology",
         "update",
     ]
 

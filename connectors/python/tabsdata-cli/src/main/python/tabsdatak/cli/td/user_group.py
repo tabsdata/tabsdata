@@ -5,14 +5,21 @@
 
 import rich_click as click
 
+from tabsdatak.cli._capability import capability
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     format_option,
     hint_common_solutions,
+    list_options,
+    list_params,
     logical_prompt,
     max_result_option,
     present,
+    progress,
     render,
+    render_deleted,
+    render_entity,
+    render_list,
     take,
     verify_login_or_prompt,
     view_options,
@@ -26,7 +33,9 @@ def user():
     """User management commands"""
 
 
+@capability("admin", "write", credential="session")
 @user.command()
+@format_option
 @click.option("--name", "-n", help="Name of the user to create.")
 @click.option("--full-name", "-f", help="Full name of the user.")
 @click.option("--email", "-e", help="Email of the user.")
@@ -47,35 +56,41 @@ def create(
 ):
     """Create a new user"""
     verify_login_or_prompt(ctx)
-    click.echo("Creating a new user")
-    click.echo("-" * 10)
-    name = name or logical_prompt(ctx, "Name of the user")
+    progress(ctx, "Creating a new user")
+    progress(ctx, "-" * 10)
+    name = name or logical_prompt(ctx, "Name of the user", option="--name")
     if password is None:
-        password = logical_prompt(ctx, "Password for the user", hide_input=True)
+        password = logical_prompt(
+            ctx, "Password for the user", hide_input=True, option="--password"
+        )
         second_password = logical_prompt(
-            ctx, "Please re-enter the password", hide_input=True
+            ctx, "Please re-enter the password", hide_input=True, option="--password"
         )
         if password != second_password:
             raise click.ClickException("Passwords do not match.")
     full_name = full_name or logical_prompt(
-        ctx, "Full name of the user", default_value=name
+        ctx, "Full name of the user", default_value=name, option="--full-name"
     )
-    email = email or logical_prompt(ctx, "Email of the user", default_value="")
+    email = email or logical_prompt(
+        ctx, "Email of the user", default_value="", option="--email"
+    )
     try:
-        ctx.obj["tabsdataserver"].create_user(
+        user = ctx.obj["tabsdataserver"].create_user(
             name,
             password,
             full_name=full_name,
             email=email if email else None,
             enabled=not disabled,
         )
-        click.echo("User created successfully")
+        render_entity(ctx, data=lambda: user._data, message="User created successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to create user: {e}")
 
 
+@capability("admin", "destructive", credential="session")
 @user.command()
+@format_option
 @click.option("--name", "-n", help="Name of the user to delete.")
 @click.option(
     "--confirm",
@@ -85,22 +100,25 @@ def create(
 def delete(ctx: click.Context, name: str, confirm: str):
     """Delete a user by name"""
     verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the user to delete")
-    click.echo(f"Deleting user: {name}")
-    click.echo("-" * 10)
-    confirm = confirm or logical_prompt(ctx, "Please type 'delete' to confirm deletion")
+    name = name or logical_prompt(ctx, "Name of the user to delete", option="--name")
+    progress(ctx, f"Deleting user: {name}")
+    progress(ctx, "-" * 10)
+    confirm = confirm or logical_prompt(
+        ctx, "Please type 'delete' to confirm deletion", option="--confirm delete"
+    )
     if confirm != "delete":
         raise click.ClickException(
             "Deletion not confirmed. The confirmation word is 'delete'."
         )
     try:
         ctx.obj["tabsdataserver"].delete_user(name)
-        click.echo("User deleted successfully")
+        render_deleted(ctx, kind="user", name=name, message="User deleted successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to delete user: {e}")
 
 
+@capability("admin", "read", credential="session")
 @user.command()
 @format_option
 @view_options()
@@ -109,7 +127,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
 def get(ctx: click.Context, name: str):
     """Display a user by name"""
     verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the user to display")
+    name = name or logical_prompt(ctx, "Name of the user to display", option="--name")
     try:
         user = ctx.obj["tabsdataserver"].get_user(name)
 
@@ -130,17 +148,19 @@ def get(ctx: click.Context, name: str):
         raise click.ClickException(f"Failed to display user: {e}")
 
 
+@capability("admin", "read", credential="session")
 @user.command(name="list")
 @format_option
 @view_options()
 @max_result_option
+@list_options
 @click.pass_context
 def list_users(ctx: click.Context):
     """List all users"""
     verify_login_or_prompt(ctx)
     try:
         list_of_users, truncated = take(
-            ctx, ctx.obj["tabsdataserver"].list_users_generator()
+            ctx, ctx.obj["tabsdataserver"].list_users_generator(**list_params(ctx))
         )
 
         def _view():
@@ -164,18 +184,20 @@ def list_users(ctx: click.Context):
                 count="users",
             )
 
-        render(
+        render_list(
             ctx,
-            data=lambda: [u._data for u in list_of_users],
-            view=_view,
+            items=lambda: [u._data for u in list_of_users],
             truncated=truncated,
+            view=_view,
         )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list users: {e}")
 
 
+@capability("admin", "write", credential="session")
 @user.command()
+@format_option
 @click.option("--name", "-n", help="Name of the user to update.")
 @click.option("--full-name", "-f", help="New full name of the user.")
 @click.option("--email", "-e", help="New email of the user.")
@@ -197,18 +219,18 @@ def update(
 ):
     """Update a user by name"""
     verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the user to update")
-    click.echo(f"Updating user: {name}")
-    click.echo("-" * 10)
+    name = name or logical_prompt(ctx, "Name of the user to update", option="--name")
+    progress(ctx, f"Updating user: {name}")
+    progress(ctx, "-" * 10)
     try:
-        ctx.obj["tabsdataserver"].update_user(
+        user = ctx.obj["tabsdataserver"].update_user(
             name,
             full_name=full_name,
             email=email,
             password=password,
             enabled=enabled,
         )
-        click.echo("User updated successfully")
+        render_entity(ctx, data=lambda: user._data, message="User updated successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to update user: {e}")

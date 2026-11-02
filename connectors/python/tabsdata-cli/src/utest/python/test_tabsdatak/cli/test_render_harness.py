@@ -204,7 +204,7 @@ _FN_VERSION = {
 # ``plan get`` nests ``collection``/``function`` objects
 # (``execution.collection.name``); the machine payload keeps them as dicts.
 _EXECUTION = {
-    "id": "EID_1",
+    "id": "ep20260301-1",
     "name": "plan-a",
     "project": "proj-a",
     "collection": {"name": "coll-a"},
@@ -213,7 +213,7 @@ _EXECUTION = {
     "triggered_on_str": "2026-03-01",
     "started_on_str": "2026-03-01",
     "ended_on_str": "2026-03-02",
-    "status": "Done",
+    "status": "Finished",
 }
 
 # ``table list`` nests a ``function`` object per table (``table.function.name``);
@@ -235,7 +235,20 @@ _TABLE_SCHEMA = [{"name": "id", "type": "Int64"}, {"name": "label", "type": "Str
 # ``table data`` returns a polars DataFrame: json/yaml serialize ``.to_dicts()``
 # while the table view just echoes the frame's own repr.
 _TABLE_DATA_DF = pl.DataFrame({"n": [1, 2], "label": ["x", "y"]})
-_TABLE_DATA_ROWS = _TABLE_DATA_DF.to_dicts()
+_TABLE_DATA_TABULAR = {
+    "columns": [
+        {"name": name, "dtype": str(dtype)}
+        for name, dtype in _TABLE_DATA_DF.schema.items()
+    ],
+    "rows": [list(row) for row in _TABLE_DATA_DF.rows()],
+    "row_count": _TABLE_DATA_DF.height,
+    "truncated": False,
+}
+
+
+def _listing(items) -> dict:
+    return {"items": items, "truncated": False, "next": None}
+
 
 # ``metrics show`` aggregates ``nodes`` into a summary table, one row per
 # collection, group and run status: each node carries its measures per status
@@ -321,7 +334,7 @@ _PATCHES = [
 # transaction) and the always-present Project column.
 _EXECUTIONS = [
     {
-        "id": "EID_1",
+        "id": "ep20260301-1",
         "name": "plan-a",
         "project": "proj-a",
         "collection": {"name": "coll-a"},
@@ -331,21 +344,21 @@ _EXECUTIONS = [
         "started_on_str": "2026-03-01",
         "ended_on_str": "2026-03-02",
         "trigger_type": "manual",
-        "status": "Done",
+        "status": "Finished",
     }
 ]
 
 _TRANSACTIONS = [
     {
-        "id": "TID_1",
+        "id": "tx20260301-1",
         "project": "proj-a",
-        "execution": {"id": "EID_1"},
+        "execution": {"id": "ep20260301-1"},
         "collection": {"name": "coll-a"},
         "triggered_on_str": "2026-03-01",
         "triggered_by": "admin",
         "started_on_str": "2026-03-01",
         "ended_on_str": "2026-03-02",
-        "status": "Done",
+        "status": "Committed",
     }
 ]
 
@@ -355,8 +368,8 @@ _FUNCTION_RUNS = [
         "project": "proj-a",
         "collection": {"name": "coll-a"},
         "function": {"name": "fn-a"},
-        "execution": {"name": "plan-a", "id": "EID_1"},
-        "transaction": {"id": "TID_1"},
+        "execution": {"name": "plan-a", "id": "ep20260301-1"},
+        "transaction": {"id": "tx20260301-1"},
         "started_on_str": "2026-03-01",
         "ended_on_str": "2026-03-02",
         "status": "Done",
@@ -369,8 +382,8 @@ _WORKERS = [
         "project": "proj-a",
         "collection": {"name": "coll-a"},
         "function": {"name": "fn-a"},
-        "execution": {"name": "plan-a", "id": "EID_1"},
-        "transaction": {"id": "TID_1"},
+        "execution": {"name": "plan-a", "id": "ep20260301-1"},
+        "transaction": {"id": "tx20260301-1"},
         "started_on_str": "2026-03-01",
         "ended_on_str": "2026-03-02",
         "status": "Done",
@@ -400,8 +413,8 @@ _DATAVERSIONS = [
         "id": "DV_1",
         "function": "fn-a",
         "function_version_id": "FV_1",
-        "execution_id": "EID_1",
-        "transaction_id": "TID_1",
+        "execution_id": "ep20260301-1",
+        "transaction_id": "tx20260301-1",
         "created_at_str": "2026-03-01",
         "schema_data_changed": False,
         "data_changed": True,
@@ -410,6 +423,20 @@ _DATAVERSIONS = [
         "status": "C",
     }
 ]
+
+
+def _annotated(row: dict, name: str, health: str, final: bool) -> dict:
+    return {**row, "status_name": name, "health": health, "final": final}
+
+
+# json/yaml rows of the status-carrying entities gain status_name/health/final.
+_EXECUTION_OUT = _annotated(_EXECUTION, "Finished", "ok", True)
+_EXECUTIONS_OUT = [_annotated(e, "Finished", "ok", True) for e in _EXECUTIONS]
+_TRANSACTIONS_OUT = [_annotated(t, "Committed", "ok", True) for t in _TRANSACTIONS]
+_FUNCTION_RUNS_OUT = [_annotated(r, "Done", "running", False) for r in _FUNCTION_RUNS]
+_WORKERS_OUT = [_annotated(w, "Done", "ok", True) for w in _WORKERS]
+_TRIGGERS_OUT = [_annotated(t, "Running", "running", False) for t in _TRIGGERS]
+_DATAVERSIONS_OUT = [_annotated(d, "Committed", "ok", True) for d in _DATAVERSIONS]
 
 # ``permission list`` builds its payload from DTO *attributes* (not _data):
 # ``--user`` -> [{permission, project} ...]; ``--proj`` -> [{user, permission,
@@ -478,6 +505,7 @@ def _set_group_list(c: MagicMock) -> None:
 
 def _set_group_info(c: MagicMock) -> None:
     c.get_group.return_value = _DTO(_GROUP_INFO)
+    c.list_tags.return_value = [{"key": "team", "value": "blue-team"}]
     # ``group get`` lists the collections whose ``group`` matches the group name.
     c.list_collections.return_value = [
         _DTO({"name": "coll-a", "group": "grp-a"}),
@@ -493,16 +521,79 @@ def _set_project_info(c: MagicMock) -> None:
     c.get_project.return_value = _DTO(_PROJECTS[0])
 
 
+# ``project graph`` renders the server's ProjectGraphResponse verbatim in the
+# machine formats; the table view lists the nodes with their topology tags and
+# the edges, merging a dependency that also triggers and leaving system tables
+# out.
+def _relation(function: str, table: str, kind: str) -> dict:
+    return {
+        "function_version_id": function,
+        "table_version_id": table,
+        "edge": {kind: {"versions": "HEAD"}},
+    }
+
+
+_PROJECT_GRAPH = {
+    "version": "TOPOV_1",
+    "at": 1767225600000,
+    "all_functions": {
+        "FV_pub": {"collection": "raw", "name": "fn-pub", "tags": {}},
+        "FV_clean": {
+            "collection": "sales",
+            "name": "fn-clean",
+            "tags": {"_parent": "FN_ORIGIN"},
+        },
+    },
+    "all_tables": {
+        "TV_raw": {"collection": "raw", "name": "tbl-raw", "tags": {}},
+        "TV_sys": {"collection": "raw", "name": "tbl-sys", "tags": {}},
+    },
+    "system_tables": ["TV_sys"],
+    "user_tables": ["TV_raw"],
+    "relations": [
+        _relation("FV_pub", "TV_raw", "Output"),
+        _relation("FV_pub", "TV_sys", "Output"),
+        _relation("FV_clean", "TV_raw", "Dependency"),
+        _relation("FV_clean", "TV_raw", "Trigger"),
+    ],
+    "collections": {},
+    "groups": {},
+}
+
+_TOPOLOGY_VERSIONS = [
+    {"id": "TOPOV_1", "valid_from": 1767225600000, "valid_to": 1767312000000},
+    {"id": "TOPOV_2", "valid_from": 1767312000000, "valid_to": None},
+]
+
+
+def _set_project_graph(c: MagicMock) -> None:
+    c.project_graph.return_value = _PROJECT_GRAPH
+
+
+def _set_topology_versions(c: MagicMock) -> None:
+    _wire_listing(c, "list_topology_versions", _TOPOLOGY_VERSIONS)
+
+
+def _set_tag_keys(c: MagicMock) -> None:
+    c.list_tag_keys.return_value = ["_parent", "team"]
+
+
+def _set_tag_values(c: MagicMock) -> None:
+    c.list_tag_values.return_value = ["blue-team", "red-team"]
+
+
 def _set_collection_list(c: MagicMock) -> None:
     _wire_listing(c, "list_collections", [_DTO(x) for x in _COLLECTIONS])
 
 
 def _set_collection_info(c: MagicMock) -> None:
     c.get_collection.return_value = _DTO(_COLLECTIONS[0])
+    c.list_tags.return_value = [{"key": "stage", "value": "gold"}]
 
 
 def _set_auth_info(c: MagicMock) -> None:
-    c.auth_info.return_value = _AUTH_INFO
+    c.auth_info.return_value = dict(_AUTH_INFO)
+    c.connection.bearer_token = "eyJhbGciOiJIUzI1NiJ9.e30.sig"
 
 
 def _set_fn_list(c: MagicMock) -> None:
@@ -510,6 +601,10 @@ def _set_fn_list(c: MagicMock) -> None:
 
 
 def _set_fn_info(c: MagicMock) -> None:
+    c.list_tags.return_value = [{"key": "_parent", "value": "FN_ORIGIN"}]
+    c.list_project_functions_generator.return_value = [
+        _DTO({"name": "fn-origin", "collection": "coll-a", "function_id": "FN_ORIGIN"})
+    ]
     # ``fn get`` reads ``[t.name for t in fn.tables]`` -- override the flat
     # ``tables`` attribute with objects while ``_data`` keeps plain names.
     c.get_function.return_value = _DTO(
@@ -538,7 +633,7 @@ def _set_trx_list(c: MagicMock) -> None:
         [
             _DTO(
                 _TRANSACTIONS[0],
-                execution=_DTO({"id": "EID_1"}),
+                execution=_DTO({"id": "ep20260301-1"}),
                 collection=_DTO({"name": "coll-a"}),
             )
         ],
@@ -554,8 +649,8 @@ def _set_run_list(c: MagicMock) -> None:
                 _FUNCTION_RUNS[0],
                 collection=_DTO({"name": "coll-a"}),
                 function=_DTO({"name": "fn-a"}),
-                execution=_DTO({"name": "plan-a", "id": "EID_1"}),
-                transaction=_DTO({"id": "TID_1"}),
+                execution=_DTO({"name": "plan-a", "id": "ep20260301-1"}),
+                transaction=_DTO({"id": "tx20260301-1"}),
             )
         ],
     )
@@ -570,13 +665,13 @@ def _set_worker_list(c: MagicMock) -> None:
                 _WORKERS[0],
                 collection=_DTO({"name": "coll-a"}),
                 function=_DTO({"name": "fn-a"}),
-                execution=_DTO({"name": "plan-a", "id": "EID_1"}),
-                transaction=_DTO({"id": "TID_1"}),
+                execution=_DTO({"name": "plan-a", "id": "ep20260301-1"}),
+                transaction=_DTO({"id": "tx20260301-1"}),
                 # the id/patch columns read the raw row via `.kwargs`
                 kwargs={
-                    "logical_function_run_id": "LFR_1",
-                    "execution_id": "EID_1",
-                    "transaction_id": "TID_1",
+                    "logical_function_run_id": "fr20260301-1",
+                    "execution_id": "ep20260301-1",
+                    "transaction_id": "tx20260301-1",
                     "function_version_patch_id": "FV_9",
                 },
             )
@@ -613,7 +708,7 @@ def _set_plan_info(c: MagicMock) -> None:
 def _set_trx_info(c: MagicMock) -> None:
     c.get_transaction.return_value = _DTO(
         _TRANSACTIONS[0],
-        execution=_DTO({"id": "EID_1"}),
+        execution=_DTO({"id": "ep20260301-1"}),
         collection=_DTO({"name": "coll-a"}),
     )
     _set_run_list(c)
@@ -625,8 +720,8 @@ def _set_run_info(c: MagicMock) -> None:
         _FUNCTION_RUNS[0],
         collection=_DTO({"name": "coll-a"}),
         function=_DTO({"name": "fn-a"}),
-        execution=_DTO({"name": "plan-a", "id": "EID_1"}),
-        transaction=_DTO({"id": "TID_1"}),
+        execution=_DTO({"name": "plan-a", "id": "ep20260301-1"}),
+        transaction=_DTO({"id": "tx20260301-1"}),
     )
     _set_worker_list(c)
 
@@ -676,7 +771,7 @@ CASES: tuple[RenderCase, ...] = (
         "user-list",
         ["user", "list"],
         _set_user_list,
-        _USERS,
+        _listing(_USERS),
         ("alice", "Alice A", "alice@x.io", "True", "bob", "Bob B", "bob@x.io", "False"),
     ),
     RenderCase(
@@ -690,23 +785,23 @@ CASES: tuple[RenderCase, ...] = (
         "group-list",
         ["group", "list"],
         _set_group_list,
-        _GROUPS,
+        _listing(_GROUPS),
         ("grp-a", "first group", "2026-01-01", "admin"),
     ),
     RenderCase(
         "group-get",
         ["group", "get", "-n", "grp-a"],
         _set_group_info,
-        _GROUP_INFO,
+        {**_GROUP_INFO, "tags": {"team": "blue-team"}},
         # Form view: name/description/created + the collections in the group
         # ("coll-a" belongs to grp-a; "coll-z" is in another group).
-        ("grp-a", "first group", "2026-01-01", "admin", "coll-a"),
+        ("grp-a", "first group", "2026-01-01", "admin", "coll-a", "team=blue-team"),
     ),
     RenderCase(
         "project-list",
         ["project", "list"],
         _set_project_list,
-        _PROJECTS,
+        _listing(_PROJECTS),
         ("proj-a", "first project", "2026-01-02", "admin"),
     ),
     RenderCase(
@@ -717,18 +812,54 @@ CASES: tuple[RenderCase, ...] = (
         ("proj-a", "first project", "2026-01-02", "admin"),
     ),
     RenderCase(
+        "project-graph",
+        ["project", "graph"],
+        _set_project_graph,
+        _PROJECT_GRAPH,
+        (
+            "TOPOV_1",
+            "2026-01-01T00:00:00Z",
+            "function raw/fn-pub",
+            "_parent=FN_ORIGIN",
+            "table raw/tbl-raw",
+            "dependency, trigger",
+            "System tables left out: 1",
+        ),
+    ),
+    RenderCase(
+        "project-topology-list",
+        ["project", "topology", "list"],
+        _set_topology_versions,
+        _listing(_TOPOLOGY_VERSIONS),
+        ("TOPOV_1", "2026-01-02T00:00:00Z", "TOPOV_2", "current"),
+    ),
+    RenderCase(
+        "project-tag-keys",
+        ["project", "tag", "keys"],
+        _set_tag_keys,
+        _listing(["_parent", "team"]),
+        ("_parent", "team"),
+    ),
+    RenderCase(
+        "project-tag-values",
+        ["project", "tag", "values", "--key", "team"],
+        _set_tag_values,
+        _listing(["blue-team", "red-team"]),
+        ("team", "blue-team", "red-team"),
+    ),
+    RenderCase(
         "collection-list",
         ["collection", "list"],
         _set_collection_list,
-        _COLLECTIONS,
+        _listing(_COLLECTIONS),
         ("coll-a", "first collection", "2026-01-03", "admin"),
     ),
     RenderCase(
         "collection-get",
         ["collection", "get", "-n", "coll-a"],
         _set_collection_info,
-        _COLLECTIONS[0],
-        ("coll-a", "first collection", "2026-01-03", "admin"),
+        {**_COLLECTIONS[0], "tags": {"stage": "gold"}},
+        ("coll-a", "first collection", "2026-01-03", "admin", "stage=gold"),
     ),
     RenderCase(
         # ``roles`` renders via beautify_list; assert the distinctive role value
@@ -736,7 +867,7 @@ CASES: tuple[RenderCase, ...] = (
         "auth-info",
         ["auth", "info"],
         _set_auth_info,
-        _AUTH_INFO,
+        {**_AUTH_INFO, "credential": "session"},
         ("alice", "alice@x.io", "sys_admin"),
     ),
     RenderCase(
@@ -744,14 +875,22 @@ CASES: tuple[RenderCase, ...] = (
         "fn-list",
         ["fn", "list", "-c", "coll-a"],
         _set_fn_list,
-        _FUNCTIONS,
+        _listing(_FUNCTIONS),
         ("fn-a", "Publisher", "publishes stuff", "2026-02-01", "admin"),
     ),
     RenderCase(
         "fn-get",
         ["fn", "get", "-n", "fn-a", "-c", "coll-a"],
         _set_fn_info,
-        _FN_INFO,
+        {
+            **_FN_INFO,
+            "tags": {"_parent": "FN_ORIGIN"},
+            "parent": {
+                "function_id": "FN_ORIGIN",
+                "collection": "coll-a",
+                "name": "fn-origin",
+            },
+        },
         # Form view: no ID row; project/collection/status(->"Active") are shown.
         (
             "fn-a",
@@ -766,15 +905,21 @@ CASES: tuple[RenderCase, ...] = (
             "trig1",
             "t1",
             "t2",
+            "_parent=FN_ORIGIN",
+            "coll-a/fn-origin",
         ),
     ),
     RenderCase(
         # plan get builds its tables inline for the table format and hands a
         # combined {plan, function_runs, workers} payload to render for json/yaml.
         "plan-get",
-        ["plan", "get", "--plan", "EID_1"],
+        ["plan", "get", "--plan", "ep20260301-1"],
         _set_plan_info,
-        {"plan": _EXECUTION, "function_runs": _FUNCTION_RUNS, "workers": _WORKERS},
+        {
+            "plan": _EXECUTION_OUT,
+            "function_runs": _FUNCTION_RUNS_OUT,
+            "workers": _WORKERS_OUT,
+        },
         (
             "plan-a",
             "proj-a",
@@ -784,33 +929,42 @@ CASES: tuple[RenderCase, ...] = (
             "Done",
             "FR_1",
             "WK_1",
-            "TID_1",
+            "tx20260301-1",
         ),
     ),
     RenderCase(
         "trx-get",
-        ["trx", "get", "--trx", "TID_1"],
+        ["trx", "get", "--trx", "tx20260301-1"],
         _set_trx_info,
         {
-            "transaction": _TRANSACTIONS[0],
-            "function_runs": _FUNCTION_RUNS,
-            "workers": _WORKERS,
+            "transaction": _TRANSACTIONS_OUT[0],
+            "function_runs": _FUNCTION_RUNS_OUT,
+            "workers": _WORKERS_OUT,
         },
-        ("TID_1", "proj-a", "coll-a", "2026-03-01", "admin", "Done", "FR_1", "WK_1"),
+        (
+            "tx20260301-1",
+            "proj-a",
+            "coll-a",
+            "2026-03-01",
+            "admin",
+            "Committed",
+            "FR_1",
+            "WK_1",
+        ),
     ),
     RenderCase(
         "fnrun-get",
-        ["fnrun", "get", "--fnrun", "FR_1"],
+        ["fnrun", "get", "--fnrun", "fr20260301-1"],
         _set_run_info,
-        {"function_run": _FUNCTION_RUNS[0], "workers": _WORKERS},
+        {"function_run": _FUNCTION_RUNS_OUT[0], "workers": _WORKERS_OUT},
         (
-            "FR_1",
+            "fr20260301-1",
             "proj-a",
             "coll-a",
             "fn-a",
             "plan-a",
-            "EID_1",
-            "TID_1",
+            "ep20260301-1",
+            "tx20260301-1",
             "2026-03-01",
             "2026-03-02",
             "Done",
@@ -821,7 +975,7 @@ CASES: tuple[RenderCase, ...] = (
         "table-list",
         ["table", "list", "-c", "coll-a"],
         _set_table_list,
-        _TABLES,
+        _listing(_TABLES),
         ("tbl-a", "fn-a", "Active", "2024-01-01T00:00:00Z", "admin"),
     ),
     RenderCase(
@@ -837,7 +991,7 @@ CASES: tuple[RenderCase, ...] = (
         "table-data",
         ["table", "data", "-c", "coll-a", "--name", "tbl-a"],
         _set_table_data,
-        _TABLE_DATA_ROWS,
+        _TABLE_DATA_TABULAR,
         ("tbl-a", "label", "x", "y"),
     ),
     RenderCase(
@@ -861,7 +1015,7 @@ CASES: tuple[RenderCase, ...] = (
         "fn-get-history",
         ["fn", "get", "-n", "fn-a", "-c", "coll-a", "--show-history"],
         _set_fn_info_history,
-        [_FN_VERSION],
+        _listing([_FN_VERSION]),
         ("fn-a", "FID_1", "FV_0", "publishes stuff", "Active", "admin", "2026-02-01"),
     ),
     RenderCase(
@@ -870,7 +1024,7 @@ CASES: tuple[RenderCase, ...] = (
         "fn-patches",
         ["fn", "patches", "-n", "fn-a", "-c", "coll-a"],
         _set_fn_list_patches,
-        _PATCHES,
+        _listing(_PATCHES),
         ("PV_2", "PV_1", "second patch", "2024-01-01T00:00:00Z", "published"),
     ),
     RenderCase(
@@ -879,28 +1033,37 @@ CASES: tuple[RenderCase, ...] = (
         "plan-list",
         ["plan", "list"],
         _set_plan_list,
-        _EXECUTIONS,
-        ("EID_1", "plan-a", "proj-a", "coll-a", "fn-a", "2026-03-01", "admin", "Done"),
+        _listing(_EXECUTIONS_OUT),
+        (
+            "ep20260301-1",
+            "plan-a",
+            "proj-a",
+            "coll-a",
+            "fn-a",
+            "2026-03-01",
+            "admin",
+            "Finished",
+        ),
     ),
     RenderCase(
         "trx-list",
         ["trx", "list"],
         _set_trx_list,
-        _TRANSACTIONS,
-        ("TID_1", "EID_1", "proj-a", "coll-a", "2026-03-01", "admin", "Done"),
+        _listing(_TRANSACTIONS_OUT),
+        ("tx20260301-1", "ep20260301-1", "proj-a", "coll-a", "2026-03-01", "admin", "Committed"),
     ),
     RenderCase(
         "fnrun-list",
         ["fnrun", "list"],
         _set_run_list,
-        _FUNCTION_RUNS,
+        _listing(_FUNCTION_RUNS_OUT),
         (
             "FR_1",
             "proj-a",
             "coll-a",
             "fn-a",
-            "EID_1",
-            "TID_1",
+            "ep20260301-1",
+            "tx20260301-1",
             "2026-03-01",
             "2026-03-02",
             "Done",
@@ -910,15 +1073,15 @@ CASES: tuple[RenderCase, ...] = (
         "worker-list",
         ["worker", "list"],
         _set_worker_list,
-        _WORKERS,
+        _listing(_WORKERS_OUT),
         (
             "WK_1",
-            "LFR_1",
+            "fr20260301-1",
             "proj-a",
             "coll-a",
             "fn-a",
-            "EID_1",
-            "TID_1",
+            "ep20260301-1",
+            "tx20260301-1",
             "Done",
             "FV_9",
         ),
@@ -927,50 +1090,68 @@ CASES: tuple[RenderCase, ...] = (
         "cron-list",
         ["cron", "list"],
         _set_trigger_list,
-        _TRIGGERS,
+        _listing(_TRIGGERS_OUT),
         ("WK_T_1", "coll-a", "fn-a", "Running", "2026-03-01", "2026-03-02"),
     ),
     RenderCase(
         "stream-list",
         ["stream", "list"],
         _set_trigger_list,
-        _TRIGGERS,
+        _listing(_TRIGGERS_OUT),
         ("WK_T_1", "coll-a", "fn-a", "Running", "2026-03-01", "2026-03-02"),
     ),
     RenderCase(
         "cron-plans",
         ["cron", "plans"],
         _set_plan_list,
-        _EXECUTIONS,
-        ("EID_1", "plan-a", "proj-a", "coll-a", "fn-a", "2026-03-01", "admin", "Done"),
+        _listing(_EXECUTIONS_OUT),
+        (
+            "ep20260301-1",
+            "plan-a",
+            "proj-a",
+            "coll-a",
+            "fn-a",
+            "2026-03-01",
+            "admin",
+            "Finished",
+        ),
     ),
     RenderCase(
         "stream-plans",
         ["stream", "plans"],
         _set_plan_list,
-        _EXECUTIONS,
-        ("EID_1", "plan-a", "proj-a", "coll-a", "fn-a", "2026-03-01", "admin", "Done"),
+        _listing(_EXECUTIONS_OUT),
+        (
+            "ep20260301-1",
+            "plan-a",
+            "proj-a",
+            "coll-a",
+            "fn-a",
+            "2026-03-01",
+            "admin",
+            "Finished",
+        ),
     ),
     RenderCase(
         "table-versions",
         ["table", "versions", "-c", "coll-a", "--name", "tbl-a"],
         _set_table_versions,
-        _DATAVERSIONS,
-        ("DV_1", "fn-a", "FV_1", "EID_1", "TID_1", "2026-03-01", "42", "1.00"),
+        _listing(_DATAVERSIONS_OUT),
+        ("DV_1", "fn-a", "FV_1", "ep20260301-1", "tx20260301-1", "2026-03-01", "42", "1.00"),
     ),
     RenderCase(
         # payload is built from attributes; a None project is null (json) / "-" (table).
         "permission-list-user",
         ["permission", "list", "--user", "alice"],
         _set_perm_list_user,
-        _PERMS_BY_USER,
+        _listing(_PERMS_BY_USER),
         ("read_collection", "proj-a", "manage_system"),
     ),
     RenderCase(
         "permission-list-project",
         ["permission", "list", "--proj", "proj-a"],
         _set_perm_list_project,
-        _ACCESS_BY_PROJECT,
+        _listing(_ACCESS_BY_PROJECT),
         ("alice", "read_collection", "role:reader"),
     ),
 )
@@ -1073,27 +1254,44 @@ def test_json_and_yaml_agree_across_the_matrix(tmp_path):
 # ---------------------------------------------------------------------------
 # ``worker/run/plan/trx logs`` -- kept out of the matrix.
 #
-# Their payload is not a DTO: the command wraps ``get_worker_log`` output in a
-# text envelope ("Worker <id> ...") and hands it to render as ``{"logs":
-# <blob>}`` (table view just echoes the blob). Pinning the exact envelope
+# Their payload is not a DTO: the command renders the SDK's worker log entries
+# as the list envelope ``{"items", "truncated", "next"}``; the table view
+# echoes a "Worker <id> ..." header and the log. Pinning the exact header
 # punctuation would duplicate production formatting and be brittle, so we
-# assert the worker id and log body are *present* in every format instead.
+# assert the worker id and log body are *present* in the table view instead.
 # The plan/trx/run variants resolve the worker via the picker: a single worker
 # streams directly; several render an indexed listing and prompt for a choice.
 # ---------------------------------------------------------------------------
 
 
+def _log_entry(worker_id: str, log: str) -> dict:
+    return {
+        "worker_id": worker_id,
+        "function_run_id": None,
+        "collection": None,
+        "function": None,
+        "status": None,
+        "status_name": None,
+        "health": None,
+        "attempt": None,
+        "lines_total": len(log.splitlines()),
+        "log_truncated": False,
+        "log_unavailable": None,
+        "signature": None,
+        "log": log,
+    }
+
+
 def _set_worker_log(c: MagicMock) -> None:
-    c.get_worker_log.return_value = "line-1\nline-2"
+    c.worker_log_entry.return_value = _log_entry("W1", "line-1\nline-2")
 
 
 def test_worker_logs_carries_worker_log_in_every_format(tmp_path):
-    # json / yaml wrap the constructed envelope under a single "logs" key.
     for fmt in ("json", "yaml"):
         client = _client()
         _set_worker_log(client)
         result = _invoke(
-            ["worker", "logs", "--worker", "W1", "-o", fmt],
+            ["worker", "logs", "--worker", "wkr20260301-1", "-o", fmt],
             client=client,
             tmp_path=tmp_path,
         )
@@ -1101,15 +1299,17 @@ def test_worker_logs_carries_worker_log_in_every_format(tmp_path):
         payload = (
             json.loads(result.output) if fmt == "json" else _load_yaml(result.output)
         )
-        assert set(payload) == {"logs"}, payload
-        assert "W1" in payload["logs"]
-        assert "line-1" in payload["logs"] and "line-2" in payload["logs"]
+        assert payload == {
+            "items": [_log_entry("W1", "line-1\nline-2")],
+            "truncated": False,
+            "next": None,
+        }
 
     # the default (table) view echoes the same envelope text.
     client = _client()
     _set_worker_log(client)
     result = _invoke(
-        ["worker", "logs", "--worker", "W1"], client=client, tmp_path=tmp_path
+        ["worker", "logs", "--worker", "wkr20260301-1"], client=client, tmp_path=tmp_path
     )
     assert result.exit_code == 0, result.output
     assert "W1" in result.output
@@ -1122,7 +1322,7 @@ def test_worker_logs_file_dash_writes_raw_logs_to_stdout(tmp_path):
     client = _client()
     _set_worker_log(client)
     result = _invoke(
-        ["worker", "logs", "--worker", "W1", "--file", "-"],
+        ["worker", "logs", "--worker", "wkr20260301-1", "--file", "-"],
         client=client,
         tmp_path=tmp_path,
     )
@@ -1153,32 +1353,34 @@ def _picker_client(*workers: tuple[str, str]) -> MagicMock:
             },
             collection=_DTO({"name": "coll-a"}),
             function=_DTO({"name": "fn-a"}),
-            execution=_DTO({"name": "plan-a", "id": "EID_1"}),
-            transaction=_DTO({"id": "TID_1"}),
+            execution=_DTO({"name": "plan-a", "id": "ep20260301-1"}),
+            transaction=_DTO({"id": "tx20260301-1"}),
             kwargs={"function_version_patch_id": None},
         )
         for wid, status in workers
     ]
-    client.get_worker_log.side_effect = lambda wid: f"log-of-{wid}"
+    client.worker_log_entry.side_effect = lambda worker, **_: _log_entry(
+        worker.id, f"log-of-{worker.id}"
+    )
     return client
 
 
 def test_run_logs_single_worker_streams_directly(tmp_path):
     client = _picker_client((_WID_1, "Done"))
     result = _invoke(
-        ["fnrun", "logs", "--fnrun", "LFR_1"], client=client, tmp_path=tmp_path
+        ["fnrun", "logs", "--fnrun", "fr20260301-1"], client=client, tmp_path=tmp_path
     )
     assert result.exit_code == 0, result.output
     assert f"log-of-{_WID_1}" in result.output
     # the run id was pushed into the workers filter
     sent = client.list_workers.call_args.kwargs["filter"]
-    assert "logical_function_run_id:eq:LFR_1" in sent
+    assert "logical_function_run_id:eq:fr20260301-1" in sent
 
 
 def test_run_logs_multiple_workers_prompts_by_index(tmp_path):
     client = _picker_client((_WID_1, "Failed"), (_WID_2, "Done"))
     result = _invoke(
-        ["fnrun", "logs", "--fnrun", "LFR_1"],
+        ["fnrun", "logs", "--fnrun", "fr20260301-1"],
         client=client,
         tmp_path=tmp_path,
         input="2\n",
@@ -1193,7 +1395,7 @@ def test_run_logs_multiple_workers_prompts_by_index(tmp_path):
 def test_plan_logs_multiple_workers_accepts_worker_id(tmp_path):
     client = _picker_client((_WID_1, "Failed"), (_WID_2, "Done"))
     result = _invoke(
-        ["plan", "logs", "--plan", "EID_1"],
+        ["plan", "logs", "--plan", "ep20260301-1"],
         client=client,
         tmp_path=tmp_path,
         input=f"{_WID_1}\n",
@@ -1201,13 +1403,13 @@ def test_plan_logs_multiple_workers_accepts_worker_id(tmp_path):
     assert result.exit_code == 0, result.output
     assert f"log-of-{_WID_1}" in result.output
     sent = client.list_workers.call_args.kwargs["filter"]
-    assert "execution_id:eq:EID_1" in sent
+    assert "execution_id:eq:ep20260301-1" in sent
 
 
 def test_trx_logs_multiple_workers_no_prompt_lists_and_fails(tmp_path):
     client = _picker_client((_WID_1, "Failed"), (_WID_2, "Done"))
     result = _invoke(
-        ["--no-prompt", "trx", "logs", "--trx", "TID_1"],
+        ["--no-prompt", "trx", "logs", "--trx", "tx20260301-1"],
         client=client,
         tmp_path=tmp_path,
     )
@@ -1215,13 +1417,13 @@ def test_trx_logs_multiple_workers_no_prompt_lists_and_fails(tmp_path):
     # the candidates are still listed, with the direct command to use
     assert _WID_1 in result.output and _WID_2 in result.output
     assert "tdk worker logs" in result.output
-    client.get_worker_log.assert_not_called()
+    client.worker_log_entry.assert_not_called()
 
 
 def test_run_logs_with_no_workers_errors(tmp_path):
     client = _picker_client()
     result = _invoke(
-        ["fnrun", "logs", "--fnrun", "LFR_1"], client=client, tmp_path=tmp_path
+        ["fnrun", "logs", "--fnrun", "fr20260301-1"], client=client, tmp_path=tmp_path
     )
     assert result.exit_code != 0
     assert "no workers yet" in result.output
@@ -1234,14 +1436,43 @@ def test_list_status_echoes_stay_out_of_machine_output(tmp_path):
     _set_run_list(client)
     _set_worker_list(client)
     for argv in (
-        ["fnrun", "list", "--plan", "EID_1", "-o", "json"],
-        ["worker", "list", "--trx", "TID_1", "-o", "json"],
+        ["fnrun", "list", "--plan", "ep20260301-1", "-o", "json"],
+        ["worker", "list", "--trx", "tx20260301-1", "-o", "json"],
     ):
         result = _invoke(argv, client=client, tmp_path=tmp_path)
         assert result.exit_code == 0, result.output
         json.loads(result.output)
     client.get_execution.assert_not_called()
     client.get_transaction.assert_not_called()
+
+
+def test_pinned_collection_notice_stays_out_of_machine_output(tmp_path):
+    (tmp_path / "options.json").write_text(
+        json.dumps({"pins": {"collection": "coll-a"}})
+    )
+    client = _client()
+    _set_collection_info(client)
+    result = _invoke(
+        ["collection", "get", "-o", "json"], client=client, tmp_path=tmp_path
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == _normalize(
+        {**_COLLECTIONS[0], "tags": {"stage": "gold"}}
+    )
+    assert "Using currently pinned collection: coll-a" in result.stderr
+
+
+def test_fn_get_keeps_the_id_of_a_parent_the_project_no_longer_lists(tmp_path):
+    client = _client()
+    _set_fn_info(client)
+    client.list_project_functions_generator.return_value = []
+    result = _invoke(
+        ["fn", "get", "-n", "fn-a", "-c", "coll-a", "-o", "json"],
+        client=client,
+        tmp_path=tmp_path,
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["parent"] == {"function_id": "FN_ORIGIN"}
 
 
 # ---------------------------------------------------------------------------
@@ -1336,7 +1567,16 @@ def test_table_data_warns_when_the_version_is_not_committed(tmp_path, rows, serv
     result = _invoke([*argv, "-o", "json"], client=client, tmp_path=tmp_path)
     assert result.exit_code == 0, result.output
     assert f"Warning: version dv-6 failed; {served}" in result.stderr
-    expected = None if rows is None else [{"a": 1}]
+    expected = (
+        None
+        if rows is None
+        else {
+            "columns": [{"name": "a", "dtype": "Int64"}],
+            "rows": [[1]],
+            "row_count": 1,
+            "truncated": False,
+        }
+    )
     assert json.loads(result.stdout) == expected
 
 
@@ -1374,3 +1614,65 @@ def test_metrics_show_sums_each_status_across_nodes(tmp_path):
     assert "666" in result.output
     assert "Txns" not in result.output
     assert "Unit" in result.output
+
+
+def test_project_graph_passes_its_pin(tmp_path):
+    client = _client()
+    _set_project_graph(client)
+    version = "0" * 26
+    result = _invoke(
+        ["project", "graph", "--topology-version", version, "-o", "json"],
+        client=client,
+        tmp_path=tmp_path,
+    )
+    assert result.exit_code == 0, result.output
+    client.project_graph.assert_called_once_with(topology_version=version, at=None)
+
+
+@pytest.mark.parametrize(
+    "pin",
+    [
+        ["--topology-version", "0" * 26, "--at", "2026-01-01"],
+        ["--topology-version", "not-an-id"],
+    ],
+)
+def test_project_graph_rejects_a_bad_pin(pin, tmp_path):
+    client = _client()
+    result = _invoke(["project", "graph", *pin], client=client, tmp_path=tmp_path)
+    assert result.exit_code == 2, result.output
+    client.project_graph.assert_not_called()
+
+
+def test_project_topology_list_passes_paging(tmp_path):
+    client = _client()
+    _set_topology_versions(client)
+    result = _invoke(
+        ["project", "topology", "list", "--max-result", "1", "-o", "json"]
+        + ["--filter", "valid_from:gt:0", "--order-by", "valid_from-"],
+        client=client,
+        tmp_path=tmp_path,
+    )
+    assert result.exit_code == 0, result.output
+    kwargs = client.list_topology_versions_generator.call_args.kwargs
+    assert kwargs["filter"] == ["valid_from:gt:0"]
+    assert kwargs["order_by"] == "valid_from-"
+    document = json.loads(result.stdout)
+    assert document["items"] == _TOPOLOGY_VERSIONS[:1]
+    assert document["truncated"] is True
+
+
+def test_project_tag_facets_ask_for_the_server_maximum(tmp_path):
+    client = _client()
+    _set_tag_keys(client)
+    _set_tag_values(client)
+    for argv in (["keys"], ["values", "-k", "team"]):
+        result = _invoke(["project", "tag", *argv], client=client, tmp_path=tmp_path)
+        assert result.exit_code == 0, result.output
+    client.list_tag_keys.assert_called_once_with(len=1000)
+    client.list_tag_values.assert_called_once_with("team", len=1000)
+
+
+@pytest.mark.parametrize("entity", ["collection", "group", "fn", "table"])
+def test_only_the_project_tag_group_has_facets(entity):
+    tag = cli.commands[entity].commands["tag"]
+    assert sorted(tag.commands) == ["delete", "list", "set"]

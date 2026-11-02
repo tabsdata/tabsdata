@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import rich_click as click
 
+from tabsdatak.cli._capability import capability
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     MutuallyExclusiveOption,
@@ -15,7 +16,9 @@ from tabsdatak.cli.cli_utils import (
     hint_common_solutions,
     logical_prompt,
     present,
-    render,
+    progress,
+    render_done,
+    render_list,
     verify_login_or_prompt,
     view_options,
 )
@@ -70,7 +73,9 @@ def permission():
     """Permission management commands (Simple Security Mode)"""
 
 
+@capability("admin", "write", credential="session")
 @permission.command()
+@format_option
 @click.option(
     "--user",
     "-u",
@@ -89,6 +94,7 @@ def permission():
 )
 @click.option(
     "--proj",
+    "-P",
     "project",
     help=(
         "Project the permission applies to. Required for project-scoped "
@@ -99,31 +105,44 @@ def permission():
 def grant(ctx: click.Context, user: str, permission: str, project: str):
     """Grant a permission to a user"""
     verify_login_or_prompt(ctx)
-    user = user or logical_prompt(ctx, "User to grant the permission to")
+    user = user or logical_prompt(
+        ctx, "User to grant the permission to", option="--user"
+    )
     permission = permission or logical_prompt(
         ctx,
         "Permission to grant. Valid values are "
         f"'{', '.join(VALID_SIMPLE_PERMISSION_TYPES)}'",
+        option="--permission",
     )
     _validate_permission(permission, project)
     try:
         if project:
-            click.echo(
+            progress(
+                ctx,
                 f"Granting permission '{permission}' to user '{user}' on "
-                f"project '{project}'"
+                f"project '{project}'",
             )
         else:
-            click.echo(f"Granting permission '{permission}' to user '{user}'")
-        click.echo("-" * 10)
+            progress(ctx, f"Granting permission '{permission}' to user '{user}'")
+        progress(ctx, "-" * 10)
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         server.grant_permission(user, permission, project)
-        click.echo("Permission granted successfully")
+        render_done(
+            ctx,
+            action="grant",
+            kind="permission",
+            id=permission,
+            details={"user": user, "project": project},
+            message="Permission granted successfully",
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to grant permission: {e}")
 
 
+@capability("admin", "destructive", credential="session")
 @permission.command()
+@format_option
 @click.option(
     "--user",
     "-u",
@@ -142,6 +161,7 @@ def grant(ctx: click.Context, user: str, permission: str, project: str):
 )
 @click.option(
     "--proj",
+    "-P",
     "project",
     help=(
         "Project the permission applies to. Required for project-scoped "
@@ -152,30 +172,42 @@ def grant(ctx: click.Context, user: str, permission: str, project: str):
 def revoke(ctx: click.Context, user: str, permission: str, project: str):
     """Revoke a permission from a user"""
     verify_login_or_prompt(ctx)
-    user = user or logical_prompt(ctx, "User to revoke the permission from")
+    user = user or logical_prompt(
+        ctx, "User to revoke the permission from", option="--user"
+    )
     permission = permission or logical_prompt(
         ctx,
         "Permission to revoke. Valid values are "
         f"'{', '.join(VALID_SIMPLE_PERMISSION_TYPES)}'",
+        option="--permission",
     )
     _validate_permission(permission, project)
     try:
         if project:
-            click.echo(
+            progress(
+                ctx,
                 f"Revoking permission '{permission}' from user '{user}' on "
-                f"project '{project}'"
+                f"project '{project}'",
             )
         else:
-            click.echo(f"Revoking permission '{permission}' from user '{user}'")
-        click.echo("-" * 10)
+            progress(ctx, f"Revoking permission '{permission}' from user '{user}'")
+        progress(ctx, "-" * 10)
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         server.revoke_permission(user, permission, project)
-        click.echo("Permission revoked successfully")
+        render_done(
+            ctx,
+            action="revoke",
+            kind="permission",
+            id=permission,
+            details={"user": user, "project": project},
+            message="Permission revoked successfully",
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to revoke permission: {e}")
 
 
+@capability("admin", "read", credential="session")
 @permission.command(name="list")
 @click.option(
     "--user",
@@ -186,6 +218,7 @@ def revoke(ctx: click.Context, user: str, permission: str, project: str):
 )
 @click.option(
     "--proj",
+    "-P",
     "project",
     help="List everyone with authority on this project.",
     cls=MutuallyExclusiveOption,
@@ -227,9 +260,10 @@ def _list_by_user(ctx: click.Context, server: TabsdataServer, user: str):
             count="permissions",
         )
 
-    render(
+    render_list(
         ctx,
-        data=[{"permission": p.permission, "project": p.project} for p in permissions],
+        items=[{"permission": p.permission, "project": p.project} for p in permissions],
+        truncated=False,
         view=_view,
     )
 
@@ -246,11 +280,12 @@ def _list_by_project(ctx: click.Context, server: TabsdataServer, project: str):
             count="grants",
         )
 
-    render(
+    render_list(
         ctx,
-        data=[
+        items=[
             {"user": e.user, "permission": e.permission, "source": e.source}
             for e in access
         ],
+        truncated=False,
         view=_view,
     )

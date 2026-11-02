@@ -9,12 +9,21 @@ from pathlib import Path
 
 import rich_click as click
 
+from tabsdatak.cli._capability import capability
+from tabsdatak.cli._credentials import (
+    SERVICE_TOKEN,
+    credential_kind,
+    ensure_stateful,
+)
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     format_option,
     logical_prompt,
     present,
+    progress,
     render,
+    render_done,
+    render_list,
     verify_login_or_prompt,
     view_options,
 )
@@ -28,11 +37,14 @@ def auth():
     """User session management commands"""
 
 
+@capability("session", "write", "read", paths={"--pem": "read"})
 @auth.command()
+@format_option
 @click.option("--server", "-s", help="Tabsdata Server URL")
 @click.option(
     "--pem",
     help="Path to the certificate PEM file, or '-' to read it from stdin.",
+    type=click.Path(allow_dash=True),
 )
 @click.pass_context
 def add_cert(ctx: click.Context, server: str, pem: str):
@@ -40,6 +52,7 @@ def add_cert(ctx: click.Context, server: str, pem: str):
     Add a certificate for a Tabsdata Server.
     Only needed for self-signed certificates.
     """
+    ensure_stateful(ctx, "tdk auth add-cert")
     # noinspection PyProtectedMember
     from tabsdatak.sdk._apiserver import (
         DEFAULT_TABSDATA_CERTIFICATE_FOLDER,
@@ -48,10 +61,10 @@ def add_cert(ctx: click.Context, server: str, pem: str):
         _obtain_certificate_file_path,
     )
 
-    server = server or logical_prompt(ctx, "Tabsdata Server URL")
-    pem = pem or logical_prompt(ctx, "Path to the certificate PEM file")
-    click.echo("Adding certificate")
-    click.echo("-" * 10)
+    server = server or logical_prompt(ctx, "Tabsdata Server URL", option="--server")
+    pem = pem or logical_prompt(ctx, "Path to the certificate PEM file", option="--pem")
+    progress(ctx, "Adding certificate")
+    progress(ctx, "-" * 10)
     try:
         if not server.startswith(HTTP_PROTOCOL) and not server.startswith(
             HTTPS_PROTOCOL
@@ -63,17 +76,29 @@ def add_cert(ctx: click.Context, server: str, pem: str):
             Path(certificate_path).write_text(sys.stdin.read())
         else:
             shutil.copy(pem, certificate_path)
-        click.echo(f"Certificate added successfully for server '{server}'")
-        click.echo(f"Certificate stored at '{certificate_path}'")
+        render_done(
+            ctx,
+            action="add",
+            kind="certificate",
+            id=server,
+            details={"path": certificate_path},
+            message=(
+                f"Certificate added successfully for server '{server}'\n"
+                f"Certificate stored at '{certificate_path}'"
+            ),
+        )
     except Exception as e:
         raise click.ClickException(f"Failed to add certificate for server: {e}")
 
 
+@capability("session", "write")
 @auth.command()
+@format_option
 @click.option("--server", "-s", help="Tabsdata Server URL")
 @click.pass_context
 def delete_cert(ctx: click.Context, server: str):
     """Delete a certificate for a Tabsdata Server"""
+    ensure_stateful(ctx, "tdk auth delete-cert")
     # noinspection PyProtectedMember
     from tabsdatak.sdk._apiserver import (
         HTTP_PROTOCOL,
@@ -81,27 +106,37 @@ def delete_cert(ctx: click.Context, server: str):
         _obtain_certificate_file_path,
     )
 
-    server = server or logical_prompt(ctx, "Tabsdata Server URL")
-    click.echo("Deleting certificate")
-    click.echo("-" * 10)
+    server = server or logical_prompt(ctx, "Tabsdata Server URL", option="--server")
+    progress(ctx, "Deleting certificate")
+    progress(ctx, "-" * 10)
     try:
         if not server.startswith(HTTP_PROTOCOL) and not server.startswith(
             HTTPS_PROTOCOL
         ):
             server = HTTPS_PROTOCOL + server
         certificate_path = _obtain_certificate_file_path(server)
-        if os.path.exists(certificate_path):
+        found = os.path.exists(certificate_path)
+        if found:
             os.remove(certificate_path)
-            click.echo(f"Certificate deleted successfully for server '{server}'")
+            message = f"Certificate deleted successfully for server '{server}'"
         else:
-            click.echo(
+            message = (
                 "No certificate found for the specified server. It should be "
                 f"stored at '{certificate_path}'."
             )
+        render_done(
+            ctx,
+            action="delete",
+            kind="certificate",
+            id=server,
+            details={"path": certificate_path, "changed": found},
+            message=message,
+        )
     except Exception as e:
         raise click.ClickException(f"Failed to delete certificate for server: {e}")
 
 
+@capability("session", "read")
 @auth.command()
 @format_option
 @view_options()
@@ -110,7 +145,14 @@ def info(ctx: click.Context):
     """Display information of the currently authenticated user"""
     verify_login_or_prompt(ctx)
     try:
-        info = ctx.obj["tabsdataserver"].auth_info()
+        server = ctx.obj["tabsdataserver"]
+        info = {
+            **server.auth_info(),
+            "credential": credential_kind(server.connection.bearer_token or ""),
+        }
+        if info["credential"] == SERVICE_TOKEN:
+            token = server.auth_service_token()
+            info.update({key: token.get(key) for key in ("slot", "hint", "expires_on")})
 
         def _view():
             return RecordView(
@@ -119,6 +161,7 @@ def info(ctx: click.Context):
                     ("Name", info["name"]),
                     ("Email", present(info["email"])),
                     ("Roles", present(", ".join(info["roles"] or []))),
+                    ("Credential", present(info["credential"])),
                 ],
             )
 
@@ -127,6 +170,7 @@ def info(ctx: click.Context):
         raise click.ClickException(f"Failed to display current user information: {e}")
 
 
+@capability("session", "write", credential="session", interactive=True)
 @auth.command()
 @click.argument("server-url")
 @click.option(
@@ -147,7 +191,6 @@ def info(ctx: click.Context):
 )
 @click.option(
     "--new-password",
-    "-n",
     help=(
         "New password for the Tabsdata Server. It is discouraged to send the password "
         "as a "
@@ -161,20 +204,24 @@ def password_change(
     ctx: click.Context, server_url: str, user: str, old_password: str, new_password: str
 ):
     """Change the password of a user in a Tabsdata Server"""
-    user = user or logical_prompt(ctx, "Username for the Tabsdata Server")
+    user = user or logical_prompt(
+        ctx, "Username for the Tabsdata Server", option="--user"
+    )
     password = old_password or logical_prompt(
         ctx,
         "Old password",
         hide_input=True,
+        option="--old-password",
     )
     if not new_password:
         new_password = logical_prompt(
             ctx,
             "New password",
             hide_input=True,
+            option="--new-password",
         )
         new_pass_verification = logical_prompt(
-            ctx, "(Repeat) New password", hide_input=True
+            ctx, "(Repeat) New password", hide_input=True, option="--new-password"
         )
         if new_password != new_pass_verification:
             raise click.ClickException(
@@ -199,8 +246,8 @@ def _moment(timestamp: int | None, missing: str) -> str:
     return _convert_timestamp_to_string(timestamp) if timestamp else missing
 
 
-def _whole_number(ctx: click.Context, message: str) -> int:
-    answer = logical_prompt(ctx, message)
+def _whole_number(ctx: click.Context, message: str, option: str) -> int:
+    answer = logical_prompt(ctx, message, option=option)
     try:
         return int(str(answer).strip())
     except ValueError:
@@ -212,6 +259,7 @@ def service_token():
     """Service token management commands"""
 
 
+@capability("admin", "write", credential="session")
 @service_token.command(name="create")
 @click.option("--slot", type=click.IntRange(1, 2), help="Which slot to fill, 1 or 2.")
 @click.option(
@@ -235,9 +283,11 @@ def service_token_create(
     server keeps only a SHA-256 digest of it.
     """
     verify_login_or_prompt(ctx)
-    slot = slot or _whole_number(ctx, "Slot to fill (1 or 2)")
+    slot = slot or _whole_number(ctx, "Slot to fill (1 or 2)", "--slot")
     if expires_in_days is None:
-        expires_in_days = _whole_number(ctx, "Days until it expires (-1 for never)")
+        expires_in_days = _whole_number(
+            ctx, "Days until it expires (-1 for never)", "--expires-in-days"
+        )
     try:
         created = ctx.obj["tabsdataserver"].create_service_token(
             slot, expires_in_days, comment=comment
@@ -255,7 +305,8 @@ def service_token_create(
                 notes=[
                     "Store it now: this is the only time the token is shown. Pass "
                     "it to 'tdk login --token', or export it as TDK_TOKEN and run "
-                    "'tdk login --token' with no value."
+                    "'tdk login --token' with no value. With TDK_SERVER exported "
+                    "too, tdk uses it directly, without logging in."
                 ],
             )
 
@@ -264,6 +315,7 @@ def service_token_create(
         raise click.ClickException(f"Failed to create the token: {e}")
 
 
+@capability("admin", "read", credential="session")
 @service_token.command(name="list")
 @format_option
 @view_options()
@@ -303,12 +355,14 @@ def service_token_list(ctx: click.Context):
                 count="service tokens",
             )
 
-        render(ctx, data=tokens, view=_view)
+        render_list(ctx, items=tokens, truncated=False, view=_view)
     except Exception as e:
         raise click.ClickException(f"Failed to list the tokens: {e}")
 
 
+@capability("admin", "destructive", credential="session")
 @service_token.command(name="revoke")
+@format_option
 @click.option("--slot", type=click.IntRange(1, 2), help="Which slot to free, 1 or 2.")
 @click.pass_context
 def service_token_revoke(ctx: click.Context, slot: int):
@@ -318,9 +372,15 @@ def service_token_revoke(ctx: click.Context, slot: int):
     immediately.
     """
     verify_login_or_prompt(ctx)
-    slot = slot or _whole_number(ctx, "Slot to revoke (1 or 2)")
+    slot = slot or _whole_number(ctx, "Slot to revoke (1 or 2)", "--slot")
     try:
         ctx.obj["tabsdataserver"].revoke_service_token(slot)
-        click.echo(f"Token in slot {slot} revoked successfully")
+        render_done(
+            ctx,
+            action="revoke",
+            kind="service_token",
+            id=str(slot),
+            message=f"Token in slot {slot} revoked successfully",
+        )
     except Exception as e:
         raise click.ClickException(f"Failed to revoke the token: {e}")

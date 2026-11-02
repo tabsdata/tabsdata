@@ -16,28 +16,32 @@ Enterprise-tier variants contribute the same way: their command modules
 annotate their own groups with :func:`cli_command`, and a
 ``tabsdatak.extensions.variant.cli.commands`` module (which ships only when the
 variant is installed) imports them for the side effect.
-:func:`collect_cli_commands` imports that module best-effort, so a variant's
+:func:`collect_cli_commands` imports that module when it exists, so a variant's
 commands surface only where the variant is installed -- open source names
 nothing edition-specific.
 This rides the same ``tabsdatak.extensions.variant.cli`` package that
 ``variant_action_classes()`` in :mod:`tabsdatak.cli.td.config_utils` already
 uses for variant *actions*; commands live in a sibling ``commands`` module so
 the actions path never depends on whatever the command module imports.
+
+The same module may register a :class:`CliExtension` with
+:func:`cli_extension`: it wraps every ``tdk`` invocation and adds to the root
+options and the ``--help --full`` tree. An extension that runs tdk for a
+program sets a :class:`tabsdatak.cli._machine.Machine` for the invocation.
 """
 
 from __future__ import annotations
 
 import importlib
-import logging
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     import click
 
-logger = logging.getLogger(__name__)
-
 # Populated by @cli_command at import time; read by collect_cli_commands().
 _CLI_COMMAND_REGISTRY: list["click.Command"] = []
+_CLI_EXTENSIONS: list["CliExtension"] = []
 
 # Importing this module registers the installed variant's annotated commands.
 # Present only when an enterprise-tier variant is installed.
@@ -66,13 +70,51 @@ def collect_cli_commands() -> list["click.Command"]:
 
     Built-in commands self-register when their modules are imported (the root
     CLI imports them). Variant commands self-register when the variant command
-    module is imported here -- best-effort, absent in open source. A broken
-    variant is logged and skipped so it can never break the core CLI.
+    module is imported here. Only the absence of that module means "no variant
+    installed"; any other failure while importing it, a missing dependency of
+    the variant included, propagates so a broken variant is never mistaken
+    for open source.
     """
     try:
         importlib.import_module(_VARIANT_CLI_COMMANDS)
-    except ImportError:
-        pass  # no variant installed -- open source has no edition-specific commands
-    except Exception as e:  # never let a variant break the core CLI
-        logger.warning("Skipping variant CLI commands: %s", e)
+    except ModuleNotFoundError as error:
+        if not _is_variant_module(error.name):
+            raise
     return list(_CLI_COMMAND_REGISTRY)
+
+
+def _is_variant_module(name: str | None) -> bool:
+    return name is not None and (
+        name == _VARIANT_CLI_COMMANDS or _VARIANT_CLI_COMMANDS.startswith(f"{name}.")
+    )
+
+
+class CliExtension(Protocol):
+    def main(
+        self, root: "click.Group", argv: list[str], run: Callable[..., Any]
+    ) -> Any:
+        """Run one invocation of ``root``: ``run(argv, **main_kwargs)`` is the
+        plain one, taking the argv to parse and any override of the keyword
+        arguments of :meth:`click.BaseCommand.main`."""
+
+    def root_params(self) -> Sequence["click.Parameter"]:
+        """Options the root group shows in its help; their values reach no
+        command."""
+
+    def describe_root(self) -> dict:
+        """Keys added to the root of the ``--help --full`` JSON tree."""
+
+    def describe(self, command: "click.Command", path: str) -> dict:
+        """Keys added to a leaf of the ``--help --full`` JSON tree; ``path`` is
+        its command words after ``tdk``."""
+
+
+def cli_extension(extension: "CliExtension") -> "CliExtension":
+    """Register an extension of every ``tdk`` invocation. Extensions wrap the
+    invocation in registration order, the first outermost."""
+    _CLI_EXTENSIONS.append(extension)
+    return extension
+
+
+def cli_extensions() -> list["CliExtension"]:
+    return list(_CLI_EXTENSIONS)

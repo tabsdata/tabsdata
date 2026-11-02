@@ -2,36 +2,52 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+import functools
 import json
 import os
 import sys
 import textwrap
-from collections.abc import Mapping
-from importlib.metadata import PackageNotFoundError, version
 
 import rich_click as click
 
-try:
-    __version__ = version("tabsdata-cli")
-except PackageNotFoundError:
-    __version__ = "0.0.0"
-
-from tabsdatak.cli._registry import collect_cli_commands
+from tabsdatak.cli._capability import capability
+from tabsdatak.cli._credentials import (
+    TOKEN_ENV,
+    ensure_stateful,
+    env_credential,
+    env_server,
+    refine_auth_error,
+    stored_expiry,
+)
+from tabsdatak.cli._errors import (
+    ClassifiedException,
+    TdkException,
+    classify,
+)
+from tabsdatak.cli._machine import machine
+from tabsdatak.cli._registry import cli_extensions, collect_cli_commands
+from tabsdatak.cli._unattended import unattended_cause
 from tabsdatak.cli.cli_utils import (
     DEFAULT_TABSDATA_DIRECTORY,
+    OPTION_PINS,
     OPTION_PROMPT,
-    RENDER_WIDTH,
     SERVER_URL_DEFAULTS_HELP,
+    FailingTabsdataServer,
     clear_pins,
     cli_option_enabled,
     configured_server,
+    format_option,
     get_credentials_file_path,
     hint_common_solutions,
     initialise_tabsdata_server_connection,
     load_cli_options,
     logical_prompt,
     make_console,
+    output_format,
+    progress,
     read_default_profile,
+    render,
+    render_done,
     set_profile,
     store_cli_options,
     utils_login,
@@ -43,12 +59,12 @@ from tabsdatak.cli.cli_utils import (
 # module registers its top-level group, attached below via collect_cli_commands.
 # Only registration runs at import time -- every command's execution-time imports
 # (the server SDK, connection templates, ...) are deferred into the command body.
-# TODO: role and stage management are temporarily removed; reintroduce their
-# modules here (they self-register via @cli_command) in a later version.
 from tabsdatak.cli.td import (  # noqa: F401
     auth_group,
     collection_group,
     connection_group,
+    docs_group,
+    doctor_group,
     examples_group,
     fn_group,
     fnrun_group,
@@ -64,7 +80,6 @@ from tabsdatak.cli.td import (  # noqa: F401
     user_group,
     worker_group,
 )
-from tabsdatak.common._information.about import tdabout
 from tabsdatak.common._tabular import HELP_STYLES
 
 CYAN = "[cyan]"
@@ -76,61 +91,44 @@ NO_BOLD = "[/bold]"
 UNDERLINE = "[underline]"
 NO_UNDERLINE = "[underline]"
 
-_render_width = None if sys.stdout.isatty() else RENDER_WIDTH
-click.rich_click.WIDTH = _render_width
-click.rich_click.MAX_WIDTH = _render_width
+HELP_WIDTH = 100
+NO_PROMPT_FLAG = "--no-prompt"
+
+_help_width = None if sys.stdout.isatty() else HELP_WIDTH
+click.rich_click.WIDTH = _help_width
+click.rich_click.MAX_WIDTH = _help_width
 for _style, _value in HELP_STYLES.items():
     setattr(click.rich_click, _style, _value)
-if _render_width is not None:
-    os.environ.setdefault("TERMINAL_WIDTH", str(_render_width))
+if _help_width is not None:
+    os.environ.setdefault("TERMINAL_WIDTH", str(_help_width))
 
 console = make_console()
 
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 
-# Env vars each supported AI agent always sets when it runs a shell; tdk refuses
-# to run inside them (agents must use the Tabsdata MCP server instead).
-_AI_AGENT_ENV_VARS = ("GEMINI_CLI", "CLAUDECODE", "CODEX_THREAD_ID")
-# Escape hatch: set to 1/true/yes to bypass the guard (warns instead of failing).
-_AI_AGENT_BYPASS_ENV_VAR = "TDK_IN_AGENT"
 
-TOKEN_ENV_VAR = "TDK_TOKEN"
-_AI_AGENT_ERROR_MESSAGE = (
-    "Tabsdata tdk command does not support running within an AI agent, "
-    "use Tabsdata MCP instead"
-)
+@functools.cache
+def _version() -> str:
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("tabsdata-cli")
+    except PackageNotFoundError:
+        return "0.0.0"
 
 
-def _env_is_truthy(value: str | None) -> bool:
-    return (value or "").strip().lower() in {"1", "true", "yes"}
+def __getattr__(name: str):
+    # ``__version__`` resolves on first access: reading the package metadata
+    # costs every invocation tens of milliseconds.
+    if name == "__version__":
+        return _version()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-def detect_ai_agent(env: Mapping[str, str] | None = None) -> str | None:
-    """Return the name of the first AI-agent marker env var that is set (and
-    non-empty), or ``None`` when tdk is not running inside a supported agent."""
-    env = os.environ if env is None else env
-    for var in _AI_AGENT_ENV_VARS:
-        value = env.get(var)
-        if value is not None and value.strip() != "":
-            return var
-    return None
-
-
-def enforce_not_in_ai_agent(env: Mapping[str, str] | None = None) -> None:
-    """Exit if tdk is being run inside a supported AI agent, unless the
-    ``_TDK_IN_AGENT`` escape hatch is set truthy (in which case warn and continue)."""
-    env = os.environ if env is None else env
-    if detect_ai_agent(env) is None:
-        return
-    if _env_is_truthy(env.get(_AI_AGENT_BYPASS_ENV_VAR)):
-        click.echo(
-            f"WARNING: {_AI_AGENT_BYPASS_ENV_VAR} is set -- bypassing the AI-agent "
-            "guard; tdk is not supported within an AI agent, use Tabsdata MCP instead.",
-            err=True,
-        )
-        return
-    click.echo(_AI_AGENT_ERROR_MESSAGE, err=True)
-    raise SystemExit(1)
+def _print_version(ctx: click.Context, param, value: bool):
+    if value and not ctx.resilient_parsing:
+        click.echo(f"Tabsdata Client {_version()}")
+        ctx.exit()
 
 
 def _full_help_options(command) -> list:
@@ -142,17 +140,13 @@ def _full_help_options(command) -> list:
                 "help": param.help or "",
                 "is_flag": bool(param.is_flag),
                 "required": bool(param.required),
-                "default": (
-                    param.default
-                    if (param.default is not None and not param.is_flag)
-                    else None
-                ),
+                "default": None if param.is_flag else param.to_info_dict()["default"],
                 "type": getattr(param.type, "name", None),
             })
     return options
 
 
-def _full_help_node(name: str, command, path: str) -> dict:
+def _full_help_node(name: str, command, path: str, parent=None) -> dict:
     node = {
         "name": name,
         "path": path,
@@ -165,10 +159,15 @@ def _full_help_node(name: str, command, path: str) -> dict:
         ],
     }
     if isinstance(command, click.Group):
+        ctx = click.Context(command, info_name=name, parent=parent)
         node["commands"] = [
-            _full_help_node(sub, command.commands[sub], f"{path} {sub}")
-            for sub in sorted(command.commands)
+            _full_help_node(sub, command.get_command(ctx, sub), f"{path} {sub}", ctx)
+            for sub in sorted(command.list_commands(ctx))
         ]
+    else:
+        words = path.split(" ", 1)[1] if " " in path else ""
+        for extension in cli_extensions():
+            node.update(extension.describe(command, words))
     return node
 
 
@@ -196,18 +195,25 @@ def _full_help_text(node: dict, lines: list | None = None) -> str:
     return "\n".join(lines)
 
 
-def build_full_help(root, output: str = "text", prog_name: str = "tdk") -> str:
+def build_full_help(
+    root, output: str = "text", prog_name: str = "tdk", compact: bool = False
+) -> str:
     """Render the help for ``root`` and every command/subcommand under it.
 
     Each option and argument is tagged ``(required)`` or ``(optional)`` in the
     text form, and carries a ``required`` boolean in the json form.
 
     ``output`` is ``"text"`` (a flat, indented listing) or ``"json"`` (a nested
-    tree of ``{name, path, help, options, arguments, commands}`` objects)."""
+    tree of ``{name, path, help, options, arguments, commands}`` objects, to
+    which each CLI extension adds), which is ``compact`` in a machine run."""
     tree = _full_help_node(prog_name, root, prog_name)
     if output == "json":
-        # ``default=str`` coerces any non-JSON option default (e.g. a Choice or
-        # Path sentinel) to its string form rather than failing the dump.
+        commands = tree.pop("commands", [])
+        for extension in cli_extensions():
+            tree.update(extension.describe_root())
+        tree = {**tree, "commands": commands}
+        if compact:
+            return json.dumps(tree, separators=(",", ":"), default=str)
         return json.dumps(tree, indent=2, default=str)
     return _full_help_text(tree)
 
@@ -218,6 +224,15 @@ def _incoming_argv(args, kwargs) -> list:
     if args and args[0] is not None:
         return list(args[0])
     return list(sys.argv[1:])
+
+
+def _hoist_no_prompt(argv: list) -> list:
+    """``--no-prompt`` is accepted in any position before ``--``."""
+    head = argv[: argv.index("--")] if "--" in argv else argv
+    if NO_PROMPT_FLAG not in head:
+        return argv
+    rest = [arg for arg in head if arg != NO_PROMPT_FLAG]
+    return [NO_PROMPT_FLAG, *rest, *argv[len(head) :]]
 
 
 def _full_output_format(argv: list) -> str:
@@ -233,25 +248,64 @@ def _full_output_format(argv: list) -> str:
     return fmt
 
 
-class _AiAgentGuardedGroup(click.RichGroup):
-    """Top-level group that refuses to run inside a supported AI agent. The check
-    runs in ``main`` -- before any argument parsing -- so even ``--help`` and
-    ``--version`` are gated, not just subcommands.
+class _RootGroup(click.RichGroup):
+    """Top-level group. ``main`` runs each invocation through the registered
+    CLI extensions (:func:`tabsdatak.cli._registry.cli_extension`), hoists
+    ``--no-prompt`` and intercepts ``--help --full`` (before Click's own
+    ``--help`` handling) to print the recursive full help for every command
+    and subcommand. ``--full`` is only honored together with ``--help``, and
+    ``--format`` only together with ``--full``: ``tdk --help [--full [--format
+    FORMAT]]``.
 
-    ``main`` also intercepts ``--help --full`` (before Click's own ``--help``
-    handling) to print the recursive full help for every command and
-    subcommand. ``--full`` is only honored together with ``--help``, and
-    ``--format`` only together with ``--full``:
-    ``tdk --help [--full [--format FORMAT]]``."""
+    ``invoke`` gives every failure its canonical exit code
+    (:mod:`tabsdatak.cli._errors`)."""
 
     def main(self, *args, **kwargs):
-        enforce_not_in_ai_agent()
-        argv = _incoming_argv(args, kwargs)
-        wants_help = "--help" in argv or "-h" in argv
-        if wants_help and "--full" in argv:
-            click.echo(build_full_help(self, _full_output_format(argv)))
+        def run(argv: list, **overrides):
+            return self._main(argv, {**kwargs, **overrides})
+
+        for extension in reversed(cli_extensions()):
+            run = self._wrapped(extension, run)
+        return run(_incoming_argv(args, kwargs))
+
+    def _wrapped(self, extension, inner):
+        def run(argv: list, **overrides):
+            return extension.main(
+                self, argv, lambda argv, **more: inner(argv, **{**overrides, **more})
+            )
+
+        return run
+
+    def _main(self, argv: list, kwargs: dict):
+        if ("--help" in argv or "-h" in argv) and "--full" in argv:
+            output = _full_output_format(argv)
+            click.echo(build_full_help(self, output, compact=machine() is not None))
             raise SystemExit(0)
-        return super().main(*args, **kwargs)
+        return super().main(**{**kwargs, "args": _hoist_no_prompt(argv)})
+
+    def invoke(self, ctx: click.Context):
+        try:
+            return super().invoke(ctx)
+        except (click.exceptions.Exit, click.Abort):
+            raise
+        except click.ClickException as e:
+            e.error = self._classify(ctx, e)
+            e.exit_code = e.error.exit_code
+            if e.error.hint and e.error.hint not in e.message:
+                e.message = f"{e.message}\n{e.error.hint}"
+            raise
+        except Exception as e:
+            raise ClassifiedException(self._classify(ctx, e)) from e
+
+    @staticmethod
+    def _classify(ctx: click.Context, e: Exception):
+        obj = ctx.obj or {}
+        listed = bool(obj.get("list_filters") or obj.get("list_order_by"))
+        return refine_auth_error(
+            classify(e, listed),
+            obj.get("env_credential"),
+            login_expiry=stored_expiry(obj.get("connection_file")),
+        )
 
 
 def _activate_profile(ctx: click.Context, profile: str | None):
@@ -271,6 +325,13 @@ def _apply_profile(ctx: click.Context, param, value):
     instead of the default one the root group loaded. Eager, so it lands before
     ``--proj`` and the other options that act on the loaded connection."""
     if value is not None:
+        credential = ctx.obj.get("env_credential")
+        if credential is not None:
+            raise TdkException(
+                "usage",
+                f"'--profile' has no effect: the credential comes from "
+                f"{credential.env}.",
+            )
         _activate_profile(ctx, validate_profile_name(value))
     return value
 
@@ -294,8 +355,12 @@ def _profile_option() -> click.Option:
 def _attach_profile_option(command: click.Command):
     """Give every command under ``command`` the per-command ``--profile``.
     ``tdk set`` and ``tdk unset`` already carry their own, which manages the
-    default profile instead, and keep it."""
+    default profile instead, and keep it. A group with no registered
+    subcommands may resolve them lazily, so it gets the option on whatever it
+    resolves, when it resolves it, without being materialized here."""
     if isinstance(command, click.Group):
+        if not command.commands:
+            _defer_profile_option(command)
         for sub in command.commands.values():
             _attach_profile_option(sub)
         return
@@ -304,8 +369,36 @@ def _attach_profile_option(command: click.Command):
     command.params.append(_profile_option())
 
 
-@click.group(cls=_AiAgentGuardedGroup, context_settings=CONTEXT_SETTINGS)
-@click.version_option(version=__version__, message="Tabsdata Client %(version)s")
+def _defer_profile_option(group: click.Group):
+    if getattr(group, "_profile_deferred", False):
+        return
+    group._profile_deferred = True
+    make_context, get_command = group.make_context, group.get_command
+
+    def _make_context(*args, **kwargs):
+        ctx = make_context(*args, **kwargs)
+        _attach_profile_option(ctx.command)
+        return ctx
+
+    def _get_command(ctx, cmd_name):
+        sub = get_command(ctx, cmd_name)
+        if sub is not None:
+            _attach_profile_option(sub)
+        return sub
+
+    group.make_context = _make_context
+    group.get_command = _get_command
+
+
+@click.group(cls=_RootGroup, context_settings=CONTEXT_SETTINGS)
+@click.option(
+    "--version",
+    is_flag=True,
+    expose_value=False,
+    is_eager=True,
+    callback=_print_version,
+    help="Show the version and exit.",
+)
 @click.option(
     "--no-prompt",
     is_flag=True,
@@ -335,6 +428,26 @@ def cli(ctx: click.Context, no_prompt: bool):
     except CompatibilityError as version_error:
         raise click.ClickException("\n".join(version_error.messages)) from None
 
+    no_prompt = no_prompt or machine() is not None or unattended_cause() is not None
+    try:
+        credential, failure = env_credential(), None
+    except TdkException as error:
+        credential, failure = None, error
+    if credential is not None or failure is not None:
+        ctx.obj = {
+            "tabsdata_directory": DEFAULT_TABSDATA_DIRECTORY,
+            "no_prompt_flag": no_prompt,
+            "env_credential": credential,
+            "cli_options": {OPTION_PINS: {}},
+            "prompt_setting": True,
+            "no_prompt": no_prompt,
+        }
+        set_profile(ctx, None)
+        if failure is not None:
+            ctx.obj["tabsdataserver"] = FailingTabsdataServer(failure)
+        else:
+            initialise_tabsdata_server_connection(ctx)
+        return
     try:
         os.makedirs(DEFAULT_TABSDATA_DIRECTORY, exist_ok=True)
         ctx.obj = {
@@ -353,8 +466,11 @@ def cli(ctx: click.Context, no_prompt: bool):
 # in sync -- a new command only needs the @cli_command annotation.
 for _command in collect_cli_commands():
     cli.add_command(_command)
+for _extension in cli_extensions():
+    cli.params.extend(_extension.root_params())
 
 
+@capability("session", "read", interactive=True)
 @cli.command()
 @click.pass_context
 def shell(ctx: click.Context):
@@ -364,16 +480,27 @@ def shell(ctx: click.Context):
     run_shell(
         ctx,
         cli,
-        __version__,
+        _version(),
         banner_title="Tabsdata Interactive Shell",
         tool_name="tdk",
     )
 
 
+@capability("knowledge", "read")
 @cli.command()
-def about():
-    """Show build metadata and system information."""
-    tdabout()
+@format_option
+@click.pass_context
+def about(ctx: click.Context):
+    """Show build metadata and system information"""
+    from tabsdatak.common._information.about import tdabout
+
+    if output_format(ctx) == "table":
+        tdabout()
+        return
+    text = tdabout(capture=True)
+    if text is None:
+        raise click.ClickException("Failed to obtain the build metadata.")
+    render(ctx, data={"version": _version(), "text": text})
 
 
 MANIFEST_COLUMN_WIDTH = 80
@@ -422,7 +549,13 @@ def _narrow_manifest_line(line: str, widths: list[int], width: int) -> list[str]
     return rows
 
 
-def _show_manifest(resource: str, title: str, dedent: bool = False, wide: bool = False):
+def _show_manifest(
+    ctx: click.Context,
+    resource: str,
+    title: str,
+    dedent: bool = False,
+    wide: bool = False,
+):
     from tabsdatak.common._resources.reader import td_resource
 
     path = td_resource(f"assets/manifest/{resource}")
@@ -430,13 +563,14 @@ def _show_manifest(resource: str, title: str, dedent: bool = False, wide: bool =
         content = f.read()
     if dedent:
         content = textwrap.dedent(content).strip()
-    if not wide:
-        content = _narrow_manifest(content)
-    console.print()
-    console.print(f"{UNDERLINE}{title}{NO_UNDERLINE}")
-    console.print()
-    console.print(f"{CYAN}{content}{NO_CYAN}")
-    console.print()
+    if output_format(ctx) == "table":
+        shown = content if wide else _narrow_manifest(content)
+        console.print()
+        console.print(f"{UNDERLINE}{title}{NO_UNDERLINE}")
+        console.print()
+        console.print(f"{CYAN}{shown}{NO_CYAN}")
+        console.print()
+    render(ctx, data={"title": title, "text": content})
 
 
 @cli.group(no_args_is_help=True)
@@ -446,31 +580,42 @@ def info():
     """
 
 
+@capability("knowledge", "read")
 @info.command(name="third-party")
+@format_option
 @click.option(
     "--wide",
     is_flag=True,
     default=False,
     help="Show the license column at its full width, instead of wrapping it.",
 )
-def third_party(wide: bool):
+@click.pass_context
+def third_party(ctx: click.Context, wide: bool):
     """Show the third-party dependencies of tabsdata."""
-    _show_manifest("THIRD-PARTY", "Third Party Dependencies", wide=wide)
+    _show_manifest(ctx, "THIRD-PARTY", "Third Party Dependencies", wide=wide)
 
 
+@capability("knowledge", "read")
 @info.command(name="license")
-def license_():
+@format_option
+@click.pass_context
+def license_(ctx: click.Context):
     """Show the license of tabsdata."""
-    _show_manifest("LICENSE", "License", dedent=True)
+    _show_manifest(ctx, "LICENSE", "License", dedent=True)
 
 
+@capability("knowledge", "read")
 @info.command(name="release-notes")
-def release_notes():
+@format_option
+@click.pass_context
+def release_notes(ctx: click.Context):
     """Show the release notes of the current version of tabsdata."""
-    _show_manifest("RELEASE-NOTES", "Release Notes")
+    _show_manifest(ctx, "RELEASE-NOTES", "Release Notes")
 
 
+@capability("session", "write")
 @cli.command()
+@format_option
 @click.option(
     "--server",
     "-s",
@@ -504,20 +649,24 @@ def release_notes():
         "is revoked."
     ),
     is_flag=False,
-    flag_value=TOKEN_ENV_VAR,
+    flag_value=TOKEN_ENV,
 )
 @click.pass_context
 def login(ctx: click.Context, server: str, user: str, password: str, token: str):
     """Login to the Tabsdata Server"""
+    ensure_stateful(ctx, "tdk login")
     server = (
-        server or configured_server(ctx) or logical_prompt(ctx, "Tabsdata Server URL")
+        server
+        or env_server()
+        or configured_server(ctx)
+        or logical_prompt(ctx, "Tabsdata Server URL", option="--server")
     )
     if token:
-        if token == TOKEN_ENV_VAR:
-            token = os.environ.get(TOKEN_ENV_VAR)
+        if token == TOKEN_ENV:
+            token = os.environ.get(TOKEN_ENV)
             if not token:
                 raise click.ClickException(
-                    f"'--token' was given no value and {TOKEN_ENV_VAR} is not set."
+                    f"'--token' was given no value and {TOKEN_ENV} is not set."
                 )
         if user or password:
             raise click.ClickException(
@@ -525,66 +674,93 @@ def login(ctx: click.Context, server: str, user: str, password: str, token: str)
             )
         utils_login(ctx, server, None, None, token=token)
     else:
-        user = user or logical_prompt(ctx, "Username for the Tabsdata Server")
+        user = user or logical_prompt(
+            ctx, "Username for the Tabsdata Server", option="--user"
+        )
         password = password or logical_prompt(
             ctx,
             "Password",
             hide_input=True,
+            option="--password",
         )
         utils_login(ctx, server, user, password)
+    render_done(
+        ctx,
+        action="login",
+        kind="session",
+        id=server,
+        details={"user": user},
+        message="Login successful.",
+    )
     from tabsdatak.cli.td.config_utils import execute_actions_for_command
 
     execute_actions_for_command("login")
 
 
+@capability("session", "write")
 @cli.command()
+@format_option
 @click.pass_context
 def logout(ctx: click.Context):
-    """Logout from the Tabsdata Server"""
+    """Logout from the Tabsdata Server: the login stored here always goes; the
+    server is asked to end the session, which otherwise expires on its own"""
+    ensure_stateful(ctx, "tdk logout")
     try:
         ctx.obj["tabsdataserver"].logout()
-        click.echo("Logout successful.")
+        ended = None
     except Exception as e:
-        hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to logout: {e}")
-    finally:
-        try:
-            os.remove(get_credentials_file_path(ctx))
-        except Exception:
-            pass
-        try:
-            clear_pins(ctx)
-            store_cli_options(ctx)
-        except Exception:
-            pass
+        ended = str(e)
+    try:
+        os.remove(get_credentials_file_path(ctx))
+    except Exception:
+        pass
+    try:
+        clear_pins(ctx)
+        store_cli_options(ctx)
+    except Exception:
+        pass
+    if ended is None:
+        render_done(
+            ctx, action="logout", kind="session", id=None, message="Logout successful."
+        )
+    else:
+        render_done(
+            ctx,
+            action="logout",
+            kind="session",
+            id=None,
+            details={"server_session": "not_ended", "reason": ended},
+            message=(
+                "Logged out here. The server could not end the session, which "
+                f"expires on its own: {ended}"
+            ),
+        )
 
 
+@capability("operations", "read")
 @cli.command()
+@format_option
 @click.pass_context
 def status(ctx: click.Context):
     """Check the status of the server"""
     verify_login_or_prompt(ctx)
-    click.echo("Obtaining server status")
-    click.echo("-" * 10)
+    progress(ctx, "Obtaining server status")
+    progress(ctx, "-" * 10)
     try:
         current_status = ctx.obj["tabsdataserver"].status
-        click.echo(str(current_status))
+        if output_format(ctx) == "table":
+            click.echo(str(current_status))
+        render(
+            ctx,
+            data=lambda: {
+                "status": current_status.status,
+                "latency_as_nanos": current_status.latency_as_nanos,
+                **current_status.kwargs,
+            },
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to get status: {e}")
 
 
 _attach_profile_option(cli)
-
-
-if __name__ == "__main__":
-    from tabsdatak.common._compatibility import (
-        PackageVersionError,
-        check_sticky_version_packages,
-    )
-
-    try:
-        check_sticky_version_packages()
-    except PackageVersionError as error:
-        print(error.messages, file=sys.stderr)
-    cli()

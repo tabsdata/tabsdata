@@ -79,6 +79,21 @@ def test_is_valid_id_rejects_bad_inputs(bad):
     assert cli_utils.is_valid_id(bad) is False
 
 
+def test_require_id_passes_ids_and_absent_values():
+    cli_utils.require_id("--plan", "ep20260930-2", "hint")
+    cli_utils.require_id("--plan", None, "hint")
+
+
+def test_require_id_fails_as_usage_with_the_hint():
+    from tabsdatak.cli._errors import ExitCode, TdkException
+
+    with pytest.raises(TdkException) as raised:
+        cli_utils.require_id("--worker", "3", "'tdk worker list' lists them.")
+    assert raised.value.exit_code == ExitCode.USAGE
+    assert raised.value.error.message == "'--worker 3' is not an id."
+    assert raised.value.error.hint == "'tdk worker list' lists them."
+
+
 def test_beautify_list_passes_through_none_marker():
     assert cli_utils.beautify_list(None) == "<None>"
     assert cli_utils.beautify_list([]) == "<None>"
@@ -725,3 +740,13 @@ def test_proj_option_decorator_adds_proj_flag():
 
     opts = [o for p in cmd.params for o in p.opts]
     assert "--proj" in opts and "-P" in opts
+
+
+def test_store_cli_options_failure_is_reported_on_stderr(tmp_path, capsys):
+    from types import SimpleNamespace
+
+    ctx = SimpleNamespace(obj={"options_file": str(tmp_path), "cli_options": {}})
+    cli_utils.store_cli_options(ctx)
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "Failed to store CLI options" in captured.err

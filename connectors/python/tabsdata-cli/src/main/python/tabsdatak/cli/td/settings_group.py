@@ -5,6 +5,8 @@
 
 import rich_click as click
 
+from tabsdatak.cli._capability import capability
+from tabsdatak.cli._credentials import ensure_stateful
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     DISABLED,
@@ -26,6 +28,7 @@ from tabsdatak.cli.cli_utils import (
     hint_common_solutions,
     load_cli_options,
     present,
+    progress,
     read_default_profile,
     render,
     set_cli_option_enabled,
@@ -62,8 +65,10 @@ def _valid_profile(ctx: click.Context, param, value):
     return validate_profile_name(value) if value is not None else value
 
 
+@capability("session", "write")
 @cli_command
 @click.command("set")
+@format_option
 @click.option(
     "--hints",
     type=_BOOL,
@@ -137,6 +142,7 @@ def set_setting(
         tdk set --profile dev                   # default profile for commands
         tdk set --profile dev --server dev-host # ...and dev's server
     """
+    ensure_stateful(ctx, "tdk set")
     settings_given = (
         hints is not None or prompt is not None or bool(url or project or collection)
     )
@@ -154,10 +160,13 @@ def set_setting(
         _pin(ctx, project, collection)
     if settings_given:
         store_cli_options(ctx)
+    render(ctx, data=lambda: _settings_document(ctx))
 
 
+@capability("session", "write")
 @cli_command
 @click.command("unset")
+@format_option
 @click.option("--hints", is_flag=True, help="Restore the hints default (true).")
 @click.option(
     "--prompt",
@@ -220,6 +229,7 @@ def unset_setting(
         tdk unset --all                         # every setting of the profile
         tdk unset --profile                     # back to the default profile
     """
+    ensure_stateful(ctx, "tdk unset")
     if all_settings:
         hints = prompt = url = project = collection = True
     settings_given = hints or prompt or url or project or collection
@@ -237,8 +247,10 @@ def unset_setting(
         _clear_default_profile(ctx)
     if settings_given:
         store_cli_options(ctx)
+    render(ctx, data=lambda: _settings_document(ctx))
 
 
+@capability("session", "read")
 @cli_command
 @click.command("settings")
 @format_option
@@ -270,17 +282,20 @@ def settings(ctx: click.Context):
             ],
         )
 
-    render(
-        ctx,
-        data={
-            "profile": profile,
-            OPTION_HINTS: _stored(hints_enabled),
-            OPTION_PROMPT: _stored(prompt_enabled),
-            OPTION_SERVER: current_server,
-            "pins": {PIN_PROJECT: project, PIN_COLLECTION: collection},
+    render(ctx, data=lambda: _settings_document(ctx), view=_view)
+
+
+def _settings_document(ctx: click.Context) -> dict:
+    return {
+        "profile": active_profile(ctx),
+        OPTION_HINTS: _stored(cli_option_enabled(ctx, OPTION_HINTS)),
+        OPTION_PROMPT: _stored(cli_option_enabled(ctx, OPTION_PROMPT)),
+        OPTION_SERVER: configured_server(ctx),
+        "pins": {
+            PIN_PROJECT: get_pin(ctx, PIN_PROJECT),
+            PIN_COLLECTION: get_pin(ctx, PIN_COLLECTION),
         },
-        view=_view,
-    )
+    }
 
 
 _TOGGLE_MESSAGES = {
@@ -301,16 +316,16 @@ _CLEARED_LABELS = {OPTION_HINTS: "Hints", OPTION_PROMPT: "Prompting"}
 
 def _set_enabled(ctx: click.Context, option: str, enabled: bool):
     set_cli_option_enabled(ctx, option, enabled)
-    click.echo(_TOGGLE_MESSAGES[option][0 if enabled else 1])
+    progress(ctx, _TOGGLE_MESSAGES[option][0 if enabled else 1])
 
 
 def _clear_enabled(ctx: click.Context, option: str):
     label = _CLEARED_LABELS[option]
     if get_current_cli_option(ctx, option) is None:
-        click.echo(f"{label} was already at its default (true).")
+        progress(ctx, f"{label} was already at its default (true).")
     else:
         clear_current_cli_option(ctx, option)
-        click.echo(f"{label} unset, back to its default (true).")
+        progress(ctx, f"{label} unset, back to its default (true).")
 
 
 def _set_default_profile(ctx: click.Context, profile: str):
@@ -319,9 +334,10 @@ def _set_default_profile(ctx: click.Context, profile: str):
     # the default, so the two land together.
     set_profile(ctx, profile)
     load_cli_options(ctx)
-    click.echo(
+    progress(
+        ctx,
         f"Default profile set to {profile}. Commands given no --profile now use "
-        f"'{profile}-connection.json' and '{profile}-options.json'."
+        f"'{profile}-connection.json' and '{profile}-options.json'.",
     )
 
 
@@ -329,26 +345,27 @@ def _clear_default_profile(ctx: click.Context):
     directory = ctx.obj["tabsdata_directory"]
     previous = read_default_profile(directory)
     if clear_default_profile(directory):
-        click.echo(
+        progress(
+            ctx,
             f"Default profile unset (was {previous}). Commands given no --profile "
-            "use 'connection.json' and 'options.json'."
+            "use 'connection.json' and 'options.json'.",
         )
     else:
-        click.echo("No default profile was set.")
+        progress(ctx, "No default profile was set.")
 
 
 def _set_server(ctx: click.Context, url: str):
     set_current_cli_option(ctx, OPTION_SERVER, url)
-    click.echo(f"Server set to {url}. 'tdk login' will use it without '--server'.")
+    progress(ctx, f"Server set to {url}. 'tdk login' will use it without '--server'.")
 
 
 def _unset_server(ctx: click.Context):
     previous = configured_server(ctx)
     clear_current_cli_option(ctx, OPTION_SERVER)
     if previous:
-        click.echo(f"Server unset (was {previous}).")
+        progress(ctx, f"Server unset (was {previous}).")
     else:
-        click.echo("No server was configured.")
+        progress(ctx, "No server was configured.")
 
 
 def _pin(ctx: click.Context, project: str, collection: str):
@@ -363,9 +380,11 @@ def _pin(ctx: click.Context, project: str, collection: str):
         if project:
             previously_pinned = get_pin(ctx, PIN_PROJECT)
             if previously_pinned and previously_pinned != project:
-                click.echo(f"Unpinning previously pinned project: {previously_pinned}")
+                progress(
+                    ctx, f"Unpinning previously pinned project: {previously_pinned}"
+                )
             set_pin(ctx, PIN_PROJECT, project)
-            click.echo(f"Pinning project: {project}")
+            progress(ctx, f"Pinning project: {project}")
             # Switching to a different project orphans a collection pinned under
             # the old one -- clear it, unless this command also sets a new
             # collection (handled below). Re-pinning the same project keeps it.
@@ -377,19 +396,20 @@ def _pin(ctx: click.Context, project: str, collection: str):
             ):
                 orphan = get_pin(ctx, PIN_COLLECTION)
                 set_pin(ctx, PIN_COLLECTION, None)
-                click.echo(
+                progress(
+                    ctx,
                     "Also unpinning collection (it belonged to the previously "
-                    f"pinned project): {orphan}"
+                    f"pinned project): {orphan}",
                 )
         if collection:
             previously_pinned = get_pin(ctx, PIN_COLLECTION)
             if previously_pinned and previously_pinned != collection:
-                click.echo(
-                    f"Unpinning previously pinned collection: {previously_pinned}"
+                progress(
+                    ctx, f"Unpinning previously pinned collection: {previously_pinned}"
                 )
             set_pin(ctx, PIN_COLLECTION, collection)
-            click.echo(f"Pinning collection: {collection}")
-        click.echo("Pins updated successfully")
+            progress(ctx, f"Pinning collection: {collection}")
+        progress(ctx, "Pins updated successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to set pins: {e}")
@@ -410,9 +430,9 @@ def _unpin(ctx: click.Context, project: bool):
         set_pin(ctx, PIN_COLLECTION, None)
 
         if cleared:
-            click.echo("Unpinned: " + ", ".join(cleared))
+            progress(ctx, "Unpinned: " + ", ".join(cleared))
         else:
-            click.echo("Nothing was pinned.")
+            progress(ctx, "Nothing was pinned.")
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to unset pins: {e}")

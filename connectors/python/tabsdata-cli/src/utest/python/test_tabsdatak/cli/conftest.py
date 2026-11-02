@@ -13,11 +13,19 @@ logger.setLevel(logging.INFO)
 
 
 @pytest.fixture(autouse=True)
-def _neutralize_ai_agent_env(monkeypatch):
-    # The CLI refuses to run inside an AI agent (tabsdatak.cli.td.cli); clear the
-    # agent-marker env vars so the unit suite is hermetic even when it is itself
-    # run from within an agent. Tests that exercise the guard set them explicitly.
-    for var in ("GEMINI_CLI", "CLAUDECODE", "CODEX_THREAD_ID", "TDK_IN_AGENT"):
+def _neutralize_tdk_env(monkeypatch):
+    # TDK_* credentials turn stateless mode on, and an agent's markers turn
+    # prompting off; clear them so the suite runs the same wherever it runs.
+    for var in (
+        "TDK_BEARER",
+        "TDK_TOKEN",
+        "TDK_SERVER",
+        "TDK_PROJECT",
+        "TDK_AGENT",
+        "CLAUDECODE",
+        "GEMINI_CLI",
+        "CODEX_THREAD_ID",
+    ):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -32,6 +40,26 @@ def _neutralize_forced_terminal(monkeypatch):
         monkeypatch.delenv(var, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _machine_double(monkeypatch):
+    # Only the test double drives tdk here, whatever extensions are installed.
+    from tabsdatak.cli import _registry
+    from test_tabsdatak.cli import machine_double
+
+    monkeypatch.setattr(
+        _registry, "_CLI_EXTENSIONS", [machine_double.MachineDouble()]
+    )
+    monkeypatch.setattr(machine_double, "SETTINGS", {})
+
+
+@pytest.fixture
+def machine_settings():
+    """The Machine fields, beyond ``emit`` and ``command``, of every
+    ``--machine`` run in the test."""
+    from test_tabsdatak.cli import machine_double
+
+    return machine_double.SETTINGS
+
 from test_tabsdatak.bootest import enrich_sys_path
 from test_tabsdatak.cli.bootest import TESTING_RESOURCES_PATH
 
@@ -45,11 +73,3 @@ enrich_sys_path()
 _enrich_sys_path()
 
 # noinspection PyUnusedImports
-from test_tabsdata.conftest import (
-    clean_everything,
-    clean_python_virtual_environments,
-    pytest_addoption,
-    pytest_generate_tests,
-    setup_temp_folder,
-    setup_temp_folder_node,
-)

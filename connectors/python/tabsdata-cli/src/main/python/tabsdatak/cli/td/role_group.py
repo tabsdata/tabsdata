@@ -71,12 +71,15 @@ def add_perm(ctx: click.Context, name: str, perm: str, project: str):
     name = (
         name
         or get_currently_pinned_object(ctx, "role")
-        or logical_prompt(ctx, "Name of the role to add the permission to")
+        or logical_prompt(
+            ctx, "Name of the role to add the permission to", option="--name"
+        )
     )
     perm = perm or logical_prompt(
         ctx,
         "Permission to add. Valid values are "
         f"'{', '.join(str(p) for p in VALID_PERMISSION_TYPES)}'",
+        option="--perm",
     )
     flattened_list = [item for tup in PERMISSION_TYPES_WITH_ENTITY for item in tup]
     requires_entity = perm in flattened_list
@@ -98,6 +101,7 @@ def add_perm(ctx: click.Context, name: str, perm: str, project: str):
                 f"'{ALL_ENTITIES_REPRESENTATION}' is provided, it will apply "
                 "to all projects.",
                 default_value=ALL_ENTITIES_REPRESENTATION,
+                option="--proj",
             )
             if project == ALL_ENTITIES_REPRESENTATION:
                 project = None
@@ -133,9 +137,11 @@ def add_user(ctx: click.Context, name: str, user: str):
     name = (
         name
         or get_currently_pinned_object(ctx, "role")
-        or logical_prompt(ctx, "Name of the role to the user to")
+        or logical_prompt(ctx, "Name of the role to the user to", option="--name")
     )
-    user = user or logical_prompt(ctx, "User that will be added to the role")
+    user = user or logical_prompt(
+        ctx, "User that will be added to the role", option="--user"
+    )
     try:
         click.echo(f"Adding user '{user}' to role '{name}'")
         click.echo("-" * 10)
@@ -163,7 +169,7 @@ def create(
     name = (
         name
         or get_currently_pinned_object(ctx, "role")
-        or logical_prompt(ctx, "Name of the role to create")
+        or logical_prompt(ctx, "Name of the role to create", option="--name")
     )
     description = description or ""
     click.echo("Creating a new role")
@@ -190,11 +196,13 @@ def delete(ctx: click.Context, name: str, confirm: str):
     name = (
         name
         or get_currently_pinned_object(ctx, "role")
-        or logical_prompt(ctx, "Name of the role to delete")
+        or logical_prompt(ctx, "Name of the role to delete", option="--name")
     )
     click.echo(f"Deleting role: {name}")
     click.echo("-" * 10)
-    confirm = confirm or logical_prompt(ctx, "Please type 'delete' to confirm deletion")
+    confirm = confirm or logical_prompt(
+        ctx, "Please type 'delete' to confirm deletion", option="--confirm"
+    )
     if confirm != "delete":
         raise click.ClickException(
             "Deletion not confirmed. The confirmation word is 'delete'."
@@ -248,11 +256,13 @@ def delete_perm(ctx: click.Context, name: str, id: str, perm: str, project: str)
         name
         or get_currently_pinned_object(ctx, "role")
         or logical_prompt(
-            ctx, "Name of the role from which the permission will be deleted"
+            ctx,
+            "Name of the role from which the permission will be deleted",
+            option="--name",
         )
     )
     if not perm:
-        id = id or logical_prompt(ctx, "ID of the permission to delete")
+        id = id or logical_prompt(ctx, "ID of the permission to delete", option="--id")
     else:
         project = _obtain_project_for_perm(perm, project, ctx)
     try:
@@ -309,6 +319,7 @@ def _obtain_project_for_perm(perm: str, project: str, ctx: click.Context):
                 f"'{ALL_ENTITIES_REPRESENTATION}' if it applies "
                 "to all projects.",
                 default_value=ALL_ENTITIES_REPRESENTATION,
+                option="--proj",
             )
             if project == ALL_ENTITIES_REPRESENTATION:
                 project = None
@@ -371,9 +382,11 @@ def delete_user(ctx: click.Context, name: str, user: str):
     name = (
         name
         or get_currently_pinned_object(ctx, "role")
-        or logical_prompt(ctx, "Name of the role from which the user will be deleted")
+        or logical_prompt(
+            ctx, "Name of the role from which the user will be deleted", option="--name"
+        )
     )
-    user = user or logical_prompt(ctx, "User to delete from the role")
+    user = user or logical_prompt(ctx, "User to delete from the role", option="--user")
     try:
         click.echo(f"Deleting user '{user}' from role '{name}'")
         click.echo("-" * 10)
@@ -406,7 +419,7 @@ def info(ctx: click.Context, name: str):
     name = (
         name
         or get_currently_pinned_object(ctx, "role")
-        or logical_prompt(ctx, "Name of the role to display")
+        or logical_prompt(ctx, "Name of the role to display", option="--name")
     )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
@@ -488,7 +501,9 @@ def list_perm(ctx: click.Context, name: str):
     name = (
         name
         or get_currently_pinned_object(ctx, "role")
-        or logical_prompt(ctx, "Name of the role to which the permissions belong")
+        or logical_prompt(
+            ctx, "Name of the role to which the permissions belong", option="--name"
+        )
     )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
@@ -548,7 +563,9 @@ def list_user(ctx: click.Context, name: str):
     name = (
         name
         or get_currently_pinned_object(ctx, "role")
-        or logical_prompt(ctx, "Name of the role to which the users belong")
+        or logical_prompt(
+            ctx, "Name of the role to which the users belong", option="--name"
+        )
     )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
@@ -593,7 +610,7 @@ def list_user(ctx: click.Context, name: str):
 @click.pass_context
 def pin(ctx: click.Context, name: str):
     """Pin a role by name"""
-    name = name or logical_prompt(ctx, "Name of the role to be pinned")
+    name = name or logical_prompt(ctx, "Name of the role to be pinned", option="--name")
     click.echo(f"Pinning role: {name}")
     click.echo("-" * 10)
     try:
@@ -643,7 +660,7 @@ def update(
     name = (
         name
         or get_currently_pinned_object(ctx, "role")
-        or logical_prompt(ctx, "Name of the role to update")
+        or logical_prompt(ctx, "Name of the role to update", option="--name")
     )
     click.echo(f"Updating role: {name}")
     click.echo("-" * 10)

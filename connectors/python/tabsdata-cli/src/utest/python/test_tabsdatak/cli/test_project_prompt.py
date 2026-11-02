@@ -28,6 +28,7 @@ from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
 PROJECT_PROMPT = "Name of the project to target"
 COLLECTION_PROMPT = "Name of the collection to which the functions belong"
+FUNCTION_COLLECTION_PROMPT = "Name of the collection to which the function belongs"
 
 
 def _client() -> MagicMock:
@@ -51,11 +52,23 @@ def _invoke(argv: list[str], *, client: MagicMock, tmp_path, input: str | None =
 
 def test_project_is_prompted_before_the_collection(tmp_path):
     client = _client()
-    result = _invoke(["fn", "list"], client=client, tmp_path=tmp_path, input="p1\nc1\n")
+    result = _invoke(
+        ["fn", "get", "--name", "f1"], client=client, tmp_path=tmp_path, input="p1\nc1\n"
+    )
     assert result.exit_code == 0, result.output
-    assert result.output.index(PROJECT_PROMPT) < result.output.index(COLLECTION_PROMPT)
+    assert result.output.index(PROJECT_PROMPT) < result.output.index(FUNCTION_COLLECTION_PROMPT)
     assert client.connection.project == "p1"
-    client.list_functions_generator.assert_called_once_with("c1")
+    client.get_function.assert_called_once_with("c1", "f1")
+
+
+def test_a_listing_without_a_collection_spans_the_project(tmp_path):
+    client = _client()
+    result = _invoke(["fn", "list"], client=client, tmp_path=tmp_path, input="p1\n")
+    assert result.exit_code == 0, result.output
+    assert COLLECTION_PROMPT not in result.output
+    client.list_project_functions_generator.assert_called_once_with(
+        filter=None, order_by=None, cursor=None
+    )
 
 
 def test_project_is_prompted_even_when_the_collection_is_given(tmp_path):
@@ -141,3 +154,24 @@ def test_proj_survives_an_interactive_login(tmp_path):
 
     assert result.exit_code == 0, result.output
     assert client.connection.project == "p1"
+
+
+@pytest.mark.parametrize("error", [EOFError, KeyboardInterrupt])
+def test_aborted_tty_prompt_raises_abort(error, monkeypatch):
+    import rich_click as click
+
+    monkeypatch.setattr("sys.stdin", MagicMock(isatty=lambda: True))
+    monkeypatch.setattr(cli_utils, "prompt_with_escape", MagicMock(side_effect=error))
+    ctx = click.Context(click.Command("cmd"), obj={"no_prompt": False})
+    with pytest.raises(click.Abort):
+        cli_utils.logical_prompt(ctx, PROJECT_PROMPT)
+
+
+@pytest.mark.parametrize("error", [EOFError, KeyboardInterrupt])
+def test_aborted_prompt_exits_non_zero(error, tmp_path):
+    client = _client()
+    with patch.object(cli_utils.click, "prompt", side_effect=error):
+        result = _invoke(["fn", "list"], client=client, tmp_path=tmp_path)
+    assert result.exit_code == 1, result.output
+    assert "Aborted" in result.stderr
+    client.list_functions_generator.assert_not_called()

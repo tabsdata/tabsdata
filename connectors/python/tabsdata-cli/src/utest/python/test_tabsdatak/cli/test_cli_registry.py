@@ -5,14 +5,15 @@
 """Unit tests for the tdk CLI command registry / auto-collection seam.
 
 Covers :mod:`tabsdatak.cli._registry`: the ``@cli_command`` annotation, the
-``collect_cli_commands`` collector, and its best-effort, never-fatal import of
-the enterprise variant's command module. Also checks the built-in groups reach
-the root ``tdk`` CLI through that registry rather than a manual ``add_command``
-list.
+``collect_cli_commands`` collector, and its import of the enterprise variant's
+command module: an absent variant is skipped, a broken one propagates. Also
+checks the built-in groups reach the root ``tdk`` CLI through that registry
+rather than a manual ``add_command`` list.
 """
 
 from __future__ import annotations
 
+import pytest
 import rich_click as click
 
 from tabsdatak.cli import _registry
@@ -24,11 +25,8 @@ from tabsdatak.cli._registry import (
 
 # The core command groups the open-source ``tdk`` CLI must always expose. Kept
 # in lockstep with what ``tabsdatak.cli.td.cli`` imports for its @cli_command
-# side effects: ``role``/``stage`` are intentionally NOT here -- they are gated
-# off in this edition (see the TODO in ``cli.py``; ``role_group.py`` exists but
-# is not imported, and there is no stage module yet). Add a group here when it is
-# wired into ``cli.py`` so this guards against a group silently dropping out of
-# the registry.
+# side effects. Add a group here when it is wired into ``cli.py`` so this guards
+# against a group silently dropping out of the registry.
 BUILTIN_GROUPS = {
     "auth",
     "collection",
@@ -81,27 +79,43 @@ def test_collect_includes_registered_commands():
         _CLI_COMMAND_REGISTRY.remove(probe2)
 
 
-def test_collect_skips_missing_variant_module(monkeypatch):
-    # No enterprise variant installed: the import target is absent. collect must
-    # not raise -- it returns the (built-in) registry unchanged.
-    monkeypatch.setattr(
-        _registry,
-        "_VARIANT_CLI_COMMANDS",
-        "tabsdatak.extensions.variant.cli.__does_not_exist__",
-    )
-    collected = collect_cli_commands()
-    assert isinstance(collected, list)
+@pytest.mark.parametrize(
+    "missing",
+    [
+        "tabsdatak.extensions",
+        "tabsdatak.extensions.variant",
+        "tabsdatak.extensions.variant.cli",
+        "tabsdatak.extensions.variant.cli.commands",
+    ],
+)
+def test_collect_skips_an_absent_variant(monkeypatch, missing):
+    def absent(_name):
+        raise ModuleNotFoundError(f"No module named '{missing}'", name=missing)
+
+    monkeypatch.setattr(_registry.importlib, "import_module", absent)
+    assert collect_cli_commands() == list(_CLI_COMMAND_REGISTRY)
 
 
-def test_collect_survives_broken_variant_module(monkeypatch):
-    # A variant module that blows up on import (not just ImportError) is logged
-    # and skipped, never breaking the core CLI.
-    def boom(_name):
-        raise RuntimeError("variant import exploded")
+@pytest.mark.parametrize(
+    "error",
+    [
+        ModuleNotFoundError("No module named 'tabsdatak.ag'", name="tabsdatak.ag"),
+        ModuleNotFoundError(
+            "No module named 'tabsdatak.extensions.variant.cli.commandsx'",
+            name="tabsdatak.extensions.variant.cli.commandsx",
+        ),
+        ImportError("cannot import name 'classify'", name="tabsdatak.x"),
+        RuntimeError("variant import exploded"),
+    ],
+)
+def test_collect_propagates_a_broken_variant(monkeypatch, error):
+    def broken(_name):
+        raise error
 
-    monkeypatch.setattr(_registry.importlib, "import_module", boom)
-    collected = collect_cli_commands()  # must not propagate the RuntimeError
-    assert isinstance(collected, list)
+    monkeypatch.setattr(_registry.importlib, "import_module", broken)
+    with pytest.raises(type(error)) as raised:
+        collect_cli_commands()
+    assert raised.value is error
 
 
 def test_builtin_groups_reach_tdk_via_registry():

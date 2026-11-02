@@ -22,27 +22,28 @@ import importlib
 import sys
 
 from tabsdatak.cli.td import config_utils as cu
+from tabsdatak.common._resources import reader
 
 
 def test_load_actions_config_parses_yaml(tmp_path, monkeypatch):
     (tmp_path / "login.yaml").write_text(
         "actions:\n  - some_action:\n      enabled: true\n"
     )
-    monkeypatch.setattr(cu, "td_resource", lambda _path: str(tmp_path))
+    monkeypatch.setattr(reader, "td_resource", lambda _path: str(tmp_path))
     assert cu.load_actions_config_for_command("login") == {
         "actions": [{"some_action": {"enabled": True}}]
     }
 
 
 def test_load_actions_config_missing_file_returns_empty(tmp_path, monkeypatch):
-    monkeypatch.setattr(cu, "td_resource", lambda _path: str(tmp_path))
+    monkeypatch.setattr(reader, "td_resource", lambda _path: str(tmp_path))
     assert cu.load_actions_config_for_command("no_such_command") == {}
 
 
 def test_load_actions_config_empty_file_returns_empty(tmp_path, monkeypatch):
     # An empty YAML document parses to None; the loader must still yield a dict.
     (tmp_path / "login.yaml").write_text("")
-    monkeypatch.setattr(cu, "td_resource", lambda _path: str(tmp_path))
+    monkeypatch.setattr(reader, "td_resource", lambda _path: str(tmp_path))
     assert cu.load_actions_config_for_command("login") == {}
 
 

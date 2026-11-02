@@ -1,0 +1,2986 @@
+{
+ "tdk about": {
+  "capability": {
+   "credential": "any",
+   "domain": "knowledge",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--profile",
+   "-o"
+  ]
+ },
+ "tdk auth add-cert": {
+  "capability": {
+   "credential": "any",
+   "domain": "session",
+   "effect": "write",
+   "escalate": {},
+   "fs": "read",
+   "interactive": false,
+   "lower": {},
+   "paths": {
+    "--pem": "read"
+   }
+  },
+  "parameters": [
+   "--pem",
+   "--profile",
+   "--server",
+   "-o"
+  ]
+ },
+ "tdk auth delete-cert": {
+  "capability": {
+   "credential": "any",
+   "domain": "session",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--profile",
+   "--server",
+   "-o"
+  ]
+ },
+ "tdk auth info": {
+  "capability": {
+   "credential": "any",
+   "domain": "session",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--max-width",
+   "--profile",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk auth password-change": {
+  "capability": {
+   "credential": "session",
+   "domain": "session",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": true,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--new-password",
+   "--old-password",
+   "--profile",
+   "--user",
+   "SERVER_URL"
+  ]
+ },
+ "tdk auth service-token create": {
+  "capability": {
+   "credential": "session",
+   "domain": "admin",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--comment",
+   "--expires-in-days",
+   "--max-width",
+   "--profile",
+   "--slot",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk auth service-token list": {
+  "capability": {
+   "credential": "session",
+   "domain": "admin",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--max-width",
+   "--profile",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk auth service-token revoke": {
+  "capability": {
+   "credential": "session",
+   "domain": "admin",
+   "effect": "destructive",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--profile",
+   "--slot",
+   "-o"
+  ]
+ },
+ "tdk collection create": {
+  "capability": {
+   "credential": "any",
+   "domain": "development",
+   "effect": "write",
+   "escalate": {
+    "--conn-file": {
+     "credential": "session"
+    }
+   },
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {
+    "--conn-file": "read"
+   }
+  },
+  "parameters": [
+   "--conn-file",
+   "--description",
+   "--group",
+   "--name",
+   "--profile",
+   "--proj",
+   "--storage-path",
+   "-o"
+  ]
+ },
+ "tdk collection delete": {
+  "capability": {
+   "credential": "any",
+   "domain": "development",
+   "effect": "destructive",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--confirm",
+   "--name",
+   "--profile",
+   "--proj",
+   "-o"
+  ]
+ },
+ "tdk collection get": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--max-width",
+   "--name",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk collection list": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--all-projects",
+   "--browse",
+   "--cursor",
+   "--filter",
+   "--max-result",
+   "--max-width",
+   "--order-by",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk collection tag delete": {
+  "capability": {
+   "credential": "any",
+   "domain": "development",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--key",
+   "--name",
+   "--profile",
+   "--proj",
+   "-o"
+  ]
+ },
+ "tdk collection tag list": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--max-width",
+   "--name",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk collection tag set": {
+  "capability": {
+   "credential": "any",
+   "domain": "development",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--key",
+   "--name",
+   "--profile",
+   "--proj",
+   "--value",
+   "-o"
+  ]
+ },
+ "tdk collection update": {
+  "capability": {
+   "credential": "any",
+   "domain": "development",
+   "effect": "write",
+   "escalate": {
+    "--conn-file": {
+     "credential": "session"
+    }
+   },
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {
+    "--conn-file": "read"
+   }
+  },
+  "parameters": [
+   "--conn-file",
+   "--description",
+   "--name",
+   "--new-name",
+   "--profile",
+   "--proj",
+   "--storage-path",
+   "-o"
+  ]
+ },
+ "tdk connection check": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "read",
+   "escalate": {
+    "--len": {
+     "fs": "read"
+    },
+    "--metadata": {
+     "fs": "read"
+    },
+    "--sample": {
+     "fs": "read"
+    }
+   },
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {
+    "--conn-file": "read"
+   }
+  },
+  "parameters": [
+   "--browse",
+   "--conn-file",
+   "--len",
+   "--max-width",
+   "--metadata",
+   "--name",
+   "--no-wait",
+   "--profile",
+   "--proj",
+   "--sample",
+   "--timeout",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk connection entities": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--cursor",
+   "--fields",
+   "--filter",
+   "--max-result",
+   "--max-width",
+   "--name",
+   "--order-by",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk connection get": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {
+    "--definition": {
+     "credential": "session"
+    }
+   },
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--definition",
+   "--max-width",
+   "--name",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk connection list": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--all-projects",
+   "--browse",
+   "--cursor",
+   "--filter",
+   "--max-result",
+   "--max-width",
+   "--mode",
+   "--order-by",
+   "--profile",
+   "--proj",
+   "--status",
+   "--type",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk connection probe": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--max-width",
+   "--probe",
+   "--profile",
+   "--proj",
+   "--timeout",
+   "--wait",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk connection refresh": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--max-width",
+   "--name",
+   "--no-wait",
+   "--profile",
+   "--proj",
+   "--timeout",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk connection sample": {
+  "capability": {
+   "credential": "any",
+   "domain": "development",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--entity",
+   "--len",
+   "--max-width",
+   "--name",
+   "--no-wait",
+   "--profile",
+   "--proj",
+   "--timeout",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk connection template": {
+  "capability": {
+   "credential": "any",
+   "domain": "knowledge",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {
+    "--file": "write"
+   }
+  },
+  "parameters": [
+   "--file",
+   "--profile",
+   "--type",
+   "-o"
+  ]
+ },
+ "tdk connection types": {
+  "capability": {
+   "credential": "any",
+   "domain": "knowledge",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--max-width",
+   "--profile",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk connection validate": {
+  "capability": {
+   "credential": "any",
+   "domain": "development",
+   "effect": "read",
+   "escalate": {},
+   "fs": "read",
+   "interactive": false,
+   "lower": {},
+   "paths": {
+    "--file": "read"
+   }
+  },
+  "parameters": [
+   "--file",
+   "--profile",
+   "-o"
+  ]
+ },
+ "tdk cron disable": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--coll",
+   "--name",
+   "--profile",
+   "--proj",
+   "-o"
+  ]
+ },
+ "tdk cron enable": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--coll",
+   "--name",
+   "--profile",
+   "--proj",
+   "-o"
+  ]
+ },
+ "tdk cron list": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--all-projects",
+   "--browse",
+   "--coll",
+   "--cursor",
+   "--filter",
+   "--max-result",
+   "--max-width",
+   "--name",
+   "--order-by",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk cron plans": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--all-projects",
+   "--browse",
+   "--coll",
+   "--cursor",
+   "--filter",
+   "--max-result",
+   "--max-width",
+   "--name",
+   "--order-by",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk docs list": {
+  "capability": {
+   "credential": "any",
+   "domain": "knowledge",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--category",
+   "--max-result",
+   "--max-width",
+   "--profile",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk docs search": {
+  "capability": {
+   "credential": "any",
+   "domain": "knowledge",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--category",
+   "--max-result",
+   "--max-width",
+   "--profile",
+   "--query",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk docs show": {
+  "capability": {
+   "credential": "any",
+   "domain": "knowledge",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--category",
+   "--name",
+   "--profile",
+   "-o"
+  ]
+ },
+ "tdk doctor": {
+  "capability": {
+   "credential": "any",
+   "domain": "development",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--check",
+   "--max-width",
+   "--offline",
+   "--profile",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk examples extract": {
+  "capability": {
+   "credential": "any",
+   "domain": "knowledge",
+   "effect": "read",
+   "escalate": {},
+   "fs": "write",
+   "interactive": false,
+   "lower": {},
+   "paths": {
+    "--dir": "write"
+   }
+  },
+  "parameters": [
+   "--dir",
+   "--name",
+   "--profile",
+   "-o"
+  ]
+ },
+ "tdk examples list": {
+  "capability": {
+   "credential": "any",
+   "domain": "knowledge",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--connector",
+   "--kind",
+   "--max-width",
+   "--profile",
+   "--tag",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk examples path": {
+  "capability": {
+   "credential": "any",
+   "domain": "knowledge",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--name",
+   "--profile",
+   "-o"
+  ]
+ },
+ "tdk examples scaffold": {
+  "capability": {
+   "credential": "any",
+   "domain": "development",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {
+    "--file": "write"
+   }
+  },
+  "parameters": [
+   "--browse",
+   "--connector",
+   "--file",
+   "--input",
+   "--kind",
+   "--list-connectors",
+   "--max-width",
+   "--name",
+   "--output",
+   "--profile",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk examples show": {
+  "capability": {
+   "credential": "any",
+   "domain": "knowledge",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--name",
+   "--profile",
+   "-o"
+  ]
+ },
+ "tdk fn bundle": {
+  "capability": {
+   "credential": "any",
+   "domain": "development",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {
+    "--extract": "write",
+    "--file": "write"
+   }
+  },
+  "parameters": [
+   "--coll",
+   "--extract",
+   "--file",
+   "--fn-version",
+   "--force",
+   "--name",
+   "--print",
+   "--profile",
+   "--proj",
+   "-o"
+  ]
+ },
+ "tdk fn check": {
+  "capability": {
+   "credential": "any",
+   "domain": "development",
+   "effect": "read",
+   "escalate": {},
+   "fs": "read",
+   "interactive": false,
+   "lower": {},
+   "paths": {
+    "--dir-to-bundle": "read",
+    "--local-pkg": "read",
+    "--path": "read",
+    "--requirements": "read"
+   }
+  },
+  "parameters": [
+   "--coll",
+   "--dir-to-bundle",
+   "--local-pkg",
+   "--name",
+   "--path",
+   "--profile",
+   "--proj",
+   "--requirements",
+   "-o"
+  ]
+ },
+ "tdk fn delete": {
+  "capability": {
+   "credential": "any",
+   "domain": "development",
+   "effect": "destructive",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--coll",
+   "--confirm",
+   "--name",
+   "--profile",
+   "--proj",
+   "-o"
+  ]
+ },
+ "tdk fn disable": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--coll",
+   "--name",
+   "--profile",
+   "--proj",
+   "-o"
+  ]
+ },
+ "tdk fn enable": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--coll",
+   "--name",
+   "--profile",
+   "--proj",
+   "-o"
+  ]
+ },
+ "tdk fn get": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--coll",
+   "--max-width",
+   "--name",
+   "--profile",
+   "--proj",
+   "--show-history",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk fn list": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--coll",
+   "--cursor",
+   "--filter",
+   "--max-result",
+   "--max-width",
+   "--order-by",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk fn patch": {
+  "capability": {
+   "credential": "any",
+   "domain": "development",
+   "effect": "write",
+   "escalate": {},
+   "fs": "read",
+   "interactive": false,
+   "lower": {
+    "--dry-run": "read"
+   },
+   "paths": {
+    "--dir-to-bundle": "read",
+    "--local-pkg": "read",
+    "--path": "read",
+    "--requirements": "read",
+    "--source": "read"
+   }
+  },
+  "parameters": [
+   "--add-package",
+   "--coll",
+   "--description",
+   "--dir-to-bundle",
+   "--dry-run",
+   "--fn-version",
+   "--local-pkg",
+   "--name",
+   "--path",
+   "--profile",
+   "--proj",
+   "--requirements",
+   "--source",
+   "-o"
+  ]
+ },
+ "tdk fn patches": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--coll",
+   "--cursor",
+   "--filter",
+   "--max-result",
+   "--max-width",
+   "--name",
+   "--order-by",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk fn register": {
+  "capability": {
+   "credential": "any",
+   "domain": "development",
+   "effect": "write",
+   "escalate": {},
+   "fs": "read",
+   "interactive": false,
+   "lower": {
+    "--dry-run": "read"
+   },
+   "paths": {
+    "--dir-to-bundle": "read",
+    "--local-pkg": "read",
+    "--path": "read",
+    "--requirements": "read"
+   }
+  },
+  "parameters": [
+   "--coll",
+   "--description",
+   "--dir-to-bundle",
+   "--dry-run",
+   "--enabled",
+   "--local-pkg",
+   "--path",
+   "--profile",
+   "--proj",
+   "--requirements",
+   "--reuse-tables",
+   "--storage-path",
+   "--update",
+   "-o"
+  ]
+ },
+ "tdk fn tag delete": {
+  "capability": {
+   "credential": "any",
+   "domain": "development",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--coll",
+   "--key",
+   "--name",
+   "--profile",
+   "--proj",
+   "-o"
+  ]
+ },
+ "tdk fn tag list": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--coll",
+   "--max-width",
+   "--name",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk fn tag set": {
+  "capability": {
+   "credential": "any",
+   "domain": "development",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--coll",
+   "--key",
+   "--name",
+   "--profile",
+   "--proj",
+   "--value",
+   "-o"
+  ]
+ },
+ "tdk fn trigger": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--coll",
+   "--name",
+   "--plan-name",
+   "--profile",
+   "--proj",
+   "--timeout",
+   "--wait",
+   "-o"
+  ]
+ },
+ "tdk fn update": {
+  "capability": {
+   "credential": "any",
+   "domain": "development",
+   "effect": "write",
+   "escalate": {
+    "--reset-stage": {
+     "effect": "destructive"
+    },
+    "--reset-state": {
+     "effect": "destructive"
+    }
+   },
+   "fs": "read",
+   "interactive": false,
+   "lower": {
+    "--dry-run": "read"
+   },
+   "paths": {
+    "--dir-to-bundle": "read",
+    "--local-pkg": "read",
+    "--path": "read",
+    "--requirements": "read"
+   }
+  },
+  "parameters": [
+   "--coll",
+   "--description",
+   "--dir-to-bundle",
+   "--dry-run",
+   "--enabled",
+   "--local-pkg",
+   "--name",
+   "--path",
+   "--profile",
+   "--proj",
+   "--requirements",
+   "--reset-stage",
+   "--reset-state",
+   "--reuse-tables",
+   "--storage-path",
+   "-o"
+  ]
+ },
+ "tdk fnrun diagnose": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--fnrun",
+   "--log-lines",
+   "--no-logs",
+   "--profile",
+   "-o"
+  ]
+ },
+ "tdk fnrun get": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--attempt",
+   "--browse",
+   "--fnrun",
+   "--max-width",
+   "--profile",
+   "--timeout",
+   "--wait",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk fnrun list": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--coll",
+   "--cursor",
+   "--filter",
+   "--fn",
+   "--health",
+   "--max-result",
+   "--max-width",
+   "--order-by",
+   "--plan",
+   "--plan-name",
+   "--profile",
+   "--proj",
+   "--status",
+   "--trx",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk fnrun logs": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {
+    "--file": "write"
+   }
+  },
+  "parameters": [
+   "--all",
+   "--file",
+   "--fnrun",
+   "--max-result",
+   "--profile",
+   "--tail",
+   "-o"
+  ]
+ },
+ "tdk fnrun recover": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--fnrun",
+   "--profile",
+   "--timeout",
+   "--wait",
+   "-o"
+  ]
+ },
+ "tdk fnrun replay": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--fnrun",
+   "--profile",
+   "--timeout",
+   "--wait",
+   "-o"
+  ]
+ },
+ "tdk group create": {
+  "capability": {
+   "credential": "session",
+   "domain": "development",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--description",
+   "--name",
+   "--profile",
+   "--proj",
+   "-o"
+  ]
+ },
+ "tdk group delete": {
+  "capability": {
+   "credential": "session",
+   "domain": "development",
+   "effect": "destructive",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--confirm",
+   "--name",
+   "--profile",
+   "--proj",
+   "-o"
+  ]
+ },
+ "tdk group get": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--max-width",
+   "--name",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk group list": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--cursor",
+   "--filter",
+   "--max-result",
+   "--max-width",
+   "--order-by",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk group tag delete": {
+  "capability": {
+   "credential": "session",
+   "domain": "admin",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--key",
+   "--name",
+   "--profile",
+   "--proj",
+   "-o"
+  ]
+ },
+ "tdk group tag list": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--max-width",
+   "--name",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk group tag set": {
+  "capability": {
+   "credential": "session",
+   "domain": "admin",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--key",
+   "--name",
+   "--profile",
+   "--proj",
+   "--value",
+   "-o"
+  ]
+ },
+ "tdk group update": {
+  "capability": {
+   "credential": "session",
+   "domain": "development",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--description",
+   "--name",
+   "--new-name",
+   "--profile",
+   "--proj",
+   "-o"
+  ]
+ },
+ "tdk info license": {
+  "capability": {
+   "credential": "any",
+   "domain": "knowledge",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--profile",
+   "-o"
+  ]
+ },
+ "tdk info release-notes": {
+  "capability": {
+   "credential": "any",
+   "domain": "knowledge",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--profile",
+   "-o"
+  ]
+ },
+ "tdk info third-party": {
+  "capability": {
+   "credential": "any",
+   "domain": "knowledge",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--profile",
+   "--wide",
+   "-o"
+  ]
+ },
+ "tdk login": {
+  "capability": {
+   "credential": "any",
+   "domain": "session",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--password",
+   "--profile",
+   "--server",
+   "--token",
+   "--user",
+   "-o"
+  ]
+ },
+ "tdk logout": {
+  "capability": {
+   "credential": "any",
+   "domain": "session",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--profile",
+   "-o"
+  ]
+ },
+ "tdk metrics inflight": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--all-projects",
+   "--browse",
+   "--collection",
+   "--collection-exclude",
+   "--group",
+   "--group-exclude",
+   "--max-width",
+   "--profile",
+   "--proj",
+   "--status",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk metrics show": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--align",
+   "--all-projects",
+   "--browse",
+   "--collection",
+   "--collection-exclude",
+   "--dim",
+   "--from",
+   "--group",
+   "--group-exclude",
+   "--max-width",
+   "--profile",
+   "--proj",
+   "--span",
+   "--status",
+   "--unit",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk permission grant": {
+  "capability": {
+   "credential": "session",
+   "domain": "admin",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--permission",
+   "--profile",
+   "--proj",
+   "--user",
+   "-o"
+  ]
+ },
+ "tdk permission list": {
+  "capability": {
+   "credential": "session",
+   "domain": "admin",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--max-width",
+   "--profile",
+   "--proj",
+   "--user",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk permission revoke": {
+  "capability": {
+   "credential": "session",
+   "domain": "admin",
+   "effect": "destructive",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--permission",
+   "--profile",
+   "--proj",
+   "--user",
+   "-o"
+  ]
+ },
+ "tdk plan cancel": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "destructive",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--confirm",
+   "--plan",
+   "--profile",
+   "-o"
+  ]
+ },
+ "tdk plan diagnose": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--log-lines",
+   "--max-runs",
+   "--no-logs",
+   "--plan",
+   "--profile",
+   "-o"
+  ]
+ },
+ "tdk plan get": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--max-width",
+   "--plan",
+   "--profile",
+   "--timeout",
+   "--wait",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk plan list": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--at",
+   "--browse",
+   "--coll",
+   "--cursor",
+   "--filter",
+   "--fn",
+   "--health",
+   "--last",
+   "--max-result",
+   "--max-width",
+   "--monitor",
+   "--name",
+   "--order-by",
+   "--profile",
+   "--proj",
+   "--status",
+   "--timeout",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk plan logs": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {
+    "--file": "write"
+   }
+  },
+  "parameters": [
+   "--all",
+   "--failed-only",
+   "--file",
+   "--max-result",
+   "--plan",
+   "--profile",
+   "--tail",
+   "-o"
+  ]
+ },
+ "tdk plan monitor": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--plan",
+   "--profile",
+   "--timeout",
+   "-o"
+  ]
+ },
+ "tdk plan recover": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--plan",
+   "--profile",
+   "--timeout",
+   "--wait",
+   "-o"
+  ]
+ },
+ "tdk project create": {
+  "capability": {
+   "credential": "session",
+   "domain": "admin",
+   "effect": "write",
+   "escalate": {},
+   "fs": "read",
+   "interactive": false,
+   "lower": {},
+   "paths": {
+    "--secrets-file": "read"
+   }
+  },
+  "parameters": [
+   "--description",
+   "--name",
+   "--profile",
+   "--secrets-file",
+   "-o"
+  ]
+ },
+ "tdk project delete": {
+  "capability": {
+   "credential": "session",
+   "domain": "admin",
+   "effect": "destructive",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--confirm",
+   "--name",
+   "--profile",
+   "-o"
+  ]
+ },
+ "tdk project get": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--max-width",
+   "--name",
+   "--profile",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk project graph": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--at",
+   "--browse",
+   "--max-width",
+   "--profile",
+   "--proj",
+   "--topology-version",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk project list": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--cursor",
+   "--filter",
+   "--max-result",
+   "--max-width",
+   "--order-by",
+   "--profile",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk project secrets": {
+  "capability": {
+   "credential": "session",
+   "domain": "admin",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--max-width",
+   "--name",
+   "--profile",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk project tag delete": {
+  "capability": {
+   "credential": "session",
+   "domain": "admin",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--key",
+   "--profile",
+   "--proj",
+   "-o"
+  ]
+ },
+ "tdk project tag keys": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--max-width",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk project tag list": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--max-width",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk project tag set": {
+  "capability": {
+   "credential": "session",
+   "domain": "admin",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--key",
+   "--profile",
+   "--proj",
+   "--value",
+   "-o"
+  ]
+ },
+ "tdk project tag values": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--key",
+   "--max-width",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk project topology list": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--cursor",
+   "--filter",
+   "--max-result",
+   "--max-width",
+   "--order-by",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk project update": {
+  "capability": {
+   "credential": "session",
+   "domain": "admin",
+   "effect": "write",
+   "escalate": {},
+   "fs": "read",
+   "interactive": false,
+   "lower": {},
+   "paths": {
+    "--secrets-file": "read"
+   }
+  },
+  "parameters": [
+   "--description",
+   "--name",
+   "--new-name",
+   "--profile",
+   "--secrets-file",
+   "-o"
+  ]
+ },
+ "tdk set": {
+  "capability": {
+   "credential": "any",
+   "domain": "session",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--coll",
+   "--hints",
+   "--profile",
+   "--proj",
+   "--prompt",
+   "--server",
+   "-o"
+  ]
+ },
+ "tdk settings": {
+  "capability": {
+   "credential": "any",
+   "domain": "session",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--max-width",
+   "--profile",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk shell": {
+  "capability": {
+   "credential": "any",
+   "domain": "session",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": true,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--profile"
+  ]
+ },
+ "tdk status": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--profile",
+   "-o"
+  ]
+ },
+ "tdk stream disable": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--coll",
+   "--name",
+   "--profile",
+   "--proj",
+   "-o"
+  ]
+ },
+ "tdk stream enable": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--coll",
+   "--name",
+   "--profile",
+   "--proj",
+   "-o"
+  ]
+ },
+ "tdk stream list": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--all-projects",
+   "--browse",
+   "--coll",
+   "--cursor",
+   "--filter",
+   "--max-result",
+   "--max-width",
+   "--name",
+   "--order-by",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk stream plans": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--all-projects",
+   "--browse",
+   "--coll",
+   "--cursor",
+   "--filter",
+   "--max-result",
+   "--max-width",
+   "--name",
+   "--order-by",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk table data": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {
+    "--file": "write"
+   }
+  },
+  "parameters": [
+   "--at",
+   "--at-trx",
+   "--browse",
+   "--coll",
+   "--extra-cols",
+   "--file",
+   "--len",
+   "--max-width",
+   "--name",
+   "--offset",
+   "--profile",
+   "--proj",
+   "--sql",
+   "--version",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk table delete": {
+  "capability": {
+   "credential": "any",
+   "domain": "development",
+   "effect": "destructive",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--coll",
+   "--confirm",
+   "--name",
+   "--profile",
+   "--proj",
+   "-o"
+  ]
+ },
+ "tdk table diff": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--against",
+   "--browse",
+   "--coll",
+   "--from",
+   "--max-events",
+   "--max-width",
+   "--name",
+   "--profile",
+   "--proj",
+   "--to",
+   "--version",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk table download": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "write",
+   "interactive": false,
+   "lower": {},
+   "paths": {
+    "--file": "write"
+   }
+  },
+  "parameters": [
+   "--at",
+   "--at-trx",
+   "--coll",
+   "--file",
+   "--name",
+   "--profile",
+   "--proj",
+   "--version",
+   "-o"
+  ]
+ },
+ "tdk table flow": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--at",
+   "--browse",
+   "--coll",
+   "--depth",
+   "--direction",
+   "--include-system",
+   "--max-width",
+   "--name",
+   "--profile",
+   "--proj",
+   "--topology-version",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk table list": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--at",
+   "--at-trx",
+   "--browse",
+   "--coll",
+   "--cursor",
+   "--filter",
+   "--max-result",
+   "--max-width",
+   "--name",
+   "--order-by",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk table profile": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--approx",
+   "--at",
+   "--at-trx",
+   "--browse",
+   "--coll",
+   "--columns",
+   "--max-width",
+   "--name",
+   "--profile",
+   "--proj",
+   "--sample-rows",
+   "--version",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk table schema": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--at",
+   "--at-trx",
+   "--browse",
+   "--coll",
+   "--extra-cols",
+   "--max-width",
+   "--name",
+   "--profile",
+   "--proj",
+   "--version",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk table stats": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--at",
+   "--at-trx",
+   "--browse",
+   "--coll",
+   "--max-width",
+   "--name",
+   "--profile",
+   "--proj",
+   "--version",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk table tag delete": {
+  "capability": {
+   "credential": "any",
+   "domain": "development",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--coll",
+   "--key",
+   "--name",
+   "--profile",
+   "--proj",
+   "-o"
+  ]
+ },
+ "tdk table tag list": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--coll",
+   "--max-width",
+   "--name",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk table tag set": {
+  "capability": {
+   "credential": "any",
+   "domain": "development",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--coll",
+   "--key",
+   "--name",
+   "--profile",
+   "--proj",
+   "--value",
+   "-o"
+  ]
+ },
+ "tdk table versions": {
+  "capability": {
+   "credential": "any",
+   "domain": "analytics",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--coll",
+   "--cursor",
+   "--filter",
+   "--max-result",
+   "--max-width",
+   "--name",
+   "--order-by",
+   "--profile",
+   "--proj",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk trx cancel": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "destructive",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--confirm",
+   "--profile",
+   "--trx",
+   "-o"
+  ]
+ },
+ "tdk trx get": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--max-width",
+   "--profile",
+   "--timeout",
+   "--trx",
+   "--wait",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk trx list": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--at",
+   "--browse",
+   "--coll",
+   "--cursor",
+   "--filter",
+   "--health",
+   "--last",
+   "--max-result",
+   "--max-width",
+   "--monitor",
+   "--order-by",
+   "--plan",
+   "--plan-name",
+   "--profile",
+   "--proj",
+   "--status",
+   "--timeout",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk trx logs": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {
+    "--file": "write"
+   }
+  },
+  "parameters": [
+   "--all",
+   "--failed-only",
+   "--file",
+   "--max-result",
+   "--profile",
+   "--tail",
+   "--trx",
+   "-o"
+  ]
+ },
+ "tdk trx monitor": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--profile",
+   "--timeout",
+   "--trx",
+   "-o"
+  ]
+ },
+ "tdk trx recover": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--profile",
+   "--timeout",
+   "--trx",
+   "--wait",
+   "-o"
+  ]
+ },
+ "tdk unset": {
+  "capability": {
+   "credential": "any",
+   "domain": "session",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--all",
+   "--coll",
+   "--hints",
+   "--profile",
+   "--proj",
+   "--prompt",
+   "--server",
+   "-o"
+  ]
+ },
+ "tdk user create": {
+  "capability": {
+   "credential": "session",
+   "domain": "admin",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--disabled",
+   "--email",
+   "--full-name",
+   "--name",
+   "--password",
+   "--profile",
+   "-o"
+  ]
+ },
+ "tdk user delete": {
+  "capability": {
+   "credential": "session",
+   "domain": "admin",
+   "effect": "destructive",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--confirm",
+   "--name",
+   "--profile",
+   "-o"
+  ]
+ },
+ "tdk user get": {
+  "capability": {
+   "credential": "session",
+   "domain": "admin",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--max-width",
+   "--name",
+   "--profile",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk user list": {
+  "capability": {
+   "credential": "session",
+   "domain": "admin",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--cursor",
+   "--filter",
+   "--max-result",
+   "--max-width",
+   "--order-by",
+   "--profile",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk user update": {
+  "capability": {
+   "credential": "session",
+   "domain": "admin",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--email",
+   "--enabled",
+   "--full-name",
+   "--name",
+   "--password",
+   "--profile",
+   "-o"
+  ]
+ },
+ "tdk worker list": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--browse",
+   "--coll",
+   "--cursor",
+   "--filter",
+   "--fn",
+   "--fnrun",
+   "--health",
+   "--max-result",
+   "--max-width",
+   "--order-by",
+   "--plan",
+   "--plan-name",
+   "--profile",
+   "--proj",
+   "--status",
+   "--trx",
+   "--wrap",
+   "-o"
+  ]
+ },
+ "tdk worker logs": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "read",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {
+    "--file": "write"
+   }
+  },
+  "parameters": [
+   "--file",
+   "--profile",
+   "--tail",
+   "--worker",
+   "-o"
+  ]
+ },
+ "tdk worker recover": {
+  "capability": {
+   "credential": "any",
+   "domain": "operations",
+   "effect": "write",
+   "escalate": {},
+   "fs": "none",
+   "interactive": false,
+   "lower": {},
+   "paths": {}
+  },
+  "parameters": [
+   "--profile",
+   "--timeout",
+   "--wait",
+   "--worker",
+   "-o"
+  ]
+ }
+}

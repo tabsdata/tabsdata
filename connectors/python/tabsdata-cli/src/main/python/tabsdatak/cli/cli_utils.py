@@ -11,15 +11,20 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import datetime
+import decimal
 import hashlib
-import importlib.abc
 import importlib.machinery
 import importlib.util
 import io
 import json
+import logging
 import os
 import re
 import sys
+import weakref
 from contextlib import contextmanager
 from itertools import islice
 from types import ModuleType
@@ -28,13 +33,27 @@ from typing import TYPE_CHECKING, Any, Iterable, Iterator, Sequence
 import rich_click as click
 from rich_click import Option, UsageError
 
+from tabsdatak.cli._credentials import (
+    credential_kind,
+    ensure_unexpired,
+    env_project,
+    env_server,
+)
+from tabsdatak.cli._errors import TdkException
+from tabsdatak.cli._machine import machine
+from tabsdatak.cli._unattended import unattended_cause
+from tabsdatak.common._constants import tabsdata_directory
+
 # Heavy imports (the server SDK, requests, ruamel) are deferred into the
 # functions that use them so importing this shared helper -- which every command
 # module does -- stays cheap. Type-only names live under TYPE_CHECKING.
 if TYPE_CHECKING:
     from rich.console import Console
 
+logger = logging.getLogger(__name__)
+
 RENDER_WIDTH = 1024
+_SERVER_VERSIONS: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
 
 def make_console(**kwargs) -> "Console":
@@ -53,10 +72,7 @@ OPTIONS_FILE = "options.json"
 PROFILE_FILE = "profile.json"
 PROFILE_KEY = "profile"
 
-# Mirrors tabsdatak.sdk._apiserver.DEFAULT_TABSDATA_DIRECTORY. Defined locally so
-# the common CLI path (which needs only this constant) never imports the
-# requests-heavy _apiserver module.
-DEFAULT_TABSDATA_DIRECTORY = os.path.join(os.path.expanduser("~"), ".tabsdata")
+DEFAULT_TABSDATA_DIRECTORY = tabsdata_directory()
 
 # Keys of the persisted settings in ``options.json``, all managed by ``tdk set``
 # / ``tdk unset``. On/off settings store ENABLED / DISABLED; ``pins`` nests the
@@ -73,9 +89,8 @@ PIN_PROJECT = "project"
 PIN_COLLECTION = "collection"
 
 # Mirrors what tabsdatak.sdk._apiserver.process_url() fills in when a
-# user-typed server URL carries no protocol or no port. Defined locally for the
-# same reason as DEFAULT_TABSDATA_DIRECTORY above, and shared by every place
-# that takes a server URL so they all quote the same defaults.
+# user-typed server URL carries no protocol or no port; defined here so the
+# CLI never imports the requests-heavy _apiserver module.
 DEFAULT_SERVER_PROTOCOL = "http://"
 DEFAULT_APISERVER_PORT = "2457"
 
@@ -97,6 +112,13 @@ def is_valid_id(possible_id: str) -> bool:
     """
     id_pattern = re.compile(r"^([0-9a-vA-V]{26}|[a-zA-Z]{1,3}[0-9]{8}-[0-9]{1,10})$")
     return bool(id_pattern.match(possible_id))
+
+
+def require_id(option: str, value: str | None, hint: str) -> None:
+    """Fail as a usage error, before any request, when ``value`` is not an id;
+    ``hint`` says where the id comes from."""
+    if value is not None and not is_valid_id(value):
+        raise TdkException("usage", f"'{option} {value}' is not an id.", hint=hint)
 
 
 def beautify_list(list_to_show) -> str:
@@ -165,12 +187,19 @@ def prompt_with_escape(message, default=None, hide_input=False):
 def _prompting_disabled_message(ctx: click.Context) -> str:
     """Why prompting is off, and how to turn it back on: the persisted
     ``tdk set --prompt false`` outlives the invocation, so it is named ahead of
-    the one-shot ``--no-prompt`` flag."""
+    an unattended session's variable and of the one-shot ``--no-prompt``
+    flag."""
     if not ctx.obj.get("prompt_setting", True):
         return (
             "Prompting is disabled by the 'prompt' setting and some required "
             "values are missing. Please provide the required values or "
             "re-enable prompting with 'tdk set --prompt true'."
+        )
+    cause = unattended_cause()
+    if cause is not None:
+        return (
+            f"Prompting is off in an unattended session ({cause}) and some "
+            "required values are missing. Please provide the required values."
         )
     return (
         "Prompting is disabled and some required "
@@ -180,17 +209,28 @@ def _prompting_disabled_message(ctx: click.Context) -> str:
 
 
 def logical_prompt(
-    ctx: click.Context, message: str, default_value=None, hide_input: bool = False
+    ctx: click.Context,
+    message: str,
+    default_value=None,
+    hide_input: bool = False,
+    option: str | None = None,
+    hint: str | None = None,
 ):
     """
     Prompt the user for a value if prompt is enabled. Otherwise, either return the
-        default value, or raise an error.
+        default value, or fail naming ``option``, the flag that supplies it, with
+        ``hint`` or by default "Pass ``option``." as the hint.
     """
 
     if ctx.obj["no_prompt"]:
-        if default_value is None:
-            raise click.ClickException(_prompting_disabled_message(ctx))
-        return default_value
+        if default_value is not None:
+            return default_value
+        missing = f"Missing required value: {option or message}."
+        if machine() is None:
+            missing = f"{missing} {_prompting_disabled_message(ctx)}"
+        if hint is None and option:
+            hint = f"Pass {option}."
+        raise TdkException("missing_argument", missing, hint=hint)
     try:
         import sys
 
@@ -201,8 +241,8 @@ def logical_prompt(
         else:
             return click.prompt(message, default=default_value, hide_input=hide_input)
     except (KeyboardInterrupt, EOFError):
-        click.echo()
-        raise click.exceptions.Exit(0)
+        click.echo(err=True)
+        raise click.Abort() from None
 
 
 def utils_login(
@@ -253,11 +293,12 @@ def utils_login(
                 ),
             )
         raise click.ClickException(f"Failed to login: {e}")
-    click.echo("Login successful.")
 
 
 def request_login_information(ctx: click.Context):
-    server_url = configured_server(ctx) or logical_prompt(ctx, "Server URL")
+    server_url = (
+        env_server() or configured_server(ctx) or logical_prompt(ctx, "Server URL")
+    )
     username = logical_prompt(ctx, "Username")
     password = logical_prompt(ctx, "Password", hide_input=True)
     return server_url, username, password
@@ -270,9 +311,12 @@ class _LazyTabsdataServer:
     ``connection``, ``--help`` -- never trigger it. It is truthy so the usual
     ``if not ctx.obj["tabsdataserver"]`` login checks keep working."""
 
-    def __init__(self, ctx: click.Context, credentials: dict):
+    def __init__(
+        self, ctx: click.Context, credentials: dict, credentials_file: str | None
+    ):
         self._ctx = ctx
         self._credentials = credentials
+        self._credentials_file = credentials_file
         self._server = None
 
     def _build(self):
@@ -281,19 +325,27 @@ class _LazyTabsdataServer:
             from tabsdatak.sdk._apiserver import APIServer
             from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
+            env_credential = self._ctx.obj.get("env_credential")
+            if env_credential is not None:
+                ensure_unexpired(env_credential)
             credentials = self._credentials
+            run = machine()
             connection = APIServer(
                 credentials.get("url"),
-                credentials_file=get_credentials_file_path(self._ctx),
+                credentials_file=self._credentials_file,
+                **(
+                    {"timeout": run.request_timeout}
+                    if run is not None and run.request_timeout
+                    else {}
+                ),
             )
             connection.refresh_token = credentials.get("refresh_token")
             connection.bearer_token = credentials.get("bearer_token")
             connection.token_type = credentials.get("token_type")
             connection.expires_in = credentials.get("expires_in")
             connection.expiration_time = credentials.get("expiration_time")
-            # The active project rides on the connection: it defaults to the
-            # pinned project, and a per-command `--proj` overrides it.
-            connection.project = get_pin(self._ctx, PIN_PROJECT)
+            # A per-command `--proj` overrides this default.
+            connection.project = env_project() or get_pin(self._ctx, PIN_PROJECT)
             server = TabsdataServer.__new__(TabsdataServer)
             server.connection = connection
             self._server = server
@@ -306,14 +358,42 @@ class _LazyTabsdataServer:
         return True
 
 
+class FailingTabsdataServer:
+    """Stand-in for the server when the environment credential is invalid:
+    commands that never touch the server (``--help`` included) still run, and
+    the first one that does fails with the credential error."""
+
+    def __init__(self, error: Exception):
+        self._error = error
+
+    def __getattr__(self, name: str):
+        raise self._error
+
+    def __bool__(self) -> bool:
+        return True
+
+
 def initialise_tabsdata_server_connection(ctx: click.Context):
     from tabsdatak.sdk import _credentials
 
+    env_credential = ctx.obj.get("env_credential")
+    ctx.obj["credential_kind"] = None
+    if env_credential is not None:
+        ctx.obj["credential_kind"] = env_credential.kind
+        ctx.obj["tabsdataserver"] = _LazyTabsdataServer(
+            ctx,
+            {"url": env_credential.server, "bearer_token": env_credential.bearer},
+            credentials_file=None,
+        )
+        return
     credentials = _credentials.read(get_credentials_file_path(ctx))
     if credentials is None:
         ctx.obj["tabsdataserver"] = None
         return
-    ctx.obj["tabsdataserver"] = _LazyTabsdataServer(ctx, credentials)
+    ctx.obj["credential_kind"] = credential_kind(credentials.get("bearer_token") or "")
+    ctx.obj["tabsdataserver"] = _LazyTabsdataServer(
+        ctx, credentials, credentials_file=get_credentials_file_path(ctx)
+    )
 
 
 def get_currently_pinned_object(ctx: click.Context, object: str) -> str | None:
@@ -322,7 +402,7 @@ def get_currently_pinned_object(ctx: click.Context, object: str) -> str | None:
     """
     currently_pinned = get_pin(ctx, object)
     if currently_pinned:
-        click.echo(f"Using currently pinned {object}: {currently_pinned}")
+        click.echo(f"Using currently pinned {object}: {currently_pinned}", err=True)
     return currently_pinned
 
 
@@ -405,7 +485,9 @@ def resolve_project_or_prompt(ctx: click.Context):
     server = ctx.obj.get("tabsdataserver")
     if server is None or server.connection.project:
         return
-    _set_active_project(ctx, logical_prompt(ctx, "Name of the project to target"))
+    _set_active_project(
+        ctx, logical_prompt(ctx, "Name of the project to target", option="--proj")
+    )
 
 
 def resolve_all_projects(ctx: click.Context, all_projects: bool) -> bool:
@@ -453,22 +535,29 @@ OUTPUT_FORMATS = ("table", "json", "yaml")
 
 def _apply_format(ctx: click.Context, param, value):
     """``-o/--format`` callback: stash the chosen format on the context so the
-    command's renderer can dispatch on it."""
+    command's renderer can dispatch on it. A machine run speaks JSON only."""
     ctx.ensure_object(dict)
+    if machine() is not None:
+        if value not in (None, "json"):
+            raise TdkException(
+                "usage", f"'--format {value}' is not available in a machine run."
+            )
+        value = "json"
     ctx.obj["output_format"] = value or "table"
     _check_view_options(ctx)
     return value
 
 
 def format_option(fn):
-    """Decorator adding ``-o/--format {table,json,yaml}`` (default ``table``)."""
+    """Decorator adding ``-o/--format {table,json,yaml}`` (default ``table``,
+    ``json`` in a machine run)."""
     return click.option(
         "-o",
         "--format",
         "fmt",
         type=click.Choice(OUTPUT_FORMATS),
-        default="table",
-        show_default=True,
+        default=None,
+        show_default="table",
         expose_value=False,
         callback=_apply_format,
         help="Output format.",
@@ -478,6 +567,19 @@ def format_option(fn):
 def output_format(ctx: click.Context) -> str:
     """The active output format for this command (defaults to ``table``)."""
     return (ctx.obj or {}).get("output_format", "table")
+
+
+def progress(ctx: click.Context, message: str = "") -> None:
+    """Echo a progress or diagnostic line: to stdout in the table view, to
+    stderr in the machine formats, so stdout holds only the rendered
+    document."""
+    click.echo(message, err=output_format(ctx) != "table")
+
+
+def progress_console(ctx: click.Context) -> "Console":
+    """The console for live progress views, on the same stream as
+    :func:`progress`."""
+    return make_console(stderr=output_format(ctx) != "table")
 
 
 def serialize(payload, fmt: str) -> str:
@@ -499,6 +601,12 @@ def serialize(payload, fmt: str) -> str:
     return buf.getvalue()
 
 
+def split_csv(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [v.strip() for v in value.split(",") if v.strip()]
+
+
 def render(
     ctx: click.Context,
     *,
@@ -515,9 +623,15 @@ def render(
     when the table view is shown. JSON is pretty-printed and both machine
     formats carry all available fields; data goes to stdout so it stays
     parseable. ``truncated`` says the listing was cut by ``--max-result``: the
-    view's footer tells, and the machine formats tell on stderr."""
+    view's footer tells, and the machine formats tell on stderr unless a
+    machine run carries it in its result. Without view the command has
+    already printed its human output."""
     fmt = output_format(ctx)
     if fmt == "table":
+        if view is None:
+            if truncated:
+                click.echo(more_results_message(ctx))
+            return
         from tabsdatak.common._tabular import show
 
         shown = view()
@@ -525,9 +639,13 @@ def render(
         views[-1].notes += more_results_notes(ctx, truncated)
         show(views, display(ctx))
         return
-    if truncated:
+    if truncated and machine() is None:
         click.echo(more_results_message(ctx), err=True)
     payload = data() if callable(data) else data
+    run = machine()
+    if run is not None:
+        run.emit(payload)
+        return
     text = serialize(payload, fmt)
     # YAML already ends with a newline; JSON does not.
     click.echo(text, nl=(fmt == "json"))
@@ -629,11 +747,182 @@ def display(ctx: click.Context):
     )
 
 
+def render_entity(ctx: click.Context, *, data, message: str) -> None:
+    """Render the object a mutation produced: ``message`` for humans, the DTO
+    itself in the machine formats."""
+    if output_format(ctx) == "table":
+        click.echo(message)
+        return
+    render(ctx, data=data)
+
+
+def render_deleted(
+    ctx: click.Context,
+    *,
+    kind: str,
+    name: str,
+    message: str,
+    collection: str | None = None,
+    project: str | None = None,
+) -> None:
+    """Render a deletion: ``message`` for humans, else
+    ``{"deleted": {"kind", "name", "collection", "project"}}``."""
+    render_entity(
+        ctx,
+        data={
+            "deleted": {
+                "kind": kind,
+                "name": name,
+                "collection": collection,
+                "project": project,
+            }
+        },
+        message=message,
+    )
+
+
+def render_done(
+    ctx: click.Context,
+    *,
+    action: str,
+    kind: str,
+    id: str | None,
+    message: str,
+    details: dict | None = None,
+) -> None:
+    """Render an action that returns no object: ``message`` for humans, else
+    ``{"done": {"action", "kind", "id", **details}}``."""
+    render_entity(
+        ctx,
+        data={"done": {"action": action, "kind": kind, "id": id, **(details or {})}},
+        message=message,
+    )
+
+
+NO_STATUS_CHANGE = "UpdateStatusRunError::0004"
+_UNCHANGED = {
+    "cancel": "Nothing to cancel: every run of {kind} '{id}' had already ended.",
+    "recover": "Nothing to recover: no run of {kind} '{id}' is in a recoverable state.",
+}
+
+
+def status_changed(response) -> bool:
+    """Whether a cancel or recover changed any run; the server answers a no-op
+    with a warning rather than an error."""
+    try:
+        warnings = (response.json().get("context") or {}).get("warnings") or []
+    except (AttributeError, ValueError):
+        return True
+    return not any(warning.get("code") == NO_STATUS_CHANGE for warning in warnings)
+
+
+def render_status_done(
+    ctx: click.Context,
+    *,
+    changed: bool,
+    action: str,
+    kind: str,
+    id: str,
+    message: str,
+    details: dict | None = None,
+) -> None:
+    """``render_done`` for a cancel or recover, with ``changed`` in the
+    details and an honest message when nothing changed, which the details
+    also carry as ``message``, so an agent can say why."""
+    details = {**(details or {}), "changed": changed}
+    if not changed:
+        message = details["message"] = _UNCHANGED[action].format(kind=kind, id=id)
+    render_done(ctx, action=action, kind=kind, id=id, message=message, details=details)
+
+
+def render_list(ctx: click.Context, *, items, truncated: bool, view=None) -> None:
+    """Render a listing: ``view`` for humans, as in :func:`render`, else the
+    list envelope ``{"items": [...], "truncated": bool, "next": cursor}``;
+    ``next`` is the ``--cursor`` that continues a truncated listing, or null."""
+    render(
+        ctx,
+        data=lambda: {
+            "items": items() if callable(items) else items,
+            "truncated": truncated,
+            "next": list_next(ctx),
+        },
+        view=view,
+        truncated=truncated,
+    )
+
+
+def server_version(server) -> str | None:
+    """The tabsdata version the server runs, read once per connection;
+    ``None`` when it cannot be read."""
+    try:
+        return _SERVER_VERSIONS[server]
+    except (KeyError, TypeError):
+        pass
+    try:
+        found = (server.connection.runtime_info_get().json().get("data") or {}).get(
+            "version"
+        )
+    except Exception as error:
+        logger.debug("The server version could not be read: %s", error)
+        found = None
+    found = found if isinstance(found, str) else None
+    try:
+        _SERVER_VERSIONS[server] = found
+    except TypeError:
+        pass
+    return found
+
+
+def version_skew(server) -> str | None:
+    """The server's version when it differs from this tdk's, else ``None``."""
+    from tabsdatak.cli.td.cli import __version__
+
+    found = server_version(server)
+    return found if found is not None and found != __version__ else None
+
+
+DEFAULT_SAMPLE_LEN = 100
+
+
+def _json_value(value):
+    if isinstance(value, (datetime.date, datetime.time)):
+        return value.isoformat()
+    if isinstance(value, datetime.timedelta):
+        return value.total_seconds()
+    if isinstance(value, decimal.Decimal):
+        return str(value)
+    if isinstance(value, (bytes, bytearray)):
+        return base64.b64encode(value).decode("ascii")
+    if isinstance(value, (list, tuple)):
+        return [_json_value(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _json_value(item) for key, item in value.items()}
+    return value
+
+
+def tabular(frame, page_len: int) -> dict:
+    """The tabular-data shape: columns with their Polars dtype, then the rows
+    as arrays. ``truncated`` is true when the page is full, so more rows may
+    follow."""
+    return {
+        "columns": [
+            {"name": name, "dtype": str(dtype)} for name, dtype in frame.schema.items()
+        ],
+        "rows": [[_json_value(value) for value in row] for row in frame.rows()],
+        "row_count": frame.height,
+        "truncated": frame.height >= page_len,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Listing size: --max-result.
 # ---------------------------------------------------------------------------
 
 DEFAULT_MAX_RESULT = 100
+FILTER_OPERATORS = ("eq", "ne", "gt", "ge", "lt", "le", "lk", "btw", "is")
+
+_FILTER = re.compile(rf"[^:]+:(?:{'|'.join(FILTER_OPERATORS)}):.*", re.DOTALL)
+_ORDER_BY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*[+-]?")
 
 
 def _apply_max_result(ctx: click.Context, param, value):
@@ -659,23 +948,189 @@ def max_result_option(fn):
 
 
 def max_result(ctx: click.Context) -> int:
-    """The active row cap for this command (0 means no limit)."""
-    return (ctx.obj or {}).get("max_result", DEFAULT_MAX_RESULT)
+    """The active row cap for this command (0 means no limit), at most the
+    machine run's ``max_result``."""
+    requested = (ctx.obj or {}).get("max_result", DEFAULT_MAX_RESULT)
+    run = machine()
+    if run is None or run.max_result is None:
+        return requested
+    cap = run.max_result
+    if cap and (not requested or requested > cap):
+        return cap
+    return requested
+
+
+def _apply_filters(ctx: click.Context, param, value):
+    for condition in value:
+        if not _FILTER.fullmatch(condition):
+            raise click.BadParameter(
+                f"'{condition}' is not FIELD:OP:VALUE with OP one of "
+                f"{', '.join(FILTER_OPERATORS)}.",
+                ctx=ctx,
+                param=param,
+            )
+    ctx.ensure_object(dict)
+    ctx.obj["list_filters"] = list(value)
+    return value
+
+
+def _apply_order_by(ctx: click.Context, param, value):
+    if value is not None and not _ORDER_BY.fullmatch(value):
+        raise click.BadParameter(
+            f"'{value}' is not FIELD, FIELD+ or FIELD-.", ctx=ctx, param=param
+        )
+    ctx.ensure_object(dict)
+    ctx.obj["list_order_by"] = value
+    return value
+
+
+def encode_cursor(
+    pagination_id: str | None, next_step: str | None, skip: int, listing: str
+) -> str:
+    """A listing's ``next``: where it resumes, and the ``listing`` key of the
+    command, its options, filters and order it belongs to."""
+    document = json.dumps(
+        {"p": pagination_id, "n": next_step, "s": skip, "k": listing},
+        separators=(",", ":"),
+    )
+    return base64.urlsafe_b64encode(document.encode()).decode().rstrip("=")
+
+
+def _optional_str(value) -> bool:
+    return value is None or isinstance(value, str)
+
+
+def decode_cursor(cursor: str) -> tuple[str | None, str | None, int, str]:
+    try:
+        raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
+        document = json.loads(raw)
+        position = (document["p"], document["n"], document["s"], document["k"])
+    except (ValueError, TypeError, KeyError, binascii.Error):
+        position = None
+    if (
+        position is None
+        or not _optional_str(position[0])
+        or not _optional_str(position[1])
+        or type(position[2]) is not int
+        or position[2] < 0
+        or not isinstance(position[3], str)
+    ):
+        raise click.BadParameter(f"'{cursor}' is not a cursor from a listing's 'next'.")
+    return position
+
+
+def _apply_cursor(ctx: click.Context, param, value):
+    ctx.ensure_object(dict)
+    ctx.obj["list_cursor"] = decode_cursor(value) if value else None
+    return value
+
+
+def list_options(fn):
+    """Decorator adding ``--filter``, ``--order-by`` and ``--cursor`` to a list
+    command backed by a paged server listing; read them with
+    :func:`list_params`."""
+    for option in (
+        click.option(
+            "--cursor",
+            expose_value=False,
+            callback=_apply_cursor,
+            help=(
+                "Continue a listing from the 'next' cursor it returned, with the "
+                "same filters and order."
+            ),
+        ),
+        click.option(
+            "--order-by",
+            "order_by",
+            metavar="FIELD[+|-]",
+            expose_value=False,
+            callback=_apply_order_by,
+            help="Sort by a field, ascending (+, the default) or descending (-).",
+        ),
+        click.option(
+            "--filter",
+            "filters",
+            metavar="FIELD:OP:VALUE",
+            multiple=True,
+            expose_value=False,
+            callback=_apply_filters,
+            help=(
+                "Filter on a field, with OP one of "
+                f"{', '.join(FILTER_OPERATORS)}. Repeatable: conditions on "
+                "different fields must all hold, conditions on the same field "
+                "are alternatives. Combines with the command's own filters."
+            ),
+        ),
+    ):
+        fn = option(fn)
+    return fn
+
+
+def list_params(
+    ctx: click.Context,
+    filter: list[str] | str | None = None,
+    order_by: str | None = None,
+) -> dict:
+    """The ``filter``, ``order_by`` and ``cursor`` arguments for an SDK listing:
+    the command's own ``filter`` plus every ``--filter``, ``--order-by`` over
+    the command's default ``order_by``, and ``--cursor``."""
+    ctx.ensure_object(dict)
+    obj = ctx.obj
+    filters = [filter] if isinstance(filter, str) else list(filter or [])
+    filters += obj.get("list_filters", [])
+    order_by = obj.get("list_order_by") or order_by
+    obj["list_key"] = _listing_key(ctx, filters, order_by)
+    cursor = obj.get("list_cursor")
+    if cursor is not None:
+        from tabsdatak.sdk.tabsdata_server import ListCursor
+
+        *position, listing = cursor
+        if listing != obj["list_key"]:
+            raise click.UsageError(
+                "'--cursor' continues a different listing; pass it with the same "
+                "command, filters and order that returned it."
+            )
+        cursor = ListCursor(*position)
+    return {"filter": filters or None, "order_by": order_by, "cursor": cursor}
+
+
+def _listing_key(ctx: click.Context, filters: list[str], order_by: str | None) -> str:
+    params = sorted(ctx.params.items())
+    names = []
+    while ctx is not None:
+        names.append(ctx.command.name)
+        ctx = ctx.parent
+    document = json.dumps([names[::-1], params, sorted(filters), order_by], default=str)
+    return hashlib.sha256(document.encode()).hexdigest()[:12]
+
+
+def list_next(ctx: click.Context) -> str | None:
+    """The cursor that continues the listing :func:`take` cut short."""
+    return (ctx.obj or {}).get("list_next")
 
 
 def take(ctx: click.Context, rows: Iterable) -> tuple[list, bool]:
-    """Drain a listing generator up to the active ``--max-result``.
+    """Drain a listing up to the active ``--max-result``.
 
     Fetches one row beyond the cap so a full page is distinguishable from a
     truncated one, then discards it. Returns the capped rows and whether the
-    server holds more."""
+    server holds more; when it does and ``rows`` is an SDK ``Listing``, the
+    cursor of the first row left out becomes :func:`list_next`."""
     limit = max_result(ctx)
+    ctx.ensure_object(dict)
+    ctx.obj["list_next"] = None
     if not limit:
         return list(rows), False
     capped = list(islice(rows, limit + 1))
-    if len(capped) > limit:
-        return capped[:limit], True
-    return capped, False
+    if len(capped) <= limit:
+        return capped, False
+    position = getattr(rows, "position", None)
+    listing = ctx.obj.get("list_key")
+    if position is not None and listing is not None:
+        ctx.obj["list_next"] = encode_cursor(
+            position.pagination_id, position.next_step, position.skip, listing
+        )
+    return capped[:limit], True
 
 
 def more_results_notes(ctx: click.Context, truncated: bool) -> list[str]:
@@ -683,9 +1138,11 @@ def more_results_notes(ctx: click.Context, truncated: bool) -> list[str]:
 
 
 def more_results_message(ctx: click.Context) -> str:
+    cursor = list_next(ctx)
     return (
         f"More results available: showing the first {max_result(ctx)}. Raise "
-        "'--max-result <N>', or pass '--max-result 0' for all."
+        "'--max-result <N>', pass '--max-result 0' for all"
+        + (f", or continue with '--cursor {cursor}'." if cursor else ".")
     )
 
 
@@ -695,9 +1152,19 @@ def verify_login_or_prompt(ctx: click.Context):
     their first statement, so the project is asked for ahead of the collection,
     function or table it scopes."""
     if not ctx.obj["tabsdataserver"]:
-        click.echo("No credentials found. Please login first.")
+        if ctx.obj.get("no_prompt"):
+            raise TdkException(
+                "auth_required",
+                "No credentials found.",
+                hint=(
+                    "Run 'tdk login', or set TDK_SERVER together with TDK_TOKEN "
+                    "or TDK_BEARER."
+                ),
+            )
+        progress(ctx, "No credentials found. Please login first.")
         server_url, username, password = request_login_information(ctx)
         utils_login(ctx, server_url, username, password)
+        progress(ctx, "Login successful.")
         initialise_tabsdata_server_connection(ctx)
         # `--proj` was parsed before there was a connection to put it on; the
         # login just built one, so apply it now.
@@ -708,22 +1175,28 @@ def verify_login_or_prompt(ctx: click.Context):
 
 class MutuallyExclusiveOption(Option):
     def __init__(self, *args, **kwargs):
-        self.mutually_exclusive = set(kwargs.pop("mutually_exclusive", []))
+        self.mutually_exclusive = {
+            name.replace("-", "_") for name in kwargs.pop("mutually_exclusive", [])
+        }
         help = kwargs.get("help", "")
         if self.mutually_exclusive:
-            ex_str = ", ".join(sorted(self.mutually_exclusive))
             kwargs["help"] = help + (
                 " NOTE: This argument is mutually exclusive with  arguments: ["
-                + ex_str
+                + self._excluded()
                 + "]."
             )
         super(MutuallyExclusiveOption, self).__init__(*args, **kwargs)
+
+    def _excluded(self) -> str:
+        return ", ".join(
+            sorted(name.replace("_", "-") for name in self.mutually_exclusive)
+        )
 
     def handle_parse_result(self, ctx, opts, args):
         if self.mutually_exclusive.intersection(opts) and self.name in opts:
             raise UsageError(
                 "Illegal usage: `{}` is mutually exclusive with arguments `{}`.".format(
-                    self.name, ", ".join(sorted(self.mutually_exclusive))
+                    self.name.replace("_", "-"), self._excluded()
                 )
             )
         return super(MutuallyExclusiveOption, self).handle_parse_result(ctx, opts, args)
@@ -816,8 +1289,8 @@ def store_cli_options(ctx: click.Context):
         with open(get_cli_options_file_path(ctx), "w") as f:
             json.dump(ctx.obj["cli_options"], f)
     except Exception as e:
-        click.echo(f"Failed to store CLI options: {e}")
-        click.echo("This will not affect the rest of the command execution.")
+        click.echo(f"Failed to store CLI options: {e}", err=True)
+        click.echo("This will not affect the rest of the command execution.", err=True)
 
 
 def get_current_cli_option(ctx: click.Context, option: str, default=None) -> str | None:
@@ -863,6 +1336,21 @@ def configured_server(ctx: click.Context) -> str | None:
     return get_current_cli_option(ctx, OPTION_SERVER)
 
 
+def login_server(ctx: click.Context) -> str | None:
+    """The server URL of the stored ``tdk login``, if any."""
+    # noinspection PyProtectedMember
+    from tabsdatak.sdk._apiserver import BASE_API_URL
+
+    try:
+        with open(get_credentials_file_path(ctx), encoding="utf-8") as stored:
+            url = json.load(stored).get("url")
+    except (OSError, TypeError, ValueError, AttributeError, KeyError):
+        return None
+    if not isinstance(url, str) or not url:
+        return None
+    return url.removesuffix(BASE_API_URL)
+
+
 def get_pins(ctx: click.Context) -> dict:
     """The pinned objects, as stored in the CLI options."""
     return ctx.obj["cli_options"].setdefault(OPTION_PINS, {})
@@ -885,14 +1373,13 @@ def clear_pins(ctx: click.Context):
 
 def show_hint(ctx: click.Context, hint: str, final_empty_line: bool = False):
     """
-    Show a hint in the CLI.
+    Show a hint in the CLI, on the :func:`progress` stream.
     """
-    if cli_option_enabled(ctx, OPTION_HINTS):
-        click.echo(click.style("Hint: ", fg="green", bold=True), nl=False)
-        click.echo(hint)
-        click.echo("Use 'tdk unset --hints' to stop seeing these hints.")
+    if machine() is None and cli_option_enabled(ctx, OPTION_HINTS):
+        progress(ctx, click.style("Hint: ", fg="green", bold=True) + hint)
+        progress(ctx, "Use 'tdk unset --hints' to stop seeing these hints.")
         if final_empty_line:
-            click.echo()
+            progress(ctx)
 
 
 def hint_common_solutions(ctx: click.Context, e: Exception):
@@ -925,6 +1412,15 @@ def hint_common_solutions(ctx: click.Context, e: Exception):
         )
 
 
+def command_failure(ctx: click.Context, action: str, e: Exception) -> Exception:
+    """The exception a command raises for ``e``: a tdk or usage error as is,
+    anything else as ``Failed to <action>: <e>``, after the common hints."""
+    if isinstance(e, (TdkException, click.UsageError)):
+        return e
+    hint_common_solutions(ctx, e)
+    return click.ClickException(f"Failed to {action}: {e}")
+
+
 # ---------------------------------------------------------------------------
 # Dynamic-import of a user function from a "path/to/file.py::name" string.
 #
@@ -946,7 +1442,7 @@ def _split_python_function_path(path: str) -> tuple[str, str]:
     return file_path, function_name
 
 
-class _SiblingFinder(importlib.abc.MetaPathFinder):
+class _SiblingFinder:
     """Resolves a bare top-level name to a module or package in one of
     ``folders`` (a ``<name>.py`` file or a ``<name>/`` package), so an
     absolute ``import <name>`` inside a bundled user file finds either a
@@ -1224,3 +1720,23 @@ def load_info_and_project_root(
     project_root = dir_to_bundle or os.path.dirname(os.path.abspath(file_path))
     info = _dynamic_import_function_from_path(path, bundle_root=project_root)
     return info, project_root
+
+
+@contextmanager
+def bundle_confinement() -> Iterator[str | None]:
+    """The ``confine_to`` of a function bundle: the machine run's, or
+    ``None``. A bundled file resolving outside it is ``path_not_allowed``."""
+    from tabsdatak.common._error import CommonErrorCode, CommonRuntimeException
+
+    run = machine()
+    workspace = run.confine_to if run is not None else None
+    try:
+        yield workspace
+    except CommonRuntimeException as error:
+        if error.api_error is not CommonErrorCode.COMMON_14:
+            raise
+        raise TdkException(
+            "path_not_allowed",
+            f"Not bundled: {str(error).split(': ', 1)[-1]}.",
+            hint=f"Keep the bundled files, symlinks followed, under {workspace}.",
+        ) from error

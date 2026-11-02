@@ -14,6 +14,7 @@ read/write ``options.json`` in the tabsdata dir).
 from __future__ import annotations
 
 import json
+import re
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -153,8 +154,9 @@ def test_prompt_false_fails_instead_of_prompting(tmp_path):
     # setting off it fails and names the setting to flip back.
     result = _invoke(["collection", "create"], client=_client(), tmp_path=tmp_path)
     assert result.exit_code != 0
-    assert "Prompting is disabled by the 'prompt' setting" in result.output
-    assert "tdk set --prompt true" in result.output
+    shown = re.sub(r"[│\s]+", " ", result.output)
+    assert "Prompting is disabled by the 'prompt' setting" in shown
+    assert "tdk set --prompt true" in shown
 
 
 # --- set/unset --server: the URL `tdk login` defaults to --------------------
@@ -248,16 +250,14 @@ def test_logout_calls_sdk_and_clears_local_state(tmp_path):
     assert _saved(tmp_path)["pins"] == {}
 
 
-def test_logout_surfaces_sdk_error_but_still_clears_credentials(tmp_path):
+def test_logout_ends_the_local_login_when_the_server_cannot_end_its_session(tmp_path):
     (tmp_path / "connection.json").write_text(json.dumps({"url": "http://x"}))
     client = _client()
     client.logout.side_effect = RuntimeError("boom-xyz")
 
     result = _invoke(["logout"], client=client, tmp_path=tmp_path)
-    # A failed server logout is a clean CLI error, not a traceback...
-    assert result.exit_code != 0
-    assert "boom-xyz" in result.output
-    # ...but the local credentials are still removed (the finally block).
+    assert result.exit_code == 0, result.output
+    assert "Logged out here" in result.output and "boom-xyz" in result.output
     assert not (tmp_path / "connection.json").exists()
 
 

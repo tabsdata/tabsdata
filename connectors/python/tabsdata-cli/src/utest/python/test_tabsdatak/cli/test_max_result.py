@@ -13,6 +13,7 @@ shown, notice emitted) and the invisible one (the generator is not drained).
 
 from __future__ import annotations
 
+import base64
 import json
 from unittest.mock import MagicMock, patch
 
@@ -55,7 +56,7 @@ def _counting_users(total: int) -> tuple[MagicMock, list[int]]:
     return client, pulled
 
 
-def _invoke(argv: list[str], *, client: MagicMock, tmp_path):
+def _invoke(argv: list[str], *, client: MagicMock, tmp_path, env=None):
     def _inject(ctx):
         ctx.obj["tabsdataserver"] = client
 
@@ -63,7 +64,7 @@ def _invoke(argv: list[str], *, client: MagicMock, tmp_path):
         patch("tabsdatak.cli.td.cli.initialise_tabsdata_server_connection", _inject),
         patch("tabsdatak.cli.td.cli.DEFAULT_TABSDATA_DIRECTORY", str(tmp_path)),
     ):
-        return CliRunner().invoke(cli, argv, env={"COLUMNS": "200"})
+        return CliRunner().invoke(cli, argv, env={"COLUMNS": "200", **(env or {})})
 
 
 MORE_RESULTS = "More results available"
@@ -149,14 +150,17 @@ def test_json_stays_parseable_and_notice_goes_to_stderr(tmp_path):
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
-    assert [row["name"] for row in payload] == ["user-0000", "user-0001", "user-0002"]
+    assert [row["name"] for row in payload["items"]] == [
+        "user-0000",
+        "user-0001",
+        "user-0002",
+    ]
+    assert payload["truncated"] is True
+    assert payload["next"] is None
     assert MORE_RESULTS not in result.stdout
     assert MORE_RESULTS in result.stderr
 
 
-# The ``role`` group also carries the option on its three list commands, but it
-# is not registered on the CLI right now (see the TODO in tabsdatak.cli.td.cli),
-# so it cannot be reached through an invocation.
 @pytest.mark.parametrize(
     "argv",
     [
@@ -182,9 +186,292 @@ def test_every_list_command_offers_the_option(argv, tmp_path):
     assert "--max-result" in result.output
 
 
-@pytest.mark.parametrize("command", ["list_roles", "list_perm", "list_user"])
-def test_role_list_commands_offer_the_option(command):
-    from tabsdatak.cli.td import role_group
+_PAGE = 4
 
-    params = getattr(role_group, command).params
-    assert any(p.name == "max_result" for p in params)
+
+def _paged_server(total: int) -> tuple[MagicMock, list[dict]]:
+    """A real SDK server over a fake connection that serves ``total`` users in
+    pages of four, keyed by the pagination id of the page before."""
+    # noinspection PyProtectedMember
+    from tabsdatak.sdk import tabsdata_server as ts
+
+    requests = []
+    names = [f"user-{index:04d}" for index in range(total)]
+
+    def _users_list(pagination_id=None, next_step=None, **kwargs):
+        requests.append({"pagination_id": pagination_id, **kwargs})
+        start = 0 if pagination_id is None else names.index(pagination_id) + 1
+        page = names[start : start + _PAGE]
+        more = start + _PAGE < total
+        response = MagicMock()
+        response.json.return_value = {
+            "data": {
+                "data": [{"name": name} for name in page],
+                "next_pagination_id": page[-1] if more else None,
+                "next": "n" if more else None,
+            }
+        }
+        return response
+
+    connection = MagicMock()
+    connection.project = "proj-a"
+    connection.users_list.side_effect = _users_list
+    server = ts.TabsdataServer.__new__(ts.TabsdataServer)
+    server.connection = connection
+    return server, requests
+
+
+def _names(result) -> list[str]:
+    return [row["name"] for row in json.loads(result.stdout)["items"]]
+
+
+def test_next_cursor_continues_the_listing(tmp_path):
+    server, requests = _paged_server(10)
+    argv = ["user", "list", "-o", "json", "--max-result", "6"]
+    first = _invoke(argv, client=server, tmp_path=tmp_path)
+    assert first.exit_code == 0, first.output
+    assert _names(first) == [f"user-{index:04d}" for index in range(6)]
+    cursor = json.loads(first.stdout)["next"]
+    assert cursor
+    assert f"--cursor {cursor}" in first.stderr
+
+    requests.clear()
+    second = _invoke([*argv, "--cursor", cursor], client=server, tmp_path=tmp_path)
+    assert second.exit_code == 0, second.output
+    assert _names(second) == [f"user-{index:04d}" for index in range(6, 10)]
+    assert json.loads(second.stdout)["next"] is None
+    assert requests[0]["pagination_id"] == "user-0003"
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        ["--filter", "name:lk:user*"],
+        ["--order-by", "name-"],
+    ],
+)
+def test_a_cursor_only_continues_its_own_listing(changed, tmp_path):
+    server, requests = _paged_server(10)
+    argv = ["user", "list", "-o", "json", "--max-result", "6"]
+    first = _invoke(argv, client=server, tmp_path=tmp_path)
+    cursor = json.loads(first.stdout)["next"]
+    requests.clear()
+    second = _invoke(
+        [*argv, *changed, "--cursor", cursor], client=server, tmp_path=tmp_path
+    )
+    assert second.exit_code == 2, second.output
+    assert "different listing" in second.output
+    assert requests == []
+
+
+class _Paged:
+    def __init__(self, rows):
+        self._rows = iter(rows)
+        self.position = MagicMock(pagination_id="p", next_step="n", skip=0)
+
+    def __iter__(self):
+        return self._rows
+
+
+def _function(name: str) -> MagicMock:
+    function = MagicMock()
+    function.name = name
+    function._data = {"name": name}
+    return function
+
+
+def test_a_cursor_is_bound_to_the_command_options(tmp_path):
+    client = _client()
+    client.list_functions_generator.side_effect = lambda *_, **__: _Paged([
+        _function("f1"),
+        _function("f2"),
+    ])
+    argv = ["fn", "list", "-o", "json", "--max-result", "1"]
+    first = _invoke([*argv, "-c", "c1"], client=client, tmp_path=tmp_path)
+    assert first.exit_code == 0, first.output
+    cursor = json.loads(first.stdout)["next"]
+    same = _invoke(
+        [*argv, "-c", "c1", "--cursor", cursor], client=client, tmp_path=tmp_path
+    )
+    assert same.exit_code == 0, same.output
+    other = _invoke(
+        [*argv, "-c", "c2", "--cursor", cursor], client=client, tmp_path=tmp_path
+    )
+    assert other.exit_code == 2, other.output
+
+
+def _cursor(document: dict) -> str:
+    raw = json.dumps(document).encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        {"p": 1, "n": None, "s": 0, "k": "x"},
+        {"p": None, "n": ["n"], "s": 0, "k": "x"},
+        {"p": None, "n": None, "s": True, "k": "x"},
+        {"p": None, "n": None, "s": "1", "k": "x"},
+        {"p": None, "n": None, "s": 0},
+    ],
+)
+def test_a_cursor_with_the_wrong_shape_is_a_usage_error(document, tmp_path):
+    client = _client()
+    argv = ["user", "list", "--cursor", _cursor(document)]
+    result = _invoke(argv, client=client, tmp_path=tmp_path)
+    assert result.exit_code == 2, result.output
+    assert client.list_users_generator.call_count == 0
+
+
+def test_filters_and_order_pass_through(tmp_path):
+    server, requests = _paged_server(2)
+    argv = [
+        "user",
+        "list",
+        "-o",
+        "json",
+        "--filter",
+        "name:lk:user*",
+        "--filter",
+        "enabled:eq:true",
+        "--order-by",
+        "name-",
+    ]
+    result = _invoke(argv, client=server, tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert requests[0]["request_filter"] == ["name:lk:user*", "enabled:eq:true"]
+    assert requests[0]["order_by"] == "name-"
+
+
+def test_filters_combine_with_the_command_filters(tmp_path):
+    client = _client()
+    client.list_executions_generator.return_value = iter([])
+    argv = ["plan", "list", "--fn", "f1", "--filter", "name:lk:nightly*"]
+    result = _invoke([*argv, "-o", "json"], client=client, tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    kwargs = client.list_executions_generator.call_args.kwargs
+    assert kwargs["filter"] == ["function:eq:f1", "name:lk:nightly*"]
+    assert kwargs["order_by"] == "triggered_on-"
+
+
+def test_tag_filters_reach_the_server(tmp_path):
+    client = _client()
+    client.list_executions_generator.return_value = iter([])
+    filters = ["function._parent:is:not_null", "collection.team:eq:finance"]
+    argv = ["plan", "list", *[a for f in filters for a in ("--filter", f)]]
+    result = _invoke([*argv, "-o", "json"], client=client, tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert client.list_executions_generator.call_args.kwargs["filter"] == filters
+
+
+def test_order_by_overrides_the_command_order(tmp_path):
+    client = _client()
+    client.list_executions_generator.return_value = iter([])
+    argv = ["plan", "list", "--order-by", "ended_on+", "-o", "json"]
+    result = _invoke(argv, client=client, tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert client.list_executions_generator.call_args.kwargs["order_by"] == (
+        "ended_on+"
+    )
+
+
+@pytest.mark.parametrize(
+    "option",
+    [
+        ["--filter", "name"],
+        ["--filter", "name:like:x"],
+        ["--order-by", "name*"],
+        ["--cursor", "not-a-cursor"],
+    ],
+)
+def test_malformed_list_options_are_usage_errors(option, tmp_path):
+    client = _client()
+    result = _invoke(["user", "list", *option], client=client, tmp_path=tmp_path)
+    assert result.exit_code == 2, result.output
+    assert client.list_users_generator.call_count == 0
+
+
+def test_machine_max_result_caps_an_unlimited_listing(tmp_path, machine_settings):
+    machine_settings.update(max_result=5)
+    client, pulled = _counting_users(20)
+    result = _invoke(
+        ["user", "list", "--max-result", "0", "--machine"],
+        client=client,
+        tmp_path=tmp_path,
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert len(payload["items"]) == 5
+    assert payload["truncated"] is True
+    assert len(pulled) == 6
+
+
+def test_machine_max_result_zero_lifts_the_cap(tmp_path, machine_settings):
+    machine_settings.update(max_result=0)
+    client, pulled = _counting_users(1500)
+    result = _invoke(
+        ["user", "list", "--max-result", "0", "--machine"],
+        client=client,
+        tmp_path=tmp_path,
+    )
+    assert result.exit_code == 0, result.output
+    assert len(json.loads(result.stdout)["items"]) == 1500
+
+
+def test_an_unknown_field_is_an_invalid_request_with_a_hint(tmp_path):
+    from tabsdatak.sdk._apiserver import APIServerError
+
+    client = _client()
+    client.list_users_generator.side_effect = APIServerError(
+        {"code": "ListError::3", "error_description": "Undefined filter: colour"},
+        status=400,
+    )
+    argv = ["user", "list", "--filter", "colour:eq:red", "--machine"]
+    result = _invoke(argv, client=client, tmp_path=tmp_path)
+    assert result.exit_code == 1
+    error = json.loads(result.stdout)["error"]
+    assert error["type"] == "invalid_request"
+    assert "--filter" in error["hint"]
+
+
+def test_a_listing_error_without_list_options_has_no_list_hint(tmp_path):
+    from tabsdatak.sdk._apiserver import APIServerError
+
+    client = _client()
+    client.list_users_generator.side_effect = APIServerError(
+        {"code": "ListError::3", "error_description": "Undefined filter: colour"},
+        status=400,
+    )
+    result = _invoke(["user", "list", "--machine"], client=client, tmp_path=tmp_path)
+    assert result.exit_code == 1
+    error = json.loads(result.stdout)["error"]
+    assert error["type"] == "invalid_request"
+    assert error.get("hint") is None
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["user", "list"],
+        ["group", "list"],
+        ["project", "list"],
+        ["collection", "list"],
+        ["fn", "list", "-c", "coll-a"],
+        ["fn", "patches", "-n", "fn-a", "-c", "coll-a"],
+        ["table", "list", "-c", "coll-a"],
+        ["table", "versions", "-c", "coll-a", "--name", "tbl-a"],
+        ["plan", "list"],
+        ["trx", "list"],
+        ["fnrun", "list"],
+        ["worker", "list"],
+        ["cron", "list"],
+        ["cron", "plans"],
+        ["stream", "list"],
+        ["stream", "plans"],
+    ],
+)
+def test_every_paged_list_command_offers_the_list_options(argv, tmp_path):
+    result = _invoke([*argv, "--help"], client=_client(), tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    for option in ("--filter", "--order-by", "--cursor"):
+        assert option in result.output
