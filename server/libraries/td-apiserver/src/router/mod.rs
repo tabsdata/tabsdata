@@ -24,6 +24,7 @@ pub(crate) mod tables;
 pub(crate) mod tags;
 pub(crate) mod tokens;
 pub(crate) mod transactions;
+pub(crate) mod ui_data;
 pub(crate) mod user_roles;
 pub(crate) mod users;
 pub(crate) mod workers;
@@ -286,6 +287,7 @@ mod tests {
             (FLAT, "get_project"),
             (FLAT, "get_resource"),
             (FLAT, "get_snapshot_global"),
+            (FLAT, "get_ui_data"),
             (FLAT, "get_user"),
             (FLAT, "info"),
             (FLAT, "instance"),
@@ -302,6 +304,7 @@ mod tests {
             (FLAT, "logout"),
             (FLAT, "logs"),
             (FLAT, "logs_tail"),
+            (FLAT, "put_ui_data"),
             (FLAT, "read_execution"),
             (FLAT, "recover_execution"),
             (FLAT, "recover_transaction"),
@@ -773,6 +776,7 @@ mod tests {
             "/transactions",
             "/transactions/{transaction}/cancel",
             "/transactions/{transaction}/recover",
+            "/user/ui-data",
             "/users",
             "/users/{user}",
             "/users/{user}/service-tokens",

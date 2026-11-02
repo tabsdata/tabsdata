@@ -12,6 +12,7 @@ use td_database::access::{DbPool, Global, retrying};
 use td_error::TdError;
 use td_objects::dxo::crudl::DeleteRequest;
 use td_objects::dxo::service_token::ServiceTokenDB;
+use td_objects::dxo::ui_data::UserUiDataDB;
 use td_objects::dxo::user::UserDB;
 use td_objects::dxo::user::UserParam;
 use td_objects::dxo::user_role::UserRoleDB;
@@ -37,8 +38,9 @@ async fn delete_user(
 
         retire_sessions(conn, &user.id, ctx.time, SessionStatus::InvalidUserDisabled).await?;
         conn.delete::<UserRoleDB>(user.id).await?;
-        // Restricting foreign key: token rows go first.
+        // Restricting foreign keys: token and UI data rows go first.
         conn.delete::<ServiceTokenDB>(user.id).await?;
+        conn.delete::<UserUiDataDB>(user.id).await?;
         conn.delete::<UserDB>(user.id).await?;
         trx.commit().await
     })
@@ -63,8 +65,12 @@ mod tests {
     use std::str::FromStr;
     use td_database::pool::TdPool;
     use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::ui_data::UserUiDataDB;
     use td_objects::dxo::user::{UserDB, UserParam};
-    use td_objects::types::basic::{AccessTokenId, UserEnabled, UserId, UserIdName, UserName};
+    use td_objects::types::basic::{
+        AccessTokenId, AtTime, UiDataDocument, UiDataEtag, UserEnabled, UserId, UserIdName,
+        UserName,
+    };
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
@@ -75,6 +81,14 @@ mod tests {
             .user(&UserName::try_from("u0").unwrap(), &UserEnabled::TRUE)
             .await
             .unwrap();
+        db.insert(&UserUiDataDB {
+            user_id: user.id,
+            etag: UiDataEtag::mint(),
+            modified_on: AtTime::default().into(),
+            data: UiDataDocument::try_from("{}").unwrap(),
+        })
+        .await
+        .unwrap();
 
         let service = Services::with_defaults(db.clone());
 
@@ -92,6 +106,9 @@ mod tests {
         assert!(res.is_none());
 
         let res: Option<UserRoleDB> = db.fetch_first::<UserRoleDB>(&user.id).await.unwrap();
+        assert!(res.is_none());
+
+        let res = db.fetch_optional::<UserUiDataDB>(&user.id).await.unwrap();
         assert!(res.is_none());
     }
 }

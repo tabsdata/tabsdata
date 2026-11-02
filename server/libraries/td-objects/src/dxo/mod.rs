@@ -58,6 +58,7 @@ pub mod tag;
 pub mod topology;
 pub mod transaction;
 pub mod trigger;
+pub mod ui_data;
 pub mod user;
 pub mod user_role;
 pub mod worker;
