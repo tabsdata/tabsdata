@@ -9,15 +9,17 @@
 use http::Method;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
+use std::time::Duration;
 use ta_services::service::Ctx;
 use td_common::jwt::{JwtConfig, encode_internal_token};
 use td_common::worker::{Callback, HttpCallback, HttpRequest};
 use td_error::td_error;
+use td_objects::dxo::connection_catalog::ProbeParam;
 use td_objects::dxo::function::FunctionVersionParam;
 use td_objects::dxo::physical_function_run::FunctionRunParam;
 use td_objects::dxo::worker::WorkerParam;
 use td_objects::types::addresses::InternalServerEndpoint;
-use td_objects::types::basic::{FunctionVersionId, PhysicalFunctionRunId, WorkerId};
+use td_objects::types::basic::{FunctionVersionId, PhysicalFunctionRunId, ProbeId, WorkerId};
 use td_objects::{PathParams, Route};
 use url::Url;
 
@@ -32,6 +34,7 @@ pub struct InternalRoutes {
     pub function_version_execute: Route<FunctionVersionParam>,
     pub function_version_execution_status: Route<FunctionVersionParam>,
     pub download_function_state: Route<FunctionVersionParam>,
+    pub probe_result: Route<ProbeParam>,
 }
 
 #[td_error]
@@ -71,8 +74,21 @@ impl InternalApi {
         method: Method,
         route: Route<P>,
         params: &P,
+        headers: HashMap<String, String>,
+        body: bool,
+    ) -> Result<HttpRequest, WorkerRequestError> {
+        self.expiring_request(method, route, params, headers, body, None)
+    }
+
+    /// [`Self::request`] with a token refused after `expires` (Unix seconds).
+    fn expiring_request<P: PathParams>(
+        &self,
+        method: Method,
+        route: Route<P>,
+        params: &P,
         mut headers: HashMap<String, String>,
         body: bool,
+        expires: Option<i64>,
     ) -> Result<HttpRequest, WorkerRequestError> {
         let base = self.routes.base;
         let url = Url::parse(&format!(
@@ -87,7 +103,7 @@ impl InternalApi {
             .map(|name| name.to_string())
             .zip(params.values())
             .collect();
-        let token = encode_internal_token(&self.jwt, method.as_str(), &scope, bindings)?;
+        let token = encode_internal_token(&self.jwt, method.as_str(), &scope, bindings, expires)?;
         headers.insert("authorization".to_string(), format!("Bearer {token}"));
         Ok(HttpRequest {
             url,
@@ -156,6 +172,25 @@ impl InternalApi {
         )
     }
 
+    /// POST: where a connection probe reports its outcome, refused once
+    /// `deadline` has passed.
+    pub fn probe_responder(
+        &self,
+        probe_id: &ProbeId,
+        deadline: Duration,
+    ) -> Result<Callback, WorkerRequestError> {
+        let expires = chrono::Utc::now().timestamp() + deadline.as_secs() as i64;
+        let request: HttpCallback = self.expiring_request(
+            Method::POST,
+            self.routes.probe_result,
+            &ProbeParam { probe: *probe_id },
+            HashMap::new(),
+            true,
+            Some(expires),
+        )?;
+        Ok(Callback::Http(request))
+    }
+
     /// POST: the trigger a stage/cron worker calls to execute its function version.
     pub fn function_version_execute(
         &self,
@@ -203,5 +238,31 @@ impl InternalApi {
             HashMap::new(),
             true,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use td_common::jwt::decode_internal_token;
+
+    #[test]
+    fn a_probe_callback_token_expires_at_the_deadline() {
+        let jwt = Ctx::new(JwtConfig::new("test-secret".to_string(), 3600));
+        let routes = InternalRoutes {
+            probe_result: Route::new("/probes/{probe}/result"),
+            ..InternalRoutes::default()
+        };
+        let api = InternalApi::new(routes, jwt.clone(), Arc::default());
+        let before = chrono::Utc::now().timestamp();
+        let Callback::Http(http) = api
+            .probe_responder(&ProbeId::default(), Duration::from_secs(340))
+            .unwrap();
+        let after = chrono::Utc::now().timestamp();
+        let token = http.headers["authorization"]
+            .strip_prefix("Bearer ")
+            .unwrap();
+        let expires = decode_internal_token(&jwt, token).unwrap().expires.unwrap();
+        assert!((before + 340..=after + 340).contains(&expires));
     }
 }

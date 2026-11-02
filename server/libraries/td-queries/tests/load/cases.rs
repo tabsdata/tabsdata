@@ -34,6 +34,8 @@ pub enum Family {
     /// Aggregation over the `__with_names` views — the metrics dataset.
     Metrics,
     Sessions,
+    /// Connected collections, their catalogs and entities.
+    Connections,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -496,6 +498,31 @@ pub const LOAD_CASES: &[LoadCase] = &[
         name: "sessions::purge",
         covers: &["Sessions::purge"],
         family: Family::Sessions,
+        status: Status::Implemented,
+    },
+    // daos/connection_catalog/ — the catalogs a caller sees, and the
+    // revision reads and write a derived index follows.
+    LoadCase {
+        name: "connection_catalog::visible",
+        covers: &[
+            "ConnectionCatalogs::visible",
+            "ConnectionCatalogs::of",
+            "ConnectionCatalogs::entities",
+        ],
+        family: Family::Connections,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "connection_catalog::text_revisions",
+        covers: &[
+            "ConnectionCatalogs::changed_after",
+            "ConnectionCatalogs::texts_of",
+            "ConnectionCatalogs::entity_texts",
+            "ConnectionCatalogs::live",
+            "ConnectionCatalogs::text_changed",
+            "ConnectionCatalogs::texts_written",
+        ],
+        family: Family::Connections,
         status: Status::Implemented,
     },
     // generic/timeline.rs — the version log of a partition, no validity

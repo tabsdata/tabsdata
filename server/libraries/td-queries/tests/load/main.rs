@@ -15,6 +15,7 @@ mod bulk;
 mod cases;
 mod chain_cases;
 mod chunked_cases;
+mod connection_catalog_cases;
 mod dataset;
 mod dataversion_cases;
 mod default_write_cases;

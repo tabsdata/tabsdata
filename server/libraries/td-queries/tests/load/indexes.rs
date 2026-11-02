@@ -95,6 +95,37 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Path(KEYSET),
     },
     IndexCase {
+        index: "connection_entities___connection_id__fqn___uidx",
+        served_by: Constraint,
+    },
+    IndexCase {
+        index: "connection_catalogs___text_revision___idx",
+        served_by: Queries(&["ConnectionCatalogs::changed_after"]),
+    },
+    IndexCase {
+        index: "connection_probes___connection_id___idx",
+        served_by: Path("connection-delete FK cascade probe"),
+    },
+    IndexCase {
+        index: "connection_probes___dedupe_key___active_uidx",
+        served_by: Constraint,
+    },
+    IndexCase {
+        index: "connection_probes___ended_on___idx",
+        served_by: Path("dispatcher tick: delete ended probes past the retention window"),
+    },
+    IndexCase {
+        index: "connection_probes___result_expires___idx",
+        served_by: Path("dispatcher tick: purge sample rows past their expiry"),
+    },
+    IndexCase {
+        index: "connection_probes___status__requested_on___active_idx",
+        served_by: Path(
+            "dispatcher tick: running probes for the caps, queued claim oldest first, \
+             overdue and undelivered sweeps; submit: the per-project queue cap",
+        ),
+    },
+    IndexCase {
         index: "dependencies___dependency_id___current_uidx",
         served_by: Constraint,
     },

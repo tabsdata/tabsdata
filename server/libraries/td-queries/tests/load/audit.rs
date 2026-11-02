@@ -361,5 +361,6 @@ fn family_name(f: Family) -> &'static str {
         Family::Chunked => "Chunked",
         Family::Metrics => "Metrics",
         Family::Sessions => "Sessions",
+        Family::Connections => "Connections",
     }
 }

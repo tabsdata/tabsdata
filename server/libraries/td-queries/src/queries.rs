@@ -19,6 +19,7 @@
 use crate::QueryExecutor;
 use crate::Serves;
 use crate::Writes;
+use crate::daos::connection_catalog::ConnectionCatalogs;
 use crate::daos::dependency::Dependencies;
 use crate::daos::execution::Executions;
 use crate::daos::function_runs::{LogicalRuns, PhysicalRuns};
@@ -293,6 +294,10 @@ pub trait Queries: QueryExecutor {
 
     fn sessions(self) -> Sessions<Self> {
         Sessions { executor: self }
+    }
+
+    fn connection_catalogs(self) -> ConnectionCatalogs<Self> {
+        ConnectionCatalogs { executor: self }
     }
 
     fn metrics(self) -> Metrics<Self> {

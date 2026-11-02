@@ -11,6 +11,7 @@
 use crate::bulk::bulk_insert;
 use crate::cases::LOAD_CASES;
 use crate::chunked_cases::done_update;
+use crate::connection_catalog_cases;
 use crate::dataset::{self, ChainHandle, WINDOW_END_MS, WINDOW_START_MS};
 use crate::dataversion_cases;
 use crate::default_write_cases::build_lfri;
@@ -1056,6 +1057,15 @@ async fn report_scaling_coverage(db: TdPool, dv_db: TdPool) -> Result<(), TdErro
     .await?;
     analyze(&db, "after metrics seed").await;
     timed.extend(time_metrics_queries(&db).await?.into_iter().map(|(n, _)| n));
+
+    connection_catalog_cases::catalog_dataset(&db, SMALL / 4).await?;
+    analyze(&db, "after catalog seed").await;
+    timed.extend(
+        connection_catalog_cases::time_catalog_queries(&db)
+            .await?
+            .into_iter()
+            .map(|(n, _)| n),
+    );
 
     bulk_insert(&dv_db, &dataversion_cases::dv_rows(0, SMALL)?).await?;
     analyze(&dv_db, "after dv seed").await;
