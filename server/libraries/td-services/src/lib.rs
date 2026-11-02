@@ -7,6 +7,7 @@
 use crate::connection_catalog::ConnectionCatalog;
 use crate::execution::services::runtime_info::RuntimeContext;
 use crate::internal_api::InternalApi;
+use crate::scheduler::cursor::TickCursor;
 use crate::table::sample::TableSampler;
 use axum::extract::FromRef;
 use std::path::PathBuf;
@@ -78,6 +79,7 @@ pub struct Services {
     pub instance_id: Ctx<InstanceId>,
     pub transaction_by: Ctx<TransactionBy>,
     pub scheduler_notify: Ctx<SchedulerNotify>,
+    pub tick_cursor: Ctx<TickCursor>,
     pub scheduler_config: Ctx<SchedulerConfig>,
     pub recovery_config: Ctx<RecoveryConfig>,
     pub bridge: Ctx<BridgeProviderHandle>,
@@ -123,6 +125,7 @@ impl Default for Services {
             ),
             transaction_by: Ctx::new(TransactionBy::default()),
             scheduler_notify: Ctx::new(SchedulerNotify::new()),
+            tick_cursor: Ctx::new(TickCursor::default()),
             scheduler_config: Ctx::new(SchedulerConfig::default()),
             recovery_config: Ctx::new(RecoveryConfig::default()),
             bridge: Ctx::new(BridgeProviderHandle::default()),

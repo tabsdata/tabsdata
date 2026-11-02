@@ -23,6 +23,7 @@ use td_services::Services;
 use td_services::connection_catalog::ConnectionCatalog;
 use td_services::execution::services::runtime_info::RuntimeContext;
 use td_services::internal_api::InternalApi;
+use td_services::scheduler::cursor::TickCursor;
 use td_services::table::sample::TableSampler;
 use td_storage::Storage;
 use te_services::{ContextExt, ExtendedServices};
@@ -109,6 +110,7 @@ impl ApiServerCtx {
             instance_id,
             transaction_by: Ctx::new(config.transaction_by.clone()),
             scheduler_notify: scheduler_notify.clone(),
+            tick_cursor: Ctx::new(TickCursor::default()),
             scheduler_config: Ctx::new(SchedulerConfig {
                 check_frequency: config.check_frequency,
                 max_functions_per_tick: config.max_functions_per_tick,

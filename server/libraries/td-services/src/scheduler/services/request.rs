@@ -8,6 +8,7 @@ use crate::execution::settlement::settle_transactions;
 use crate::internal_api::InternalApi;
 use crate::logical::dispatch_mint::mint_function_runs_on_dispatch;
 use crate::project::active::active_project_ids;
+use crate::scheduler::cursor::TickCursor;
 use crate::scheduler::request::{
     WorkerMessages, create_locked_cron_trigger_workers_start_request,
     create_locked_cron_trigger_workers_stop_request,
@@ -35,6 +36,7 @@ use td_queries::Queries;
 use td_storage::Storage;
 use tracing::{debug, error};
 
+#[allow(clippy::too_many_arguments)]
 #[service_factory]
 async fn request(
     storage: Ctx<Storage>,
@@ -42,6 +44,7 @@ async fn request(
     internal_api: Ctx<InternalApi>,
     scheduler_notify: Ctx<SchedulerNotify>,
     config: Ctx<SchedulerConfig>,
+    cursor: Ctx<TickCursor>,
     db: DbPool<AcrossProjects>,
     _request: (),
 ) -> Result<(), TdError> {
@@ -54,7 +57,7 @@ async fn request(
     // which the scheduler is woken for instead of waiting out its timer.
     let mut rerun = false;
 
-    let active = projects_to_tick(&db, grant).await?;
+    let active = cursor.order(projects_to_tick(&db, grant).await?);
     let draining = projects_to_drain(&db, grant).await?;
     let tick = |project| ProjectTick {
         project,
@@ -67,6 +70,7 @@ async fn request(
     };
     for project in &active {
         tick(project).run(&mut saturated, &mut rerun).await;
+        cursor.finished(project);
     }
     for project in &draining {
         tick(project).drain(&mut rerun).await;
@@ -1130,6 +1134,35 @@ mod tests {
                 .await?;
             assert_eq!(pfrs.len(), 1, "each project must dispatch its own run");
         }
+        Ok(())
+    }
+
+    /// A tick resumes after the last project the previous one finished, so a
+    /// tick cancelled part-way leaves its unticked projects first in line.
+    #[td_test::test(db)]
+    async fn test_tick_resumes_after_the_last_project_it_finished(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let mut projects = Vec::new();
+        for name in ["p_one", "p_two", "p_three"] {
+            projects.push(
+                db.seed()
+                    .project(ProjectName::try_from(name)?)
+                    .await?
+                    .project_id,
+            );
+        }
+        projects.sort();
+
+        let (context, _sent) = kubernetes_scheduler_context(&db);
+        context.tick_cursor.finished(&projects[0]);
+        context.clone().request(()).await?;
+
+        assert_eq!(
+            context.tick_cursor.last(),
+            Some(projects[0]),
+            "the walk started after the cursor and wrapped around to it"
+        );
         Ok(())
     }
 
