@@ -138,7 +138,7 @@ pip-tools==7.6.2
 pip-upgrader==2.4.13
 pipdeptree==4.2.13
 pkginfo==2.0
-platformdirs==4.14.0
+platformdirs==4.14.3
 plotext==5.3.2
 pluggy==1.7.0
 prompt-toolkit==3.0.53
@@ -162,7 +162,7 @@ pysentry-rs==0.5.0
 pytest==9.2.0
 pytest-check==3.0.3
 pytest-cov==7.1.0
-pytest-env==1.8.3
+pytest-env==1.8.4
 pytest-instafail==0.5.0
 pytest-reporter==0.5.3
 pytest-reporter-html1==0.9.5

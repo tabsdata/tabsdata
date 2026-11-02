@@ -676,9 +676,9 @@ checksum = "217698eaf96b4a3f0bc4f3662aaa55bdf913cd54d7204591faa790070c6d0853"
 
 [[package]]
 name = "crc32fast"
-version = "1.5.3"
+version = "1.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ba106e844045ddc02c20768ac4b0b7cb45f2cc2ecbd833ac9f5dacb183c2055"
+checksum = "5f97d3416d5337d15c4b0d78c8c91df922ca143f57ec20e2d1c188333047ef04"
 dependencies = [
  "cfg-if",
 ]
@@ -5411,7 +5411,7 @@ dependencies = [
  "serde_stacker",
  "slotmap",
  "stacker",
- "sysinfo",
+ "sysinfo 0.39.6",
  "tokio",
  "uuid",
  "version_check",
@@ -6975,6 +6975,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "sysinfo"
+version = "0.40.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e8a3edbe0394ce115f3917a00349dd242be09eb5a091ed509eaf67b55cfb8a8"
+dependencies = [
+ "libc",
+ "memchr",
+ "ntapi",
+ "objc2-core-foundation",
+ "objc2-io-kit",
+ "objc2-open-directory",
+ "windows 0.62.2",
+]
+
+[[package]]
 name = "ta-tableframe"
 version = "2.3.0"
 dependencies = [
@@ -7012,7 +7027,7 @@ dependencies = [
  "iana-time-zone",
  "serde",
  "serde_yaml",
- "sysinfo",
+ "sysinfo 0.40.1",
  "tinyvec",
  "tm-workspace",
  "toml",
@@ -7051,7 +7066,7 @@ dependencies = [
  "sqlx",
  "strum",
  "supports-color",
- "sysinfo",
+ "sysinfo 0.40.1",
  "td-attach",
  "td-build",
  "td-error",
@@ -7835,7 +7850,7 @@ dependencies = [
  "bon",
  "rustc_version",
  "rustversion",
- "sysinfo",
+ "sysinfo 0.39.6",
  "time",
  "vergen-lib",
 ]

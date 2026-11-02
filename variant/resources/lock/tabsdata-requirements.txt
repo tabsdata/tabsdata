@@ -12,7 +12,7 @@ anyio==4.16.0
 archspec==0.2.7
 asn1crypto==1.5.1
 attrs==26.1.0
-authlib==1.9.1
+authlib==1.9.2
 avro==1.12.2
 azure-common==1.1.28
 azure-core==1.41.0
@@ -115,7 +115,7 @@ pg8000==1.31.6
 pillow==13.0.0
 pip==26.2.2
 pip-tools==7.6.2
-platformdirs==4.14.0
+platformdirs==4.14.3
 polars==2.1.0
 polars-runtime-32==2.1.0
 prompt-toolkit==3.0.53
