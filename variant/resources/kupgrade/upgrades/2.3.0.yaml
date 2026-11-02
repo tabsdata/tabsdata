@@ -83,6 +83,23 @@ configs:
               disk_limit_percent: 80
             abort:
               memory_threshold_percent: 95
+        - op: insert-sibling-if-existing
+          leaf: pods.function
+          sibling: probe
+          placement: after
+          value:
+            priority: tabsdata-function
+            resources:
+              cpu: 250m
+              memory: 1Gi
+              disk: 2Gi
+            placement:
+              selectors:
+                role: tabsdata-functions
+              tolerations:
+                - key: workload
+                  value: batch
+                  effect: NoSchedule
     tabsdata_docker.yaml:
       action: modify
       changes:
@@ -111,6 +128,18 @@ configs:
               disk_limit_percent: 80
             abort:
               memory_threshold_percent: 95
+        - op: insert-sibling-if-existing
+          leaf: pods.function
+          sibling: probe
+          placement: after
+          value:
+            resources:
+              cpu: 250m
+              memory: 1Gi
+              disk: 2Gi
+            placement:
+              selectors: {}
+              tolerations: []
     tabsdata_eks.yaml:
       action: modify
       changes:
@@ -139,6 +168,22 @@ configs:
               disk_limit_percent: 80
             abort:
               memory_threshold_percent: 95
+        - op: insert-sibling-if-existing
+          leaf: pods.function
+          sibling: probe
+          placement: after
+          value:
+            priority: tabsdata-function
+            resources:
+              cpu: 250m
+              memory: 1Gi
+              disk: 2Gi
+            placement:
+              selectors: {}
+              tolerations:
+                - key: workload
+                  value: batch
+                  effect: NoSchedule
     tabsdata_fargate.yaml:
       action: modify
       changes:
@@ -179,6 +224,18 @@ configs:
               disk_limit_percent: 80
             abort:
               memory_threshold_percent: 95
+        - op: insert-sibling-if-existing
+          leaf: pods.function
+          sibling: probe
+          placement: after
+          value:
+            resources:
+              cpu: 250m
+              memory: 1Gi
+              disk: 2Gi
+            placement:
+              selectors: {}
+              tolerations: []
     tabsdata_gke.yaml:
       action: modify
       changes:
@@ -207,6 +264,23 @@ configs:
               disk_limit_percent: 80
             abort:
               memory_threshold_percent: 95
+        - op: insert-sibling-if-existing
+          leaf: pods.function
+          sibling: probe
+          placement: after
+          value:
+            priority: tabsdata-function
+            resources:
+              cpu: 250m
+              memory: 1Gi
+              disk: 2Gi
+            placement:
+              selectors:
+                role: tabsdata-functions
+              tolerations:
+                - key: workload
+                  value: batch
+                  effect: NoSchedule
     tabsdata_kminus.yaml:
       action: modify
       changes:
@@ -235,6 +309,18 @@ configs:
               disk_limit_percent: 80
             abort:
               memory_threshold_percent: 95
+        - op: insert-sibling-if-existing
+          leaf: pods.function
+          sibling: probe
+          placement: after
+          value:
+            resources:
+              cpu: 250m
+              memory: 1Gi
+              disk: 2Gi
+            placement:
+              selectors: {}
+              tolerations: []
 pods:
   apiserver.yaml:
     apiserver_aks.yaml:
@@ -249,6 +335,19 @@ pods:
       action: replace
     apiserver_kminus.yaml:
       action: replace
+  connection-probe.yaml:
+    connection-probe_aks.yaml:
+      action: create
+    connection-probe_docker.yaml:
+      action: create
+    connection-probe_eks.yaml:
+      action: create
+    connection-probe_fargate.yaml:
+      action: create
+    connection-probe_gke.yaml:
+      action: create
+    connection-probe_kminus.yaml:
+      action: create
   cron-publisher.yaml:
     cron-publisher_aks.yaml:
       action: replace

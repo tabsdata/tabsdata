@@ -1,0 +1,247 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: td-connection-probe
+  namespace: ${{system:tdk_namespace_name}}
+  annotations:
+    tabsdata.com/description: "Tabsdata connection probe"
+    kubernetes.io/change-cause: ""
+  labels:
+    app.kubernetes.io/name: tabsdata
+    app.kubernetes.io/instance: tabsdata
+    app.kubernetes.io/version: "${{system:tdk_tabsdata_version}}"
+    app.kubernetes.io/component: connection-probe
+    app.kubernetes.io/part-of: tabsdata
+    app.kubernetes.io/managed-by: tdkserver
+    tabsdata.com/tier: ephemeral
+    tabsdata.com/worker: connection-probe
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 330
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+      labels:
+        app.kubernetes.io/name: tabsdata
+        app.kubernetes.io/instance: tabsdata
+        app.kubernetes.io/version: "${{system:tdk_tabsdata_version}}"
+        app.kubernetes.io/component: connection-probe
+        app.kubernetes.io/part-of: tabsdata
+        app.kubernetes.io/managed-by: tdkserver
+        tabsdata.com/tier: ephemeral
+        tabsdata.com/worker: connection-probe
+    spec:
+      restartPolicy: Never
+      serviceAccountName: default
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      dnsPolicy: ClusterFirst
+      securityContext:
+        fsGroup: 10400
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: 0000-cabundle
+          image: curlimages/curl:8.11.1
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+          - |
+            set -eu
+            curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
+               --output /tabsdata/certs/ca-mozilla.pem https://curl.se/ca/cacert.pem
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+          - name: certs
+            mountPath: /tabsdata/certs
+        - name: 0010-venvloader
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+          imagePullPolicy: IfNotPresent
+          command: ["bash"]
+          args:
+            - $(CONTAINER_ROOT)/tabsdata/assets/venvloader.sh
+            - --output
+            - ${{system:tdk_runtimes_root}}
+            - --image
+            - tdvenvs-${{system:tdk_cluster_name}}-${{system:tdk_namespace_name}}.tar.zst
+            - --venv
+            - fn
+            - --storage-config
+            - $(CONTAINER_ROOT)/tabsdata/config-storage/apiserver.storage.yaml
+            - --constraint
+            - $(CONTAINER_ROOT)/tabsdata/assets/tabsdata-requirements.txt
+          env:
+            - name: CONTAINER_ROOT
+              value: ""
+          envFrom:
+            - secretRef:
+                name: td-app-apiserver-secret-config-apiserver.storage.yaml
+              prefix: SECRETS__
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: assets
+              mountPath: /tabsdata/assets
+              readOnly: true
+            - name: config-storage
+              mountPath: /tabsdata/config-storage
+              readOnly: true
+            - name: runtimes
+              mountPath: /tabsdata/runtimes
+      containers:
+        - name: 1000-probe
+          image: ubuntu:24.04
+          imagePullPolicy: IfNotPresent
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_probe"]
+          args:
+            - --shared-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared
+            - --work-dir
+            - $(CONTAINER_ROOT)/tabsdata/work
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --journal-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
+            - --connection-file
+            - $(CONTAINER_ROOT)/tabsdata/connection/connection.yaml
+            - --request
+            - $(CONTAINER_ROOT)/tabsdata/probe/request.json
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10400
+            runAsGroup: 10400
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CONTAINER_ROOT
+              value: ""
+            - name: HOME
+              value: /tmp
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_TABSDATA_INSTANCE
+              value: "${{system:tdk_instance_name}}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+            - name: SSL_CERT_FILE
+              value: "/tabsdata/certs/ca-mozilla.pem"
+            - name: TD_BEFORE_PATH
+              value: "${{system:tdk_pyenv_fn_root}}/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
+          envFrom:
+            - secretRef:
+                name: ${{system:tdk_connection_secret_name}}
+          volumeMounts:
+            - name: certs
+              mountPath: /tabsdata/certs
+              readOnly: true
+            - name: config-probe
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: connection
+              mountPath: /tabsdata/connection
+              readOnly: true
+            - name: probe-request
+              mountPath: /tabsdata/probe
+              readOnly: true
+            - name: liveness
+              mountPath: /tabsdata/liveness
+            - name: runtimes
+              mountPath: /tabsdata/runtimes
+              readOnly: true
+            - name: shared
+              mountPath: /tabsdata/shared
+            - name: work
+              mountPath: /tabsdata/work
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: assets
+          projected:
+            defaultMode: 493
+            sources:
+              - configMap:
+                  name: td-app-venvloader-asset-venvloader.sh
+              - configMap:
+                  name: td-app-mounts-asset-mounts.py
+                  items:
+                    - key: mounts.py
+                      path: tabsdatak/common/_storage/mounts.py
+              - configMap:
+                  name: td-app-transfer-asset-transfer.py
+                  items:
+                    - key: transfer.py
+                      path: tabsdatak/common/_storage/transfer.py
+              - configMap:
+                  name: td-app-venvloader-asset-venvloader.py
+              - configMap:
+                  name: td-app-tabsdata-requirements-asset-tabsdata-requirements.txt
+        - name: certs
+          emptyDir: {}
+        - name: config-probe
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-storage
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+        - name: connection
+          projected:
+            sources:
+              - configMap:
+                  name: ${{system:tdk_connection_configmap_name}}
+                  items:
+                    - key: connection.yaml
+                      path: connection.yaml
+        - name: liveness
+          emptyDir: {}
+        - name: probe-request
+          projected:
+            sources:
+              - configMap:
+                  name: ${{system:tdk_probe_request_configmap_name}}
+                  items:
+                    - key: request.json
+                      path: request.json
+        - name: runtimes
+          emptyDir: {}
+        - name: shared
+          emptyDir: {}
+        - name: work
+          emptyDir: {}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 512Mi
