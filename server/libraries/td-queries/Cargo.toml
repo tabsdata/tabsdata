@@ -38,7 +38,7 @@ test_logging = []
 test-utils = ["td-schema/test-utils"]
 
 [package.metadata.cargo-machete]
-ignored = ["td-queries", "regex", "serde", "strum", "td-build", "thiserror", "tokio", "toml", "utoipa"]
+ignored = ["regex", "strum", "td-build", "thiserror", "toml", "utoipa"]
 
 # Build dependencies
 
@@ -68,7 +68,6 @@ td-schema = { workspace = true }
 
 chrono = { workspace = true }
 sea-query = { workspace = true, features = ["sqlx-utils"] }
-sea-query-sqlx = { workspace = true, features = ["sqlx-postgres"] }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
