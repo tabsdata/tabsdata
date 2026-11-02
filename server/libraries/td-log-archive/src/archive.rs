@@ -9,7 +9,10 @@ use std::sync::Arc;
 
 use td_bridge::worker::WorkerLogStream;
 
+use crate::cloudlogging::CloudLoggingReader;
 use crate::cloudwatch::CloudWatchLogReader;
+
+pub(crate) const STARTED_ON_LEEWAY_MILLIS: i64 = 30_000;
 
 /// What a reader needs to find one worker's archived logs.
 #[derive(Clone, Copy, Debug)]
@@ -18,6 +21,7 @@ pub struct ArchiveRequest<'a> {
     /// The `tabsdata.com/log-id` label the worker's pods carry: the name of
     /// its workload.
     pub log_id: &'a str,
+    pub started_on_millis: Option<i64>,
 }
 
 pub trait ArchiveReader: Send + Sync {
@@ -42,7 +46,9 @@ impl LogArchive {
                 .await
                 .map(Self::new);
         }
-        None
+        CloudLoggingReader::from_metadata(namespace)
+            .await
+            .map(Self::new)
     }
 
     pub fn stream(&self, request: ArchiveRequest<'_>) -> WorkerLogStream {

@@ -115,6 +115,11 @@ fn worker_log_target(
         decorator,
         log_patterns: extensions.iter().map(LogsExtension::glob_pattern).collect(),
         casts: casts.iter().map(|cast| cast.to_string()).collect(),
+        started_on_millis: worker
+            .base
+            .started_on
+            .as_ref()
+            .map(|started_on| started_on.timestamp_millis()),
         finished: is_finished(&worker.base.status),
     }
 }

@@ -68,12 +68,22 @@ pub struct ComponentConfig {
     pub placement: PlacementConfig,
     pub priority: Option<String>,
     pub service_account: ServiceAccountConfig,
+    pub worker_logs: WorkerLogsConfig,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ServiceAccountConfig {
     pub annotations: BTreeMap<String, String>,
+}
+
+/// Where the apiserver reads a worker's logs once its pod is gone, when they
+/// are kept somewhere other than the provider's default.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WorkerLogsConfig {
+    pub bucket: Option<String>,
+    pub location: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

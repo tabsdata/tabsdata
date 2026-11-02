@@ -10,8 +10,11 @@
 //! cluster the apiserver runs in, and is all a caller needs.
 
 mod archive;
+mod cloudlogging;
 mod cloudwatch;
+mod env;
 mod render;
 
 pub use archive::{ArchiveReader, ArchiveRequest, LogArchive};
+pub use env::{ENV_TD_WORKER_LOGS_BUCKET, ENV_TD_WORKER_LOGS_LOCATION};
 pub use render::container_header;

@@ -19,6 +19,7 @@ fn request() -> ArchiveRequest<'static> {
     ArchiveRequest {
         worker_id: WORKER,
         log_id: LOG_ID,
+        started_on_millis: None,
     }
 }
 

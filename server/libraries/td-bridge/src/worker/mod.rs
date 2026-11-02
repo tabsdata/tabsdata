@@ -21,6 +21,7 @@ pub struct WorkerLogTarget {
     pub decorator: Option<Decorator>,
     pub log_patterns: Vec<String>,
     pub casts: Vec<String>,
+    pub started_on_millis: Option<i64>,
     pub finished: bool,
 }
 

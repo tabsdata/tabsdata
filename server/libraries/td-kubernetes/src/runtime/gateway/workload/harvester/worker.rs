@@ -35,6 +35,7 @@ impl KubernetesWorkerHandler {
         let podless = PodlessLogs {
             finished: target.finished,
             log_id,
+            started_on_millis: target.started_on_millis,
             archive: self.archive.clone(),
         };
         Ok(stream_worker_logs(

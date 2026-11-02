@@ -822,3 +822,126 @@ fn a_deployment_reads_the_annotation_from_its_pod_template() {
     let spec = deployment.spec.template.spec.unwrap();
     assert!(names(&spec, "service").is_empty());
 }
+
+fn placement(component: &str, tier: &str) -> PodPlacement {
+    PodPlacement {
+        component: Some(component.to_owned()),
+        tier: Some(tier.to_owned()),
+    }
+}
+
+fn env_value(spec: &PodSpec, container: &str, name: &str) -> Option<String> {
+    spec.containers
+        .iter()
+        .chain(spec.init_containers.iter().flatten())
+        .find(|candidate| candidate.name == container)?
+        .env
+        .as_ref()?
+        .iter()
+        .find(|env| env.name == name)?
+        .value
+        .clone()
+}
+
+const WORKER_LOGS_CONFIG: &str = indoc! {"
+    pods:
+      service:
+        apiserver:
+          worker_logs:
+            bucket: tabsdata-logs
+            location: europe-west1
+"};
+
+#[test]
+fn worker_logs_settings_reach_the_component_pods() {
+    let mut spec = build_pod_spec_with(&["1000-apiserver"]);
+    apply_component_envs(
+        WORKER_LOGS_CONFIG,
+        &placement("apiserver", "server"),
+        &mut spec,
+    )
+    .expect("applies");
+    assert_eq!(
+        env_value(&spec, "1000-apiserver", ENV_TD_WORKER_LOGS_BUCKET).as_deref(),
+        Some("tabsdata-logs")
+    );
+    assert_eq!(
+        env_value(&spec, "1000-apiserver", ENV_TD_WORKER_LOGS_LOCATION).as_deref(),
+        Some("europe-west1")
+    );
+}
+
+#[test]
+fn worker_logs_settings_skip_other_components() {
+    let mut spec = build_pod_spec_with(&["1000-aiagent"]);
+    apply_component_envs(
+        WORKER_LOGS_CONFIG,
+        &placement("aiagent", "server"),
+        &mut spec,
+    )
+    .expect("applies");
+    assert_eq!(
+        env_value(&spec, "1000-aiagent", ENV_TD_WORKER_LOGS_BUCKET),
+        None
+    );
+    assert_eq!(
+        env_value(&spec, "1000-aiagent", ENV_TD_WORKER_LOGS_LOCATION),
+        None
+    );
+}
+
+#[test]
+fn a_worker_logs_location_alone_sets_only_the_location() {
+    let config = indoc! {"
+        pods:
+          service:
+            apiserver:
+              worker_logs:
+                location: europe-west1
+    "};
+    let mut spec = build_pod_spec_with(&["1000-apiserver"]);
+    apply_component_envs(config, &placement("apiserver", "server"), &mut spec).expect("applies");
+    assert_eq!(
+        env_value(&spec, "1000-apiserver", ENV_TD_WORKER_LOGS_BUCKET),
+        None
+    );
+    assert_eq!(
+        env_value(&spec, "1000-apiserver", ENV_TD_WORKER_LOGS_LOCATION).as_deref(),
+        Some("europe-west1")
+    );
+}
+
+#[test]
+fn empty_worker_logs_settings_set_nothing() {
+    let config = indoc! {r#"
+        pods:
+          service:
+            apiserver:
+              worker_logs:
+                bucket: ""
+                location:
+    "#};
+    let mut spec = build_pod_spec_with(&["1000-apiserver"]);
+    apply_component_envs(config, &placement("apiserver", "server"), &mut spec).expect("applies");
+    assert!(spec.containers[0].env.as_ref().is_none_or(Vec::is_empty));
+}
+
+#[test]
+fn worker_logs_settings_replace_a_value_the_template_declares() {
+    let mut spec = build_pod_spec_with(&["1000-apiserver"]);
+    spec.containers[0].env = Some(vec![EnvVar {
+        name: ENV_TD_WORKER_LOGS_BUCKET.to_owned(),
+        value: Some("stale".to_owned()),
+        ..Default::default()
+    }]);
+    apply_component_envs(
+        WORKER_LOGS_CONFIG,
+        &placement("apiserver", "server"),
+        &mut spec,
+    )
+    .expect("applies");
+    assert_eq!(
+        env_value(&spec, "1000-apiserver", ENV_TD_WORKER_LOGS_BUCKET).as_deref(),
+        Some("tabsdata-logs")
+    );
+}

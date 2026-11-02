@@ -11,6 +11,8 @@ use k8s_openapi::api::core::v1::{
 };
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 
+use td_log_archive::{ENV_TD_WORKER_LOGS_BUCKET, ENV_TD_WORKER_LOGS_LOCATION};
+
 use crate::base::constants::{
     ENV_TD_DATAFLOW__ABORT__MEMORY_THRESHOLD_PERCENT, ENV_TD_DATAFLOW__SPILL__DISK_LIMIT_PERCENT,
     ENV_TD_DATAFLOW__SPILL__ENABLED, ENV_TD_DATAFLOW__SPILL__FOLDER,
@@ -27,7 +29,9 @@ use crate::kube::api::entity::secret::list_secrets;
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::profile::Profile;
 use crate::runtime::instance::sizing::{PodPlacement, inject_sizing};
-use crate::runtime::instance::tabsdata::{DataflowConfig, Percent, TABSDATA_FILE, TabsdataConfig};
+use crate::runtime::instance::tabsdata::{
+    DataflowConfig, Percent, TABSDATA_FILE, TabsdataConfig, WorkerLogsConfig,
+};
 use crate::runtime::secrets::discovery::{SecretLeaf, extract_secret_leaves};
 use crate::runtime::secrets::source::to_secret_name;
 
@@ -57,6 +61,7 @@ pub fn inject_into_pod(
                 cause: "pod has no spec".to_owned(),
             })?;
     inject_sizing(profile, pod_template_key, &placement, spec)?;
+    inject_component_envs(profile, pod_template_key, &placement, spec)?;
     inject_secret_envs(profile, pod_template_key, delivery, spec, available_secrets)
 }
 
@@ -81,6 +86,7 @@ pub fn inject_into_job(
             cause: "job has no spec.template.spec".to_owned(),
         })?;
     inject_sizing(profile, pod_template_key, &placement, spec)?;
+    inject_component_envs(profile, pod_template_key, &placement, spec)?;
     inject_secret_envs(profile, pod_template_key, delivery, spec, available_secrets)
 }
 
@@ -110,6 +116,7 @@ pub fn inject_into_cronjob(
             cause: "cronjob has no spec.jobTemplate.spec.template.spec".to_owned(),
         })?;
     inject_sizing(profile, pod_template_key, &placement, spec)?;
+    inject_component_envs(profile, pod_template_key, &placement, spec)?;
     inject_secret_envs(profile, pod_template_key, delivery, spec, available_secrets)
 }
 
@@ -128,6 +135,7 @@ pub fn inject_into_deployment(
         }
     })?;
     inject_sizing(profile, pod_template_key, &placement, spec)?;
+    inject_component_envs(profile, pod_template_key, &placement, spec)?;
     inject_secret_envs(profile, pod_template_key, delivery, spec, available_secrets)
 }
 
@@ -145,6 +153,60 @@ impl SecretDelivery {
             .is_some_and(|delivery| delivery == SECRET_DELIVERY_FILE);
         if file { Self::File } else { Self::Env }
     }
+}
+
+pub fn inject_component_envs(
+    profile: &Profile,
+    pod_template_key: &str,
+    placement: &PodPlacement,
+    spec: &mut PodSpec,
+) -> Result<(), LauncherError> {
+    let Some(config_yaml) = profile.configs.get(TABSDATA_FILE) else {
+        return Ok(());
+    };
+    apply_component_envs(config_yaml, placement, spec).map_err(|cause| {
+        LauncherError::ComponentEnvConfigParseFailed {
+            config: TABSDATA_FILE.to_owned(),
+            pod: pod_template_key.to_owned(),
+            cause: cause.to_string(),
+        }
+    })
+}
+
+pub fn apply_component_envs(
+    config_yaml: &str,
+    placement: &PodPlacement,
+    spec: &mut PodSpec,
+) -> Result<(), serde_yaml::Error> {
+    let config = TabsdataConfig::parse(config_yaml)?;
+    let component = config.component(
+        placement.component.as_deref().unwrap_or_default(),
+        placement.tier.as_deref(),
+    );
+    let entries = worker_logs_env_entries(&component.worker_logs);
+    if !entries.is_empty() {
+        override_env_entries(spec, &entries);
+    }
+    Ok(())
+}
+
+fn worker_logs_env_entries(worker_logs: &WorkerLogsConfig) -> Vec<EnvVar> {
+    [
+        (ENV_TD_WORKER_LOGS_BUCKET, &worker_logs.bucket),
+        (ENV_TD_WORKER_LOGS_LOCATION, &worker_logs.location),
+    ]
+    .into_iter()
+    .filter_map(|(name, value)| {
+        value
+            .as_deref()
+            .filter(|value| !value.is_empty())
+            .map(|value| EnvVar {
+                name: name.to_owned(),
+                value: Some(value.to_owned()),
+                ..Default::default()
+            })
+    })
+    .collect()
 }
 
 pub fn inject_secret_envs(

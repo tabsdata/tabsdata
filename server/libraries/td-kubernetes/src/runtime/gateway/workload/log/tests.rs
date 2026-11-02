@@ -35,8 +35,8 @@ fn podless_context(listings: Arc<AtomicUsize>) -> KubeContext {
     )
 }
 
-/// A worker ID and log ID an archive was asked for.
-type Asked = (String, String);
+/// A worker ID, log ID and start time an archive was asked for.
+type Asked = (String, String, Option<i64>);
 
 /// An archive holding one line for any worker, recording what it was asked.
 #[derive(Clone, Default)]
@@ -52,10 +52,11 @@ impl FakeArchive {
 
 impl ArchiveReader for FakeArchive {
     fn stream(&self, request: ArchiveRequest<'_>) -> WorkerLogStream {
-        self.requests
-            .lock()
-            .expect("requests")
-            .push((request.worker_id.to_owned(), request.log_id.to_owned()));
+        self.requests.lock().expect("requests").push((
+            request.worker_id.to_owned(),
+            request.log_id.to_owned(),
+            request.started_on_millis,
+        ));
         Box::pin(futures::stream::iter([
             Ok(container_header(ARCHIVED_CONTAINER)),
             Ok(Bytes::from_static(b"archived\n")),
@@ -67,6 +68,7 @@ fn podless(finished: bool, archive: Option<&FakeArchive>) -> PodlessLogs {
     PodlessLogs {
         finished,
         log_id: LOG_ID.to_owned(),
+        started_on_millis: None,
         archive: archive.map(|archive| LogArchive::new(archive.clone())),
     }
 }
@@ -134,14 +136,24 @@ async fn tailing_an_unfinished_worker_waits_for_its_pod_then_gives_up() {
 }
 
 #[tokio::test]
-async fn the_archive_is_asked_for_the_worker_and_its_log_id() {
+async fn the_archive_is_asked_for_the_worker_its_log_id_and_start() {
     let archive = FakeArchive::default();
     let context = podless_context(Arc::default());
+    let podless = PodlessLogs {
+        finished: true,
+        log_id: LOG_ID.to_owned(),
+        started_on_millis: Some(1_792_000_000_000),
+        archive: Some(LogArchive::new(archive.clone())),
+    };
 
-    read(&context, false, podless(true, Some(&archive))).await;
+    read(&context, false, podless).await;
 
     assert_eq!(
         archive.requests(),
-        vec![(LOGICAL_WORKER.to_owned(), LOG_ID.to_owned())]
+        vec![(
+            LOGICAL_WORKER.to_owned(),
+            LOG_ID.to_owned(),
+            Some(1_792_000_000_000)
+        )]
     );
 }

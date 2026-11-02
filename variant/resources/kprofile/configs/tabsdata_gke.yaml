@@ -57,6 +57,11 @@ pods:
         selectors:
           role: tabsdata-services
         tolerations: []
+      service_account:
+        annotations: {}
+      worker_logs:
+        bucket:
+        location:
 
   function:
     priority: tabsdata-function

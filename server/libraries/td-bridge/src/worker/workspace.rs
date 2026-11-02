@@ -313,6 +313,7 @@ mod tests_worker_log_files {
             decorator: None,
             log_patterns: vec![format!("*.{LOG_EXTENSION}")],
             casts: vec![],
+            started_on_millis: None,
             finished: true,
         };
 
@@ -355,6 +356,7 @@ mod tests_worker_log_files {
             decorator: None,
             log_patterns: vec![format!("*.{LOG_EXTENSION}")],
             casts: vec![],
+            started_on_millis: None,
             finished: true,
         };
 
@@ -386,6 +388,7 @@ mod tests_worker_log_files {
             decorator: None,
             log_patterns: vec![format!("fn*.{LOG_EXTENSION}")],
             casts: vec!["1".to_string()],
+            started_on_millis: None,
             finished: true,
         };
 

@@ -23,6 +23,7 @@ const READ_BUFFER_LEN: usize = 64 * 1024;
 pub struct PodlessLogs {
     pub finished: bool,
     pub log_id: String,
+    pub started_on_millis: Option<i64>,
     pub archive: Option<LogArchive>,
 }
 
@@ -66,6 +67,7 @@ pub fn stream_worker_logs(
                             let mut archived = archive.stream(ArchiveRequest {
                                 worker_id: &worker_id,
                                 log_id: &podless.log_id,
+                                started_on_millis: podless.started_on_millis,
                             });
                             while let Some(item) = archived.next().await {
                                 yield item;
