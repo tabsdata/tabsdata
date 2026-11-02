@@ -687,8 +687,8 @@ script = [
     with_server_start_before = get_env TD_WITH_SERVER_START
     with_server_stop_before = get_env TD_WITH_SERVER_STOP
     with_server_status_before = get_env TD_WITH_SERVER_STATUS
+    umbrella_build_before = get_env TD_UMBRELLA_BUILD
 
-    unset_env TD_UMBRELLA_BUILD
     unset_env TD_UMBRELLA_SERVER_START
     unset_env TD_UMBRELLA_SERVER_STATUS
     set_env TD_UMBRELLA_SERVER_STOP "false"
@@ -702,7 +702,11 @@ script = [
 
     cm_run_task itest_py
 
-    unset_env TD_UMBRELLA_BUILD
+    if is_empty ${umbrella_build_before}
+        unset_env TD_UMBRELLA_BUILD
+    else
+        set_env TD_UMBRELLA_BUILD ${umbrella_build_before}
+    end
     unset_env TD_UMBRELLA_SERVER_START
     unset_env TD_UMBRELLA_SERVER_STATUS
     unset_env TD_UMBRELLA_SERVER_STOP
