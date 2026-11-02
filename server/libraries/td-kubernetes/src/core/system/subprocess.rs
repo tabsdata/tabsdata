@@ -9,7 +9,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use sysinfo::{Pid, ProcessRefreshKind, ProcessStatus, ProcessesToUpdate, RefreshKind, UpdateKind};
-use td_common::os::system_with;
+use td_common::os::{OsProcessError, system_with};
 use tracing::{debug, info, warn};
 
 use crate::base::trace;
@@ -174,18 +174,22 @@ pub fn seal_own_stdio() {
     }
 }
 
-pub fn is_alive(pid: u32) -> bool {
-    let Some(mut system) = system_with(RefreshKind::nothing()) else {
-        return false;
-    };
+pub fn is_alive(pid: u32) -> Result<bool, OsProcessError> {
+    let mut system = system_with(RefreshKind::nothing())?;
     system.refresh_processes(ProcessesToUpdate::Some(&[Pid::from_u32(pid)]), true);
-    match system.process(Pid::from_u32(pid)) {
+    Ok(match system.process(Pid::from_u32(pid)) {
         Some(process) => process.status() != ProcessStatus::Zombie,
         None => false,
-    }
+    })
 }
 
-pub fn process_paths(pid: u32) -> Option<(Option<PathBuf>, Option<PathBuf>)> {
+pub fn may_be_alive(pid: u32) -> bool {
+    is_alive(pid).unwrap_or(true)
+}
+
+pub type ProcessPaths = (Option<PathBuf>, Option<PathBuf>);
+
+pub fn process_paths(pid: u32) -> Result<Option<ProcessPaths>, OsProcessError> {
     let mut system = system_with(RefreshKind::nothing())?;
     system.refresh_processes_specifics(
         ProcessesToUpdate::Some(&[Pid::from_u32(pid)]),
@@ -194,14 +198,16 @@ pub fn process_paths(pid: u32) -> Option<(Option<PathBuf>, Option<PathBuf>)> {
             .with_exe(UpdateKind::Always)
             .with_cwd(UpdateKind::Always),
     );
-    let process = system.process(Pid::from_u32(pid))?;
+    let Some(process) = system.process(Pid::from_u32(pid)) else {
+        return Ok(None);
+    };
     if process.status() == ProcessStatus::Zombie {
-        return None;
+        return Ok(None);
     }
-    Some((
+    Ok(Some((
         process.exe().map(Path::to_path_buf),
         process.cwd().map(Path::to_path_buf),
-    ))
+    )))
 }
 
 pub fn terminate_process(pid: u32, grace: Duration) {
@@ -217,10 +223,10 @@ pub fn terminate_process(pid: u32, grace: Duration) {
         "Process tree did not exit within grace period; force-killing"
     );
     force_kill_tree(pid, &descendants);
-    if is_alive(pid) {
-        warn!(pid, "Process still alive after force-kill");
-    } else {
-        warn!(pid, "Process tree force-killed");
+    match is_alive(pid) {
+        Ok(true) => warn!(pid, "Process still alive after force-kill"),
+        Ok(false) => warn!(pid, "Process tree force-killed"),
+        Err(error) => warn!(pid, %error, "Process force-killed; cannot confirm it exited"),
     }
 }
 
@@ -250,7 +256,7 @@ pub fn force_terminate_process_tree(pid: u32, grace: Duration) -> bool {
 }
 
 fn collect_descendants(root: u32) -> Vec<u32> {
-    let Some(mut system) = system_with(RefreshKind::nothing()) else {
+    let Ok(mut system) = system_with(RefreshKind::nothing()) else {
         return Vec::new();
     };
     system.refresh_processes(ProcessesToUpdate::All, true);
@@ -318,7 +324,7 @@ fn process_groups(root: u32, descendants: &[u32]) -> Vec<i32> {
 fn wait_for_tree_exit(root: u32, descendants: &[u32], timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
     loop {
-        let any_alive = is_alive(root) || descendants.iter().any(|pid| is_alive(*pid));
+        let any_alive = may_be_alive(root) || descendants.iter().any(|pid| may_be_alive(*pid));
         if !any_alive {
             return true;
         }
@@ -332,7 +338,7 @@ fn wait_for_tree_exit(root: u32, descendants: &[u32], timeout: Duration) -> bool
 pub fn wait_for_exit(pid: u32, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
     loop {
-        if !is_alive(pid) {
+        if !may_be_alive(pid) {
             return true;
         }
         if Instant::now() >= deadline {

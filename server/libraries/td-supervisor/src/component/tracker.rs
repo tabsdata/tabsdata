@@ -282,9 +282,11 @@ pub fn check_status(pid_path: PathBuf, live_pids: Option<&HashSet<i32>>) -> Work
     if pid_path.exists() {
         match read_pid_file(pid_path) {
             Ok(Some(pid)) => {
+                // A worker whose state cannot be read is reported running: a stop
+                // still signals it, and nothing starts it a second time.
                 let alive = match live_pids {
                     Some(pids) => pids.contains(&pid),
-                    None => check_process(pid),
+                    None => check_process(pid).unwrap_or(true),
                 };
                 if alive {
                     WorkerStatus::Running { pid }
@@ -300,16 +302,18 @@ pub fn check_status(pid_path: PathBuf, live_pids: Option<&HashSet<i32>>) -> Work
     }
 }
 
-pub fn snapshot_live_pids() -> HashSet<i32> {
-    let Some(mut system) = system_with(RefreshKind::everything()) else {
-        return HashSet::new();
+pub fn snapshot_live_pids() -> Option<HashSet<i32>> {
+    let Ok(mut system) = system_with(RefreshKind::everything()) else {
+        return None;
     };
     system.refresh_all();
-    system
-        .processes()
-        .keys()
-        .map(|pid| pid.as_u32() as i32)
-        .collect()
+    Some(
+        system
+            .processes()
+            .keys()
+            .map(|pid| pid.as_u32() as i32)
+            .collect(),
+    )
 }
 
 pub fn get_ok_path(work_path: PathBuf) -> PathBuf {

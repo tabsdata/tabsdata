@@ -27,7 +27,7 @@ pub type ProcessDistilled = (
 
 /// Function to get the process tree starting from a given PID.
 pub fn get_process_tree(pid: i32) -> Vec<ProcessDistilled> {
-    let Some(mut system) = system_with(RefreshKind::everything()) else {
+    let Ok(mut system) = system_with(RefreshKind::everything()) else {
         return Vec::new();
     };
     system.refresh_all();
@@ -146,7 +146,7 @@ fn process_tree(
         |p| {
             p.exe().map_or_else(
                 || String::from("!"),
-                |exe| exe.to_str().unwrap().to_string(),
+                |exe| exe.to_string_lossy().into_owned(),
             )
         },
     );

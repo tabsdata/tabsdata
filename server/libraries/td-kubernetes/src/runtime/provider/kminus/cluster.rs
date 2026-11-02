@@ -27,7 +27,8 @@ use crate::core::system::stopevent;
 use crate::core::system::stream::Silencer;
 use crate::core::system::subprocess::{
     self, apply_detached_flags, apply_subprocess_flags, force_terminate_process_tree,
-    is_alive as process_is_alive, seal_own_stdio, terminate_single_process, wait_for_exit,
+    is_alive as process_is_alive, may_be_alive, seal_own_stdio, terminate_single_process,
+    wait_for_exit,
 };
 use crate::cwarn;
 use crate::runtime::provider::{Cluster, Transaction};
@@ -378,7 +379,7 @@ impl KminusCluster {
 
     async fn poll_process_dead(&self, pid: u32) -> bool {
         tokio::time::timeout(KM_POLL_DEAD_TIMEOUT, async {
-            while process_is_alive(pid) {
+            while may_be_alive(pid) {
                 tokio::time::sleep(KM_POLL_INTERVAL).await;
             }
         })
@@ -493,7 +494,7 @@ impl Cluster for KminusCluster {
         let Some(pid) = read_km_pid(&self.pids_path()) else {
             return Ok(false);
         };
-        if !process_is_alive(pid) {
+        if let Ok(false) = process_is_alive(pid) {
             return Ok(false);
         }
         if self.stop_through_km() {
@@ -522,7 +523,10 @@ impl Cluster for KminusCluster {
         let Some(pid) = read_km_pid(&self.pids_path()) else {
             return false;
         };
-        process_is_alive(pid) && try_connect(&self.kubefile()).await
+        match process_is_alive(pid) {
+            Ok(false) => false,
+            Ok(true) | Err(_) => try_connect(&self.kubefile()).await,
+        }
     }
 
     async fn poll_alive(&self) -> bool {

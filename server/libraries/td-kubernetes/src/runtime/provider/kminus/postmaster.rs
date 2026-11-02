@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command as SystemCommand;
 use std::time::Duration;
 
-use td_common::os::EXE_SUFFIX;
+use td_common::os::{EXE_SUFFIX, OsProcessError};
 use tracing::warn;
 
 use crate::core::system::subprocess;
@@ -29,12 +29,15 @@ pub struct Postmaster {
 pub fn running_on(data_dir: &Path) -> Option<Postmaster> {
     let pid = recorded_pid(data_dir)?;
     let binary = recorded_binary(data_dir)?;
-    is_postmaster(pid, &binary, data_dir).then_some(Postmaster { pid, binary })
+    match is_postmaster(pid, &binary, data_dir) {
+        Ok(false) => None,
+        Ok(true) | Err(_) => Some(Postmaster { pid, binary }),
+    }
 }
 
 pub fn stop(data_dir: &Path, postmaster: &Postmaster, verbose: bool) -> bool {
     stop_with_pg_ctl(data_dir, &postmaster.binary, verbose);
-    if !is_postmaster(postmaster.pid, &postmaster.binary, data_dir) {
+    if let Ok(false) = is_postmaster(postmaster.pid, &postmaster.binary, data_dir) {
         return true;
     }
     warn!(
@@ -42,14 +45,17 @@ pub fn stop(data_dir: &Path, postmaster: &Postmaster, verbose: bool) -> bool {
         "The database server outlived 'pg_ctl stop'; killing its process tree"
     );
     subprocess::force_terminate_process_tree(postmaster.pid, FORCE_KILL_WAIT);
-    !is_postmaster(postmaster.pid, &postmaster.binary, data_dir)
+    matches!(
+        is_postmaster(postmaster.pid, &postmaster.binary, data_dir),
+        Ok(false)
+    )
 }
 
-fn is_postmaster(pid: u32, binary: &Path, data_dir: &Path) -> bool {
-    let Some((Some(exe), cwd)) = subprocess::process_paths(pid) else {
-        return false;
+fn is_postmaster(pid: u32, binary: &Path, data_dir: &Path) -> Result<bool, OsProcessError> {
+    let Some((Some(exe), cwd)) = subprocess::process_paths(pid)? else {
+        return Ok(false);
     };
-    same_path(&exe, binary) && cwd.is_none_or(|cwd| same_path(&cwd, data_dir))
+    Ok(same_path(&exe, binary) && cwd.is_none_or(|cwd| same_path(&cwd, data_dir)))
 }
 
 fn stop_with_pg_ctl(data_dir: &Path, binary: &Path, verbose: bool) {

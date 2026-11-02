@@ -48,12 +48,12 @@ time.sleep(30)
 
 #[test]
 fn is_alive_returns_true_for_current_process() {
-    assert!(is_alive(std::process::id()));
+    assert!(is_alive(std::process::id()).unwrap());
 }
 
 #[test]
 fn is_alive_returns_false_for_unlikely_pid() {
-    assert!(!is_alive(u32::MAX));
+    assert!(!is_alive(u32::MAX).unwrap());
 }
 
 #[cfg(unix)]
@@ -87,9 +87,12 @@ fn terminate_process_kills_descendant_in_own_process_group() {
 
     let descendant = read_first_pid(child.stdout.take().expect("captured stdout"));
 
-    assert!(is_alive(root), "root must be alive before terminate");
     assert!(
-        is_alive(descendant),
+        is_alive(root).unwrap(),
+        "root must be alive before terminate"
+    );
+    assert!(
+        is_alive(descendant).unwrap(),
         "descendant must be alive before terminate"
     );
     assert_ne!(
@@ -149,9 +152,12 @@ fn terminate_single_process_leaves_descendant_in_own_group_alone() {
 
     let descendant = read_first_pid(child.stdout.take().expect("captured stdout"));
 
-    assert!(is_alive(root), "root must be alive before terminate");
     assert!(
-        is_alive(descendant),
+        is_alive(root).unwrap(),
+        "root must be alive before terminate"
+    );
+    assert!(
+        is_alive(descendant).unwrap(),
         "descendant must be alive before terminate"
     );
     assert_ne!(
@@ -167,7 +173,7 @@ fn terminate_single_process_leaves_descendant_in_own_group_alone() {
         "root left running after terminate_single_process"
     );
     assert!(
-        is_alive(descendant),
+        is_alive(descendant).unwrap(),
         "descendant killed; a root that exits on SIGTERM must never reach the \
          force-kill, and only the force-kill takes the tree"
     );
@@ -211,7 +217,7 @@ fn process_group_of(pid: u32) -> i32 {
 #[cfg(unix)]
 fn wait_for_death(pid: u32, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
-    while is_alive(pid) {
+    while is_alive(pid).unwrap() {
         if Instant::now() >= deadline {
             return false;
         }

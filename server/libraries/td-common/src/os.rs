@@ -57,6 +57,8 @@ pub enum OsProcessError {
     TerminationNotSupported(i32, Signal),
     #[error("Unable to terminate process '{0}' with signal '{1}")]
     TerminationFailure(i32, Signal),
+    #[error("Cannot read the system's process table: {0}")]
+    ProcessTableUnreadable(String),
 }
 
 /// Function to attach the correct extension to a program path based on platform.
@@ -72,36 +74,28 @@ pub fn name_program(path: &Path) -> PathBuf {
     path
 }
 
-/// The system's process table, or `None` when it cannot be read. The failure is
-/// logged, and callers treat it as an empty table, as sysinfo did before it
-/// reported the failure.
-pub fn system_with(refresh: RefreshKind) -> Option<System> {
-    match System::new_with_specifics(refresh) {
-        Ok(system) => Some(system),
-        Err(error) => {
-            warn!("Cannot read the system's process table: {error}");
-            None
-        }
-    }
+/// The system's process table. When it cannot be read, whether a process runs is
+/// unknown, never "not running": each caller decides what is safe to assume.
+pub fn system_with(refresh: RefreshKind) -> Result<System, OsProcessError> {
+    System::new_with_specifics(refresh).map_err(|error| {
+        warn!("Cannot read the system's process table: {error}");
+        OsProcessError::ProcessTableUnreadable(error.to_string())
+    })
 }
 
-/// Function to check if a process with a given PID exists.
-pub fn check_process(pid: i32) -> bool {
-    let Some(mut system) = system_with(RefreshKind::everything()) else {
-        return false;
-    };
+/// Whether a process with a given PID exists, or an error when it cannot be told.
+pub fn check_process(pid: i32) -> Result<bool, OsProcessError> {
+    let mut system = system_with(RefreshKind::everything())?;
     system.refresh_all();
-    match system.process(Pid::from_u32(pid as u32)) {
+    Ok(match system.process(Pid::from_u32(pid as u32)) {
         Some(process) => process.status() != ProcessStatus::Zombie,
         None => false,
-    }
+    })
 }
 
 /// Function to terminate a process with a given PID using a specified signal.
 pub fn terminate_process(pid: i32, signal: Signal) -> Result<(), OsProcessError> {
-    let Some(mut system) = system_with(RefreshKind::everything()) else {
-        return Err(OsProcessError::ProcessNotFound(pid));
-    };
+    let mut system = system_with(RefreshKind::everything())?;
     system.refresh_all();
     if let Some(process) = system.process(Pid::from_u32(pid as u32)) {
         info!("Process with pid '{}' found: '{:?}'", pid, process.name());
@@ -120,9 +114,7 @@ pub fn terminate_process(pid: i32, signal: Signal) -> Result<(), OsProcessError>
 }
 
 pub fn terminate_process_tree(pid: i32, signal: Signal) -> Result<(), OsProcessError> {
-    let Some(mut system) = system_with(RefreshKind::everything()) else {
-        return Err(OsProcessError::ProcessNotFound(pid));
-    };
+    let mut system = system_with(RefreshKind::everything())?;
     system.refresh_all();
     let Some(process) = system.process(Pid::from_u32(pid as u32)) else {
         return Err(OsProcessError::ProcessNotFound(pid));
@@ -132,38 +124,40 @@ pub fn terminate_process_tree(pid: i32, signal: Signal) -> Result<(), OsProcessE
 
     let deadline = Instant::now() + TERMINATE_TREE_GRACE;
     while Instant::now() < deadline {
-        if !is_subtree_alive(pid as u32) {
+        if let Ok(false) = is_subtree_alive(pid as u32) {
             return Ok(());
         }
         std::thread::sleep(TERMINATE_TREE_POLL);
     }
 
     force_kill_tree(pid as u32);
-    if is_subtree_alive(pid as u32) {
-        Err(OsProcessError::TerminationFailure(pid, signal))
-    } else {
-        Ok(())
+    match is_subtree_alive(pid as u32)? {
+        true => Err(OsProcessError::TerminationFailure(pid, signal)),
+        false => Ok(()),
     }
 }
 
 #[cfg(not(target_os = "windows"))]
-fn is_subtree_alive(root: u32) -> bool {
-    if check_process(root as i32) {
-        return true;
+fn is_subtree_alive(root: u32) -> Result<bool, OsProcessError> {
+    if check_process(root as i32)? {
+        return Ok(true);
     }
-    collect_descendants(root)
-        .into_iter()
-        .any(|pid| check_process(pid as i32))
+    for pid in collect_descendants(root)? {
+        if check_process(pid as i32)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 #[cfg(target_os = "windows")]
-fn is_subtree_alive(root: u32) -> bool {
+fn is_subtree_alive(root: u32) -> Result<bool, OsProcessError> {
     check_process(root as i32)
 }
 
 #[cfg(not(target_os = "windows"))]
 fn force_kill_tree(root: u32) {
-    let descendants = collect_descendants(root);
+    let descendants = collect_descendants(root).unwrap_or_default();
     let _ = process::Command::new("kill")
         .arg("-KILL")
         .arg(root.to_string())
@@ -193,10 +187,8 @@ fn force_kill_tree(root: u32) {
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn collect_descendants(root: u32) -> Vec<u32> {
-    let Some(mut system) = system_with(RefreshKind::nothing()) else {
-        return Vec::new();
-    };
+pub fn collect_descendants(root: u32) -> Result<Vec<u32>, OsProcessError> {
+    let mut system = system_with(RefreshKind::nothing())?;
     system.refresh_processes(ProcessesToUpdate::All, true);
     let mut descendants: Vec<u32> = Vec::new();
     let mut frontier: Vec<Pid> = vec![Pid::from_u32(root)];
@@ -208,7 +200,7 @@ pub fn collect_descendants(root: u32) -> Vec<u32> {
             }
         }
     }
-    descendants
+    Ok(descendants)
 }
 
 /// Interceptor of 'sysinfo' crate function kill_with to run "taskkill /F /T ..." on Windows
@@ -423,9 +415,8 @@ mod tests {
     // Helper function to terminate a process with a specified signal and verify termination
     fn kill_process(signal: Signal) {
         fn is_process_alive(pid: Pid) -> bool {
-            let Some(mut system) = system_with(RefreshKind::nothing()) else {
-                return false;
-            };
+            let mut system =
+                system_with(RefreshKind::nothing()).expect("the process table is readable");
             system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
             match system.process(pid) {
                 Some(process) => process.status() != ProcessStatus::Zombie,

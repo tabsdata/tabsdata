@@ -352,8 +352,8 @@ fn listener_pids(port: u16) -> Vec<u32> {
 
 #[cfg(windows)]
 fn parent_pid(pid: u32) -> Option<u32> {
-    use sysinfo::{Pid, ProcessesToUpdate, System};
-    let mut system = System::new();
+    use sysinfo::{Pid, ProcessesToUpdate, RefreshKind};
+    let mut system = td_common::os::system_with(RefreshKind::nothing()).ok()?;
     system.refresh_processes(ProcessesToUpdate::Some(&[Pid::from_u32(pid)]), true);
     system
         .process(Pid::from_u32(pid))

@@ -32,13 +32,13 @@ impl Default for ResourcesMonitor {
 impl ResourcesMonitor {
     pub fn new() -> Self {
         Self {
-            system: system_with(RefreshKind::everything()),
+            system: system_with(RefreshKind::everything()).ok(),
             locale: Locale::en,
         }
     }
 
     pub fn monitor(&mut self, instance: &Option<PathBuf>) {
-        self.system = system_with(RefreshKind::everything());
+        self.system = system_with(RefreshKind::everything()).ok();
         let Some(system) = self.system.as_mut() else {
             return;
         };

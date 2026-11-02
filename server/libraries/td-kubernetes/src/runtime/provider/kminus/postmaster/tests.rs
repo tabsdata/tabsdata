@@ -179,7 +179,7 @@ fn a_server_running_elsewhere_is_left_alone() {
 
     assert_eq!(found_elsewhere.map(|found| found.pid), Some(server.id()));
     assert_eq!(running_on(data_dir.path()), None);
-    assert!(subprocess::is_alive(server.id()));
+    assert!(subprocess::is_alive(server.id()).unwrap());
     server.kill().unwrap();
     server.wait().unwrap();
 }

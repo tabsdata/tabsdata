@@ -593,8 +593,12 @@ impl Supervisor {
             );
         }
 
-        let Some(mut system) = system_with(RefreshKind::everything()) else {
-            return;
+        let mut system = match system_with(RefreshKind::everything()) {
+            Ok(system) => system,
+            Err(error) => {
+                error!("Cannot find the worker processes to drop: {error}");
+                return;
+            }
         };
         system.refresh_all();
         let pid = process::id();
@@ -2700,7 +2704,7 @@ impl Supervisor {
                 let live_pids = live_pids.clone();
                 async move {
                     let _ = tokio::task::spawn_blocking(move || {
-                        Self::stop_worker(cast_folder, signal, Some(&live_pids));
+                        Self::stop_worker(cast_folder, signal, live_pids.as_ref().as_ref());
                     })
                     .await;
                 }
@@ -2766,9 +2770,9 @@ impl Supervisor {
     }
 
     async fn stop_processes(&self, signal: Signal) -> Result<(), RuntimeError> {
-        let Some(mut system) = system_with(RefreshKind::everything()) else {
-            return Ok(());
-        };
+        let mut system = system_with(RefreshKind::everything()).map_err(|error| {
+            RuntimeError::new(format!("Cannot find the worker processes to stop: {error}"))
+        })?;
         system.refresh_all();
         let pid = process::id();
         if pid > 0 {

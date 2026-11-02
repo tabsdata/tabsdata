@@ -2233,23 +2233,26 @@ fn command_worker_restart(arguments: WorkerRestartArguments) {
 }
 
 fn status_running_instances() {
-    let mut instances: Vec<(sysinfo::Pid, PathBuf)> = system_with(RefreshKind::everything())
-        .map(|mut system| {
-            system.refresh_all();
-            system
-                .processes()
-                .iter()
-                .filter_map(|(&pid, process)| {
-                    if !is_supervisor_process(process) {
-                        return None;
-                    }
-                    let instance = supervisor_instance_argument(process);
-                    let instance = supervisor_instance(instance);
-                    Some((pid, instance))
-                })
-                .collect()
+    let mut system = match system_with(RefreshKind::everything()) {
+        Ok(system) => system,
+        Err(error) => {
+            error!("\nCannot tell which instances are running: {error}\n");
+            return;
+        }
+    };
+    system.refresh_all();
+    let mut instances: Vec<(sysinfo::Pid, PathBuf)> = system
+        .processes()
+        .iter()
+        .filter_map(|(&pid, process)| {
+            if !is_supervisor_process(process) {
+                return None;
+            }
+            let instance = supervisor_instance_argument(process);
+            let instance = supervisor_instance(instance);
+            Some((pid, instance))
         })
-        .unwrap_or_default();
+        .collect();
 
     if instances.is_empty() {
         info!("\nNo running instances found.\n");
