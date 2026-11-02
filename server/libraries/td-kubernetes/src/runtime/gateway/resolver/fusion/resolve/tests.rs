@@ -501,7 +501,9 @@ fn an_empty_template_mapping_given_a_scalar_is_structure_mismatch() {
 fn the_shipped_eks_config_keeps_the_apiserver_role_annotation() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../variant/resources/kprofile/configs/tabsdata_eks.yaml");
-    let template = std::fs::read_to_string(&path).expect("shipped eks config");
+    let template = std::fs::read_to_string(&path)
+        .expect("shipped eks config")
+        .replace("\r\n", "\n");
     let annotated = template.replacen(
         "      service_account:\n        annotations: {}",
         "      service_account:\n        annotations:\n          \
