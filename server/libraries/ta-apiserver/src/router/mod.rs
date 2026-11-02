@@ -6,7 +6,6 @@ use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::any::{Any, TypeId, type_name};
 use std::collections::HashMap;
-use std::sync::OnceLock;
 use strum::{Display, EnumString};
 use td_error::{TdError, td_error};
 use utoipa::openapi::path::{HttpMethod, Operation};
@@ -175,7 +174,8 @@ impl RouterStates {
 }
 
 /// One route's registration, emitted by `#[apiserver_path]` (hand-written for
-/// routes the macro cannot express); collected via inventory.
+/// routes the macro cannot express). td-apiserver's own are collected via
+/// inventory; the edition's are passed to [`Routes::new`].
 pub struct RouterRegistration {
     pub name: &'static str,
     pub server: Server,
@@ -215,7 +215,7 @@ impl RouterRegistration {
             (Server::Internal, Some(_)) => {
                 self.scope == Scope::Flat
                     && self.modes == SecurityMode::ALL
-                    && class == AuthClass::Internal
+                    && (class == AuthClass::Internal || self.auth == [Auth::ServiceToken])
             }
             (Server::Internal, None) => false,
             (Server::Public, None) => {
@@ -252,24 +252,12 @@ inventory::collect!(RouterRegistration);
 
 #[td_error]
 pub enum RouterRegistryError {
-    #[error(
-        "No routes are registered: the linker dropped the route registrations. \
-         The `#[used]` anchor in td-apiserver's router module must reference \
-         the edition crate's `link()` symbol."
-    )]
-    NoRoutesRegistered = 5000,
     #[error("Route `{0}` declares a placement the topology never composes: {1}")]
     InvalidRegistration(&'static str, String) = 5001,
 }
 
-/// Sorted by placement then name: inventory iteration order is link order.
-pub fn registered() -> Vec<&'static RouterRegistration> {
-    let mut routes: Vec<_> = inventory::iter::<RouterRegistration>.into_iter().collect();
-    routes.sort_by_key(|r| (r.server, r.version, r.scope, r.name));
-    routes
-}
-
-/// One position in the topology: the routes `mount_router` merges together.
+/// One position in the topology: the routes [`Routes::mount_router`] merges
+/// together.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Position {
     pub server: Server,
@@ -289,72 +277,133 @@ impl Position {
     }
 }
 
-pub fn mount_router(position: Position, states: &RouterStates) -> OpenApiRouter {
-    registered()
-        .into_iter()
-        .filter(|r| position.selects(r))
-        .fold(OpenApiRouter::default(), |acc, r| {
+/// Every route a server serves: td-apiserver's own, submitted to the
+/// inventory by `#[apiserver_path]`, and the edition's, passed in.
+pub struct Routes {
+    registered: Vec<&'static RouterRegistration>,
+    by_route: HashMap<(Method, &'static str), &'static [Auth]>,
+}
+
+impl Routes {
+    pub fn new(edition: &'static [RouterRegistration]) -> Self {
+        let mut registered: Vec<_> = inventory::iter::<RouterRegistration>
+            .into_iter()
+            .chain(edition)
+            .collect();
+        registered.sort_by_key(|r| (r.server, r.version, r.scope, r.name));
+        let by_route = registered
+            .iter()
+            .map(|r| ((r.method, r.path), r.auth))
+            .collect();
+        Self {
+            registered,
+            by_route,
+        }
+    }
+
+    /// Sorted by placement then name.
+    pub fn registered(&self) -> &[&'static RouterRegistration] {
+        &self.registered
+    }
+
+    pub fn validate(&self) -> Result<(), TdError> {
+        for route in &self.registered {
+            route.validate()?;
+        }
+        Ok(())
+    }
+
+    pub fn mount_router(&self, position: Position, states: &RouterStates) -> OpenApiRouter {
+        self.registered
+            .iter()
+            .filter(|r| position.selects(r))
+            .fold(OpenApiRouter::default(), |acc, r| {
+                acc.merge(r.router(states))
+            })
+    }
+
+    /// The named routes, merged and built against `states`; panics on an
+    /// unknown name (test aid).
+    pub fn named_router(&self, names: &[&str], states: &RouterStates) -> OpenApiRouter {
+        let routes: Vec<_> = self
+            .registered
+            .iter()
+            .filter(|r| names.contains(&r.name))
+            .collect();
+        for name in names {
+            assert!(
+                routes.iter().any(|r| r.name == *name),
+                "no registered route named `{name}`"
+            );
+        }
+        routes.into_iter().fold(OpenApiRouter::default(), |acc, r| {
             acc.merge(r.router(states))
         })
+    }
+
+    /// The credentials the route answering `method` on `path` accepts;
+    /// `None` when no route answers that method there.
+    pub fn route_auth(&self, method: &str, path: &str) -> Option<&'static [Auth]> {
+        Method::from_http(method)
+            .and_then(|method| self.by_route.get(&(method, path)))
+            .or_else(|| self.by_route.get(&(Method::Any, path)))
+            .copied()
+    }
+
+    pub fn routes_accepting(&self, auth: Auth) -> Vec<(&'static str, &'static str)> {
+        let mut routes: Vec<_> = self
+            .registered
+            .iter()
+            .filter(|r| r.auth.contains(&auth))
+            .map(|r| (r.method.as_str(), r.path))
+            .collect();
+        routes.sort_unstable();
+        routes
+    }
 }
 
-/// The named routes, merged and built against `states`; panics on an unknown
-/// name (test aid).
-pub fn named_router(names: &[&str], states: &RouterStates) -> OpenApiRouter {
-    let routes: Vec<_> = registered()
-        .into_iter()
-        .filter(|r| names.contains(&r.name))
-        .collect();
-    for name in names {
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn registration(server: Server, auth: &'static [Auth]) -> RouterRegistration {
+        RouterRegistration {
+            name: "route",
+            server,
+            version: Some(Version::V1),
+            scope: Scope::Flat,
+            modes: SecurityMode::ALL,
+            method: Method::Post,
+            path: "/internal/route",
+            auth,
+            operation: Operation::default,
+            components: Components::default,
+            build: |_| axum::Router::new(),
+        }
+    }
+
+    #[test]
+    fn an_internal_route_takes_internal_tokens_or_service_tokens_alone() {
+        for auth in [&[Auth::Internal][..], &[Auth::ServiceToken]] {
+            assert!(
+                registration(Server::Internal, auth).validate().is_ok(),
+                "{auth:?}"
+            );
+        }
+        for auth in [
+            &[Auth::Session][..],
+            &[Auth::Session, Auth::ServiceToken],
+            &[Auth::None],
+        ] {
+            assert!(
+                registration(Server::Internal, auth).validate().is_err(),
+                "{auth:?}"
+            );
+        }
         assert!(
-            routes.iter().any(|r| r.name == *name),
-            "no registered route named `{name}`"
+            registration(Server::Public, &[Auth::Internal])
+                .validate()
+                .is_err()
         );
     }
-    routes.into_iter().fold(OpenApiRouter::default(), |acc, r| {
-        acc.merge(r.router(states))
-    })
-}
-
-/// The credentials the route answering `method` on `path` accepts; `None`
-/// when no route answers that method there.
-pub fn route_auth(method: &str, path: &str) -> Option<&'static [Auth]> {
-    let by_route = by_route();
-    Method::from_http(method)
-        .and_then(|method| by_route.get(&(method, path)))
-        .or_else(|| by_route.get(&(Method::Any, path)))
-        .copied()
-}
-
-fn by_route() -> &'static HashMap<(Method, &'static str), &'static [Auth]> {
-    static BY_ROUTE: OnceLock<HashMap<(Method, &'static str), &'static [Auth]>> = OnceLock::new();
-    BY_ROUTE.get_or_init(|| {
-        registered()
-            .into_iter()
-            .map(|r| ((r.method, r.path), r.auth))
-            .collect()
-    })
-}
-
-pub fn routes_accepting(auth: Auth) -> Vec<(&'static str, &'static str)> {
-    let mut routes: Vec<_> = registered()
-        .into_iter()
-        .filter(|r| r.auth.contains(&auth))
-        .map(|r| (r.method.as_str(), r.path))
-        .collect();
-    routes.sort_unstable();
-    routes
-}
-
-/// [`registered`], validated, with an empty registry as the linker-drop
-/// failure.
-pub fn require_registered() -> Result<Vec<&'static RouterRegistration>, TdError> {
-    let routes = registered();
-    if routes.is_empty() {
-        return Err(RouterRegistryError::NoRoutesRegistered.into());
-    }
-    for route in &routes {
-        route.validate()?;
-    }
-    Ok(routes)
 }

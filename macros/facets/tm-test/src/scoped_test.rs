@@ -21,7 +21,8 @@ use crate::db_arm::{DbComponents, db_setup, emit_db_wrapper};
 #[derive(Debug, FromMeta)]
 struct TestArgs {
     /// Db-backed test. Bare `db` provisions the apiserver component; `db(Type, ...)`
-    /// provisions each listed component (own schema) and injects a pool per type.
+    /// provisions each listed component (own schema) and injects a pool per type;
+    /// `domain = "name"` puts the schemas in that tdd domain's database.
     #[darling(default)]
     db: Option<DbComponents>,
 }
@@ -87,6 +88,6 @@ fn try_scoped_test(args: TokenStream, item: TokenStream) -> darling::Result<Toke
         ))
         .with_span(&input.sig.inputs));
     }
-    let setup = db_setup(&ctx.original_name.to_string(), &components);
+    let setup = db_setup(&ctx.original_name.to_string(), &components, db.domain());
     Ok(emit_db_wrapper(&ctx, &fn_args, &setup))
 }

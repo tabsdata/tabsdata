@@ -14,30 +14,53 @@ use syn::TypePath;
 
 use crate::common::{EmitCtx, ret_sig_and_skip};
 
-/// The components a `db` test provisions, parsed from `db` (bare) or
-/// `db(Type, ...)`. Empty means the default apiserver component; otherwise each
-/// listed type's pool is provisioned (on its own schema) and injected in order.
+/// What a `db` test provisions, parsed from `db` (bare) or
+/// `db(Type, ..., domain = "name")`. No types means the default apiserver
+/// component; otherwise each listed type's pool is provisioned (on its own
+/// schema) and injected in order. `domain` names the tdd domain whose database
+/// the schemas go in, for a test that needs what only that domain has.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct DbComponents(Vec<syn::Path>);
+pub(crate) struct DbComponents {
+    paths: Vec<syn::Path>,
+    domain: Option<String>,
+}
 
 impl FromMeta for DbComponents {
     /// Bare `db` — default to the apiserver component.
     fn from_word() -> darling::Result<Self> {
         Ok(Self::default())
     }
-    /// `db(TypeA, TypeB)` — one component type path per pool.
+    /// `db(TypeA, TypeB, domain = "name")` — one component type path per pool,
+    /// and at most one domain.
     fn from_list(items: &[NestedMeta]) -> darling::Result<Self> {
-        let paths = items
-            .iter()
-            .map(|item| match item {
-                NestedMeta::Meta(syn::Meta::Path(p)) => Ok(p.clone()),
-                other => Err(darling::Error::custom(
-                    "expected a component type, e.g. `db(AiAgentComponent)`",
-                )
-                .with_span(other)),
-            })
-            .collect::<darling::Result<Vec<_>>>()?;
-        Ok(Self(paths))
+        let mut db = Self::default();
+        for item in items {
+            match item {
+                NestedMeta::Meta(syn::Meta::Path(p)) => db.paths.push(p.clone()),
+                NestedMeta::Meta(syn::Meta::NameValue(nv)) if nv.path.is_ident("domain") => {
+                    if db.domain.is_some() {
+                        return Err(darling::Error::duplicate_field("domain").with_span(nv));
+                    }
+                    let domain = String::from_expr(&nv.value)?;
+                    if domain.trim().is_empty() {
+                        return Err(darling::Error::custom(
+                            "names no domain — expected its name in the tdd store, e.g. \
+                             `db(domain = \"apiserver_postgres_own\")`",
+                        )
+                        .with_span(&nv.value));
+                    }
+                    db.domain = Some(domain);
+                }
+                other => {
+                    return Err(darling::Error::custom(
+                        "expected a component type or `domain = \"...\"`, e.g. \
+                         `db(AiAgentComponent)`",
+                    )
+                    .with_span(other));
+                }
+            }
+        }
+        Ok(db)
     }
 }
 
@@ -45,17 +68,30 @@ impl DbComponents {
     /// Resolved component type paths — the default apiserver component when the
     /// list is empty.
     pub(crate) fn paths(&self) -> Vec<TokenStream2> {
-        if self.0.is_empty() {
+        if self.paths.is_empty() {
             vec![quote! { ::td_database::components::ApiserverComponent }]
         } else {
-            self.0.iter().map(|p| quote! { #p }).collect()
+            self.paths.iter().map(|p| quote! { #p }).collect()
         }
+    }
+
+    pub(crate) fn domain(&self) -> Option<&str> {
+        self.domain.as_deref()
     }
 }
 
-/// The setup expression: provision `components` for `test_name`.
-pub(crate) fn db_setup(test_name: &str, components: &[TokenStream2]) -> TokenStream2 {
+/// The setup expression: provision `components` for `test_name`, in `domain`'s
+/// database when the test names one.
+pub(crate) fn db_setup(
+    test_name: &str,
+    components: &[TokenStream2],
+    domain: Option<&str>,
+) -> TokenStream2 {
     let components = components.to_vec();
+    let domain = match domain {
+        Some(name) => quote! { ::std::option::Option::Some(#name) },
+        None => quote! { ::std::option::Option::None },
+    };
     // A `const` binds the component list to `'static` (each `&Component`
     // const-promotes), satisfying the harness's `&'static [...]` input.
     quote! {
@@ -63,7 +99,7 @@ pub(crate) fn db_setup(test_name: &str, components: &[TokenStream2]) -> TokenStr
             const __TD_TEST_COMPONENTS:
                 &[&dyn ::td_database::components::SchemaComponent] =
                 &[#(& #components),*];
-            ::td_test::db::DbTestSetup::new(#test_name, __TD_TEST_COMPONENTS)
+            ::td_test::db::DbTestSetup::new(#test_name, __TD_TEST_COMPONENTS, #domain)
                 .setup()
                 .await
         }

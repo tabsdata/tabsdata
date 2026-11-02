@@ -19,6 +19,7 @@ const DEADLOCK_DETECTED: &str = "40P01";
 const SERIALIZATION_FAILURE: &str = "40001";
 const LOCK_NOT_AVAILABLE: &str = "55P03";
 const QUERY_CANCELED: &str = "57014";
+const UNIQUE_VIOLATION: &str = "23505";
 
 /// One run of a unit of work. Only [`retrying`] and the service wrapper make
 /// one, and a write transaction needs one, so every write unit is retried.
@@ -173,6 +174,16 @@ pub fn conflicted(error: &TdError) -> bool {
     database_error(error).is_some_and(conflicted_sql)
 }
 
+/// Whether `error` is a unique violation of the index or constraint named
+/// `constraint`.
+pub fn unique_violation_on(error: &TdError, constraint: &str) -> bool {
+    database_error(error)
+        .and_then(|sql| sql.as_database_error())
+        .is_some_and(|db| {
+            db.code().as_deref() == Some(UNIQUE_VIOLATION) && db.constraint() == Some(constraint)
+        })
+}
+
 pub(super) fn conflicted_sql(error: &sqlx::Error) -> bool {
     error
         .as_database_error()
@@ -296,6 +307,10 @@ mod tests {
         fn kind(&self) -> ErrorKind {
             ErrorKind::Other
         }
+
+        fn constraint(&self) -> Option<&str> {
+            Some("the_uidx")
+        }
     }
 
     fn sql(code: &'static str) -> TdError {
@@ -338,6 +353,14 @@ mod tests {
         .await;
         assert!(outcome.is_err());
         assert_eq!(runs.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn a_unique_violation_is_told_by_its_index() {
+        assert!(unique_violation_on(&sql(UNIQUE_VIOLATION), "the_uidx"));
+        assert!(!unique_violation_on(&sql(UNIQUE_VIOLATION), "other_uidx"));
+        assert!(!unique_violation_on(&sql(DEADLOCK_DETECTED), "the_uidx"));
+        assert!(!unique_violation_on(&Failure::Plain.into(), "the_uidx"));
     }
 
     #[tokio::test]

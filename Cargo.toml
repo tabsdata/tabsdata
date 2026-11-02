@@ -34,6 +34,7 @@ members = [
     "devutils/automation/tasks/cargo/td-build",
     "devutils/automation/tasks/makers/td-xtask",
     "server/libraries/ta-apiserver",
+    "server/libraries/ta-edition",
     "server/libraries/ta-execution",
     "server/libraries/ta-objects",
     "server/libraries/ta-services",
@@ -64,6 +65,7 @@ members = [
     "extensions/rust/te-apiserver",
     "extensions/rust/te-authz",
     "extensions/rust/te-database",
+    "extensions/rust/te-edition",
     "extensions/rust/te-execution",
     "extensions/rust/te-services",
     "extensions/rust/te-system",
@@ -191,6 +193,9 @@ path = "server/libraries/ta-services"
 [workspace.dependencies.ta-system]
 path = "server/libraries/ta-system"
 
+[workspace.dependencies.ta-edition]
+path = "server/libraries/ta-edition"
+
 [workspace.dependencies.ta-tableframe]
 path = "server/libraries/ta-tableframe"
 
@@ -226,6 +231,9 @@ path = "extensions/rust/te-authz"
 
 [workspace.dependencies.te-database]
 path = "extensions/rust/te-database"
+
+[workspace.dependencies.te-edition]
+path = "extensions/rust/te-edition"
 
 [workspace.dependencies.te-services]
 path = "extensions/rust/te-services"

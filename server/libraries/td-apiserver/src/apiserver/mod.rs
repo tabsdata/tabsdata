@@ -7,6 +7,7 @@ use crate::apiserver::v1::ApiServerV1;
 use crate::config::Config;
 use crate::router::internal::internal_routes;
 use std::sync::Arc;
+use ta_apiserver::router::Routes;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::AuthzRegistry;
@@ -19,8 +20,10 @@ use td_execution::{RecoveryConfig, SchedulerConfig, SchedulerNotify};
 use td_objects::types::addresses::InternalServerEndpoint;
 use td_objects::types::basic::InstanceId;
 use td_services::Services;
+use td_services::connection_catalog::ConnectionCatalog;
 use td_services::execution::services::runtime_info::RuntimeContext;
 use td_services::internal_api::InternalApi;
+use td_services::table::sample::TableSampler;
 use td_storage::Storage;
 use te_services::{ContextExt, ExtendedServices};
 use tokio_util::sync::CancellationToken;
@@ -61,6 +64,7 @@ pub struct ApiServerCtx {
     pub config: Config,
     pub services: Services,
     pub extended_services: ExtendedServices,
+    pub routes: Arc<Routes>,
 }
 
 impl ApiServerCtx {
@@ -75,6 +79,7 @@ impl ApiServerCtx {
         bridge: Ctx<BridgeProviderHandle>,
         authz_registry: Arc<AuthzRegistry>,
         internal_endpoint: Arc<InternalServerEndpoint>,
+        routes: Arc<Routes>,
     ) -> Result<Self, TdError> {
         let jwt_config = Ctx::new(config.jwt.clone());
         let services = Services {
@@ -99,6 +104,7 @@ impl ApiServerCtx {
             ssl_folder: Ctx::new(config.ssl_folder.clone()),
             resources_dir: Ctx::new(config.resources_folder.clone()),
             storage: storage.clone(),
+            table_sampler: Ctx::new(TableSampler::default()),
             runtime_context: runtime_context.clone(),
             instance_id,
             transaction_by: Ctx::new(config.transaction_by.clone()),
@@ -119,6 +125,8 @@ impl ApiServerCtx {
                 max_recoveries_per_tick: config.max_recoveries_per_tick,
             }),
             bridge,
+            connection_catalog: Ctx::new(ConnectionCatalog::default()),
+            catalog_config: Ctx::new(config.catalog.clone()),
         };
         let extended_services = services
             .extend(&serving_pools, &config.extended_config)
@@ -128,6 +136,7 @@ impl ApiServerCtx {
             config,
             services,
             extended_services,
+            routes,
         })
     }
 }

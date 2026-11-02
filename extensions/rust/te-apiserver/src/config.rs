@@ -13,8 +13,8 @@ use td_objects::types::basic::ServiceToken;
 pub struct ExtendedConfig {}
 
 impl ExtendedConfig {
-    /// The token the server seeds as a system token at boot, if any.
-    pub fn instance_token(&self) -> Option<&ServiceToken> {
+    /// The tokens the server seeds as system tokens at boot, if any.
+    pub fn seeded_tokens(&self) -> Option<&ServiceToken> {
         None
     }
 }

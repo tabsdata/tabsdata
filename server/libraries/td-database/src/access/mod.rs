@@ -43,7 +43,7 @@ pub use connection::GatedConnection;
 pub use grant::{Gated, Grant};
 pub use lock_instant::LockInstant;
 pub use mode::{AccessMode, OpensIn, RO, RW, WriteMode, XW};
-pub use retry::{Attempt, conflicted, retrying};
+pub use retry::{Attempt, conflicted, retrying, unique_violation_on};
 use sqlx::postgres::PgConnection;
 use std::fmt::Display;
 use std::marker::PhantomData;

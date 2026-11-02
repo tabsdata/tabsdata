@@ -44,6 +44,15 @@ pub trait PgConnectionExt {
         key: &str,
     ) -> impl Future<Output = Result<bool, Error>> + Send;
 
+    /// [`try_advisory_xact_lock_text`](Self::try_advisory_xact_lock_text)
+    /// with `key` qualified by `current_schema()`: for a lock on a
+    /// schema-wide resource, which schemas sharing one database must not
+    /// contend on.
+    fn try_schema_advisory_xact_lock_text(
+        &mut self,
+        key: &str,
+    ) -> impl Future<Output = Result<bool, Error>> + Send;
+
     /// Bound as a parameter, so the value reaches no SQL text — client batch
     /// logs, server statement logs and wire captures see only `set_config`.
     fn set_local_secret(
@@ -118,6 +127,22 @@ impl PgConnectionExt for PgConnection {
             .expr(
                 Func::cust("pg_try_advisory_lock")
                     .arg(Func::cust("hashtextextended").args([Expr::val(key), Expr::val(0)])),
+            )
+            .build_query_scalar()
+            .fetch_one(self)
+            .await
+    }
+
+    async fn try_schema_advisory_xact_lock_text(&mut self, key: &str) -> Result<bool, Error> {
+        let qualified = Func::cust("concat").args([
+            Func::cust("current_schema").into(),
+            Expr::val(":"),
+            Expr::val(key),
+        ]);
+        Query::select()
+            .expr(
+                Func::cust("pg_try_advisory_xact_lock")
+                    .arg(Func::cust("hashtextextended").args([qualified.into(), Expr::val(0)])),
             )
             .build_query_scalar()
             .fetch_one(self)

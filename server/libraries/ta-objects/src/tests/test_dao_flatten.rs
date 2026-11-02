@@ -261,7 +261,7 @@ mod tests {
     }
 
     #[test]
-    fn test_keyed_cols_resolve_into_base() {
+    fn test_keyed_cols_resolve_into_base_and_keep_the_pk() {
         let keys: Vec<String> = WidgetRowDao::key_columns()
             .into_iter()
             .map(|c| Iden::to_string(&c))
@@ -272,7 +272,7 @@ mod tests {
             .into_iter()
             .map(|c| Iden::to_string(&c))
             .collect();
-        assert_eq!(values, ["id", "defined_on", "row_id"]);
+        assert_eq!(values, ["defined_on", "row_id"]);
     }
 
     fn addresses_one_row<S: DbScope, C: AddressesOneRow<WidgetRowDao, S>>(_condition: &C) {}

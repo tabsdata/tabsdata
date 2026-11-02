@@ -4,8 +4,9 @@
 
 //! The registry schema components and their management: the privileged
 //! [`AdminPool`] and the provision / upgrade / check orchestration over the
-//! configured [`DatabaseComponents`]. Component registration is the edition
-//! extension's job (`te-database`), so this module stays edition-agnostic.
+//! configured [`DatabaseComponents`], over the components of a [`Registry`].
+//! The edition passes its components in, so this module stays
+//! edition-agnostic.
 //!
 //! Logging shape, kept by every phase here: `info!` announces the phase and
 //! confirms it, once per component, with the component key and its schema;
@@ -14,6 +15,7 @@
 mod admin_pool;
 mod apiserver;
 mod component;
+mod extensions;
 mod plan;
 pub(crate) mod sql;
 mod upgrade;
@@ -33,8 +35,12 @@ use crate::server::{EmbeddedPassword, resolve_password, server_connectable};
 pub use admin_pool::AdminPool;
 pub use apiserver::{APISERVER_COMPONENT_KEY, ApiserverComponent};
 pub use component::{
-    ComponentRegistration, ComponentStatus, ProvisionSpec, SchemaComponent, SchemaSource,
-    component, registered, validate_components,
+    BaselineSeeder, ComponentStatus, ProvisionSpec, Registry, SchemaComponent, SchemaSource,
+    validate_components,
+};
+pub use extensions::{
+    DependentObject, EXTENSIONS_REPORT_PREFIX, ExtensionPools, ExtensionReport, ExtensionState,
+    ExtensionsDocument, OptionalExtension, RemoveOutcome, optional_extension, optional_extensions,
 };
 pub use plan::{ComponentUpgrade, UpgradeAction};
 use sqlx::Connection;
@@ -198,6 +204,15 @@ async fn admin_pool_for(
     AdminPool::connect(&serving_config(components, component)?).await
 }
 
+/// `component`'s schema owner pool: the owner of the objects its optional
+/// extensions feed and of the ledger that marks the ones Tabsdata created.
+pub async fn extension_owner_pool(
+    components: &DatabaseComponents,
+    component: &dyn SchemaComponent,
+) -> Result<AdminPool, DbError> {
+    admin_pool_for(components, component).await
+}
+
 async fn serving_for(
     components: &DatabaseComponents,
     component: &dyn SchemaComponent,
@@ -219,11 +234,12 @@ pub struct ComponentObjects {
 
 /// Inspect every registered component's schema, owner role and RLS roles.
 pub async fn inspect_all(
+    registry: &Registry,
     components: &DatabaseComponents,
     admin: &AdminPool,
 ) -> Result<Vec<ComponentObjects>, DbError> {
     let mut found = Vec::new();
-    for component in registered() {
+    for component in registry.components() {
         let entry = component_entry(components, component)?;
         let (owner, _) = owner_credentials(entry, component)?;
         let schema = schema_of(entry, component)?;
@@ -306,10 +322,11 @@ pub fn require_present(found: &[ComponentObjects]) -> Result<(), DbError> {
 /// without the check a `create` over a live database would adopt its schemas
 /// instead of failing. Returns the pre-provision state for the caller's report.
 pub async fn provision_all(
+    registry: &Registry,
     components: &DatabaseComponents,
     admin: &AdminPool,
 ) -> Result<Vec<ComponentObjects>, DbError> {
-    let before = inspect_all(components, admin).await?;
+    let before = inspect_all(registry, components, admin).await?;
     require_absent(&before)?;
     for objects in &before {
         if objects.roles_present {
@@ -321,7 +338,7 @@ pub async fn provision_all(
             );
         }
     }
-    for component in registered() {
+    for component in registry.components() {
         let entry = component_entry(components, component)?;
         let (owner, password) = owner_credentials(entry, component)?;
         let roles = entry.rls_roles()?;
@@ -354,10 +371,11 @@ pub async fn provision_all(
 /// version may newly depend on, which the owner-run [`upgrade_all`] cannot
 /// create itself. Idempotent; runs before it on `db upgrade`.
 pub async fn ensure_roles_all(
+    registry: &Registry,
     components: &DatabaseComponents,
     admin: &AdminPool,
 ) -> Result<(), DbError> {
-    for component in registered() {
+    for component in registry.components() {
         let entry = component_entry(components, component)?;
         let owner = schema_of(entry, component)?;
         let roles = entry.rls_roles()?;
@@ -377,10 +395,11 @@ pub async fn ensure_roles_all(
 /// owner (DDL on its own schema). Reports the version transition each
 /// component took. Cluster-global roles are [`ensure_roles_all`]'s job.
 pub async fn upgrade_all(
+    registry: &Registry,
     components: &DatabaseComponents,
 ) -> Result<Vec<ComponentUpgrade>, DbError> {
     let mut upgraded = Vec::new();
-    for component in registered() {
+    for component in registry.components() {
         let schema = resolved_schema(components, component)?;
         info!(
             component = component.key(),
@@ -409,8 +428,11 @@ pub async fn upgrade_all(
 /// Every declared pool must have its `pool:` block and every serving block
 /// must be declared — a block for a pool the component does not have is a
 /// config error, same as a missing one.
-pub fn validate_component_pools(components: &DatabaseComponents) -> Result<(), DbError> {
-    for component in registered() {
+pub fn validate_component_pools(
+    registry: &Registry,
+    components: &DatabaseComponents,
+) -> Result<(), DbError> {
+    for component in registry.components() {
         let entry = component_entry(components, component)?;
         for kind in [PoolKind::Regular, PoolKind::Exclusive] {
             let declared = component.pools().contains(&kind);
@@ -434,9 +456,12 @@ pub fn validate_component_pools(components: &DatabaseComponents) -> Result<(), D
 
 /// Verify every registered component is serveable and up to date, on fresh
 /// serving pools opened from the config.
-pub async fn check_all(components: &DatabaseComponents) -> Result<(), DbError> {
-    for component in registered() {
-        let serving = connect_serving(components, component.key()).await?;
+pub async fn check_all(
+    registry: &Registry,
+    components: &DatabaseComponents,
+) -> Result<(), DbError> {
+    for component in registry.components() {
+        let serving = connect_serving(registry, components, component.key()).await?;
         component.check(&serving).await?;
     }
     Ok(())
@@ -445,22 +470,45 @@ pub async fn check_all(components: &DatabaseComponents) -> Result<(), DbError> {
 /// Seed every registered component's release baseline on fresh serving pools
 /// opened from the config. Run after `upgrade_all` on both create and upgrade;
 /// each `seed` is an idempotent full sync, and components that ship structure
-/// only inherit the trait no-op.
-pub async fn seed_all(components: &DatabaseComponents) -> Result<(), DbError> {
-    for component in registered() {
+/// only inherit the trait no-op. The [`BaselineSeeder`]s contributed to a
+/// component follow its own seed, on the same serving pool.
+pub async fn seed_all(registry: &Registry, components: &DatabaseComponents) -> Result<(), DbError> {
+    for component in registry.components() {
         let schema = resolved_schema(components, component)?;
         debug!(component = component.key(), schema = %schema, "Seeding baseline");
-        let serving = connect_serving(components, component.key()).await?;
+        let serving = connect_serving(registry, components, component.key()).await?;
         component.seed(&serving).await?;
+        for seeder in registry.seeders(component.key()) {
+            debug!(
+                component = component.key(),
+                seeder = seeder.name,
+                "Seeding baseline content"
+            );
+            (seeder.seed)(seeding_pools(component, &serving))
+                .await
+                .map_err(|cause| {
+                    DbError::BaselineSeedFailed(component.key(), seeder.name, cause)
+                })?;
+        }
         info!(component = component.key(), schema = %schema, "Baseline seeded");
     }
     Ok(())
 }
 
+/// `serving` in every pool slot `component` declares: the domain pools a
+/// seeder opens its connections from.
+fn seeding_pools(component: &dyn SchemaComponent, serving: &TdPool) -> DomainPools {
+    let mut pools = ComponentPools::default();
+    for kind in component.pools() {
+        pools.set(*kind, serving.clone());
+    }
+    DomainPools::from_map(BTreeMap::from([(component.key(), pools)]))
+}
+
 /// Verify every registered component on its already-open serving pool — the
 /// apiserver's boot check.
-pub async fn check_pools(pools: &ServingPools) -> Result<(), DbError> {
-    for component in registered() {
+pub async fn check_pools(registry: &Registry, pools: &ServingPools) -> Result<(), DbError> {
+    for component in registry.components() {
         let regular = pools.get(component.key())?.get(PoolKind::Regular).ok_or(
             DbError::MissingComponentPool(component.key(), PoolKind::Regular),
         )?;
@@ -470,16 +518,20 @@ pub async fn check_pools(pools: &ServingPools) -> Result<(), DbError> {
 }
 
 /// Verify one component is serveable on the given serving pool.
-pub async fn check(key: &str, serving: &TdPool) -> Result<(), DbError> {
-    component(key)?.check(serving).await
+pub async fn check(registry: &Registry, key: &str, serving: &TdPool) -> Result<(), DbError> {
+    registry.component(key)?.check(serving).await
 }
 
 /// Drop every registered component's schema and owner role. Destructive; the
 /// caller guards. The `across_projects` marker is left standing — it is
 /// cluster-global and every deployment's policies name it.
-pub async fn drop_all(components: &DatabaseComponents, admin: &AdminPool) -> Result<(), DbError> {
+pub async fn drop_all(
+    registry: &Registry,
+    components: &DatabaseComponents,
+    admin: &AdminPool,
+) -> Result<(), DbError> {
     let mut rls_roles = BTreeSet::new();
-    for component in registered() {
+    for component in registry.components() {
         let entry = component_entry(components, component)?;
         let (owner, _) = owner_credentials(entry, component)?;
         debug!(component = component.key(), schema = %owner, "Dropping component");
@@ -496,11 +548,14 @@ pub async fn drop_all(components: &DatabaseComponents, admin: &AdminPool) -> Res
 }
 
 /// Report each component's recorded version and whether it is current.
-pub async fn status(components: &DatabaseComponents) -> Result<Vec<ComponentStatus>, DbError> {
+pub async fn status(
+    registry: &Registry,
+    components: &DatabaseComponents,
+) -> Result<Vec<ComponentStatus>, DbError> {
     let mut out = Vec::new();
-    for component in registered() {
+    for component in registry.components() {
         let schema = resolved_schema(components, component)?;
-        let db_version = connect_serving(components, component.key())
+        let db_version = connect_serving(registry, components, component.key())
             .await?
             .db_version()
             .await?;
@@ -515,8 +570,12 @@ pub async fn status(components: &DatabaseComponents) -> Result<Vec<ComponentStat
 }
 
 /// Build one component's serving pool — the same path the apiserver uses.
-pub async fn build_pool(components: &DatabaseComponents, key: &str) -> Result<TdPool, DbError> {
-    serving_for(components, component(key)?).await
+pub async fn build_pool(
+    registry: &Registry,
+    components: &DatabaseComponents,
+    key: &str,
+) -> Result<TdPool, DbError> {
+    serving_for(components, registry.component(key)?).await
 }
 
 /// Open the privileged pool on the `database_server:` entry. Connects to the
@@ -572,10 +631,13 @@ impl ServingPools {
 /// **App-only** serving pools for every registered component: one pool per
 /// declared kind, each sized by its own explicit `pool:` block. The apiserver
 /// never boots or manages the database, so it holds no privileged access.
-pub async fn connect_app_all(components: &DatabaseComponents) -> Result<ServingPools, DbError> {
-    validate_component_pools(components)?;
+pub async fn connect_app_all(
+    registry: &Registry,
+    components: &DatabaseComponents,
+) -> Result<ServingPools, DbError> {
+    validate_component_pools(registry, components)?;
     let mut pools = BTreeMap::new();
-    for component in registered() {
+    for component in registry.components() {
         let key = component.key();
         let config = serving_config(components, component)?;
         let mut component_pools = ComponentPools::default();
@@ -593,17 +655,18 @@ pub async fn connect_app_all(components: &DatabaseComponents) -> Result<ServingP
 /// One writable app-only pool straight from the component's `pool.regular`
 /// block — the dbmanager lifecycle path (check/seed/status/ping).
 pub async fn connect_serving(
+    registry: &Registry,
     components: &DatabaseComponents,
     key: &str,
 ) -> Result<TdPool, DbError> {
-    serving_for(components, component(key)?).await
+    serving_for(components, registry.component(key)?).await
 }
 
 /// Ping every registered component's serving pool — proves the database is
 /// reachable exactly as the application sees it.
-pub async fn ping_all(components: &DatabaseComponents) -> Result<(), DbError> {
-    for component in registered() {
-        connect_serving(components, component.key())
+pub async fn ping_all(registry: &Registry, components: &DatabaseComponents) -> Result<(), DbError> {
+    for component in registry.components() {
+        connect_serving(registry, components, component.key())
             .await?
             .begin()
             .await?

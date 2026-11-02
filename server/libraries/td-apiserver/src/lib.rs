@@ -9,9 +9,10 @@ use crate::apiserver::{ApiServer, ApiServerCtx};
 use crate::bridge::ServerBridgeFactory;
 use crate::config::{Config, Params};
 use crate::recovery::WorkerRecoverer;
-use crate::scheduler::FunctionRequester;
+use crate::scheduler::{FunctionRequester, ProbeDispatcher};
 use std::sync::Arc;
 use std::time::Duration;
+use ta_edition::Edition;
 use ta_services::service::Ctx;
 use td_bridge::{BridgeProviderFactory, BridgeProviderHandle};
 use td_common::signal::terminate;
@@ -31,7 +32,6 @@ use tracing::{error, info};
 mod apiserver;
 mod bridge;
 pub mod config;
-mod extractors;
 mod layers;
 mod recovery;
 mod router;
@@ -47,6 +47,7 @@ pub mod tdmanager;
 /// deliberate, test-only cycle), which puts two builds of td-services in that
 /// graph, so one of its types cannot cross back. Plain strings can.
 pub use apiserver::BASE_URL as INTERNAL_BASE_URL;
+pub use router::connection_catalog::CONNECTION_PROBE_RESULT_PATH;
 pub use router::internal::{
     DOWNLOAD_STATE_PATH, FUNCTION_RUN_CALLBACK_PATH, FUNCTION_VERSION_EXECUTE_PATH,
     FUNCTION_VERSION_EXECUTION_STATUS_PATH, WORKER_CALLBACK_PATH, WORKER_MESSAGE_PATH,
@@ -58,17 +59,20 @@ pub const CONFIG_NAME: &str = "apiserver";
 /// grace less the 12s sleep.
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(30);
 
-pub fn run() {
+pub fn run(edition: Edition) {
+    let registry = edition.database();
+    let routes = Arc::new(edition.routes());
     Cli::<Config, Params>::exec_async(
         CONFIG_NAME,
         |config, params| async move {
+            let registry = &registry;
             let config = params.resolve(config).map_err(|e| {
                 error!("Error resolving API Server configuration: {e:#?}");
                 ExitStatus::GeneralError
             })?;
 
             let database_components = &config.database;
-            dbm::validate_components(database_components).map_err(|e| {
+            dbm::validate_components(registry, database_components).map_err(|e| {
                 error!("Invalid database configuration: {e:#?}");
                 ExitStatus::GeneralError
             })?;
@@ -77,21 +81,21 @@ pub fn run() {
             // component so each context grabs the one it needs. The server
             // lifecycle and schema management belong to `td_dbmanager`, never
             // to the apiserver.
-            let serving_pools = dbm::connect_app_all(database_components)
+            let serving_pools = dbm::connect_app_all(registry, database_components)
                 .await
                 .map_err(|e| {
                     error!("Error connecting to database: {e:#?}");
                     ExitStatus::GeneralError
                 })?;
             // Runtime check runs on the serving pools themselves — no system access.
-            dbm::check_pools(&serving_pools).await.map_err(|e| {
-                error!("Error checking if database is up to date: {e:#?}");
-                ExitStatus::GeneralError
-            })?;
+            dbm::check_pools(registry, &serving_pools)
+                .await
+                .map_err(|e| {
+                    error!("Error checking if database is up to date: {e:#?}");
+                    ExitStatus::GeneralError
+                })?;
             info!("Database is up to date, starting apiserver");
 
-            // The apiserver's regular pool, for the boot-time wiring below
-            // (authz enablement seeds identities).
             let db = serving_pools
                 .get(dbm::APISERVER_COMPONENT_KEY)
                 .map_err(|e| {
@@ -160,11 +164,10 @@ pub fn run() {
             // and EE builds each supply their own `te-authz` with this same
             // entry point.
             let authz_registry = te_authz::enable_extensions(
-                &db,
                 &DbPool::new(serving_pools.domain_pools(), Global),
                 config.security_mode.is_simple(),
                 &config.password,
-                config.extended_config.instance_token(),
+                config.extended_config.seeded_tokens(),
             )
             .await
             .map_err(|e| {
@@ -195,6 +198,7 @@ pub fn run() {
                 bridge.clone(),
                 authz_registry.clone(),
                 Arc::new(internal_endpoint),
+                routes.clone(),
             )
             .await
             .map_err(|e| {
@@ -215,12 +219,15 @@ pub fn run() {
 
             let function_request_server = FunctionRequester::new(&server_context.services).await;
             let worker_recovery_server = WorkerRecoverer::new(&server_context.services).await;
+            let probe_dispatch_server = ProbeDispatcher::new(&server_context.services).await;
 
-            let outcome = TaskGroup::new(SHUTDOWN_GRACE)
+            let tasks = TaskGroup::new(SHUTDOWN_GRACE)
                 .task(api_server)
                 .task(internal_server)
                 .task(function_request_server)
                 .task(worker_recovery_server)
+                .task(probe_dispatch_server);
+            let outcome = te_services::extended_tasks(&server_context.extended_services, tasks)
                 .run_until(terminate())
                 .await;
 

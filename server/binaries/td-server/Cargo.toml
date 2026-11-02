@@ -129,6 +129,7 @@ tm-workspace = { workspace = true }
 
 ## Libraries
 
+ta-edition = { workspace = true }
 td-apiserver = { workspace = true }
 td-common = { workspace = true }
 td-database = { workspace = true }
@@ -141,6 +142,7 @@ td-supervisor = { workspace = true }
 ## Extensions
 
 te-database = { workspace = true }
+te-edition = { workspace = true }
 te-system = { workspace = true }
 
 # External dependencies

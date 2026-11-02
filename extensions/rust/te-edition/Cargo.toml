@@ -1,0 +1,36 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+[package]
+description = "Tabsdata Edition Extension Implementation - Open Source"
+name = "te-edition"
+build = false
+
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+publish = { workspace = true }
+readme = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+
+[lib]
+
+[features]
+enterprise = []
+dummy = []
+mock-env = []
+td-test = ["dummy", "mock-env", "test-utils"]
+test-utils = []
+
+[package.metadata.cargo-machete]
+ignored = ["te-edition"]
+
+[dependencies]
+
+# Internal dependencies
+
+ta-edition = { workspace = true }

@@ -13,8 +13,6 @@ use td_process::pathenv::extend_path;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-te_database::force_link!();
-
 #[attach(signal = "td_tdmanager")]
 fn main() {
     extend_path();
@@ -27,5 +25,5 @@ fn main() {
 
     logging::start();
     install_crypto_provider();
-    td_apiserver::tdmanager::run();
+    td_apiserver::tdmanager::run(te_edition::edition());
 }

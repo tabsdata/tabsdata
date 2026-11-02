@@ -6,6 +6,9 @@
 //! schema(s). Bare `db` provisions the apiserver component and the function must
 //! take `db: TdPool`; `db(Type, ...)` provisions each listed component on its own
 //! schema and injects one `TdPool` per type, in declaration order.
+//! `db(..., domain = "name")` provisions them in that tdd domain's database
+//! rather than the default one, for a test that needs what only that domain has
+//! (an extension the default domain's server lacks, say).
 //!
 //! tdd-provisioned backends are not a flavor of this macro — see
 //! [`macro@domain`] / [`macro@system`], which compose with any test attribute.
@@ -24,6 +27,9 @@
 //!
 //! #[td_test::test(db(crate::fixtures::Foo))]
 //! async fn with_fixture(db: TdPool) { /* ... */ }
+//!
+//! #[td_test::test(db(domain = "apiserver_postgres_own"))]
+//! async fn in_own_domain(db: TdPool) { /* ... */ }
 //!
 //! #[td_test::test(db, flavor = "multi_thread")]
 //! async fn parallel(db: TdPool) { /* ... */ }

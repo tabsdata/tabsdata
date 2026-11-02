@@ -25,6 +25,7 @@ impl From<TdError> for ErrorStatus {
             code: error.code().to_string(),
             error: Some(reason_phrase(error.api_error())),
             error_description: Some(error.user_message()),
+            retry_after: error.retry_after(),
         }
         .into()
     }

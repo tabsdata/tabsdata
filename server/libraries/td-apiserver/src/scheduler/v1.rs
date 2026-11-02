@@ -4,9 +4,11 @@
 
 use std::future::Future;
 use std::time::{Duration, Instant};
+use ta_services::service::Ctx;
 use td_common::task_group::BoxError;
 use td_execution::SchedulerNotify;
 use td_services::Services;
+use td_services::connection_catalog::ConnectionCatalog;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, trace, warn};
 
@@ -78,4 +80,51 @@ pub(crate) async fn timed_tick<T, E: Into<BoxError>>(
         );
     }
     result
+}
+
+/// Claims queued connection probes and sends their requests; also expires
+/// sample rows and times out probes that never reported.
+pub struct ProbeDispatcherV1 {
+    services: Services,
+    catalog: Ctx<ConnectionCatalog>,
+    check_frequency: Duration,
+    tick_timeout: Duration,
+}
+
+impl ProbeDispatcherV1 {
+    pub async fn new(services: &Services) -> Self {
+        ProbeDispatcherV1 {
+            services: services.clone(),
+            catalog: services.connection_catalog.clone(),
+            check_frequency: services.scheduler_config.check_frequency.0,
+            tick_timeout: services.scheduler_config.tick_timeout.0,
+        }
+    }
+
+    async fn dispatch(&self) -> Result<(), BoxError> {
+        timed_tick(
+            "probe dispatch",
+            self.tick_timeout,
+            self.services.dispatch_connection_probes(()),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn run(self, shutdown: CancellationToken) -> Result<(), BoxError> {
+        loop {
+            tokio::select! {
+                _ = shutdown.cancelled() => {
+                    debug!("Connection probe dispatcher shutting down...");
+                    break;
+                }
+                _ = self.catalog.submitted.notified() => debug!("Probe dispatcher: tick (notify)"),
+                _ = tokio::time::sleep(self.check_frequency) => debug!("Probe dispatcher: tick (timer)"),
+            }
+            if let Err(e) = self.dispatch().await {
+                error!("Error executing the connection probe dispatcher: {e:#?}");
+            }
+        }
+        Ok(())
+    }
 }

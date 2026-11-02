@@ -14,9 +14,7 @@
 use std::sync::Arc;
 use td_authz::rbac::AuthzRegistry;
 use td_authz::security::sys_admin::ensure_sys_admin_permissions;
-use td_database::access::{DbPool, Global, Grant, RO, retrying};
-use td_database::domain::{Apiserver, DomainConnection};
-use td_database::pool::TdPool;
+use td_database::access::{DbPool, Global, Grant, retrying};
 use td_error::{TdError, td_error};
 use td_objects::types::basic::ServiceToken;
 use td_security::config::PasswordHashingConfig;
@@ -30,8 +28,6 @@ pub fn register_ext(registry: AuthzRegistry) -> AuthzRegistry {
 
 #[td_error]
 pub enum AuthzBootstrapError {
-    #[error("Could not start the authz bootstrap transaction: {0}.")]
-    TransactionBegin(String) = 5000,
     #[error(
         "Cannot start in 'simple' security mode: the current RBAC configuration is not \
          representable on the Simple surface. Revert the offending configuration or start in \
@@ -44,15 +40,15 @@ pub enum AuthzBootstrapError {
 /// in `simple` security mode — verify the RBAC configuration is representable on
 /// the Simple surface. Returns the shared registry for the API server context.
 ///
-/// `pw_cfg` and `instance_token` are unused in the OS build (no extension
-/// identities to seed); they are accepted so the signature matches the EE crate
-/// and the shared `td-apiserver` compiles against either.
+/// `pw_cfg` and `seeded_tokens` are unused in the OS build (no extension
+/// identities to seed); they are accepted so the shared `td-apiserver` call,
+/// which passes the edition config's `seeded_tokens()`, compiles against
+/// either crate.
 pub async fn enable_extensions(
-    db: &TdPool,
     pools: &DbPool<Global>,
     simple_mode: bool,
     _pw_cfg: &PasswordHashingConfig,
-    _instance_token: Option<&ServiceToken>,
+    _seeded_tokens: Option<&ServiceToken>,
 ) -> Result<Arc<AuthzRegistry>, TdError> {
     let registry = register_ext(AuthzRegistry::default());
 
@@ -66,7 +62,7 @@ pub async fn enable_extensions(
     .await?;
 
     if simple_mode {
-        ensure_representable(db, &registry).await?;
+        ensure_representable(pools, &registry).await?;
     } else {
         info!("Security mode 'rbac': RBAC management endpoints enabled");
     }
@@ -77,14 +73,13 @@ pub async fn enable_extensions(
 /// Simple Security Mode requires the current RBAC configuration to be
 /// representable on the flat Simple surface; refuse to start otherwise and list
 /// the offending rows so the operator can revert or boot in `rbac` mode.
-async fn ensure_representable(db: &TdPool, registry: &AuthzRegistry) -> Result<(), TdError> {
-    let conn = db
-        .begin_ro()
-        .await
-        .map_err(|e| AuthzBootstrapError::TransactionBegin(e.to_string()))?;
-    let mut conn = DomainConnection::<Apiserver, Global, RO>::new(conn);
+async fn ensure_representable(
+    pools: &DbPool<Global>,
+    registry: &AuthzRegistry,
+) -> Result<(), TdError> {
+    let mut conn = pools.read().await?;
     let reasons = td_authz::security::representability::check_representability(
-        &mut conn,
+        conn.get(Grant::asserted("authz representability check")),
         registry.sys_admin_permissions(),
     )
     .await?;

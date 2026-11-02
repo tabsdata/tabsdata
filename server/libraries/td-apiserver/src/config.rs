@@ -25,6 +25,7 @@ use td_execution::{
 use td_objects::types::addresses::{
     ApiServerAddresses, InternalServerAddresses, NonEmptyAddresses,
 };
+use td_objects::types::catalog::CatalogConfig;
 use td_security::config::PasswordHashingConfig;
 use td_security::token::config::ServiceTokenConfig;
 use td_storage::{MountDef, StorageError};
@@ -110,6 +111,8 @@ pub struct Config {
     pub database_server: Option<ComponentConfig>,
     #[serde(default)]
     pub storage: Option<StorageConfig>,
+    #[serde(default)]
+    pub catalog: CatalogConfig,
     /// Root directory served by `GET /api/v1/resources/{*path}`. A request for
     /// `/resources/a/b.svg` returns `<resources_folder>/a/b.svg`. When unset,
     /// the route returns `404` for every path.
@@ -184,6 +187,7 @@ impl Default for Config {
             database: DatabaseComponents::default(),
             database_server: None,
             storage: Some(StorageConfig::default()),
+            catalog: CatalogConfig::default(),
             resources_folder: None,
             transaction_by: TransactionBy::default(),
             orchestrator: Orchestrator::default(),
@@ -414,6 +418,7 @@ impl Params {
             },
             database_server: config.database_server,
             storage: resolved_storage,
+            catalog: config.catalog,
             resources_folder: self.resources_folder.clone().or(config.resources_folder),
             transaction_by: self
                 .transaction_by
@@ -508,6 +513,31 @@ database:
         assert_eq!(regular.max_connections, 25);
         assert_eq!(regular.min_connections, 1);
         assert!(entry.pool.exclusive.is_none());
+    }
+
+    fn load(yaml: &str) -> Result<Config, config::ConfigError> {
+        config::Config::builder()
+            .add_source(config::Config::try_from(&Config::default()).unwrap())
+            .add_source(config::File::from_str(yaml, config::FileFormat::Yaml))
+            .build()
+            .unwrap()
+            .try_deserialize()
+    }
+
+    #[test]
+    fn an_unknown_catalog_key_fails_the_load() {
+        for (yaml, key) in [
+            ("catalog:\n  refresh: 24h\n", "refresh"),
+            ("catalog:\n  max_entities: 5\n", "max_entities"),
+        ] {
+            let error = load(yaml).err().unwrap_or_else(|| panic!("{yaml} loaded"));
+            assert!(error.to_string().contains(key), "{yaml}: {error}");
+        }
+        let config = load("catalog:\n  refresh_interval: 24h\n").unwrap();
+        assert!(config.catalog.refresh_interval.is_some());
+        assert!(!config.catalog.maintenance_samples);
+        let config = load("catalog:\n  maintenance_samples: true\n").unwrap();
+        assert!(config.catalog.maintenance_samples);
     }
 
     #[test]

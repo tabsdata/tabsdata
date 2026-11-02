@@ -22,14 +22,11 @@
 
 use crate::apiserver::server::{Server, ServerBuilder, ServerError};
 use crate::apiserver::{ApiServerCtx, BASE_API_URL, V1};
-use crate::layers::authorization::authorization_layer;
+use crate::layers::authorization::{AuthorizationState, authorization_layer};
 use crate::layers::project_resolver::project_resolver_layer;
 use crate::layers::{catch_panic, compression, timeout, trace};
 use axum::middleware::from_fn_with_state;
-use ta_apiserver::router::{
-    AuthClass, Position, RouterStates, Scope, Server as Listener, Version, mount_router,
-    require_registered,
-};
+use ta_apiserver::router::{AuthClass, Position, RouterStates, Scope, Server as Listener, Version};
 use ta_apiserver::status::error_status::ErrorStatus;
 use td_error::{ApiError, api_error};
 use tower::ServiceBuilder;
@@ -45,15 +42,13 @@ impl ApiServerV1 {
         }
 
         let inner = {
-            // Routes come from the inventory registry; only the topology is
-            // built here.
-            require_registered()?;
+            context.routes.validate()?;
             let states = RouterStates::default()
                 .with(context.services.clone())
                 .with(context.extended_services.clone());
             let mode = context.config.security_mode;
             let at = |scope: Scope, class: AuthClass| {
-                mount_router(
+                context.routes.mount_router(
                     Position {
                         server: Listener::Public,
                         version: Some(Version::V1),
@@ -69,14 +64,14 @@ impl ApiServerV1 {
                 .merge(at(Scope::Flat, AuthClass::Open))
                 .merge({
                     let flat = at(Scope::Flat, AuthClass::Bearer);
-                    // The resolver runs after auth and 404s unknown projects
-                    // before any RLS-scoped table is touched.
+                    // The resolver runs after auth and 404s unknown or hidden
+                    // projects before any RLS-scoped table is touched.
                     let project = at(Scope::Project, AuthClass::Bearer).layer(from_fn_with_state(
                         context.services.clone(),
                         project_resolver_layer,
                     ));
                     flat.merge(project).layer(from_fn_with_state(
-                        context.services.clone(),
+                        AuthorizationState::new(&context.services, context.routes.clone()),
                         authorization_layer,
                     ))
                 });
@@ -87,7 +82,7 @@ impl ApiServerV1 {
                 .fallback(api_not_found_handler);
             let router = utoipa_axum::router::OpenApiRouter::default().nest(BASE_API_URL, router);
 
-            let router = router.merge(mount_router(
+            let router = router.merge(context.routes.mount_router(
                 Position {
                     server: Listener::Public,
                     version: None,
@@ -162,7 +157,7 @@ mod tests {
         let states = RouterStates::default()
             .with(Services::default())
             .with(ExtendedServices::default());
-        let flat = mount_router(
+        let flat = ta_apiserver::router::Routes::new(&[]).mount_router(
             Position {
                 server: Listener::Public,
                 version: Some(Version::V1),

@@ -79,6 +79,7 @@ td-error = { workspace = true }
 ## Libraries
 
 ta-apiserver = { workspace = true }
+ta-edition = { workspace = true }
 ta-services = { workspace = true }
 td-apiforge = { workspace = true }
 td-authz = { workspace = true }
@@ -134,6 +135,7 @@ utoipa-swagger-ui = { workspace = true, features = ["axum", "reqwest"] }
 [dev-dependencies]
 td-apiserver = { workspace = true, features = ["td-test"] }
 td-test = { workspace = true }
+te-edition = { workspace = true }
 
 config = { workspace = true, features = ["yaml"] }
 indoc = { workspace = true }

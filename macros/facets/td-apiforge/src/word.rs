@@ -48,3 +48,51 @@ impl ToTokens for Word {
         self.0.to_tokens(tokens);
     }
 }
+
+macro_rules! word_enum {
+    ($name:ident, $key:literal, { $($spelling:literal => $variant:ident),+ $(,)? }) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        pub enum $name {
+            $($variant),+
+        }
+
+        impl $name {
+            const NAMES: &'static [&'static str] = &[$($spelling),+];
+
+            fn from_name(name: &str) -> Option<Self> {
+                match name {
+                    $($spelling => Some($name::$variant),)+
+                    _ => None,
+                }
+            }
+        }
+
+        impl ::darling::FromMeta for $name {
+            fn from_list(items: &[::darling::ast::NestedMeta]) -> darling::Result<Self> {
+                let $crate::word::Word(ident) = <$crate::word::Word as ::darling::FromMeta>::from_list(items)?;
+                Self::from_name(&ident.to_string()).ok_or_else(|| {
+                    darling::Error::custom(format!(
+                        "unknown {} `{ident}`; expected one of {}",
+                        $key,
+                        Self::NAMES.join(", ")
+                    ))
+                    .with_span(&ident)
+                })
+            }
+
+            fn from_expr(expr: &::syn::Expr) -> darling::Result<Self> {
+                Err($crate::word::Word::spelling_error(expr))
+            }
+        }
+
+        impl ::quote::ToTokens for $name {
+            fn to_tokens(&self, tokens: &mut ::proc_macro2::TokenStream) {
+                tokens.extend(match self {
+                    $($name::$variant => ::quote::quote!(::ta_apiserver::router::$name::$variant),)+
+                });
+            }
+        }
+    };
+}
+
+pub(crate) use word_enum;

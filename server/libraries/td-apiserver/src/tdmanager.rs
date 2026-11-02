@@ -10,9 +10,10 @@ use crate::tdmanager::rules::{RuleContext, UpgradeRule};
 use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use ta_edition::Edition;
 use td_common::status::ExitStatus;
 use td_database::access::{DbPool, Global};
-use td_database::components::propagate_server_target;
+use td_database::components::{Registry, propagate_server_target};
 use td_database::config::{ComponentConfig, DatabaseComponents};
 use td_error::TdError;
 use td_kubernetes::client::session::pod::PodContext;
@@ -57,7 +58,8 @@ struct TdManagerParameters {
     command: Option<Command>,
 }
 
-pub fn run() {
+pub fn run(edition: Edition) {
+    let registry = edition.database();
     Cli::<TdManagerConfig, TdManagerParameters>::exec_async(
         CONFIG_NAME,
         |config, parameters| async move {
@@ -66,7 +68,9 @@ pub fn run() {
                 return ExitStatus::GeneralError;
             };
             let outcome = match command {
-                Command::Upgrade { rules } => upgrade(&config.components(), &rules).await,
+                Command::Upgrade { rules } => {
+                    upgrade(&registry, &config.components(), &rules).await
+                }
             };
             match outcome {
                 Ok(()) => ExitStatus::Success,
@@ -82,24 +86,29 @@ pub fn run() {
     );
 }
 
-async fn upgrade(database: &DatabaseComponents, ids: &[String]) -> Result<(), TdError> {
+async fn upgrade(
+    registry: &Registry,
+    database: &DatabaseComponents,
+    ids: &[String],
+) -> Result<(), TdError> {
     let rules = rules::resolve(ids)?;
     if rules.is_empty() {
         info!("No upgrade rules to apply");
         return Ok(());
     }
-    te_database::validate_components(database)?;
-    let pools = te_database::connect_app_all(database).await?;
-    let outcome = apply(&pools, &rules).await;
+    te_database::validate_components(registry, database)?;
+    let pools = te_database::connect_app_all(registry, database).await?;
+    let outcome = apply(registry, &pools, &rules).await;
     pools.shutdown().await;
     outcome
 }
 
 async fn apply(
+    registry: &Registry,
     pools: &te_database::ServingPools,
     rules: &[&'static dyn UpgradeRule],
 ) -> Result<(), TdError> {
-    te_database::check_pools(pools).await?;
+    te_database::check_pools(registry, pools).await?;
     let context = RuleContext {
         database: DbPool::new(pools.domain_pools(), Global),
         kubernetes: kubernetes_context().await?,

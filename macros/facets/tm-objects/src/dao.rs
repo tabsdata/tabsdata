@@ -803,25 +803,6 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
             impl ta_objects::UnversionedDao for #ident {}
         }
     });
-    let upsert_impl = ops.upsert.as_ref().map(|types| {
-        let key_cols = types
-            .iter()
-            .map(|t| quote! { <Self as ta_objects::HasColumn<#t>>::COL });
-        quote! {
-            impl ta_objects::UpsertDao for #ident {
-                fn key_columns() -> impl IntoIterator<Item = Self::Iden> {
-                    [#(#key_cols),*]
-                }
-                fn value_columns() -> impl IntoIterator<Item = Self::Iden> {
-                    let __keys: Vec<_> =
-                        <Self as ta_objects::UpsertDao>::key_columns().into_iter().collect();
-                    <Self as ta_objects::Dao>::columns()
-                        .into_iter()
-                        .filter(move |c| !__keys.contains(c))
-                }
-            }
-        }
-    });
 
     let role = |mark: &str, base_const: &str, base_assoc: &str, base_trait: &str| {
         let base_const = format_ident!("{}", base_const);
@@ -853,12 +834,33 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
             }
         }
     });
-    // if is_table && !is_update && pk.is_none() {
-    //     return Err(syn::Error::new_spanned(
-    //         ident,
-    //         "a table DAO marks its primary key column with #[dao(pk)]",
-    //     ));
-    // }
+    if is_table && !is_update && pk.is_none() {
+        return Err(syn::Error::new_spanned(
+            ident,
+            "a table DAO marks its primary key column with #[dao(pk)]",
+        ));
+    }
+    let upsert_impl = ops.upsert.as_ref().map(|types| {
+        let pk_col = pk.as_ref().map(|(col, _)| col).into_iter();
+        let key_cols = types
+            .iter()
+            .map(|t| quote! { <Self as ta_objects::HasColumn<#t>>::COL });
+        quote! {
+            impl ta_objects::UpsertDao for #ident {
+                fn key_columns() -> impl IntoIterator<Item = Self::Iden> {
+                    [#(#key_cols),*]
+                }
+                fn value_columns() -> impl IntoIterator<Item = Self::Iden> {
+                    let mut __kept: Vec<_> =
+                        <Self as ta_objects::UpsertDao>::key_columns().into_iter().collect();
+                    #(__kept.push(#pk_col);)*
+                    <Self as ta_objects::Dao>::columns()
+                        .into_iter()
+                        .filter(move |c| !__kept.contains(c))
+                }
+            }
+        }
+    });
     if is_versioned && pk.is_none() {
         return Err(syn::Error::new_spanned(
             ident,

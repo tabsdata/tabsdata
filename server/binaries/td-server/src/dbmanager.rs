@@ -4,13 +4,14 @@
 
 //! Standalone database-administration CLI, two command groups that never mix
 //! configs: `server start|serve|stop` reads only the `database_server:` entry,
-//! `db create|upgrade|check|status|drop|ping` reads the `database:` map
-//! (`create`/`upgrade`/`drop` also need the server entry for the privileged
-//! pool).
+//! `db create|upgrade|check|status|drop|ping|extensions` reads the
+//! `database:` map (`create`/`upgrade`/`drop`/`extensions` also need the
+//! server entry for the privileged pool).
 //!
-//! Import rule: registry-dependent operations go through `te_database` (the
-//! edition facade, aliased `dbm`); server lifecycle and config types come
-//! from `td_database` directly (edition-agnostic).
+//! Import rule: the components come from the edition (`te_edition`), and the
+//! operations over them go through `te_database` (the edition facade, aliased
+//! `dbm`); server lifecycle and config types come from `td_database` directly
+//! (edition-agnostic).
 
 #![allow(linker_messages)]
 
@@ -20,6 +21,7 @@ use std::time::Instant;
 
 use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
+use ta_edition::Edition;
 use td_common::attach::attach;
 use td_common::crypto::install_crypto_provider;
 use td_common::status::ExitStatus;
@@ -31,14 +33,10 @@ use td_process::launcher::cli::Cli;
 use td_process::launcher::hooks;
 use td_process::pathenv::extend_path;
 use te_database as dbm;
-use te_database::UpgradeAction;
+use te_database::{Registry, UpgradeAction};
 use tracing::{debug, error, info};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-// Without this anchor the linker drops the inventory submissions and the
-// component registry comes up empty.
-te_database::force_link!();
 
 /// The two sections this binary consumes; other apiserver config keys in the
 /// file are ignored.
@@ -74,7 +72,7 @@ enum ServerCommand {
     Stop,
 }
 
-#[derive(Debug, Clone, Copy, Subcommand)]
+#[derive(Debug, Clone, Subcommand)]
 enum DbCommand {
     /// Provision and upgrade all configured schemas.
     Create,
@@ -92,6 +90,29 @@ enum DbCommand {
     },
     /// Check that every configured schema is reachable on its serving pool.
     Ping,
+    /// List, add or remove the optional extensions Tabsdata uses when the
+    /// database server offers them.
+    #[command(subcommand)]
+    Extensions(ExtensionsCommand),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+enum ExtensionsCommand {
+    /// Show each optional extension: its state, versions and the Tabsdata
+    /// objects that depend on it.
+    List,
+    /// Create the extension the server offers (if the database lacks it) and
+    /// build the Tabsdata objects that depend on it.
+    Add {
+        /// The extension's name.
+        name: String,
+    },
+    /// Drop the Tabsdata objects that depend on the extension, and the
+    /// extension itself when Tabsdata created it.
+    Remove {
+        /// The extension's name.
+        name: String,
+    },
 }
 
 #[derive(Debug, Clone, Args)]
@@ -118,32 +139,40 @@ async fn serve(server: Option<&ComponentConfig>) -> Result<(), DbError> {
 
 /// Provision every component's schema and owner role, then upgrade each.
 async fn create(
+    registry: &Registry,
     components: &DatabaseComponents,
     server: Option<&ComponentConfig>,
 ) -> Result<(), DbError> {
     let started = Instant::now();
     let upgraded = with_server(server, async |admin| {
-        info!(schemas = ?resolved_schemas(components)?, "Creating database");
-        let before = dbm::provision_all(components, admin).await?;
-        let upgraded = dbm::upgrade_all(components).await?;
-        report_objects(&before, &dbm::inspect_all(components, admin).await?);
+        info!(schemas = ?resolved_schemas(registry, components)?, "Creating database");
+        let before = dbm::provision_all(registry, components, admin).await?;
+        let upgraded = dbm::upgrade_all(registry, components).await?;
+        report_objects(
+            &before,
+            &dbm::inspect_all(registry, components, admin).await?,
+        );
         Ok(upgraded)
     })
     .await?;
     // Baseline *content* is seeded on the serving pools (not the privileged
     // pool), so it runs after the schema structure is provisioned and upgraded.
-    dbm::seed_all(components).await?;
+    dbm::seed_all(registry, components).await?;
     report_versions(&upgraded);
     info!(
-        schemas = ?resolved_schemas(components)?,
+        schemas = ?resolved_schemas(registry, components)?,
         elapsed_ms = started.elapsed().as_millis(),
         "Database created"
     );
     Ok(())
 }
 
-fn resolved_schemas(components: &DatabaseComponents) -> Result<Vec<String>, DbError> {
-    dbm::registered()
+fn resolved_schemas(
+    registry: &Registry,
+    components: &DatabaseComponents,
+) -> Result<Vec<String>, DbError> {
+    registry
+        .components()
         .map(|component| dbm::resolved_schema(components, component))
         .collect()
 }
@@ -155,22 +184,23 @@ fn resolved_schemas(components: &DatabaseComponents) -> Result<Vec<String>, DbEr
 /// them here delivers the new release's baseline content to an existing
 /// database.
 async fn upgrade(
+    registry: &Registry,
     components: &DatabaseComponents,
     server: Option<&ComponentConfig>,
 ) -> Result<(), DbError> {
     let started = Instant::now();
     let before = with_server(server, async |admin| {
-        let found = dbm::inspect_all(components, admin).await?;
+        let found = dbm::inspect_all(registry, components, admin).await?;
         dbm::require_present(&found)?;
-        dbm::ensure_roles_all(components, admin).await?;
+        dbm::ensure_roles_all(registry, components, admin).await?;
         Ok(found)
     })
     .await?;
-    info!(schemas = ?resolved_schemas(components)?, "Upgrading database");
-    let upgraded = dbm::upgrade_all(components).await?;
-    dbm::seed_all(components).await?;
+    info!(schemas = ?resolved_schemas(registry, components)?, "Upgrading database");
+    let upgraded = dbm::upgrade_all(registry, components).await?;
+    dbm::seed_all(registry, components).await?;
     let after = with_server(server, async |admin| {
-        dbm::inspect_all(components, admin).await
+        dbm::inspect_all(registry, components, admin).await
     })
     .await?;
     report_objects(&before, &after);
@@ -180,6 +210,92 @@ async fn upgrade(
         "Database upgraded"
     );
     Ok(())
+}
+
+/// `db extensions …`: act on the optional extensions, then report every one
+/// of them, human-readable in the log and as one JSON line on stdout.
+async fn extensions(
+    registry: &Registry,
+    components: &DatabaseComponents,
+    server: Option<&ComponentConfig>,
+    command: ExtensionsCommand,
+) -> Result<(), DbError> {
+    with_server(server, async |admin| {
+        let removed = match &command {
+            ExtensionsCommand::List => None,
+            ExtensionsCommand::Add { name } => {
+                let (component, extension) = dbm::optional_extension(registry, name)?;
+                let report = with_extension_pools(components, admin, component, async |pools| {
+                    pools.add(extension).await
+                })
+                .await?;
+                info!(
+                    extension = extension.name,
+                    version = report.installed_version.as_deref().unwrap_or_default(),
+                    objects = report.dependents_summary(),
+                    "Optional extension added"
+                );
+                None
+            }
+            ExtensionsCommand::Remove { name } => {
+                let (component, extension) = dbm::optional_extension(registry, name)?;
+                let outcome = with_extension_pools(components, admin, component, async |pools| {
+                    pools.remove(extension).await
+                })
+                .await?;
+                info!(
+                    extension = extension.name,
+                    dropped_objects = outcome.dropped_objects.len(),
+                    dropped_extension = outcome.dropped_extension,
+                    "Optional extension removed"
+                );
+                Some(outcome)
+            }
+        };
+        let mut reports = Vec::new();
+        for component in registry.components().filter(|c| !c.extensions().is_empty()) {
+            reports.extend(
+                with_extension_pools(components, admin, component, async |pools| {
+                    pools.list(component.extensions()).await
+                })
+                .await?,
+            );
+        }
+        report_extensions(&reports);
+        let document = dbm::ExtensionsDocument {
+            extensions: reports,
+            removed,
+        };
+        println!(
+            "{}{}",
+            dbm::EXTENSIONS_REPORT_PREFIX,
+            serde_json::json!(document)
+        );
+        Ok(())
+    })
+    .await
+}
+
+fn report_extensions(reports: &[dbm::ExtensionReport]) {
+    for report in reports {
+        info!(
+            extension = report.name,
+            purpose = report.purpose,
+            state = report.state.as_str(),
+            installed = report.installed_version.as_deref().unwrap_or("-"),
+            offered = report.offered_version.as_deref().unwrap_or("-"),
+            update_available = report.update_available,
+            created_by_tabsdata = report.created_by_tabsdata,
+            objects = report.dependents_summary(),
+            "Optional extension"
+        );
+        if let Some(sql) = &report.dba_sql {
+            info!(
+                extension = report.name,
+                "A database administrator runs: {sql};"
+            );
+        }
+    }
 }
 
 /// The version transition each component took, once the run is done.
@@ -245,15 +361,15 @@ fn state_of(was_present: bool, is_present: bool) -> &'static str {
 }
 
 /// The same correctness check the apiserver runs on its serving pools.
-async fn check(components: &DatabaseComponents) -> Result<(), DbError> {
-    dbm::check_all(components)
+async fn check(registry: &Registry, components: &DatabaseComponents) -> Result<(), DbError> {
+    dbm::check_all(registry, components)
         .await
         .inspect(|()| info!("Database is up to date"))
 }
 
 /// Report each component's recorded version.
-async fn status(components: &DatabaseComponents) -> Result<(), DbError> {
-    for s in dbm::status(components).await? {
+async fn status(registry: &Registry, components: &DatabaseComponents) -> Result<(), DbError> {
+    for s in dbm::status(registry, components).await? {
         info!(
             component = s.key,
             schema = %s.schema,
@@ -266,21 +382,22 @@ async fn status(components: &DatabaseComponents) -> Result<(), DbError> {
 }
 
 async fn drop_components(
+    registry: &Registry,
     components: &DatabaseComponents,
     server: Option<&ComponentConfig>,
 ) -> Result<(), DbError> {
     with_server(server, async |admin| {
         info!("Dropping database");
-        dbm::drop_all(components, admin).await?;
-        info!(schemas = ?resolved_schemas(components)?, "Database dropped");
+        dbm::drop_all(registry, components, admin).await?;
+        info!(schemas = ?resolved_schemas(registry, components)?, "Database dropped");
         Ok(())
     })
     .await
 }
 
 /// Ping each component's serving pool — the way the apiserver reaches it.
-async fn ping(components: &DatabaseComponents) -> Result<(), DbError> {
-    dbm::ping_all(components)
+async fn ping(registry: &Registry, components: &DatabaseComponents) -> Result<(), DbError> {
+    dbm::ping_all(registry, components)
         .await
         .inspect(|()| info!("Database is reachable"))
 }
@@ -295,6 +412,24 @@ async fn with_server<T>(
     let pool = dbm::connect_server(server).await?;
     let result = op(&pool).await;
     pool.close().await;
+    result
+}
+
+/// `op` on the privileged `admin` pool and a fresh owner pool of
+/// `component`'s schema.
+async fn with_extension_pools<T>(
+    components: &DatabaseComponents,
+    admin: &dbm::AdminPool,
+    component: &dyn dbm::SchemaComponent,
+    op: impl AsyncFnOnce(&dbm::ExtensionPools<'_>) -> Result<T, DbError>,
+) -> Result<T, DbError> {
+    let owner = dbm::extension_owner_pool(components, component).await?;
+    let pools = dbm::ExtensionPools {
+        server: admin,
+        owner: &owner,
+    };
+    let result = op(&pools).await;
+    owner.close().await;
     result
 }
 
@@ -320,7 +455,8 @@ async fn wait_for_shutdown() {
     }
 }
 
-fn run() {
+fn run(edition: Edition) {
+    let registry = edition.database();
     Cli::<DbManagerConfig, DbManagerParams>::exec_async(
         td_apiserver::CONFIG_NAME,
         |config, params| async move {
@@ -333,10 +469,11 @@ fn run() {
                 dbm::propagate_server_target(&mut resolved, server);
             }
             let components = &resolved;
+            let registry = &registry;
             let server = config.database_server.as_ref();
             // Each group validates only the section it reads.
             if matches!(command, Command::Db(_))
-                && let Err(e) = dbm::validate_components(components)
+                && let Err(e) = dbm::validate_components(registry, components)
             {
                 error!("Invalid database configuration: {e}");
                 debug!("{e:#?}");
@@ -350,16 +487,21 @@ fn run() {
                     ServerCommand::Stop => stop_server(server).await,
                 },
                 Command::Db(command) => match command {
-                    DbCommand::Create => create(components, server).await,
-                    DbCommand::Upgrade => upgrade(components, server).await,
-                    DbCommand::Check => check(components).await,
-                    DbCommand::Status => status(components).await,
+                    DbCommand::Create => create(registry, components, server).await,
+                    DbCommand::Upgrade => upgrade(registry, components, server).await,
+                    DbCommand::Check => check(registry, components).await,
+                    DbCommand::Status => status(registry, components).await,
                     DbCommand::Drop { force: false } => {
                         error!("Refusing to drop schemas without --force");
                         return ExitStatus::GeneralError;
                     }
-                    DbCommand::Drop { force: true } => drop_components(components, server).await,
-                    DbCommand::Ping => ping(components).await,
+                    DbCommand::Drop { force: true } => {
+                        drop_components(registry, components, server).await
+                    }
+                    DbCommand::Ping => ping(registry, components).await,
+                    DbCommand::Extensions(command) => {
+                        extensions(registry, components, server, command).await
+                    }
                 },
             };
 
@@ -389,5 +531,5 @@ fn main() {
 
     logging::start();
     install_crypto_provider();
-    run();
+    run(te_edition::edition());
 }

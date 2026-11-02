@@ -2,16 +2,19 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! The schema-component contract and the inventory registry used to discover
-//! components at runtime; the edition extension (`te-database`) registers
-//! components via `inventory::submit!`.
+//! The schema-component contract and the [`Registry`] of the components a
+//! binary manages: the built-in apiserver component and the ones the edition
+//! passes in.
 
-use crate::components::{AdminPool, UpgradeTransaction, resolved_schema};
+use crate::components::extensions::OptionalExtension;
+use crate::components::{AdminPool, ApiserverComponent, UpgradeTransaction, resolved_schema};
 use crate::config::{DatabaseComponents, RlsRoles};
+use crate::domain::DomainPools;
 use crate::error::DbError;
 use crate::pool::PoolKind;
 use crate::pool::TdPool;
 use async_trait::async_trait;
+use futures_util::future::BoxFuture;
 use std::collections::BTreeMap;
 pub use td_schema::SchemaSource;
 
@@ -47,6 +50,13 @@ pub trait SchemaComponent: Send + Sync + 'static {
     /// This component's schema content.
     fn schema_source(&self) -> &'static dyn SchemaSource;
 
+    /// The optional extensions this component's schema uses when the database
+    /// has them: `td_dbmanager db extensions add` creates one into its schema,
+    /// marks it in its ledger and builds its dependent objects. Default: none.
+    fn extensions(&self) -> &'static [OptionalExtension] {
+        &[]
+    }
+
     /// Create the schema, its owner role, and its RLS roles.
     async fn provision(&self, admin: &AdminPool, spec: &ProvisionSpec<'_>) -> Result<(), DbError> {
         admin.provision_schema(spec).await
@@ -81,43 +91,76 @@ pub trait SchemaComponent: Send + Sync + 'static {
     }
 }
 
-/// Inventory registration slot, one submission per component.
-pub struct ComponentRegistration {
-    pub component: &'static dyn SchemaComponent,
-}
-inventory::collect!(ComponentRegistration);
-
-/// All components registered (linked) into this binary.
-pub fn registered() -> impl Iterator<Item = &'static dyn SchemaComponent> {
-    inventory::iter::<ComponentRegistration>
-        .into_iter()
-        .map(|r| r.component)
+/// Baseline content a crate above `td-database` seeds into a component's
+/// schema, run by [`seed_all`](crate::components::seed_all) after the
+/// component's own [`SchemaComponent::seed`], on the component's serving
+/// pools. An error fails the create or upgrade.
+pub struct BaselineSeeder {
+    pub component: &'static str,
+    pub name: &'static str,
+    pub seed: fn(DomainPools) -> BoxFuture<'static, Result<(), String>>,
 }
 
-/// Resolve a component by its key.
-pub fn component(key: &str) -> Result<&'static dyn SchemaComponent, DbError> {
-    registered()
-        .find(|c| c.key() == key)
-        .ok_or_else(|| DbError::UnknownSchemaEntry(key.to_owned()))
+/// The schema components a binary manages, the built-in apiserver component
+/// first, and the baseline content seeded into them.
+#[derive(Clone)]
+pub struct Registry {
+    components: Vec<&'static dyn SchemaComponent>,
+    seeders: &'static [BaselineSeeder],
+}
+
+impl Registry {
+    /// The apiserver component plus the edition's `components` and `seeders`.
+    pub fn new(
+        components: &'static [&'static dyn SchemaComponent],
+        seeders: &'static [BaselineSeeder],
+    ) -> Self {
+        let mut all: Vec<&'static dyn SchemaComponent> = vec![&ApiserverComponent];
+        all.extend_from_slice(components);
+        Self {
+            components: all,
+            seeders,
+        }
+    }
+
+    pub fn components(&self) -> impl Iterator<Item = &'static dyn SchemaComponent> + '_ {
+        self.components.iter().copied()
+    }
+
+    /// Resolve a component by its key.
+    pub fn component(&self, key: &str) -> Result<&'static dyn SchemaComponent, DbError> {
+        self.components()
+            .find(|c| c.key() == key)
+            .ok_or_else(|| DbError::UnknownSchemaEntry(key.to_owned()))
+    }
+
+    /// The seeders contributed to `component`.
+    pub fn seeders<'a>(
+        &self,
+        component: &'a str,
+    ) -> impl Iterator<Item = &'static BaselineSeeder> + 'a {
+        self.seeders
+            .iter()
+            .filter(move |seeder| seeder.component == component)
+    }
 }
 
 /// Validate the `database:` map against the registry: every registered
 /// component has its own entry, every key names a registered component, and no
 /// two components resolve to the same schema — provisioning is idempotent, so a
-/// collision has the second component silently share the first one's tables. An
-/// empty registry means the binary forgot the `force_link!` anchor, which
-/// compiles fine but fails every config at runtime.
-pub fn validate_components(components: &DatabaseComponents) -> Result<(), DbError> {
-    if registered().next().is_none() {
-        return Err(DbError::NoComponentsRegistered);
-    }
-    for registered_component in registered() {
+/// collision has the second component silently share the first one's tables.
+pub fn validate_components(
+    registry: &Registry,
+    components: &DatabaseComponents,
+) -> Result<(), DbError> {
+    for registered_component in registry.components() {
         super::component_entry(components, registered_component)?;
     }
     for key in components.keys() {
-        let _ = component(key)?;
+        let _ = registry.component(key)?;
     }
-    let resolved: Vec<(&'static str, String)> = registered()
+    let resolved: Vec<(&'static str, String)> = registry
+        .components()
         .map(|c| Ok((c.key(), resolved_schema(components, c)?)))
         .collect::<Result<_, DbError>>()?;
     require_distinct_schemas(&resolved)

@@ -4,9 +4,7 @@
 
 //! The built-in apiserver schema component.
 
-use crate::components::{
-    AdminPool, ComponentRegistration, SchemaComponent, SchemaSource, UpgradeTransaction,
-};
+use crate::components::{AdminPool, SchemaComponent, SchemaSource, UpgradeTransaction};
 use crate::domain::{Apiserver, DbDomain};
 use crate::error::DbError;
 use crate::pool::PoolKind;
@@ -65,9 +63,4 @@ impl SchemaComponent for ApiserverComponent {
         serving.check_rls_posture().await?;
         Ok(())
     }
-}
-
-// Self-registers in always-linked td-database, so every edition gets it.
-inventory::submit! {
-    ComponentRegistration { component: &ApiserverComponent }
 }

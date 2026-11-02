@@ -16,11 +16,6 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 const LOG_CONFIG_LONG: &str = "--log-config";
 const LOG_CONFIG_SHORT: &str = "-c";
 
-// Keep the schema-component registrations in this binary's final link (see the
-// macro docs); without the anchor the linker drops the inventory submissions and
-// the registry comes up empty.
-te_database::force_link!();
-
 #[attach(signal = "td_apiserver")]
 fn main() {
     extend_path();
@@ -42,7 +37,7 @@ fn main() {
     let command = arguments.join(" ");
     info!("Running apiserver with command: \n{}", command);
 
-    td_apiserver::run();
+    td_apiserver::run(te_edition::edition());
 }
 
 fn log_config_arg() -> Option<String> {

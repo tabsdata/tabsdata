@@ -10,8 +10,9 @@
 //! are conveyed by the body `code` field (and, optionally, the `errors(...)` argument of
 //! `apiserver_path`).
 
-use http::StatusCode;
+use http::{HeaderValue, StatusCode};
 use serde::Serialize;
+use std::time::Duration;
 
 /// Generic API Server Error response.
 #[derive(utoipa::ToSchema, Debug, Default, Serialize)]
@@ -22,6 +23,8 @@ pub struct ErrorResponse {
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_description: Option<String>,
+    #[serde(skip_serializing)]
+    pub retry_after: Option<Duration>,
 }
 
 #[derive(utoipa::ToSchema, utoipa::IntoResponses, serde::Serialize)]
@@ -31,18 +34,24 @@ pub struct ErrorResponse {
 )]
 pub struct ErrorStatus(ErrorResponse);
 
-/// Seconds a client is told to wait before retrying a 503.
-const RETRY_AFTER_SECS: &str = "1";
+/// Seconds a client is told to wait before retrying a 503 whose wait is unknown.
+const UNAVAILABLE_RETRY_AFTER_SECS: u64 = 1;
+
+fn whole_seconds(wait: Duration) -> u64 {
+    wait.as_secs() + u64::from(wait.subsec_nanos() > 0)
+}
 
 impl axum::response::IntoResponse for ErrorStatus {
     fn into_response(self) -> axum::response::Response {
         let status = self.0.status;
+        let retry_after = self.0.retry_after.map(whole_seconds).or_else(|| {
+            (status == StatusCode::SERVICE_UNAVAILABLE).then_some(UNAVAILABLE_RETRY_AFTER_SECS)
+        });
         let mut response = (status, axum::Json(serde_json::json!(self.0))).into_response();
-        if status == StatusCode::SERVICE_UNAVAILABLE {
-            response.headers_mut().insert(
-                http::header::RETRY_AFTER,
-                http::HeaderValue::from_static(RETRY_AFTER_SECS),
-            );
+        if let Some(seconds) = retry_after {
+            response
+                .headers_mut()
+                .insert(http::header::RETRY_AFTER, HeaderValue::from(seconds));
         }
         response
     }
@@ -76,8 +85,29 @@ mod tests {
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(
             response.headers()[http::header::RETRY_AFTER],
-            RETRY_AFTER_SECS
+            UNAVAILABLE_RETRY_AFTER_SECS.to_string()
         );
+    }
+
+    #[tokio::test]
+    async fn test_a_known_wait_becomes_retry_after_in_whole_seconds() {
+        let limited = api_error!(ApiError::Any(429), "slow down")
+            .with_retry_after(Duration::from_millis(1_500));
+        let response = ErrorStatus::from(limited).into_response();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(response.headers()[http::header::RETRY_AFTER], "2");
+
+        let exact =
+            api_error!(ApiError::Any(429), "slow down").with_retry_after(Duration::from_secs(42));
+        let response = ErrorStatus::from(exact).into_response();
+        assert_eq!(response.headers()[http::header::RETRY_AFTER], "42");
+    }
+
+    #[tokio::test]
+    async fn test_an_unknown_wait_sends_no_retry_after() {
+        let response = ErrorStatus::from(api_error!(ApiError::Any(429), "full")).into_response();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert!(response.headers().get(http::header::RETRY_AFTER).is_none());
     }
 
     #[tokio::test]

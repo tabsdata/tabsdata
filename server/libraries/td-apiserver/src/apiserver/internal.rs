@@ -5,14 +5,12 @@
 use crate::apiserver::server::{self, Server, ServerBuilder, ServerError};
 use crate::apiserver::{ApiServerCtx, BASE_API_URL, V1};
 use crate::config::Config;
+use crate::layers::authorization::{AuthorizationState, authorization_layer};
 use crate::layers::internal_token::internal_token_layer;
 use crate::layers::{catch_panic, timeout, trace};
 use axum::middleware::from_fn_with_state;
 use std::error::Error;
-use ta_apiserver::router::{
-    AuthClass, Position, RouterStates, Scope, Server as Listener, Version, mount_router,
-    require_registered,
-};
+use ta_apiserver::router::{AuthClass, Position, RouterStates, Scope, Server as Listener, Version};
 use ta_apiserver::status::error_status::ErrorStatus;
 use td_common::task_group::{BoxError, GroupTask};
 use td_error::{ApiError, api_error};
@@ -56,33 +54,39 @@ impl InternalServer {
             // Routes are keyed by globally-unique ids; the services resolve
             // the owning project from the row itself, so no project
             // resolution happens here.
-            require_registered()?;
+            context.routes.validate()?;
             let states = RouterStates::default()
                 .with(context.services.clone())
                 .with(context.extended_services.clone());
-            let internal = mount_router(
-                Position {
-                    server: Listener::Internal,
-                    version: Some(Version::V1),
-                    scope: Scope::Flat,
-                    mode: context.config.security_mode,
-                    class: AuthClass::Internal,
-                },
-                &states,
-            );
-            let router = utoipa_axum::router::OpenApiRouter::default().merge(
-                internal
-                    // Internal authorization gate: validate the per-request
-                    // internal-endpoint token (replaces the loopback-IP gate)
-                    // and inject the internal RequestContext (system user,
-                    // internal provenance). `route_layer` so routing runs first
-                    // and the gate can read the matched route + path params it
-                    // validates against.
-                    .route_layer(from_fn_with_state(
-                        context.services.clone(),
-                        internal_token_layer,
-                    )),
-            );
+            let at = |class| {
+                context.routes.mount_router(
+                    Position {
+                        server: Listener::Internal,
+                        version: Some(Version::V1),
+                        scope: Scope::Flat,
+                        mode: context.config.security_mode,
+                        class,
+                    },
+                    &states,
+                )
+            };
+            let router = utoipa_axum::router::OpenApiRouter::default()
+                .merge(
+                    at(AuthClass::Internal)
+                        // `route_layer`, so routing runs first and the gate can
+                        // read the matched route and path params the per-request
+                        // internal token is bound to.
+                        .route_layer(from_fn_with_state(
+                            context.services.clone(),
+                            internal_token_layer,
+                        )),
+                )
+                // Service tokens resolve to their own identity: no internal
+                // provenance, so no RBAC bypass.
+                .merge(at(AuthClass::Bearer).layer(from_fn_with_state(
+                    AuthorizationState::new(&context.services, context.routes.clone()),
+                    authorization_layer,
+                )));
 
             let router = utoipa_axum::router::OpenApiRouter::default()
                 .nest(V1, router)

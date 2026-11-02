@@ -158,3 +158,28 @@ where
         }
     }
 }
+
+/// Work accepted to run asynchronously: the body is its handle.
+#[derive(utoipa::ToSchema, utoipa::IntoResponses, serde::Serialize)]
+pub enum AcceptedStatus<T>
+where
+    T: ToSchema,
+{
+    #[response(status = StatusCode::ACCEPTED, description = "Accepted")]
+    ACCEPTED(CtxResponse<T>),
+}
+
+impl<T> axum::response::IntoResponse for AcceptedStatus<T>
+where
+    T: Serialize + ToSchema,
+{
+    fn into_response(self) -> axum::response::Response {
+        match self {
+            Self::ACCEPTED(response) => (
+                http::StatusCode::ACCEPTED,
+                axum::Json(serde_json::json!(response)),
+            )
+                .into_response(),
+        }
+    }
+}

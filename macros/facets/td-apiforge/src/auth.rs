@@ -12,29 +12,16 @@ use proc_macro2::TokenStream;
 use quote::{ToTokens, quote};
 use syn::{Expr, Meta};
 
-use crate::word::Word;
+use crate::word::{Word, word_enum};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Auth {
-    None,
-    Internal,
-    Session,
-    ServiceToken,
-}
+word_enum!(Auth, "credential", {
+    "none" => None,
+    "internal" => Internal,
+    "session" => Session,
+    "service_token" => ServiceToken,
+});
 
 impl Auth {
-    pub const NAMES: &'static [&'static str] = &["none", "internal", "session", "service_token"];
-
-    fn from_name(name: &str) -> Option<Self> {
-        match name {
-            "none" => Some(Auth::None),
-            "internal" => Some(Auth::Internal),
-            "session" => Some(Auth::Session),
-            "service_token" => Some(Auth::ServiceToken),
-            _ => None,
-        }
-    }
-
     fn standalone(self) -> bool {
         matches!(self, Auth::None | Auth::Internal)
     }
@@ -93,12 +80,7 @@ impl FromMeta for AuthSet {
 
 impl ToTokens for AuthSet {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let variants = self.0.iter().map(|auth| match auth {
-            Auth::None => quote!(::ta_apiserver::router::Auth::None),
-            Auth::Internal => quote!(::ta_apiserver::router::Auth::Internal),
-            Auth::Session => quote!(::ta_apiserver::router::Auth::Session),
-            Auth::ServiceToken => quote!(::ta_apiserver::router::Auth::ServiceToken),
-        });
+        let variants = &self.0;
         tokens.extend(quote!(&[#(#variants),*]));
     }
 }

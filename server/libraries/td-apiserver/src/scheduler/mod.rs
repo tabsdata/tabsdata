@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::scheduler::v1::FunctionRequesterV1;
+use crate::scheduler::v1::{FunctionRequesterV1, ProbeDispatcherV1};
 use td_common::task_group::{BoxError, GroupTask};
 use td_services::Services;
 use tokio_util::sync::CancellationToken;
@@ -25,6 +25,26 @@ impl GroupTask for FunctionRequester {
     async fn run(self, shutdown: CancellationToken) -> Result<(), BoxError> {
         match self {
             FunctionRequester::V1(server) => server.run(shutdown).await,
+        }
+    }
+}
+
+pub enum ProbeDispatcher {
+    V1(Box<ProbeDispatcherV1>),
+}
+
+impl ProbeDispatcher {
+    pub async fn new(services: &Services) -> Self {
+        ProbeDispatcher::V1(Box::new(ProbeDispatcherV1::new(services).await))
+    }
+}
+
+impl GroupTask for ProbeDispatcher {
+    const NAME: &'static str = "probe_dispatcher";
+
+    async fn run(self, shutdown: CancellationToken) -> Result<(), BoxError> {
+        match self {
+            ProbeDispatcher::V1(server) => server.run(shutdown).await,
         }
     }
 }

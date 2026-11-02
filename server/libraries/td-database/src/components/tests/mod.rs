@@ -18,12 +18,15 @@
 //!   as a non-superuser `CREATEROLE` admin (postgres only).
 //! * [`create_preconditions`] — `create` refusing an already-provisioned
 //!   database (postgres only).
+//! * [`extensions`] — listing, adding and removing the optional extensions
+//!   (postgres only).
 //!
 //! This module holds the shared query helpers; the submodules reach them via
 //! `super::`.
 
 mod create_preconditions;
 mod delta_data;
+mod extensions;
 mod migration;
 mod provisioning;
 mod rls;
@@ -136,7 +139,7 @@ async fn schema_db_version(db: &TestDb) -> String {
 /// validates; and a block for a pool no component has no longer parses.
 #[test]
 fn test_validate_component_pools_requires_declared_blocks() {
-    use crate::components::validate_component_pools;
+    use crate::components::{Registry, validate_component_pools};
     use crate::config::DatabaseComponents;
     use crate::error::DbError;
 
@@ -159,7 +162,7 @@ apiserver:
     exclusive: {min_connections: 1, max_connections: 2}
 ",
     );
-    validate_component_pools(&full).unwrap();
+    validate_component_pools(&Registry::new(&[], &[]), &full).unwrap();
 
     let missing_exclusive = entry(
         "  pool:
@@ -167,7 +170,7 @@ apiserver:
 ",
     );
     assert!(matches!(
-        validate_component_pools(&missing_exclusive),
+        validate_component_pools(&Registry::new(&[], &[]), &missing_exclusive),
         Err(DbError::MissingComponentPoolConfig(_, "exclusive"))
     ));
 
@@ -177,7 +180,7 @@ apiserver:
 ",
     );
     assert!(matches!(
-        validate_component_pools(&missing_regular),
+        validate_component_pools(&Registry::new(&[], &[]), &missing_regular),
         Err(DbError::MissingComponentPoolConfig(_, "regular"))
     ));
 

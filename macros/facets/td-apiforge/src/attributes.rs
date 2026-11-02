@@ -24,6 +24,11 @@ pub struct UtoipaPathArguments {
     security_mode: Option<SecurityMode>,
     #[darling(default)]
     internal: Flag,
+    /// The route is the edition's: its crate lists the emitted `<FN>_ROUTE`
+    /// in the routes it hands the server instead of submitting it to the
+    /// inventory, so an unlisted route is dead code.
+    #[darling(default)]
+    edition: Flag,
     /// The endpoint's one-line description; becomes the fn's doc comment and,
     /// through it, the OpenAPI summary.
     doc: LitStr,
@@ -39,8 +44,9 @@ pub struct UtoipaPathArguments {
 }
 
 /// Utoipa path attribute macro generator. It takes the Axum fn as an argument, as well as
-/// the mount, method, path, and tag attributes. It generates the appropriate utoipa::path
-/// attribute plus the route's inventory registration.
+/// the placement, auth, method, path, and tag attributes. It generates the appropriate utoipa::path
+/// attribute plus the route's registration, submitted to the inventory unless the route is the
+/// edition's.
 pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
     match try_utoipa_path(args, item) {
         Ok(tokens) => tokens.into(),
@@ -55,6 +61,7 @@ fn try_utoipa_path(args: TokenStream, item: TokenStream) -> darling::Result<Toke
         scope,
         security_mode,
         internal,
+        edition,
         doc,
         method,
         path,
@@ -95,6 +102,10 @@ fn try_utoipa_path(args: TokenStream, item: TokenStream) -> darling::Result<Toke
     }
 
     let responses = extract_result_types(&input)?;
+    let list_dto = list_dto_type(&query_params, responses.as_ref().map(|(ok, _)| ok));
+    let document_list_fields = list_dto.map(|dto| {
+        quote! { ::td_objects::list::openapi::document_list_fields::<#dto>(&mut operation); }
+    });
 
     // Generate the `#[utoipa::path(...)]` attribute
     let verb = method.utoipa_verb();
@@ -170,31 +181,24 @@ fn try_utoipa_path(args: TokenStream, item: TokenStream) -> darling::Result<Toke
     }
 
     let mut schema_components = Vec::new();
-    match (&responses, content_type.as_deref()) {
-        (Some((ok_response, err_response)), Some(ct)) => {
-            schema_components.extend([ok_response.clone(), err_response.clone()]);
-            utoipa_attr = quote! {
-                #utoipa_attr
-                responses(
-                    (status = 200, description = "OK", body = Vec<u8>, content_type = #ct),
-                    #err_response
-                ),
+    let responses = match responses {
+        Some((ok_response, err_response)) => {
+            let ok = match content_type.as_deref() {
+                Some(ct) => {
+                    quote!((status = 200, description = "OK", body = Vec<u8>, content_type = #ct))
+                }
+                None => quote!(#ok_response),
             };
+            let responses = quote!(#ok, #err_response);
+            schema_components.extend([ok_response, err_response]);
+            responses
         }
-        (Some((ok_response, err_response)), None) => {
-            schema_components.extend([ok_response.clone(), err_response.clone()]);
-            utoipa_attr = quote! {
-                #utoipa_attr
-                responses(#ok_response, #err_response),
-            };
-        }
-        (None, _) => {
-            utoipa_attr = quote! {
-                #utoipa_attr
-                responses((status = 200, description = "Response forwarded as produced")),
-            };
-        }
-    }
+        None => quote!((status = 200, description = "Response forwarded as produced")),
+    };
+    utoipa_attr = quote! {
+        #utoipa_attr
+        responses(#responses),
+    };
 
     utoipa_attr = quote! {
         #utoipa_attr
@@ -203,9 +207,8 @@ fn try_utoipa_path(args: TokenStream, item: TokenStream) -> darling::Result<Toke
         ),
     };
 
-    // The route's registration: a one-route `OpenApiRouter` build fn (the
-    // handler plus its schema components, state applied) submitted to the
-    // inventory registry under the declared mount.
+    // The route's registration: a one-route axum build fn (state applied) and
+    // its OpenAPI operation and schema components at the declared placement.
     let mut state_types = extract_type_in_generic_argument(&input, "State");
     state_types.dedup_by_key(|ty| quote!(#ty).to_string());
     let state_application = match state_types.as_slice() {
@@ -235,6 +238,12 @@ fn try_utoipa_path(args: TokenStream, item: TokenStream) -> darling::Result<Toke
     let path_ident = format_ident!("__path_{}", fn_ident);
     let operation_ident = format_ident!("__registry_operation_{}", fn_ident);
     let components_ident = format_ident!("__registry_components_{}", fn_ident);
+    let route_const = format_ident!("{}_ROUTE", fn_name.to_uppercase());
+    let submission = (!edition.is_present()).then(|| {
+        quote! {
+            ::ta_apiserver::router::inventory::submit! { #route_const }
+        }
+    });
     let routing = method.axum_routing();
     schema_components.extend(query_params.iter().cloned());
     schema_components.extend(path_params.iter().cloned());
@@ -265,6 +274,7 @@ fn try_utoipa_path(args: TokenStream, item: TokenStream) -> darling::Result<Toke
                     .get_or_insert_with(Vec::new)
                     .extend(tags.into_iter().map(String::from));
             }
+            #document_list_fields
             operation
         }
 
@@ -285,7 +295,7 @@ fn try_utoipa_path(args: TokenStream, item: TokenStream) -> darling::Result<Toke
                 .with_state(state)
         }
 
-        ::ta_apiserver::router::inventory::submit! {
+        pub(crate) const #route_const: ::ta_apiserver::router::RouterRegistration =
             ::ta_apiserver::router::RouterRegistration {
                 name: #fn_name,
                 server: #server,
@@ -298,8 +308,9 @@ fn try_utoipa_path(args: TokenStream, item: TokenStream) -> darling::Result<Toke
                 operation: #operation_ident,
                 components: #components_ident,
                 build: #build_ident,
-            }
-        }
+            };
+
+        #submission
     };
 
     Ok(output)
@@ -358,6 +369,20 @@ fn project_id_extension_arg(input: &ItemFn) -> Option<&FnArg> {
         }
         false
     })
+}
+
+/// The `D` of a handler that takes `Query<ListParams>` and answers
+/// `ListStatus<D>`: its `order_by`/`filter` parameters take `D`'s fields.
+fn list_dto_type(query_params: &[Type], ok_response: Option<&Type>) -> Option<Type> {
+    let path_ending_in = |ty: &Type, name: &str| match ty {
+        Type::Path(p) if p.path.segments.last().is_some_and(|s| s.ident == name) => Some(p.clone()),
+        _ => None,
+    };
+    query_params
+        .iter()
+        .find_map(|ty| path_ending_in(ty, "ListParams"))?;
+    let list_status = path_ending_in(ok_response?, "ListStatus")?;
+    extract_first_generic_argument(&list_status.path)
 }
 
 /// Extracts the type of the generic argument in the arguments of a given type signature.

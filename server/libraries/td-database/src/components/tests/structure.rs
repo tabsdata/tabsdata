@@ -22,6 +22,9 @@ fn expected_tables() -> Vec<&'static str> {
     vec![
         "bundles",
         "collections",
+        "connection_catalogs",
+        "connection_entities",
+        "connection_probes",
         "connections",
         "dependencies",
         "executions",
@@ -63,6 +66,7 @@ async fn test_schema_views_postgres(domain_apiserver_postgres_internals: Postgre
 fn expected_views() -> Vec<&'static str> {
     vec![
         "collections__with_names",
+        "connection_catalogs__with_names",
         "dependencies__with_names",
         "executions__with_names",
         "function_patches__with_names",
@@ -125,6 +129,13 @@ async fn assert_indices(db: &TdPool) {
         "collections___project_id__name___current_uidx",
         "collections___collection_id__valid_from__id___idx",
         "collections___project_id__id___idx",
+        "connection_entities___connection_id__fqn___uidx",
+        "connection_catalogs___text_revision___idx",
+        "connection_probes___connection_id___idx",
+        "connection_probes___dedupe_key___active_uidx",
+        "connection_probes___ended_on___idx",
+        "connection_probes___result_expires___idx",
+        "connection_probes___status__requested_on___active_idx",
         "groups___group_id___current_uidx",
         "groups___name___idx",
         "groups___project_id__name___current_uidx",

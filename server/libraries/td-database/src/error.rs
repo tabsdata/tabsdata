@@ -194,12 +194,6 @@ pub enum DbError {
     )]
     UnknownSchemaEntry(String) = 5027,
     #[error(
-        "No database schema components are registered. This binary is missing the \
-         `te_database::force_link!()` anchor, so the linker dropped the component \
-         registrations. Add the anchor at the binary's top level."
-    )]
-    NoComponentsRegistered = 5032,
-    #[error(
         "Database components '{1}' and '{2}' both resolve to schema '{0}'. Each \
          component owns its own schema and owner role; give them distinct \
          `schema:` values, or distinct component keys under a shared database."
@@ -292,4 +286,26 @@ pub enum DbError {
          once it has finished."
     )]
     ConcurrentUpgradeInProgress(String) = 5046,
+    #[error("'{0}' is not an optional extension Tabsdata uses; the ones it uses are: {1}.")]
+    ExtensionNotAllowed(String, String) = 5053,
+    #[error(
+        "The database server does not offer the '{0}' extension. Install the \
+         extension's files on the database server (Tabsdata does not ship \
+         them), then add it again."
+    )]
+    ExtensionNotAvailable(String) = 5054,
+    #[error(
+        "The database role may not create the '{0}' extension ({2}). Have a \
+         database administrator run `{1};` in the Tabsdata database, then add \
+         it again so Tabsdata builds the objects that use it."
+    )]
+    ExtensionRefused(String, String, String) = 5055,
+    #[error(
+        "The '{0}' extension was not dropped: other objects still depend on it \
+         ({1}). Tabsdata's own objects were dropped; drop or migrate the rest \
+         first, or leave the extension in place."
+    )]
+    ExtensionInUse(String, String) = 5056,
+    #[error("Seeding '{1}' into the '{0}' schema failed: {2}")]
+    BaselineSeedFailed(&'static str, &'static str, String) = 5057,
 }

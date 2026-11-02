@@ -49,6 +49,7 @@ td-build = { workspace = true }
 
 # Internal dependencies
 
+td-common = { workspace = true }
 td-database = { workspace = true }
 td-error = { workspace = true }
 

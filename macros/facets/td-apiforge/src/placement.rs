@@ -6,61 +6,12 @@
 //! `security_mode(rbac|simple)` and `internal`. Each maps to a field of the registry's
 //! `RouterRegistration`; an absent flag is the plain value.
 
-use darling::FromMeta;
-use darling::ast::NestedMeta;
 use darling::util::Flag;
 use proc_macro2::TokenStream;
-use quote::{ToTokens, quote};
-use syn::Expr;
+use quote::quote;
 
 use crate::auth::{Auth, AuthSet};
-use crate::word::Word;
-
-macro_rules! word_enum {
-    ($name:ident, $key:literal, { $($spelling:literal => $variant:ident),+ $(,)? }) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-        pub enum $name {
-            $($variant),+
-        }
-
-        impl $name {
-            const NAMES: &'static [&'static str] = &[$($spelling),+];
-
-            fn from_name(name: &str) -> Option<Self> {
-                match name {
-                    $($spelling => Some($name::$variant),)+
-                    _ => None,
-                }
-            }
-        }
-
-        impl FromMeta for $name {
-            fn from_list(items: &[NestedMeta]) -> darling::Result<Self> {
-                let Word(ident) = Word::from_list(items)?;
-                Self::from_name(&ident.to_string()).ok_or_else(|| {
-                    darling::Error::custom(format!(
-                        "unknown {} `{ident}`; expected one of {}",
-                        $key,
-                        Self::NAMES.join(", ")
-                    ))
-                    .with_span(&ident)
-                })
-            }
-
-            fn from_expr(expr: &Expr) -> darling::Result<Self> {
-                Err(Word::spelling_error(expr))
-            }
-        }
-
-        impl ToTokens for $name {
-            fn to_tokens(&self, tokens: &mut TokenStream) {
-                tokens.extend(match self {
-                    $($name::$variant => quote!(::ta_apiserver::router::$name::$variant),)+
-                });
-            }
-        }
-    };
-}
+use crate::word::word_enum;
 
 word_enum!(Version, "version", { "v1" => V1 });
 word_enum!(Scope, "scope", { "project" => Project });
@@ -124,6 +75,7 @@ impl Placement {
     ) -> darling::Result<()> {
         let open = auth.0 == [Auth::None];
         let internal = auth.0 == [Auth::Internal];
+        let service_token = auth.0 == [Auth::ServiceToken];
         let project_path = path.starts_with(PROJECT_PREFIX);
         let internal_path = path.starts_with(INTERNAL_PREFIX);
         if self.internal.is_present() != internal_path {
@@ -148,9 +100,9 @@ impl Placement {
                 )
                 .with_span(&self.internal.span()));
             }
-            if !internal {
+            if !internal && !service_token {
                 return Err(darling::Error::custom(
-                    "`internal` routes accept exactly `auth(internal)`",
+                    "`internal` routes accept exactly `auth(internal)` or `auth(service_token)`",
                 )
                 .with_span(&self.internal.span()));
             }

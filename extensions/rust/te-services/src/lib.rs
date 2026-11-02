@@ -3,6 +3,7 @@
 //
 
 use std::future::Future;
+use td_common::task_group::TaskGroup;
 use td_database::components::ServingPools;
 use td_error::TdError;
 
@@ -30,4 +31,10 @@ impl<Base, Extended> ContextExt<Extended> for Base {
     ) -> Result<ExtendedServices, TdError> {
         Ok(ExtendedServices::default())
     }
+}
+
+/// Edition seam: the background tasks this edition runs inside the
+/// apiserver, added to its own. The open-source edition adds none.
+pub fn extended_tasks(_services: &ExtendedServices, tasks: TaskGroup) -> TaskGroup {
+    tasks
 }

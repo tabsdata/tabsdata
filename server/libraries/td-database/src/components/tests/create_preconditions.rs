@@ -6,7 +6,7 @@
 //! already there. The provisioning DDL is idempotent on purpose, so this is the
 //! only thing standing between a stray `db create` and a live database.
 
-use crate::components::{APISERVER_COMPONENT_KEY, AdminPool, provision_all};
+use crate::components::{APISERVER_COMPONENT_KEY, AdminPool, Registry, provision_all};
 use crate::config::{
     ComponentConfig, DatabaseComponents, DatabaseConfig, PoolConfig, PoolsConfig, PostgresConfig,
     RlsRoles, Schema,
@@ -71,11 +71,15 @@ async fn test_provision_all_refuses_an_already_provisioned_component(
         .await
         .unwrap();
 
-    provision_all(&components, &admin).await.unwrap();
+    provision_all(&Registry::new(&[], &[]), &components, &admin)
+        .await
+        .unwrap();
     assert!(admin.schema_exists(&schema).await.unwrap());
     assert!(admin.role_exists(&schema).await.unwrap());
 
-    let error = provision_all(&components, &admin).await.unwrap_err();
+    let error = provision_all(&Registry::new(&[], &[]), &components, &admin)
+        .await
+        .unwrap_err();
     let DbError::CreatePreconditionFailed(present) = &error else {
         panic!("expected CreatePreconditionFailed, got {error:?}");
     };
