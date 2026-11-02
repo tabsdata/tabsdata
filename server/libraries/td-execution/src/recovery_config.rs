@@ -20,7 +20,8 @@ pub struct RecoveryConfig {
 }
 
 seconds_knob!(
-    /// Budget for one recovery tick. Recovery lists orchestrator workloads
+    /// Budget for one recovery tick, adaptive like the scheduler's tick
+    /// budget (`SchedulerTickTimeout`). Recovery lists orchestrator workloads
     /// and acts on the divergent ones, so it needs a larger budget than the
     /// request tick.
     RecoveryTickTimeout,

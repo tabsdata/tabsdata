@@ -139,5 +139,6 @@ te-edition = { workspace = true }
 
 config = { workspace = true, features = ["yaml"] }
 indoc = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
 tracing-subscriber = { workspace = true }
 

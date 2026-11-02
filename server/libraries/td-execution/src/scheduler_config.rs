@@ -19,9 +19,11 @@ seconds_knob!(
 );
 
 seconds_knob!(
-    /// Budget for one scheduler tick (the request or dispatch service call).
-    /// On expiry the tick is cancelled and its transaction rolled back, and
-    /// the next tick retries. The orchestrator writes a tick makes are
+    /// Budget for one scheduler tick (the request or dispatch service call),
+    /// the floor of an adaptive budget: each timeout raises it by this much,
+    /// up to ten times this, and finished ticks bring it back down. On expiry
+    /// the tick is cancelled and its transaction rolled back, and the next
+    /// tick retries. The orchestrator writes a tick makes are
     /// post-commit, so they are not rolled back with it; each workload is
     /// applied as one uncancellable unit so that expiry falls between
     /// workloads rather than part-way through one.

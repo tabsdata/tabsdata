@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::scheduler::v1::timed_tick;
+use crate::scheduler::v1::TickBudget;
 use std::time::Duration;
 use td_common::task_group::{BoxError, GroupTask};
 use td_services::Services;
@@ -34,7 +34,7 @@ impl GroupTask for WorkerRecoverer {
 pub struct WorkerRecovererV1 {
     services: Services,
     check_frequency: Duration,
-    tick_timeout: Duration,
+    budget: TickBudget,
 }
 
 impl WorkerRecovererV1 {
@@ -42,16 +42,16 @@ impl WorkerRecovererV1 {
         WorkerRecovererV1 {
             services: services.clone(),
             check_frequency: services.recovery_config.check_frequency.0,
-            tick_timeout: services.recovery_config.tick_timeout.0,
+            budget: TickBudget::new("recovery", services.recovery_config.tick_timeout.0),
         }
     }
 
-    async fn recover(&self) -> Result<(), BoxError> {
-        timed_tick("recovery", self.tick_timeout, self.services.recovery(())).await?;
+    async fn recover(&mut self) -> Result<(), BoxError> {
+        self.budget.run(self.services.recovery(())).await?;
         Ok(())
     }
 
-    pub async fn run(self, shutdown: CancellationToken) -> Result<(), BoxError> {
+    pub async fn run(mut self, shutdown: CancellationToken) -> Result<(), BoxError> {
         // First tick immediately: cold-start convergence must not wait out
         // a full check period.
         match self.recover().await {
