@@ -14,6 +14,7 @@ mod tests {
     use td_common::time::UniqueUtc;
     use td_error::td_error;
     use tm_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
+    use uuid::Uuid;
 
     macro_rules! typed_test {
         ($type_:ty, $value:expr) => {
@@ -70,6 +71,38 @@ mod tests {
 
         let display = format!("{typed}");
         assert_eq!(display, format!("{id}"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_uuid() -> Result<(), td_error::TdError> {
+        use crate::NullableSeaValue;
+        use std::str::FromStr;
+
+        #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+        struct TypedType(Uuid);
+
+        let text = "0b8e6a52-6f1d-4c3e-9a57-2f0c1d7e4b9a";
+        let uuid = Uuid::parse_str(text).unwrap();
+
+        let typed = TypedType::try_new(uuid)?;
+        assert_eq!(*typed, uuid);
+        assert_eq!(*TypedType::from(uuid), uuid);
+        assert_eq!(*TypedType::from_str(text)?, uuid);
+        assert!(TypedType::from_str("not-a-uuid").is_err());
+
+        let serialized = serde_json::to_string(&typed).unwrap();
+        assert_eq!(serialized, format!("\"{text}\""));
+        let deserialized: TypedType = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(*deserialized, uuid);
+        assert!(serde_json::from_str::<TypedType>("\"not-a-uuid\"").is_err());
+
+        assert_eq!(format!("{typed}"), text);
+        assert_eq!(
+            typed.as_sea_expr(),
+            sea_query::Expr::from(sea_query::Value::Uuid(Some(uuid)))
+        );
+        assert_eq!(TypedType::null_sea_value(), sea_query::Value::Uuid(None));
         Ok(())
     }
 

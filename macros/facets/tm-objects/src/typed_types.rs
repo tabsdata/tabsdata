@@ -170,6 +170,7 @@ enum Kind {
     IdL(Ident),
     Timestamp,
     IntervalEnd,
+    Uuid,
     Composed,
 }
 
@@ -237,6 +238,7 @@ fn detect_kind(inner: &Type) -> syn::Result<Kind> {
         }
         "Timestamp" => Kind::Timestamp,
         "IntervalEnd" => Kind::IntervalEnd,
+        "Uuid" => Kind::Uuid,
         _ => Kind::Composed,
     })
 }
@@ -539,7 +541,7 @@ fn expand_primitive(
 ) -> proc_macro2::TokenStream {
     let copy = matches!(
         kind,
-        Kind::Numeric | Kind::Bool | Kind::Id | Kind::Timestamp | Kind::IntervalEnd
+        Kind::Numeric | Kind::Bool | Kind::Id | Kind::Timestamp | Kind::IntervalEnd | Kind::Uuid
     )
     .then(|| impl_copy(name));
     let identity = matches!(kind, Kind::Id | Kind::IdL(_)).then(|| impl_identity(name));
@@ -550,7 +552,7 @@ fn expand_primitive(
     // types without an explicit default get no Default impl at all.
     let constrained = args.min.is_some() || args.max.is_some();
     let default_expr = match (&kind, &args.default) {
-        (Kind::Str, None) | (Kind::IdL(_), _) => None,
+        (Kind::Str, None) | (Kind::Uuid, None) | (Kind::IdL(_), _) => None,
         (_, Some(d)) => Some(quote! { #d }),
         (Kind::Numeric, None) if constrained => None,
         (_, None) => Some(quote! { <#inner as Default>::default() }),
@@ -584,7 +586,7 @@ fn expand_primitive(
                 fn from(v: #inner) -> Self { Self(v) }
             }
         },
-        Kind::Id => quote! {
+        Kind::Id | Kind::Uuid => quote! {
             impl From<#inner> for #name { fn from(v: #inner) -> Self { Self(v) } }
         },
         Kind::IdL(key) => expand_idl_appendix(name, inner, key),
@@ -642,7 +644,7 @@ fn expand_primitive(
 fn expand_sealed(name: &Ident, inner: &Type, kind: &Kind) -> proc_macro2::TokenStream {
     let copy = matches!(
         kind,
-        Kind::Numeric | Kind::Bool | Kind::Id | Kind::Timestamp | Kind::IntervalEnd
+        Kind::Numeric | Kind::Bool | Kind::Id | Kind::Timestamp | Kind::IntervalEnd | Kind::Uuid
     )
     .then(|| impl_copy(name));
     let sea_value = impl_sea_value_typed(name, inner);

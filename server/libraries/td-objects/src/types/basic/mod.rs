@@ -15,6 +15,7 @@ mod tag;
 mod tagged;
 mod timestamp;
 mod typed_enum;
+mod ui_data;
 
 pub use bool::*;
 pub use brand::*;
@@ -29,3 +30,4 @@ pub use tag::*;
 pub use tagged::*;
 pub use timestamp::*;
 pub use typed_enum::*;
+pub use ui_data::*;

@@ -70,7 +70,8 @@ sqlx = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-utoipa = { workspace = true }
+utoipa = { workspace = true, features = ["uuid"] }
+uuid = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
 ta-objects = { workspace = true, features = ["td-test"] }

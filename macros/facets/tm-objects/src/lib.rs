@@ -147,7 +147,7 @@ pub fn path_params(input: TokenStream) -> TokenStream {
 }
 
 /// Newtype over a primitive (`String`, `i16..f64`, `bool`, `Id`, `IdL<K>`,
-/// `Timestamp`) or a `ComposedString` type, detected from the single unnamed
+/// `Timestamp`, `Uuid`) or a `ComposedString` type, detected from the single unnamed
 /// field. Implements the construction gate (`ta_objects::Typed::try_new`)
 /// from the `#[typed(...)]` constraints (`len`/`min_len`/`max_len`/`regex`/
 /// `parser`/`secret` for strings, `min`/`max` for numerics, `default`,

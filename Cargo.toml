@@ -642,11 +642,11 @@ version = "0.3.3"
 
 [workspace.dependencies.sea-query]
 version = "1.0.2"
-features = ["with-chrono", "with-json"]
+features = ["with-chrono", "with-json", "with-uuid"]
 
 [workspace.dependencies.sea-query-sqlx]
 version = "0.9.1"
-features = ["with-chrono", "with-json"]
+features = ["with-chrono", "with-json", "with-uuid"]
 
 [workspace.dependencies.semver]
 version = "1.0.28"
@@ -682,7 +682,7 @@ version = "0.12.3"
 
 [workspace.dependencies.sqlx]
 version = "0.9.0"
-features = ["chrono", "runtime-tokio", "tls-rustls"]
+features = ["chrono", "runtime-tokio", "tls-rustls", "uuid"]
 
 [workspace.dependencies.strum]
 version = "0.28.0"

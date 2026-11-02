@@ -90,6 +90,7 @@ tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 url = { workspace = true }
 utoipa = { workspace = true, features = ["axum_extras", "chrono", "preserve_order", "url", "uuid"] }
+uuid = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
 td-objects = { workspace = true, features = ["td-test"] }

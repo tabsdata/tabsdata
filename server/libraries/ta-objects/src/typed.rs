@@ -34,6 +34,7 @@ use td_error::{TdError, td_error};
 use utoipa::PartialSchema;
 use utoipa::openapi::RefOr;
 use utoipa::openapi::schema::Schema;
+use uuid::Uuid;
 
 /// The single construction gate for `#[derive(Typed)]` newtypes: every
 /// construction path (FromStr, the TryFrom family, `try_from =` siblings,
@@ -247,6 +248,28 @@ impl TypedInner for Id {
             ))
             .min_length(Some(td_common::id::ID_LENGTH))
             .max_length(Some(td_common::id::ID_LENGTH))
+            .into()
+    }
+}
+
+impl TypedInner for Uuid {
+    fn sea_expr(&self) -> sea_query::Expr {
+        sea_query::Value::Uuid(Some(*self)).into()
+    }
+    fn null_sea_value() -> sea_query::Value {
+        sea_query::Value::Uuid(None)
+    }
+    fn parse_str(s: &str) -> Result<Self, TdError> {
+        Uuid::parse_str(s).map_err(|e| TypedError::Parse("uuid", e.to_string()).into())
+    }
+    fn schema() -> RefOr<Schema> {
+        utoipa::openapi::ObjectBuilder::new()
+            .schema_type(utoipa::openapi::schema::SchemaType::new(
+                utoipa::openapi::schema::Type::String,
+            ))
+            .format(Some(utoipa::openapi::schema::SchemaFormat::KnownFormat(
+                utoipa::openapi::schema::KnownFormat::Uuid,
+            )))
             .into()
     }
 }
