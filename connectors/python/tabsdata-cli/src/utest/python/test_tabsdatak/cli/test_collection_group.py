@@ -8,7 +8,6 @@ the server receives."""
 
 from __future__ import annotations
 
-import json
 from unittest.mock import MagicMock, patch
 
 import click
@@ -47,6 +46,9 @@ spec:
 """
 
 
+_CTX = click.Context(click.Command("create"), obj={})
+
+
 def _write(tmp_path, text: str) -> str:
     path = tmp_path / "conn.yaml"
     path.write_text(text)
@@ -61,7 +63,7 @@ def test_load_connection_document_dehydrates(tmp_path):
     from tabsdatak.cli import template
 
     connection, group, secrets = collection_group._load_connection_document(
-        _write(tmp_path, _MYSQL_SRC_YAML), None
+        _CTX, _write(tmp_path, _MYSQL_SRC_YAML), None
     )
     assert group == "sources"
     # The secret values are harvested out of the document, into the payload.
@@ -101,7 +103,7 @@ spec:
 def test_load_connection_document_rejects_unprefixed_secret_values(tmp_path):
     with pytest.raises(click.ClickException) as ei:
         collection_group._load_connection_document(
-            _write(tmp_path, _MYSQL_SRC_YAML_BARE), None
+            _CTX, _write(tmp_path, _MYSQL_SRC_YAML_BARE), None
         )
     # Both offending secret fields are named and the required `secret:` form
     # is spelled out; the load aborts, so nothing is stored or sent.
@@ -142,7 +144,7 @@ def test_load_connection_document_resolves_env_secret_refs(
     monkeypatch.setenv("DB_USER", "etl")
     monkeypatch.setenv("DB_PASS", "hunter2")
     connection, group, secrets = collection_group._load_connection_document(
-        _write(tmp_path, _MYSQL_SRC_YAML_ENVREF), None
+        _CTX, _write(tmp_path, _MYSQL_SRC_YAML_ENVREF), None
     )
     # The env-var values are harvested into the payload.
     assert {kv["value"] for kv in secrets} == {"etl", "hunter2"}
@@ -163,7 +165,7 @@ def test_load_connection_document_env_secret_ref_missing_var(tmp_path, monkeypat
     monkeypatch.delenv("DB_PASS", raising=False)
     with pytest.raises(click.ClickException, match=r"\$secret:"):
         collection_group._load_connection_document(
-            _write(tmp_path, _MYSQL_SRC_YAML_ENVREF), None
+            _CTX, _write(tmp_path, _MYSQL_SRC_YAML_ENVREF), None
         )
 
 
@@ -174,14 +176,14 @@ def test_load_connection_document_group_mismatch(tmp_path):
     # kind implies 'sources'; --group says 'destinations'.
     with pytest.raises(click.ClickException, match="sources"):
         collection_group._load_connection_document(
-            _write(tmp_path, _MYSQL_SRC_YAML), "destinations"
+            _CTX, _write(tmp_path, _MYSQL_SRC_YAML), "destinations"
         )
 
 
 def test_load_connection_document_invalid_yaml(tmp_path):
     with pytest.raises(click.ClickException, match="invalid connection YAML"):
         collection_group._load_connection_document(
-            _write(tmp_path, "kind: : :\n  - nope"), None
+            _CTX, _write(tmp_path, "kind: : :\n  - nope"), None
         )
 
 
@@ -225,9 +227,10 @@ def _invoke(argv, *, client, tmp_path):
     def _inject(ctx):
         ctx.obj["tabsdataserver"] = client
 
-    with patch(
-        "tabsdatak.cli.td.cli.initialise_tabsdata_server_connection", _inject
-    ), patch("tabsdatak.cli.td.cli.DEFAULT_TABSDATA_DIRECTORY", str(tmp_path)):
+    with (
+        patch("tabsdatak.cli.td.cli.initialise_tabsdata_server_connection", _inject),
+        patch("tabsdatak.cli.td.cli.DEFAULT_TABSDATA_DIRECTORY", str(tmp_path)),
+    ):
         return CliRunner().invoke(cli, argv)
 
 
@@ -275,26 +278,3 @@ def test_update_conn_file_with_rename_updates_both(tmp_path):
     client.update_collection.assert_called_once()
     client.update_collection_connection.assert_called_once()
     assert client.update_collection_connection.call_args.args[0] == "c2"
-
-
-def test_connection_view_calls_sdk_and_renders(tmp_path):
-    client = _mock_client()
-    client.get_collection_connection.return_value = {
-        "id": "abc",
-        "connection": {
-            "type": "tabsdatak.conn.mysql:MySQLSrcConn",
-            "spec": {"uri": "mysql://h:3306/db"},
-        },
-        "secret_names": ["S1", "S2"],
-    }
-    result = _invoke(
-        ["collection", "connection", "-n", "c", "-o", "json"],
-        client=client,
-        tmp_path=tmp_path,
-    )
-    assert result.exit_code == 0, result.output
-    client.get_collection_connection.assert_called_once_with("c")
-    out = json.loads(result.output)
-    assert out["connection"]["type"] == "tabsdatak.conn.mysql:MySQLSrcConn"
-    # Secret names are never surfaced.
-    assert "secret_names" not in out

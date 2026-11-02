@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Callable
 
 import rich_click as click
 
+from tabsdatak.cli._capability import capability
 from tabsdatak.cli.cli_utils import (
     ancestry,
     format_option,
@@ -16,7 +17,9 @@ from tabsdatak.cli.cli_utils import (
     logical_prompt,
     present,
     proj_option,
-    render,
+    render_done,
+    render_entity,
+    render_list,
     verify_login_or_prompt,
     view_options,
 )
@@ -26,6 +29,8 @@ if TYPE_CHECKING:
     from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
 _KIND_LABELS = {"T": "Topology", "S": "System", "U": "User"}
+PARENT_TAG = "_parent"
+_FACET_LEN = 1000
 
 # Per entity: its label and whether it lives in a collection.
 _ENTITIES = {
@@ -35,6 +40,16 @@ _ENTITIES = {
     "function": ("function", True),
     "table": ("table", True),
 }
+
+
+def tags_of(server: TabsdataServer, **target: str) -> dict[str, str]:
+    """An entity's tags as ``{key: value}``, the platform's ``_`` keys
+    included; ``target`` as :meth:`TabsdataServer.list_tags` takes it."""
+    return {tag["key"]: tag["value"] for tag in server.list_tags(**target)}
+
+
+def tags_text(tags: dict[str, str]) -> str | None:
+    return ", ".join(f"{key}={value}" for key, value in sorted(tags.items())) or None
 
 
 def _target_options(entity: str) -> Callable:
@@ -60,7 +75,7 @@ def _target(ctx: click.Context, entity: str, name: str, coll: str) -> dict:
     label, in_collection = _ENTITIES[entity]
     if entity == "project":
         return {}
-    name = name or logical_prompt(ctx, f"Name of the {label}")
+    name = name or logical_prompt(ctx, f"Name of the {label}", option="--name")
     if entity == "group":
         return {"group": name}
     if entity == "collection":
@@ -68,7 +83,11 @@ def _target(ctx: click.Context, entity: str, name: str, coll: str) -> dict:
     coll = (
         coll
         or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, f"Name of the collection to which the {label} belongs")
+        or logical_prompt(
+            ctx,
+            f"Name of the collection to which the {label} belongs",
+            option="--coll",
+        )
     )
     return {"collection": coll, entity: name}
 
@@ -93,12 +112,19 @@ def tag_group(entity: str) -> click.Group:
     def tag():
         pass
 
+    writes = (
+        capability("admin", "write", credential="session")
+        if entity in ("group", "project")
+        else capability("development", "write")
+    )
+
     tag.help = (
         "Manage the tags of the project; `list` covers every entity in it"
         if entity == "project"
         else f"Manage the tags of a {label}"
     )
 
+    @capability("analytics", "read")
     @tag.command("list")
     @_target_options(entity)
     @format_option
@@ -145,13 +171,15 @@ def tag_group(entity: str) -> click.Group:
                     count="tags",
                 )
 
-            render(ctx, data=tags, view=_view)
+            render_list(ctx, items=tags, truncated=False, view=_view)
         except Exception as e:
             hint_common_solutions(ctx, e)
             raise click.ClickException(f"Failed to list tags: {e}")
 
+    @writes
     @tag.command("set")
     @_target_options(entity)
+    @format_option
     @click.option("--key", "-k", help="Key of the tag.")
     @click.option("--value", "-v", default="", help="Value of the tag.")
     @click.pass_context
@@ -161,30 +189,105 @@ def tag_group(entity: str) -> click.Group:
         """Set a user tag, replacing its value if the key is set"""
         verify_login_or_prompt(ctx)
         target = _target(ctx, entity, name, coll)
-        key = key or logical_prompt(ctx, "Key of the tag")
+        key = key or logical_prompt(ctx, "Key of the tag", option="--key")
         try:
             server: TabsdataServer = ctx.obj["tabsdataserver"]
-            server.set_tag(key, value, **target)
-            click.echo(f"Tag '{key}' set")
+            render_entity(
+                ctx,
+                data=server.set_tag(key, value, **target),
+                message=f"Tag '{key}' set",
+            )
         except Exception as e:
             hint_common_solutions(ctx, e)
             raise click.ClickException(f"Failed to set tag: {e}")
 
+    @writes
     @tag.command("delete")
     @_target_options(entity)
+    @format_option
     @click.option("--key", "-k", help="Key of the tag.")
     @click.pass_context
     def delete_tag(ctx: click.Context, key: str, name: str = None, coll: str = None):
         """Remove a user tag"""
         verify_login_or_prompt(ctx)
         target = _target(ctx, entity, name, coll)
-        key = key or logical_prompt(ctx, "Key of the tag")
+        key = key or logical_prompt(ctx, "Key of the tag", option="--key")
         try:
             server: TabsdataServer = ctx.obj["tabsdataserver"]
             server.delete_tag(key, **target)
-            click.echo(f"Tag '{key}' removed")
+            render_done(
+                ctx,
+                action="delete",
+                kind="tag",
+                id=key,
+                details=target,
+                message=f"Tag '{key}' removed",
+            )
         except Exception as e:
             hint_common_solutions(ctx, e)
             raise click.ClickException(f"Failed to remove tag: {e}")
 
+    if entity == "project":
+        _add_facets(tag)
     return tag
+
+
+def _facet_view(ctx: click.Context, title: str, column: str, items, context=()):
+    def _view():
+        return TableView(
+            title=title,
+            context=[*ancestry(ctx), *context],
+            columns=[Column(column, Kind.ID)],
+            rows=[[item] for item in items],
+            count=title.lower(),
+        )
+
+    return _view
+
+
+def _add_facets(tag: click.Group) -> None:
+    @capability("analytics", "read")
+    @tag.command("keys")
+    @proj_option
+    @format_option
+    @view_options()
+    @click.pass_context
+    def tag_keys(ctx: click.Context):
+        """List the tag keys open on the project's entities"""
+        verify_login_or_prompt(ctx)
+        try:
+            server: TabsdataServer = ctx.obj["tabsdataserver"]
+            keys = server.list_tag_keys(len=_FACET_LEN)
+            render_list(
+                ctx,
+                items=keys,
+                truncated=False,
+                view=_facet_view(ctx, "Tag keys", "Key", keys),
+            )
+        except Exception as e:
+            hint_common_solutions(ctx, e)
+            raise click.ClickException(f"Failed to list tag keys: {e}")
+
+    @capability("analytics", "read")
+    @tag.command("values")
+    @proj_option
+    @format_option
+    @view_options()
+    @click.option("--key", "-k", help="Key of the tag whose values to list.")
+    @click.pass_context
+    def tag_values(ctx: click.Context, key: str):
+        """List the values a tag key is open with on the project's entities"""
+        verify_login_or_prompt(ctx)
+        key = key or logical_prompt(ctx, "Key of the tag", option="--key")
+        try:
+            server: TabsdataServer = ctx.obj["tabsdataserver"]
+            values = server.list_tag_values(key, len=_FACET_LEN)
+            render_list(
+                ctx,
+                items=values,
+                truncated=False,
+                view=_facet_view(ctx, "Tag values", "Value", values, [("Key", key)]),
+            )
+        except Exception as e:
+            hint_common_solutions(ctx, e)
+            raise click.ClickException(f"Failed to list tag values: {e}")

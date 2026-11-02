@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 import rich_click as click
 
+from tabsdatak.cli._capability import capability
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     all_projects_option,
@@ -17,18 +18,24 @@ from tabsdatak.cli.cli_utils import (
     format_option,
     get_currently_pinned_object,
     hint_common_solutions,
+    list_options,
+    list_params,
     logical_prompt,
     max_result_option,
     present,
+    progress,
     proj_option,
     render,
+    render_deleted,
+    render_entity,
+    render_list,
     resolve_all_projects,
     serialize,
     take,
     verify_login_or_prompt,
     view_options,
 )
-from tabsdatak.cli.td.tag_commands import tag_group
+from tabsdatak.cli.td.tag_commands import tag_group, tags_of, tags_text
 from tabsdatak.common._tabular import Column, Kind, RecordView, TableView
 
 if TYPE_CHECKING:
@@ -41,8 +48,15 @@ def collection():
     """Collection management commands"""
 
 
+@capability(
+    "development",
+    "write",
+    paths={"--conn-file": "read"},
+    escalate={"--conn-file": {"credential": "session"}},
+)
 @collection.command()
 @proj_option
+@format_option
 @click.option("--name", "-n", help="Name of the collection to create.")
 @click.option("--description", help="Description of the collection.")
 @click.option(
@@ -68,6 +82,7 @@ def collection():
         "The connection is validated and dehydrated client-side; secret "
         "values are stripped into the secret payload."
     ),
+    type=click.Path(allow_dash=True),
 )
 @click.pass_context
 def create(
@@ -83,22 +98,22 @@ def create(
     name = (
         name
         or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to create")
+        or logical_prompt(ctx, "Name of the collection to create", option="--name")
     )
     description = description or ""
     connection = None
     secrets = None
     if conn_file:
-        connection, group, secrets = _load_connection_document(conn_file, group)
+        connection, group, secrets = _load_connection_document(ctx, conn_file, group)
     elif group in ("sources", "destinations"):
         raise click.ClickException(
             f"a {group} collection is created WITH its connection; pass --conn-file"
         )
-    click.echo("Creating a new collection")
-    click.echo("-" * 10)
+    progress(ctx, "Creating a new collection")
+    progress(ctx, "-" * 10)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.create_collection(
+        created = server.create_collection(
             name,
             description,
             group=group,
@@ -106,7 +121,9 @@ def create(
             connection=connection,
             secrets=secrets,
         )
-        click.echo("Collection created successfully")
+        render_entity(
+            ctx, data=lambda: created._data, message="Collection created successfully"
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to create collection: {e}")
@@ -166,17 +183,10 @@ def _public_connection(conn_read: dict) -> dict:
     return {k: v for k, v in conn_read.items() if k != "secret_names"}
 
 
-def _load_connection_document(conn_file, group):
-    """Read the connection YAML, validate it as a `Conn`, and dehydrate it.
-
-    Returns ``(connection_yaml, group, secrets)``: the dehydrated connection
-    re-serialized as YAML (secret leaves reduced to ``secret:``), the group its
-    kind implies, and the harvested secret values. No secret value is sent
-    inside the connection document — they ride in the secret payload.
-
-    ``$secret:<ENV_VAR>`` values are resolved from the environment here (on the
-    client, at create/update time); the env vars read are echoed to the user.
-    """
+def _read_connection_document(ctx, conn_file) -> tuple[dict, list[str]]:
+    """Read a connection YAML document, with its ``$secret:<ENV_VAR>`` values
+    resolved from the environment (on the client); returns it and the env vars
+    read, which are also echoed to the user."""
     # noinspection PyProtectedMember
     from tabsdatak.cli import template
     from tabsdatak.common._error import CommonException
@@ -192,21 +202,37 @@ def _load_connection_document(conn_file, group):
             else Path(conn_file).read_text(encoding="utf-8")
         )
     except OSError as e:
-        raise click.ClickException(f"cannot read connection file: {e}")
+        raise click.ClickException(f"cannot read connection file: {e}") from None
     try:
         document = template.from_yaml(raw)
     except Exception as e:  # noqa: BLE001 -- any YAML parse failure
-        raise click.ClickException(f"invalid connection YAML: {e}")
+        raise click.ClickException(f"invalid connection YAML: {e}") from None
     env_vars = env_secret_ref_vars(document)
     try:
         document = resolve_env_secret_refs(document)
     except CommonException as e:
         raise click.ClickException(str(e))
     if env_vars:
-        click.echo(
+        progress(
+            ctx,
             "Connection secrets resolved from environment variable(s): "
-            + ", ".join(env_vars)
+            + ", ".join(env_vars),
         )
+    return document, env_vars
+
+
+def _load_connection_document(ctx, conn_file, group):
+    """Read the connection YAML, validate it as a `Conn`, and dehydrate it.
+
+    Returns ``(connection_yaml, group, secrets)``: the dehydrated connection
+    re-serialized as YAML (secret leaves reduced to ``secret:``), the group its
+    kind implies, and the harvested secret values. No secret value is sent
+    inside the connection document — they ride in the secret payload.
+    """
+    # noinspection PyProtectedMember
+    from tabsdatak.cli import template
+
+    document, _ = _read_connection_document(ctx, conn_file)
     try:
         dehydrated, secrets = template.dehydrate_document(document)
     except template.TemplateError as e:
@@ -220,8 +246,10 @@ def _load_connection_document(conn_file, group):
     return template.to_yaml(dehydrated), implied, secrets
 
 
+@capability("development", "destructive")
 @collection.command()
 @proj_option
+@format_option
 @click.option("--name", "-n", help="Name of the collection to delete.")
 @click.option(
     "--confirm",
@@ -234,11 +262,13 @@ def delete(ctx: click.Context, name: str, confirm: str):
     name = (
         name
         or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to delete")
+        or logical_prompt(ctx, "Name of the collection to delete", option="--name")
     )
-    click.echo(f"Deleting collection: {name}")
-    click.echo("-" * 10)
-    confirm = confirm or logical_prompt(ctx, "Please type 'delete' to confirm deletion")
+    progress(ctx, f"Deleting collection: {name}")
+    progress(ctx, "-" * 10)
+    confirm = confirm or logical_prompt(
+        ctx, "Please type 'delete' to confirm deletion", option="--confirm delete"
+    )
     if confirm != "delete":
         raise click.ClickException(
             "Deletion not confirmed. The confirmation word is 'delete'."
@@ -246,12 +276,19 @@ def delete(ctx: click.Context, name: str, confirm: str):
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         server.delete_collection(name)
-        click.echo("Collection deleted successfully")
+        render_deleted(
+            ctx,
+            kind="collection",
+            name=name,
+            project=server.connection.project,
+            message="Collection deleted successfully",
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to delete collection: {e}")
 
 
+@capability("analytics", "read")
 @collection.command()
 @proj_option
 @format_option
@@ -264,12 +301,13 @@ def get(ctx: click.Context, name: str):
     name = (
         name
         or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to display")
+        or logical_prompt(ctx, "Name of the collection to display", option="--name")
     )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         collection = server.get_collection(name)
-        data = collection._data or {}
+        tags = tags_of(server, collection=name)
+        data = {**(collection._data or {}), "tags": tags}
         collection_type = data.get("collection_type")
         conn_read = None
         if collection_type in ("S", "D"):
@@ -289,6 +327,7 @@ def get(ctx: click.Context, name: str):
                 ),
                 ("Defined by", present(collection.defined_by)),
                 ("Defined on", present(collection.defined_on_str)),
+                ("Tags", present(tags_text(tags))),
             ]
             if conn_read is not None:
                 doc = conn_read.get("connection") or {}
@@ -299,56 +338,20 @@ def get(ctx: click.Context, name: str):
                 ))
             return RecordView(title="Collection", fields=fields)
 
-        render(ctx, data=lambda: collection._data, view=_view)
+        render(ctx, data=lambda: data, view=_view)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to display collection: {e}")
 
 
-@collection.command()
-@proj_option
-@click.option(
-    "-o",
-    "--format",
-    "fmt",
-    type=click.Choice(("json", "yaml")),
-    default="json",
-    show_default=True,
-    help="Output format.",
-)
-@click.option(
-    "--name",
-    "-n",
-    help="Name of the source/destination collection whose connection to display.",
-)
-@click.pass_context
-def connection(ctx: click.Context, fmt: str, name: str):
-    """Display the connection of a source/destination collection.
-
-    Emits the dehydrated connection document as JSON or YAML; secret and var
-    names are never shown.
-    """
-    verify_login_or_prompt(ctx)
-    name = (
-        name
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection whose connection to display")
-    )
-    try:
-        server: TabsdataServer = ctx.obj["tabsdataserver"]
-        conn_read = _public_connection(server.get_collection_connection(name))
-        click.echo(serialize(conn_read, fmt), nl=(fmt == "json"))
-    except Exception as e:
-        hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to display connection: {e}")
-
-
+@capability("analytics", "read")
 @collection.command(name="list")
 @proj_option
 @all_projects_option
 @format_option
 @view_options()
 @max_result_option
+@list_options
 @click.pass_context
 def list_collections(ctx: click.Context, all_projects: bool):
     """List all collections"""
@@ -356,7 +359,9 @@ def list_collections(ctx: click.Context, all_projects: bool):
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         spanning = resolve_all_projects(ctx, all_projects)
-        list_of_collections, truncated = take(ctx, server.list_collections_generator())
+        list_of_collections, truncated = take(
+            ctx, server.list_collections_generator(**list_params(ctx))
+        )
 
         def _view():
             columns = [Column("Name", Kind.ID), Column("Description")]
@@ -381,19 +386,26 @@ def list_collections(ctx: click.Context, all_projects: bool):
                 count="collections",
             )
 
-        render(
+        render_list(
             ctx,
-            data=lambda: [c._data for c in list_of_collections],
-            view=_view,
+            items=lambda: [c._data for c in list_of_collections],
             truncated=truncated,
+            view=_view,
         )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list collections: {e}")
 
 
+@capability(
+    "development",
+    "write",
+    paths={"--conn-file": "read"},
+    escalate={"--conn-file": {"credential": "session"}},
+)
 @collection.command()
 @proj_option
+@format_option
 @click.option("--name", "-n", help="Name of the collection to update.")
 @click.option("--new-name", help="New name for the collection.")
 @click.option("--description", help="New description for the collection.")
@@ -412,6 +424,7 @@ def list_collections(ctx: click.Context, all_projects: bool):
         "the source/destination collection's connection. Validated and dehydrated "
         "client-side; secret values are stripped into the secret payload."
     ),
+    type=click.Path(allow_dash=True),
 )
 @click.pass_context
 def update(
@@ -427,14 +440,14 @@ def update(
     name = (
         name
         or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to update")
+        or logical_prompt(ctx, "Name of the collection to update", option="--name")
     )
-    click.echo(f"Updating collection: {name}")
-    click.echo("-" * 10)
+    progress(ctx, f"Updating collection: {name}")
+    progress(ctx, "-" * 10)
     connection = None
     secrets = None
     if conn_file:
-        connection, _group, secrets = _load_connection_document(conn_file, None)
+        connection, _group, secrets = _load_connection_document(ctx, conn_file, None)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         # Scalar fields go through the collection-update endpoint; the connection
@@ -453,7 +466,11 @@ def update(
             server.update_collection_connection(
                 new_name or name, connection=connection, secrets=secrets
             )
-        click.echo("Collection updated successfully")
+        render_entity(
+            ctx,
+            data=lambda: server.get_collection(new_name or name)._data,
+            message="Collection updated successfully",
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to update collection: {e}")

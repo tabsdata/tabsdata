@@ -11,14 +11,25 @@ from typing import TYPE_CHECKING
 
 import rich_click as click
 
+from tabsdatak.cli._capability import capability
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
+    MutuallyExclusiveOption,
+    ancestry,
     format_option,
     hint_common_solutions,
+    list_options,
+    list_params,
     logical_prompt,
     max_result_option,
     present,
+    progress,
+    proj_option,
     render,
+    render_deleted,
+    render_entity,
+    render_list,
+    require_id,
     take,
     verify_login_or_prompt,
     view_options,
@@ -36,6 +47,15 @@ SECRETS_FILE_HELP = (
     "value already stored (empty if there is none)."
 )
 NULL_TAG = "tag:yaml.org,2002:null"
+TOPOLOGY_VERSION_HINT = "'tdk project topology list' lists topology version ids."
+_TOPOLOGY_VERSION_HELP = (
+    "Read the graph at this topology version, as 'tdk project topology list' "
+    "lists them."
+)
+_GRAPH_AT_HELP = (
+    "Read the graph as it was at this time, in the formats '--at' takes "
+    "everywhere else."
+)
 
 
 @cli_command
@@ -44,7 +64,9 @@ def project():
     """Project management commands"""
 
 
-def _load_secrets_file(secrets_file: str) -> dict[str, dict[str, str | None]]:
+def _load_secrets_file(
+    ctx: click.Context, secrets_file: str
+) -> dict[str, dict[str, str | None]]:
     from ruamel.yaml import YAML
     from ruamel.yaml.nodes import MappingNode, ScalarNode
 
@@ -88,9 +110,10 @@ def _load_secrets_file(secrets_file: str) -> dict[str, dict[str, str | None]]:
             entries[key] = _secret_value(name, key, value_node, variables)
         secrets[name] = entries
     if variables:
-        click.echo(
+        progress(
+            ctx,
             "Project secrets read from environment variable(s): "
-            + ", ".join(sorted(variables))
+            + ", ".join(sorted(variables)),
         )
     return secrets
 
@@ -112,29 +135,41 @@ def _secret_value(name: str, key: str, node, variables: set[str]) -> str | None:
     return os.environ[variable]
 
 
+@capability(
+    "admin", "write", "read", paths={"--secrets-file": "read"}, credential="session"
+)
 @project.command()
+@format_option
 @click.option("--name", "-n", help="Name of the project to create.")
 @click.option("--description", help="Description of the project.")
-@click.option("--secrets-file", help=SECRETS_FILE_HELP)
+@click.option(
+    "--secrets-file",
+    help=SECRETS_FILE_HELP,
+    type=click.Path(exists=True, dir_okay=False, allow_dash=True),
+)
 @click.pass_context
 def create(ctx: click.Context, name: str, description: str, secrets_file: str):
     """Create a new project"""
     verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the project to create")
+    name = name or logical_prompt(ctx, "Name of the project to create", option="--name")
     description = description or ""
-    secrets = None if secrets_file is None else _load_secrets_file(secrets_file)
-    click.echo("Creating a new project")
-    click.echo("-" * 10)
+    secrets = None if secrets_file is None else _load_secrets_file(ctx, secrets_file)
+    progress(ctx, "Creating a new project")
+    progress(ctx, "-" * 10)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.create_project(name, description, secrets=secrets)
-        click.echo("Project created successfully")
+        created = server.create_project(name, description, secrets=secrets)
+        render_entity(
+            ctx, data=lambda: created._data, message="Project created successfully"
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to create project: {e}")
 
 
+@capability("admin", "destructive", credential="session")
 @project.command()
+@format_option
 @click.option("--name", "-n", help="Name of the project to delete.")
 @click.option(
     "--confirm",
@@ -144,10 +179,12 @@ def create(ctx: click.Context, name: str, description: str, secrets_file: str):
 def delete(ctx: click.Context, name: str, confirm: str):
     """Delete a project by name."""
     verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the project to delete")
-    click.echo(f"Deleting project: {name}")
-    click.echo("-" * 10)
-    confirm = confirm or logical_prompt(ctx, "Please type 'delete' to confirm deletion")
+    name = name or logical_prompt(ctx, "Name of the project to delete", option="--name")
+    progress(ctx, f"Deleting project: {name}")
+    progress(ctx, "-" * 10)
+    confirm = confirm or logical_prompt(
+        ctx, "Please type 'delete' to confirm deletion", option="--confirm delete"
+    )
     if confirm != "delete":
         raise click.ClickException(
             "Deletion not confirmed. The confirmation word is 'delete'."
@@ -155,12 +192,15 @@ def delete(ctx: click.Context, name: str, confirm: str):
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         server.delete_project(name)
-        click.echo("Project deleted successfully")
+        render_deleted(
+            ctx, kind="project", name=name, message="Project deleted successfully"
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to delete project: {e}")
 
 
+@capability("analytics", "read")
 @project.command()
 @format_option
 @view_options()
@@ -169,7 +209,9 @@ def delete(ctx: click.Context, name: str, confirm: str):
 def get(ctx: click.Context, name: str):
     """Display a project by name"""
     verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the project to display")
+    name = name or logical_prompt(
+        ctx, "Name of the project to display", option="--name"
+    )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         prj = server.get_project(name)
@@ -191,17 +233,21 @@ def get(ctx: click.Context, name: str):
         raise click.ClickException(f"Failed to display project: {e}")
 
 
+@capability("analytics", "read")
 @project.command(name="list")
 @format_option
 @view_options()
 @max_result_option
+@list_options
 @click.pass_context
 def list_projects(ctx: click.Context):
     """List all projects"""
     verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        list_of_projects, truncated = take(ctx, server.list_projects_generator())
+        list_of_projects, truncated = take(
+            ctx, server.list_projects_generator(**list_params(ctx))
+        )
 
         def _view():
             return TableView(
@@ -224,17 +270,18 @@ def list_projects(ctx: click.Context):
                 count="projects",
             )
 
-        render(
+        render_list(
             ctx,
-            data=lambda: [p._data for p in list_of_projects],
-            view=_view,
+            items=lambda: [p._data for p in list_of_projects],
             truncated=truncated,
+            view=_view,
         )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list projects: {e}")
 
 
+@capability("admin", "read", credential="session")
 @project.command()
 @format_option
 @view_options()
@@ -243,7 +290,9 @@ def list_projects(ctx: click.Context):
 def secrets(ctx: click.Context, name: str):
     """List the secrets of a project, with their keys (never their values)"""
     verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the project whose secrets to list")
+    name = name or logical_prompt(
+        ctx, "Name of the project whose secrets to list", option="--name"
+    )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         project_secrets = server.get_project_secrets(name)
@@ -266,13 +315,18 @@ def secrets(ctx: click.Context, name: str):
         raise click.ClickException(f"Failed to list project secrets: {e}")
 
 
+@capability(
+    "admin", "write", "read", paths={"--secrets-file": "read"}, credential="session"
+)
 @project.command()
+@format_option
 @click.option("--name", "-n", help="Name of the project to update.")
 @click.option("--new-name", help="New name for the project.")
 @click.option("--description", help="New description for the project.")
 @click.option(
     "--secrets-file",
     help=SECRETS_FILE_HELP + " Replaces all the secrets of the project.",
+    type=click.Path(exists=True, dir_okay=False, allow_dash=True),
 )
 @click.pass_context
 def update(
@@ -284,22 +338,196 @@ def update(
 ):
     """Update a project by name"""
     verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the project to update")
-    secrets = None if secrets_file is None else _load_secrets_file(secrets_file)
-    click.echo(f"Updating project: {name}")
-    click.echo("-" * 10)
+    name = name or logical_prompt(ctx, "Name of the project to update", option="--name")
+    secrets = None if secrets_file is None else _load_secrets_file(ctx, secrets_file)
+    progress(ctx, f"Updating project: {name}")
+    progress(ctx, "-" * 10)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.update_project(
+        updated = server.update_project(
             name,
             new_name=new_name,
             new_description=description,
             new_secrets=secrets,
         )
-        click.echo("Project updated successfully")
+        render_entity(
+            ctx, data=lambda: updated._data, message="Project updated successfully"
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to update project: {e}")
 
 
 project.add_command(tag_group("project"))
+
+
+def topology_options(fn):
+    for option in (
+        click.option(
+            "--at",
+            help=_GRAPH_AT_HELP,
+            cls=MutuallyExclusiveOption,
+            mutually_exclusive=["topology_version"],
+        ),
+        click.option(
+            "--topology-version",
+            "topology_version",
+            help=_TOPOLOGY_VERSION_HELP,
+            cls=MutuallyExclusiveOption,
+            mutually_exclusive=["at"],
+        ),
+    ):
+        fn = option(fn)
+    return fn
+
+
+def _tags_cell(tags: dict | None) -> str | None:
+    return present(", ".join(f"{k}={v}" for k, v in sorted((tags or {}).items())))
+
+
+def _graph_views(ctx: click.Context, document: dict) -> list[TableView]:
+    from tabsdatak.common._datetime import _convert_timestamp_to_string
+
+    functions = document.get("all_functions") or {}
+    tables = document.get("all_tables") or {}
+    system = set(document.get("system_tables") or ())
+    kinds: dict[tuple[str, str], set[str]] = {}
+    for relation in document.get("relations") or ():
+        table_id = relation["table_version_id"]
+        if table_id in system:
+            continue
+        function = ("function", relation["function_version_id"])
+        table = ("table", table_id)
+        kind = next(iter(relation["edge"]))
+        pair = (function, table) if kind == "Output" else (table, function)
+        kinds.setdefault(pair, set()).add(kind)
+
+    def label(node: tuple[str, str]) -> str:
+        kind, node_id = node
+        info = (functions if kind == "function" else tables).get(node_id) or {}
+        return f"{kind} {info.get('collection')}/{info.get('name')}"
+
+    def edge_kind(found: set[str]) -> str:
+        if "Output" in found:
+            return "output"
+        if "Dependency" in found:
+            return "dependency, trigger" if "Trigger" in found else "dependency"
+        return "trigger"
+
+    nodes = [
+        ["function", f.get("collection"), f.get("name"), _tags_cell(f.get("tags"))]
+        for f in functions.values()
+    ] + [
+        ["table", t.get("collection"), t.get("name"), _tags_cell(t.get("tags"))]
+        for table_id, t in tables.items()
+        if table_id not in system
+    ]
+    nodes.sort(key=lambda row: (row[0], row[1] or "", row[2] or ""))
+    edges = sorted(
+        [label(source), label(target), edge_kind(found)]
+        for (source, target), found in kinds.items()
+    )
+    notes = (
+        [f"System tables left out: {len(system)}; '-o json' has them."]
+        if system
+        else []
+    )
+    return [
+        TableView(
+            title="Graph",
+            context=[
+                *ancestry(ctx),
+                ("Topology version", document.get("version")),
+                ("At", _convert_timestamp_to_string(document.get("at"))),
+            ],
+            columns=[
+                Column("Kind"),
+                Column("Collection", Kind.ID),
+                Column("Name", Kind.ID),
+                Column("Tags"),
+            ],
+            rows=nodes,
+            count="functions and tables",
+        ),
+        TableView(
+            title="Edges",
+            columns=[Column("From"), Column("To"), Column("Kind")],
+            rows=edges,
+            count="edges",
+            notes=notes,
+        ),
+    ]
+
+
+@capability("analytics", "read")
+@project.command()
+@proj_option
+@topology_options
+@format_option
+@view_options()
+@click.pass_context
+def graph(ctx: click.Context, topology_version: str, at: str):
+    """Show the project's functions and tables and the edges between them"""
+    require_id("--topology-version", topology_version, TOPOLOGY_VERSION_HINT)
+    verify_login_or_prompt(ctx)
+    try:
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        document = server.project_graph(topology_version=topology_version, at=at)
+        render(ctx, data=document, view=lambda: _graph_views(ctx, document))
+    except Exception as e:
+        hint_common_solutions(ctx, e)
+        raise click.ClickException(f"Failed to obtain project graph: {e}")
+
+
+@project.group()
+def topology():
+    """The project's topology versions"""
+
+
+@capability("analytics", "read")
+@topology.command(name="list")
+@proj_option
+@format_option
+@view_options()
+@max_result_option
+@list_options
+@click.pass_context
+def list_topology_versions(ctx: click.Context):
+    """List the project's topology versions, each with when it was current"""
+    verify_login_or_prompt(ctx)
+    try:
+        from tabsdatak.common._datetime import _convert_timestamp_to_string
+
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        versions, truncated = take(
+            ctx, server.list_topology_versions_generator(**list_params(ctx))
+        )
+
+        def _view():
+            return TableView(
+                title="Topology versions",
+                context=ancestry(ctx),
+                columns=[
+                    Column("Version", Kind.ID),
+                    Column("Valid from", Kind.TIME),
+                    Column("Valid to", Kind.TIME),
+                ],
+                rows=[
+                    [
+                        version["id"],
+                        _convert_timestamp_to_string(version["valid_from"]),
+                        (
+                            "current"
+                            if version.get("valid_to") is None
+                            else _convert_timestamp_to_string(version["valid_to"])
+                        ),
+                    ]
+                    for version in versions
+                ],
+                count="topology versions",
+            )
+
+        render_list(ctx, items=versions, truncated=truncated, view=_view)
+    except Exception as e:
+        hint_common_solutions(ctx, e)
+        raise click.ClickException(f"Failed to list topology versions: {e}")
