@@ -38,6 +38,16 @@ fn submission(label: &str) -> Submission<&'static str> {
         name: format!("pub-{label}"),
         payload: "payload",
         attempts: 0,
+        function_id: None,
+        sequence: 0,
+    }
+}
+
+fn function_run(label: &str, function: &str, sequence: u64) -> Submission<&'static str> {
+    Submission {
+        function_id: FunctionId::try_from(function).ok(),
+        sequence,
+        ..submission(label)
     }
 }
 
@@ -456,14 +466,13 @@ fn a_blocking_streamer_is_deleted_at_once() {
 
 /// A run of the function is in init, doing its work, when another
 /// attempt of the same function is started (a replay of an older run). The
-/// working pod must not be deleted to make room, neither at once nor once
-/// it has run for a while, or the replay and the run's re-dispatch kill each
-/// other.
+/// working pod is never deleted to make room, neither at once nor once it has
+/// run for a while: the new attempt waits for it.
 #[test]
-fn a_run_doing_its_work_is_not_deleted_for_another_attempt_of_its_function() {
+fn a_run_doing_its_work_holds_another_attempt_and_is_never_deleted() {
     let mut state = State::default();
     let start = Instant::now();
-    state.submit(run("b"), submission("b"));
+    state.submit(run("b"), function_run("b", FUNCTION, 1));
     let working = workload(
         "pub-a",
         FUNCTION,
@@ -477,17 +486,103 @@ fn a_run_doing_its_work_is_not_deleted_for_another_attempt_of_its_function() {
             "the working run was deleted after {:?}",
             at - start
         );
+        assert!(creates(&actions).is_empty(), "the attempt did not wait");
     }
+    assert!(state.queued().contains(&worker("b")));
 }
 
-/// Another attempt's workload of the function is being deleted slowly
-/// (a stuck finalizer, a NotReady node). The new attempt's create does not
-/// wait for it, so recovery never sees the new attempt missing for that long.
+/// Another attempt's workload of the function is being deleted slowly (a
+/// stuck finalizer, a NotReady node). The new attempt waits for it, reported
+/// queued all along so recovery does not take it for missing.
 #[test]
-fn a_run_is_created_while_another_attempt_is_slowly_deleted() {
+fn a_run_waits_while_another_attempt_of_its_function_is_slowly_deleted() {
     let mut state = State::default();
-    state.submit(run("b"), submission("b"));
+    state.submit(run("b"), function_run("b", FUNCTION, 1));
     let going = being_deleted("pub-a", WorkloadKind::Function);
-    let actions = state.plan(&[going], Instant::now());
+    assert!(creates(&state.plan(&[going], Instant::now())).is_empty());
+    assert!(state.queued().contains(&worker("b")));
+    let actions = state.plan(&[], Instant::now());
+    assert_eq!(creates(&actions), vec![function_run("b", FUNCTION, 1)]);
+}
+
+#[test]
+fn runs_of_one_function_are_created_one_at_a_time_in_request_order() {
+    let mut state = State::default();
+    state.submit(run("c"), function_run("c", FUNCTION, 2));
+    state.submit(run("b"), function_run("b", FUNCTION, 1));
+    let actions = state.plan(&[], Instant::now());
+    assert_eq!(creates(&actions), vec![function_run("b", FUNCTION, 1)]);
+    let running = workload(
+        "pub-b",
+        FUNCTION,
+        WorkloadKind::Function,
+        WorkloadPhase::Running,
+    );
+    assert!(creates(&state.plan(std::slice::from_ref(&running), Instant::now())).is_empty());
+    let finished = workload(
+        "pub-b",
+        FUNCTION,
+        WorkloadKind::Function,
+        WorkloadPhase::Succeeded,
+    );
+    let actions = state.plan(&[finished], Instant::now());
+    assert_eq!(creates(&actions), vec![function_run("c", FUNCTION, 2)]);
+}
+
+#[test]
+fn a_run_being_created_holds_the_next_run_of_its_function() {
+    let mut state = State::default();
+    state.submit(run("b"), function_run("b", FUNCTION, 1));
+    let at = Instant::now();
+    assert_eq!(
+        creates(&state.plan(&[], at)),
+        vec![function_run("b", FUNCTION, 1)]
+    );
+    state.issued("pub-b", at);
+    state.submit(run("c"), function_run("c", FUNCTION, 2));
+    assert!(creates(&state.plan(&[], at)).is_empty());
+}
+
+#[test]
+fn runs_of_other_functions_are_not_sequenced_together() {
+    let mut state = State::default();
+    state.submit(run("b"), function_run("b", FUNCTION, 1));
+    let other = workload(
+        "pub-z",
+        OTHER_FUNCTION,
+        WorkloadKind::Function,
+        WorkloadPhase::Running,
+    );
+    let actions = state.plan(&[other], Instant::now());
+    assert_eq!(creates(&actions), vec![function_run("b", FUNCTION, 1)]);
+}
+
+#[test]
+fn a_trigger_of_the_function_does_not_hold_its_runs() {
+    let mut state = State::default();
+    state.submit(run("b"), function_run("b", FUNCTION, 1));
+    let streamer = workload(
+        "stm-a",
+        FUNCTION,
+        WorkloadKind::StageTrigger,
+        WorkloadPhase::Running,
+    );
+    let actions = state.plan(&[streamer], Instant::now());
+    assert!(deletes(&actions).is_empty());
+    assert_eq!(creates(&actions), vec![function_run("b", FUNCTION, 1)]);
+}
+
+#[test]
+fn a_run_of_the_function_does_not_hold_its_trigger() {
+    let mut state = State::default();
+    state.submit(key(WorkloadKind::StageTrigger), submission("b"));
+    let running = workload(
+        "pub-a",
+        FUNCTION,
+        WorkloadKind::Function,
+        WorkloadPhase::Running,
+    );
+    let actions = state.plan(&[running], Instant::now());
+    assert!(deletes(&actions).is_empty());
     assert_eq!(creates(&actions), vec![submission("b")]);
 }

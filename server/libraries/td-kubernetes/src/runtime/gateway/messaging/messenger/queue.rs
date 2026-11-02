@@ -4,6 +4,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use async_trait::async_trait;
 use serde_yaml::Value;
@@ -13,7 +14,7 @@ use td_bridge::messaging::{
 };
 use td_bridge::observer::WorkloadKind;
 use td_common::worker::{Decorator, MessageAction};
-use td_objects::types::basic::WorkerId;
+use td_objects::types::basic::{FunctionId, WorkerId};
 use tracing::error;
 
 use crate::base::naming::{
@@ -263,6 +264,15 @@ pub(super) fn parse_worker_id(id: &str) -> Result<WorkerId, QueueError> {
     })
 }
 
+fn function_run_of(payload: &OrchestratorMessagePayload<Value>) -> Option<FunctionId> {
+    match payload {
+        OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
+            FunctionRequest::Start(start),
+        ) => Some(start.function_id),
+        _ => None,
+    }
+}
+
 fn derive_key(
     id: &str,
     worker_id: &WorkerId,
@@ -292,6 +302,7 @@ fn derive_key(
 pub struct KubernetesOrchestratorMessageQueue {
     factory: Arc<WorkloadFactory>,
     reconciler: Arc<Reconciler>,
+    sequence: AtomicU64,
 }
 
 impl KubernetesOrchestratorMessageQueue {
@@ -299,6 +310,7 @@ impl KubernetesOrchestratorMessageQueue {
         Self {
             factory,
             reconciler,
+            sequence: AtomicU64::new(0),
         }
     }
 
@@ -358,8 +370,10 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                     Submission {
                         worker_id,
                         name,
+                        function_id: function_run_of(&payload),
                         payload: payload.clone(),
                         attempts: 0,
+                        sequence: self.sequence.fetch_add(1, Ordering::Relaxed),
                     },
                 );
             }

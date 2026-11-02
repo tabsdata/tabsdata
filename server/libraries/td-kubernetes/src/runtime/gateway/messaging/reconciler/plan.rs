@@ -16,6 +16,15 @@
 //! - A trigger's key is `(function_id, kind)`, kind being cron trigger or
 //!   stage trigger, so a newer version of a trigger displaces the older one.
 //!
+//! # Sequencing
+//!
+//! Function runs of one function run one at a time, best effort: two runs of
+//! a subscriber writing the same rows to an external system must not overlap.
+//! This is not reconciliation: no request is dropped and no workload deleted
+//! for it. A run's create is held while another workload of its function is
+//! live, while another create of its function is settling, or while an older
+//! create of its function waits; held creates go in the order requested.
+//!
 //! # State
 //!
 //! - `creates`: at most one pending create per key (the latest Start).
@@ -54,11 +63,12 @@
 //!    pending deletion (Stop W, then Start W), the create is held until the
 //!    old workload is gone.
 //! 5. A pending create is held while its name is settling or still listed.
-//!    Otherwise the create waits while any other live workload of its key
-//!    (any phase but Succeeded/Failed) is listed, and each such workload is
-//!    queued for deletion at once (self-heal: one workload per key). Only a
-//!    trigger's key can hold another workload. Finished workloads are left
-//!    alone so their logs survive until their TTL.
+//!    A function run's create is then held by sequencing. Otherwise the
+//!    create waits while any other live workload of its key (any phase but
+//!    Succeeded/Failed) is listed, and each such workload is queued for
+//!    deletion at once (self-heal: one workload per key). Only a trigger's key
+//!    can hold another workload. Finished workloads are left alone so their
+//!    logs survive until their TTL.
 //! 6. Each listed deletion is issued once; after `WARN_AFTER` it warns once;
 //!    after `FORCE_AFTER` it is forced, and forced again every
 //!    `FORCE_RETRY` while the workload is still listed.
@@ -75,6 +85,8 @@
 //!   being deleted.
 //! - The newest request of a key wins; a Stop for an older worker never
 //!   removes or drops a newer one.
+//! - At most one live function run per function, except one created before
+//!   another run's workload was listed, which this process cannot see.
 //! - The state lives in memory. After a restart, recovery restores
 //!   consistency: a lost create shows as a missing workload, a lost
 //!   deletion as a workload no attempt expects.
@@ -83,7 +95,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use td_bridge::observer::{ObservedWorkload, WorkloadKind, WorkloadPhase};
-use td_objects::types::basic::WorkerId;
+use td_objects::types::basic::{FunctionId, WorkerId};
 use tracing::info;
 
 pub(crate) const WARN_AFTER: Duration = Duration::from_secs(30);
@@ -129,6 +141,8 @@ pub(crate) struct Submission<P> {
     pub name: String,
     pub payload: P,
     pub attempts: u32,
+    pub function_id: Option<FunctionId>,
+    pub sequence: u64,
 }
 
 #[derive(Debug, PartialEq)]
@@ -171,6 +185,7 @@ fn live(workload: &ObservedWorkload) -> bool {
 struct Settling {
     key: Key,
     issued: Option<Instant>,
+    function_id: Option<FunctionId>,
 }
 
 #[derive(Debug)]
@@ -292,6 +307,55 @@ impl<P> State<P> {
         self.creates.is_empty() && self.deletions.is_empty()
     }
 
+    fn sequenced(&self, submission: &Submission<P>, observed: &[ObservedWorkload]) -> bool {
+        let Some(function_id) = &submission.function_id else {
+            return false;
+        };
+        let running: Vec<&str> = observed
+            .iter()
+            .filter(|workload| {
+                workload.kind == WorkloadKind::Function
+                    && workload.name != submission.name
+                    && live(workload)
+                    && workload.function_id.as_ref() == Some(function_id)
+            })
+            .map(|workload| workload.name.as_str())
+            .collect();
+        if !running.is_empty() {
+            info!(
+                workload = %submission.name,
+                running = ?running,
+                "reconciler: create held; another run of the function is live"
+            );
+            return true;
+        }
+        let starting = self.settling.iter().find(|(name, settling)| {
+            *name != &submission.name && settling.function_id.as_ref() == Some(function_id)
+        });
+        if let Some((name, _)) = starting {
+            info!(
+                workload = %submission.name,
+                starting = %name,
+                "reconciler: create held; another run of the function is starting"
+            );
+            return true;
+        }
+        let ahead = self.creates.values().find(|other| {
+            other.name != submission.name
+                && other.function_id.as_ref() == Some(function_id)
+                && other.sequence < submission.sequence
+        });
+        if let Some(other) = ahead {
+            info!(
+                workload = %submission.name,
+                ahead = %other.name,
+                "reconciler: create held; an older run of the function goes first"
+            );
+            return true;
+        }
+        false
+    }
+
     pub(crate) fn plan(&mut self, observed: &[ObservedWorkload], now: Instant) -> Vec<Action<P>> {
         let present: HashMap<&str, &ObservedWorkload> = observed
             .iter()
@@ -357,6 +421,9 @@ impl<P> State<P> {
             }
             if present.contains_key(submission.name.as_str()) {
                 info!(workload = %submission.name, "reconciler: create held; its old workload is still listed");
+                continue;
+            }
+            if self.sequenced(submission, observed) {
                 continue;
             }
             let blockers: Vec<&ObservedWorkload> = observed
@@ -436,6 +503,7 @@ impl<P> State<P> {
                     Settling {
                         key: key.clone(),
                         issued: None,
+                        function_id: submission.function_id,
                     },
                 );
                 actions.push(Action::Create { key, submission });
