@@ -8,14 +8,19 @@ from typing import TYPE_CHECKING
 
 import rich_click as click
 
+from tabsdatak.cli._capability import capability
+from tabsdatak.cli._errors import TdkException
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
+    all_projects_option,
     ancestry,
     format_option,
     hint_common_solutions,
     present,
     proj_option,
     render,
+    resolve_all_projects,
+    split_csv,
     verify_login_or_prompt,
     view_options,
 )
@@ -25,14 +30,12 @@ if TYPE_CHECKING:
     from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
 
-def _split(value: str | None) -> list[str]:
-    """Comma-separated list parser for repeatable filter options."""
-    if not value:
-        return []
-    return [v.strip() for v in value.split(",") if v.strip()]
-
-
 DEFAULT_UNIT = "day"
+EMPTY_CALENDAR_HINT = (
+    "With '--align calendar' the window starts at the boundary that holds "
+    "'--from', so a '--from' on a boundary leaves it empty; for the '--span' "
+    "units that end at '--from', pass '--align rolling'."
+)
 
 EXTERNAL_LABELS = {
     "ExternalSource": "(external sources)",
@@ -40,9 +43,9 @@ EXTERNAL_LABELS = {
 }
 
 
-def _summary_view(data: dict, scope: list, unit: str) -> TableView:
+def _summary_view(data: dict, scope: list, unit: str, spanning: bool) -> TableView:
     """Single condensed table: one row per
-    `(dim_entity, group, status)`, magnitudes summed across buckets.
+    `(project, dim_entity, group, status)`, magnitudes summed across buckets.
     """
     dim = (data.get("dim") or "").lower()
     start_ms = data.get("start_ms")
@@ -57,8 +60,9 @@ def _summary_view(data: dict, scope: list, unit: str) -> TableView:
     nodes = data.get("nodes") or []
     is_collection_dim = dim == "collection"
 
-    agg: dict[tuple[str, str, str], dict] = {}
+    agg: dict[tuple[str, str, str, str], dict] = {}
     for n in nodes:
+        project = (n.get("project_name") or "") if spanning else ""
         coll_id = (n.get("collection_id") or "") if is_collection_dim else ""
         coll_name = (n.get("collection_name") or "") if is_collection_dim else ""
         grp_id = n.get("group_id") or ""
@@ -75,7 +79,7 @@ def _summary_view(data: dict, scope: list, unit: str) -> TableView:
             dim_key = coll_id if is_collection_dim else grp_id
         for status, measures in (n.get("by_status") or {}).items():
             row = agg.setdefault(
-                (dim_key, grp_id, status),
+                (project, dim_key, grp_id, status),
                 {
                     "collection_name": coll_name,
                     "group_name": grp_name,
@@ -98,10 +102,11 @@ def _summary_view(data: dict, scope: list, unit: str) -> TableView:
 
     show_bytes = any(r["bytes_in"] or r["bytes_out"] for r in agg.values())
 
+    columns = [Column("Project", Kind.ID)] if spanning else []
     if is_collection_dim:
-        columns = [Column("Collection", Kind.ID), Column("Group", Kind.ID)]
+        columns += [Column("Collection", Kind.ID), Column("Group", Kind.ID)]
     else:
-        columns = [Column("Group", Kind.ID)]
+        columns += [Column("Group", Kind.ID)]
     columns += [
         Column("Status", Kind.STATUS),
         Column("Runs", Kind.NUMBER),
@@ -117,9 +122,9 @@ def _summary_view(data: dict, scope: list, unit: str) -> TableView:
     rows = []
     # Stable order: by dim_id then status.
     for key in sorted(agg.keys()):
-        dim_key, grp_id, status = key
+        project, dim_key, grp_id, status = key
         r = agg[key]
-        cells: list[object] = []
+        cells: list[object] = [present(project)] if spanning else []
         if is_collection_dim:
             cells.append(present(r["collection_name"] or dim_key))
             cells.append(present(r["group_name"] or grp_id))
@@ -153,8 +158,10 @@ def metrics():
     """Operational metrics over a window."""
 
 
+@capability("analytics", "read")
 @metrics.command()
 @proj_option
+@all_projects_option
 @click.option(
     "--dim",
     type=click.Choice(["collection", "group"], case_sensitive=False),
@@ -223,6 +230,7 @@ def metrics():
 @click.pass_context
 def show(
     ctx: click.Context,
+    all_projects: bool,
     dim: str,
     unit: str,
     align: str,
@@ -243,6 +251,7 @@ def show(
     """
     verify_login_or_prompt(ctx)
     try:
+        spanning = resolve_all_projects(ctx, all_projects)
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         data = server.metrics(
             dim=dim.lower() if dim else None,
@@ -250,26 +259,47 @@ def show(
             align=align.lower() if align else None,
             from_ms=from_ms,
             span=span,
-            collection=_split(collection) or None,
-            collection_exclude=_split(collection_exclude) or None,
-            group=_split(group) or None,
-            group_exclude=_split(group_exclude) or None,
-            status=_split(status) or None,
+            collection=split_csv(collection) or None,
+            collection_exclude=split_csv(collection_exclude) or None,
+            group=split_csv(group) or None,
+            group_exclude=split_csv(group_exclude) or None,
+            status=split_csv(status) or None,
         )
         render(
             ctx,
             data=data,
             view=lambda: _summary_view(
-                data, ancestry(ctx), (unit or DEFAULT_UNIT).lower()
+                data, ancestry(ctx), (unit or DEFAULT_UNIT).lower(), spanning
             ),
         )
     except Exception as e:
         hint_common_solutions(ctx, e)
+        if _empty_calendar_window(e, align, from_ms):
+            raise TdkException(
+                "invalid_request",
+                f"Failed to fetch metrics: {e}",
+                hint=EMPTY_CALENDAR_HINT,
+            ) from e
         raise click.ClickException(f"Failed to fetch metrics: {e}")
 
 
+def _empty_calendar_window(
+    e: Exception, align: str | None, from_ms: int | None
+) -> bool:
+    from tabsdatak.sdk._apiserver import APIServerError
+
+    return (
+        isinstance(e, APIServerError)
+        and (e.code or "").startswith("TimeWindowError")
+        and from_ms is not None
+        and (align or "calendar").lower() == "calendar"
+    )
+
+
+@capability("analytics", "read")
 @metrics.command()
 @proj_option
+@all_projects_option
 @click.option(
     "--collection",
     default=None,
@@ -302,6 +332,7 @@ def show(
 @click.pass_context
 def inflight(
     ctx: click.Context,
+    all_projects: bool,
     collection: str,
     collection_exclude: str,
     group: str,
@@ -313,13 +344,14 @@ def inflight(
     """
     verify_login_or_prompt(ctx)
     try:
+        spanning = resolve_all_projects(ctx, all_projects)
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         data = server.inflight(
-            collection=_split(collection) or None,
-            collection_exclude=_split(collection_exclude) or None,
-            group=_split(group) or None,
-            group_exclude=_split(group_exclude) or None,
-            status=_split(status) or None,
+            collection=split_csv(collection) or None,
+            collection_exclude=split_csv(collection_exclude) or None,
+            group=split_csv(group) or None,
+            group_exclude=split_csv(group_exclude) or None,
+            status=split_csv(status) or None,
         )
         rows = data.get("rows") or []
 
@@ -328,6 +360,7 @@ def inflight(
                 title="Inflight",
                 context=ancestry(ctx),
                 columns=[
+                    *([Column("Project", Kind.ID)] if spanning else []),
                     Column("Collection", Kind.ID),
                     Column("Group", Kind.ID),
                     Column("Status", Kind.STATUS),
@@ -335,6 +368,7 @@ def inflight(
                 ],
                 rows=[
                     [
+                        *([present(r.get("project_name"))] if spanning else []),
                         r.get("collection_name") or str(r.get("collection_id") or ""),
                         r.get("group_name") or str(r.get("group_id") or ""),
                         str(r.get("status", "")),

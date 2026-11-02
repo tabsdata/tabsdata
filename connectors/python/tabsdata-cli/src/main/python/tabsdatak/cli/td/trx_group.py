@@ -8,39 +8,54 @@ from typing import TYPE_CHECKING, List
 
 import rich_click as click
 
+from tabsdatak.cli._capability import capability
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     collection_label,
     display,
     format_option,
     hint_common_solutions,
+    list_options,
     max_result_option,
-    more_results_notes,
     output_format,
     present,
+    progress,
     render,
+    render_list,
+    render_status_done,
+    require_id,
     show_hint,
+    status_changed,
     verify_login_or_prompt,
     view_options,
 )
+from tabsdatak.cli.td._wait import (
+    render_waited_transaction,
+    require_wait,
+    timeout_option,
+    wait_listing,
+    wait_option,
+    wait_transaction,
+)
 from tabsdatak.cli.td.execution_utils import (
+    PLAN_ID_HINT,
+    TRX_ID_HINT,
+    all_workers_option,
     confirm_cancel,
-    emit_worker_logs,
+    emit_scope_logs,
+    failed_only_option,
     function_runs_view,
-    live_monitor,
     obtain_list_trx_filters,
     obtain_transaction_list,
-    pick_worker,
     span_projects,
+    status_codes,
+    status_filter_options,
+    tail_option,
     transactions_view,
     workers_view,
 )
-from tabsdatak.common._tabular import Kind, RecordView
-from tabsdatak.sdk.status_utils.transaction import (
-    TRANSACTION_FINAL_STATUSES,
-    TRANSACTION_SUCCESSFUL_FINAL_STATUSES,
-    TRANSACTION_VALID_USER_PROVIDED_STATUSES,
-)
+from tabsdatak.common._tabular import Kind, RecordView, renderable
+from tabsdatak.sdk.status_utils.groups import Entity, Health, annotate, health
 
 if TYPE_CHECKING:
     from tabsdatak.sdk.tabsdata_server import TabsdataServer
@@ -64,20 +79,14 @@ def trx():
     """Transaction management commands"""
 
 
+@capability("operations", "read")
 @trx.command(name="list")
-@click.option("--proj", type=str, help="Name of the project to filter transactions by.")
 @click.option(
-    "--status",
-    type=str,
-    multiple=True,
-    help=(
-        "Filter transactions by status. The possible statuses are "
-        f"'{TRANSACTION_VALID_USER_PROVIDED_STATUSES}'. This field is "
-        "case-insensitive. "
-    ),
+    "--proj", "-P", type=str, help="Name of the project to filter transactions by."
 )
+@status_filter_options(Entity.TRANSACTION)
 @click.option(
-    "--coll", type=str, help="Name of the collection to filter transactions by."
+    "--coll", "-c", type=str, help="Name of the collection to filter transactions by."
 )
 @click.option("--plan", help="ID of the plan to filter transactions by.")
 @click.option(
@@ -99,31 +108,38 @@ def trx():
     is_flag=True,
     help=(
         "If set, the command will monitor the listed transactions until they all "
-        "reach a final state."
+        "reach a final state. Exits 7 when '--timeout' runs out."
         " A lost connection to the server is retried for up to two minutes "
         "before the command fails."
     ),
 )
+@timeout_option()
 @format_option
 @view_options()
 @max_result_option
+@list_options
 @click.pass_context
 def list_transactions(
     ctx: click.Context,
     proj: str,
     status: List[str],
+    healths: tuple[str, ...],
     coll: str,
     plan: str,
     plan_name: str,
     last: bool,
     at: str,
     monitor: bool,
+    timeout: float | None,
 ):
     """List transactions across every project you can view."""
+    require_id("--plan", plan, PLAN_ID_HINT)
+    if timeout is not None and not monitor:
+        raise click.UsageError("'--timeout' applies only together with '--monitor'.")
     verify_login_or_prompt(ctx)
     try:
         request_filter = obtain_list_trx_filters(
-            status=status,
+            status=status_codes(Entity.TRANSACTION, status, healths),
             exe_name=plan_name,
             execution_id=plan,
             collection=coll,
@@ -135,29 +151,32 @@ def list_transactions(
         list_of_transactions, truncated = obtain_transaction_list(
             ctx, server, request_filter, last
         )
-
-        if output_format(ctx) != "table" or not monitor:
-            render(
+        if monitor:
+            list_of_transactions = wait_listing(
                 ctx,
-                data=[t._data for t in list_of_transactions],
-                view=lambda: transactions_view(list_of_transactions),
-                truncated=truncated,
-            )
-            if output_format(ctx) != "table":
-                return
-        else:
-            list_of_transactions = live_monitor(
+                server,
                 list_of_transactions,
                 lambda: obtain_transaction_list(ctx, server, request_filter, last)[0],
-                transactions_view,
-                lambda transactions: all(
-                    t.status in TRANSACTION_FINAL_STATUSES for t in transactions
+                Entity.TRANSACTION,
+                lambda transactions: renderable(
+                    transactions_view(transactions), display(ctx)
                 ),
-                notes=more_results_notes(ctx, truncated),
-                presentation=display(ctx),
+                "transactions",
+                timeout,
             )
+
+        render_list(
+            ctx,
+            items=lambda: [
+                annotate(Entity.TRANSACTION, t._data) for t in list_of_transactions
+            ],
+            truncated=truncated,
+            view=None if monitor else lambda: transactions_view(list_of_transactions),
+        )
+        if output_format(ctx) != "table":
+            return
         if not all([
-            aux_trx.status in TRANSACTION_SUCCESSFUL_FINAL_STATUSES
+            health(Entity.TRANSACTION, aux_trx.status) is Health.OK
             for aux_trx in list_of_transactions
         ]):
             show_hint(
@@ -172,20 +191,29 @@ def list_transactions(
         raise click.ClickException(f"Failed to list transactions: {e}")
 
 
+@capability("operations", "read")
 @trx.command()
 @click.option("--trx", required=True, help="ID of the transaction to display.")
+@wait_option("the transaction")
+@timeout_option()
 @format_option
 @view_options()
 @click.pass_context
-def get(ctx: click.Context, trx: str):
+def get(ctx: click.Context, trx: str, wait: bool, timeout: float | None):
     """
     Display a transaction: its details plus its function runs and workers.
     """
+    require_id("--trx", trx, TRX_ID_HINT)
+    require_wait(wait, timeout)
     verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         span_projects(server)
         transaction = server.get_transaction(trx)
+        waited = {}
+        if wait:
+            document = wait_transaction(ctx, transaction, timeout, live=False)
+            waited["waited_ms"] = document["waited_ms"]
         function_runs = server.list_function_runs(filter=f"transaction_id:eq:{trx}")
         workers = server.list_workers(filter=f"transaction_id:eq:{trx}")
 
@@ -213,9 +241,12 @@ def get(ctx: click.Context, trx: str):
         render(
             ctx,
             data={
-                "transaction": transaction._data,
-                "function_runs": [r._data for r in function_runs],
-                "workers": [w._data for w in workers],
+                "transaction": annotate(Entity.TRANSACTION, transaction._data),
+                "function_runs": [
+                    annotate(Entity.FUNCTION_RUN, r._data) for r in function_runs
+                ],
+                "workers": [annotate(Entity.WORKER, w._data) for w in workers],
+                **waited,
             },
             view=_views,
         )
@@ -225,7 +256,9 @@ def get(ctx: click.Context, trx: str):
         raise click.ClickException(f"Failed to display transaction: {e}")
 
 
+@capability("operations", "destructive")
 @trx.command()
+@format_option
 @click.option("--trx", required=True, help="ID of the transaction to cancel.")
 @click.option(
     "--confirm",
@@ -239,85 +272,129 @@ def cancel(ctx: click.Context, trx: str, confirm: str):
     non-committed transaction that read its output, in later plans too.
     Canceled runs cannot be recovered.
     """
+    require_id("--trx", trx, TRX_ID_HINT)
     verify_login_or_prompt(ctx)
-    click.echo(f"Canceling transaction with ID '{trx}'")
-    click.echo("-" * 10)
+    progress(ctx, f"Canceling transaction with ID '{trx}'")
+    progress(ctx, "-" * 10)
     confirm_cancel(ctx, confirm, f"transaction '{trx}'")
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.cancel_transaction(trx)
-        click.echo("Transaction canceled successfully")
+        changed = status_changed(server.cancel_transaction(trx))
+        render_status_done(
+            ctx,
+            changed=changed,
+            action="cancel",
+            kind="transaction",
+            id=trx,
+            message="Transaction canceled successfully",
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to cancel transaction: {e}")
 
 
+@capability("operations", "write")
 @trx.command()
+@format_option
 @click.option("--trx", required=True, help="ID of the transaction to recover.")
+@wait_option("the recovered transaction")
+@timeout_option()
 @click.pass_context
-def recover(ctx: click.Context, trx: str):
+def recover(ctx: click.Context, trx: str, wait: bool, timeout: float | None):
     """
     Recover a transaction: its failed or on-hold function runs are
     re-scheduled, each re-running its pinned function version and that
     version's latest patch.
     """
+    require_id("--trx", trx, TRX_ID_HINT)
+    require_wait(wait, timeout)
     verify_login_or_prompt(ctx)
-    click.echo(f"Recovering transaction with ID '{trx}'")
-    click.echo("-" * 10)
+    progress(ctx, f"Recovering transaction with ID '{trx}'")
+    progress(ctx, "-" * 10)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.recover_transaction(trx)
-        click.echo("Transaction recovered successfully")
+        changed = status_changed(server.recover_transaction(trx))
+        if wait and changed:
+            render_waited_transaction(ctx, server, trx, timeout)
+            return
+        render_status_done(
+            ctx,
+            changed=changed,
+            action="recover",
+            kind="transaction",
+            id=trx,
+            message="Transaction recovered successfully",
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to recover transaction: {e}")
 
 
+@capability("operations", "read")
 @trx.command()
+@format_option
 @click.option("--trx", required=True, help="ID of the transaction to monitor.")
+@timeout_option()
 @click.pass_context
-def monitor(ctx: click.Context, trx: str):
+def monitor(ctx: click.Context, trx: str, timeout: float | None):
     """
-    Monitor the execution of a transaction.
+    Monitor the execution of a transaction until it finishes. Exits 7 when
+    '--timeout' runs out and 8 when a function run did not succeed.
     """
+    require_id("--trx", trx, TRX_ID_HINT)
     verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        span_projects(server)
-        transaction = server.get_transaction(trx)
-        from tabsdatak.cli.td.fn_group import _monitor_execution_or_transaction
-
-        _monitor_execution_or_transaction(ctx, transaction=transaction)
+        render_waited_transaction(ctx, server, trx, timeout)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to monitor transaction: {e}")
 
 
+@capability("operations", "read", paths={"--file": "write"})
 @trx.command()
 @click.option("--trx", required=True, help="ID of the transaction whose logs to show.")
+@all_workers_option
+@tail_option
+@failed_only_option
 @click.option(
     "--file",
     help=(
         "Path of the file where the logs will be saved, or '-' to write them to "
         "stdout. Any folders provided before the file must already exist."
     ),
+    type=click.Path(allow_dash=True),
 )
 @format_option
 @click.pass_context
-def logs(ctx: click.Context, trx: str, file: str):
+def logs(
+    ctx: click.Context,
+    trx: str,
+    all_workers: bool,
+    tail: int | None,
+    failed_only: bool,
+    file: str,
+):
     """
-    Show logs of one of the transaction's workers; when several ran, pick one
-    from the listing.
+    Show the logs of the transaction's workers: every worker's with '--all',
+    newest first; else one worker's, picked from the listing when several ran.
+    Each worker that did not succeed carries the error signature of its log.
     """
+    require_id("--trx", trx, TRX_ID_HINT)
     verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        span_projects(server)
-        target = pick_worker(
-            ctx, server, [f"transaction_id:eq:{trx}"], f"Transaction '{trx}'"
+        emit_scope_logs(
+            ctx,
+            server,
+            f"Transaction '{trx}'",
+            all_workers=all_workers,
+            tail=tail,
+            file=file,
+            failed_only=failed_only,
+            trx=trx,
         )
-        emit_worker_logs(ctx, server, target, file)
-    except click.exceptions.Exit:
+    except (click.exceptions.Exit, click.Abort):
         raise
     except Exception as e:
         hint_common_solutions(ctx, e)

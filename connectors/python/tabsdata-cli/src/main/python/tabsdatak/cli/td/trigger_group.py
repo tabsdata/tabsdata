@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import rich_click as click
 
+from tabsdatak.cli._capability import capability
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     all_projects_option,
@@ -29,11 +30,13 @@ from tabsdatak.cli.cli_utils import (
     format_option,
     get_currently_pinned_object,
     hint_common_solutions,
+    list_options,
+    list_params,
     logical_prompt,
     max_result_option,
     present,
     proj_option,
-    render,
+    render_list,
     resolve_all_projects,
     take,
     verify_login_or_prompt,
@@ -47,6 +50,7 @@ from tabsdatak.cli.td.execution_utils import (
 )
 from tabsdatak.cli.td.fn_group import set_function_enabled
 from tabsdatak.common._tabular import Column, Kind, TableView
+from tabsdatak.sdk.status_utils.groups import Entity, annotate
 
 if TYPE_CHECKING:
     from tabsdatak.sdk.tabsdata_server import TabsdataServer
@@ -107,8 +111,10 @@ def stream():
     """Stream-publisher functions"""
 
 
+@capability("operations", "write")
 @cron.command()
 @proj_option
+@format_option
 @_name_option("Name of the cron-triggered function to enable.")
 @_coll_option("Name of the collection to which the function belongs.")
 @click.pass_context
@@ -121,8 +127,10 @@ def enable(ctx: click.Context, name: str, coll: str):
     _enable_function(ctx, CRON, name, coll, True)
 
 
+@capability("operations", "write")
 @cron.command()
 @proj_option
+@format_option
 @_name_option("Name of the cron-triggered function to disable.")
 @_coll_option("Name of the collection to which the function belongs.")
 @click.pass_context
@@ -135,6 +143,7 @@ def disable(ctx: click.Context, name: str, coll: str):
     _enable_function(ctx, CRON, name, coll, False)
 
 
+@capability("operations", "read")
 @cron.command("list")
 @proj_option
 @all_projects_option
@@ -143,12 +152,14 @@ def disable(ctx: click.Context, name: str, coll: str):
 @format_option
 @view_options()
 @max_result_option
+@list_options
 @click.pass_context
 def list_crons(ctx: click.Context, all_projects: bool, name: str, coll: str):
     """List the cron triggers of the project"""
     _list_triggers(ctx, CRON, all_projects, name, coll)
 
 
+@capability("operations", "read")
 @cron.command("plans")
 @proj_option
 @all_projects_option
@@ -157,14 +168,17 @@ def list_crons(ctx: click.Context, all_projects: bool, name: str, coll: str):
 @format_option
 @view_options()
 @max_result_option
+@list_options
 @click.pass_context
 def list_cron_plans(ctx: click.Context, all_projects: bool, name: str, coll: str):
     """List the execution plans the cron triggers started, newest first"""
     _list_plans(ctx, CRON, all_projects, name, coll)
 
 
+@capability("operations", "write")
 @stream.command("enable")
 @proj_option
+@format_option
 @_name_option("Name of the stream-publisher function to enable.")
 @_coll_option("Name of the collection to which the function belongs.")
 @click.pass_context
@@ -177,8 +191,10 @@ def enable_stream(ctx: click.Context, name: str, coll: str):
     _enable_function(ctx, STREAM, name, coll, True)
 
 
+@capability("operations", "write")
 @stream.command("disable")
 @proj_option
+@format_option
 @_name_option("Name of the stream-publisher function to disable.")
 @_coll_option("Name of the collection to which the function belongs.")
 @click.pass_context
@@ -191,6 +207,7 @@ def disable_stream(ctx: click.Context, name: str, coll: str):
     _enable_function(ctx, STREAM, name, coll, False)
 
 
+@capability("operations", "read")
 @stream.command("list")
 @proj_option
 @all_projects_option
@@ -199,12 +216,14 @@ def disable_stream(ctx: click.Context, name: str, coll: str):
 @format_option
 @view_options()
 @max_result_option
+@list_options
 @click.pass_context
 def list_streams(ctx: click.Context, all_projects: bool, name: str, coll: str):
     """List the stream publishers of the project"""
     _list_triggers(ctx, STREAM, all_projects, name, coll)
 
 
+@capability("operations", "read")
 @stream.command("plans")
 @proj_option
 @all_projects_option
@@ -213,33 +232,38 @@ def list_streams(ctx: click.Context, all_projects: bool, name: str, coll: str):
 @format_option
 @view_options()
 @max_result_option
+@list_options
 @click.pass_context
 def list_stream_plans(ctx: click.Context, all_projects: bool, name: str, coll: str):
     """List the execution plans the stream publishers started, newest first"""
     _list_plans(ctx, STREAM, all_projects, name, coll)
 
 
-def _triggers_of(server: "TabsdataServer", kind: _Kind, coll: str, name: str):
+def _triggers_of(
+    ctx: click.Context, server: "TabsdataServer", kind: _Kind, coll: str, name: str
+):
     request_filter = obtain_list_worker_filters(
         fn=name, collection=coll, worker_type=kind.code
     )
-    return server.list_workers_generator(filter=request_filter)
+    return server.list_workers_generator(**list_params(ctx, request_filter))
 
 
 def _enable_function(
     ctx: click.Context, kind: _Kind, name: str, coll: str, enabled: bool
 ):
     verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the function")
+    name = name or logical_prompt(ctx, "Name of the function", option="--name")
     coll = (
         coll
         or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to which the function belongs")
+        or logical_prompt(
+            ctx, "Name of the collection to which the function belongs", option="--coll"
+        )
     )
     action = "enable" if enabled else "disable"
     server: TabsdataServer = ctx.obj["tabsdataserver"]
     try:
-        has_trigger = any(True for _ in _triggers_of(server, kind, coll, name))
+        has_trigger = any(True for _ in _triggers_of(ctx, server, kind, coll, name))
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to {action} function: {e}")
@@ -277,11 +301,14 @@ def _list_plans(
 
         # The listing already returned each row; ``_data`` would re-fetch them
         # one by one, and ``kwargs`` alone drops the id the row was built from.
-        render(
+        render_list(
             ctx,
-            data=lambda: [{"id": plan.id, **plan.kwargs} for plan in plans],
-            view=_view,
+            items=lambda: [
+                annotate(Entity.EXECUTION, {"id": plan.id, **plan.kwargs})
+                for plan in plans
+            ],
             truncated=truncated,
+            view=_view,
         )
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -302,7 +329,7 @@ def _list_triggers(
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         spanning = resolve_all_projects(ctx, all_projects)
-        triggers, truncated = take(ctx, _triggers_of(server, kind, coll, name))
+        triggers, truncated = take(ctx, _triggers_of(ctx, server, kind, coll, name))
 
         def _view():
             columns = [Column("Function", Kind.ID)]
@@ -338,11 +365,11 @@ def _list_triggers(
 
         # ``kwargs`` is the row the listing already returned; ``_data`` would
         # re-fetch each worker one by one.
-        render(
+        render_list(
             ctx,
-            data=lambda: [t.kwargs for t in triggers],
-            view=_view,
+            items=lambda: [annotate(Entity.WORKER, t.kwargs) for t in triggers],
             truncated=truncated,
+            view=_view,
         )
     except Exception as e:
         hint_common_solutions(ctx, e)

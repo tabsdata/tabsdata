@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-from itertools import count
 from unittest.mock import MagicMock, patch
 
 import requests
@@ -17,19 +16,21 @@ from tabsdatak.sdk.tabsdata_server import TabsdataServer
 def test_a_monitor_error_after_the_trigger_is_not_reported_as_a_failed_trigger(
     tmp_path,
 ):
-    """`tdk fn trigger` commits the trigger, and the apiserver then drops the
-    connection while the plan is being monitored. The plan exists and runs,
-    so the command must not report "Failed to trigger function", which
-    invites a second trigger and a duplicate plan."""
-    execution = MagicMock(id="P1", status="R", function_runs=[])
-    execution.refresh.side_effect = requests.ConnectionError("connection reset")
+    """`tdk fn trigger --wait` commits the trigger, and the apiserver then
+    stays away for longer than a wait rides out. The plan exists and runs, so
+    the command must not report "Failed to trigger function", which invites a
+    second trigger and a duplicate plan."""
+    execution = MagicMock(id="P1", status="R", function_runs=[], _data={})
+    execution.wait.side_effect = requests.ConnectionError("connection reset")
     client = _client()
     client.trigger_function.return_value = execution
 
-    result = _trigger(client, tmp_path)
+    result = _trigger(client, tmp_path, "--wait")
 
     client.trigger_function.assert_called_once()
     assert "Failed to trigger function" not in result.output, result.output
+    unboxed = " ".join(result.output.replace("│", " ").split())
+    assert "tdk plan monitor --plan P1" in unboxed, result.output
 
 
 def test_a_trigger_whose_answer_is_lost_says_it_may_have_run(tmp_path):
@@ -48,14 +49,12 @@ def _client() -> MagicMock:
     return client
 
 
-def _trigger(client: MagicMock, tmp_path):
+def _trigger(client: MagicMock, tmp_path, *args: str):
     def _inject(ctx):
         ctx.obj["tabsdataserver"] = client
 
     with (
         patch("tabsdatak.cli.td.cli.initialise_tabsdata_server_connection", _inject),
         patch("tabsdatak.cli.td.cli.DEFAULT_TABSDATA_DIRECTORY", str(tmp_path)),
-        patch("tabsdatak.cli.td.execution_utils.sleep", lambda seconds: None),
-        patch("tabsdatak.cli.td.execution_utils.monotonic", count(step=60).__next__),
     ):
-        return CliRunner().invoke(cli, ["fn", "trigger", "-n", "f1", "-c", "c1"])
+        return CliRunner().invoke(cli, ["fn", "trigger", "-n", "f1", "-c", "c1", *args])
