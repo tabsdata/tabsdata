@@ -57,7 +57,16 @@ def _python_dash_m(unattended: bool, *argv):
     env = {
         key: value
         for key, value in os.environ.items()
-        if key not in ("TDK_AGENT", "CLAUDECODE", "GEMINI_CLI", "CODEX_THREAD_ID")
+        if key
+        not in (
+            "TDK_AGENT",
+            "CLAUDECODE",
+            "GEMINI_CLI",
+            "CODEX_THREAD_ID",
+            "FORCE_COLOR",
+            "PY_COLORS",
+            "GITHUB_ACTIONS",
+        )
     }
     if unattended:
         env["TDK_AGENT"] = "1"

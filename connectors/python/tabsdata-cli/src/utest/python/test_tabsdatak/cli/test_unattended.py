@@ -43,7 +43,15 @@ def test_an_unattended_session_never_waits_on_open_stdin(tmp_path):
     env = {
         key: value
         for key, value in os.environ.items()
-        if not key.startswith("TDK_") and key not in ("GEMINI_CLI", "CODEX_THREAD_ID")
+        if not key.startswith("TDK_")
+        and key
+        not in (
+            "GEMINI_CLI",
+            "CODEX_THREAD_ID",
+            "FORCE_COLOR",
+            "PY_COLORS",
+            "GITHUB_ACTIONS",
+        )
     }
     env.update({"HOME": str(tmp_path), "CLAUDECODE": "1", "COLUMNS": "250"})
     process = subprocess.Popen(
