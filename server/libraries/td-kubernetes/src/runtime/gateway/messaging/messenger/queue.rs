@@ -9,21 +9,27 @@ use async_trait::async_trait;
 use serde_yaml::Value;
 use td_bridge::messaging::{
     CronRequest, FunctionRequest, OrchestratorMessage, OrchestratorMessagePayload,
-    OrchestratorMessageQueue, QueueError, StageTriggerRequest,
+    OrchestratorMessageQueue, ProbeRequest, QueueError, StageTriggerRequest,
 };
 use td_bridge::observer::WorkloadKind;
 use td_common::worker::{Decorator, MessageAction};
 use td_objects::types::basic::WorkerId;
 use tracing::error;
 
-use crate::base::naming::{logical_id_text, to_fn_pod_name, worker_name_prefix, worker_pod_stem};
+use crate::base::naming::{
+    logical_id_text, to_fn_pod_name, to_probe_pod_name, worker_name_prefix, worker_pod_stem,
+};
 use crate::runtime::gateway::messaging::messenger::factory::WorkloadFactory;
 use crate::runtime::gateway::messaging::messenger::kit::{
-    FunctionRunKit, build_cron_run_kit, build_function_run_kit, build_stream_run_kit,
+    FunctionRunKit, build_cron_run_kit, build_function_run_kit, build_probe_run_kit,
+    build_stream_run_kit,
 };
+use crate::runtime::gateway::messaging::messenger::request::PROBE_WORKER;
 use crate::runtime::gateway::messaging::messenger::template::{PodTemplate, PodTemplateIndex};
 use crate::runtime::gateway::messaging::reconciler::Reconciler;
 use crate::runtime::gateway::messaging::reconciler::plan::{Key, Submission};
+
+const PROBE_NAME_PREFIX: &str = "prb";
 
 fn unsupported(id: &str, action: &str) -> QueueError {
     error!(id = %id, action = %action, "Action not yet supported in Kubernetes messaging layer.");
@@ -129,6 +135,13 @@ pub(super) fn derive_routing(
             }),
             CronRequest::Notify => Err(unsupported(id, "Notify")),
         },
+        OrchestratorMessagePayload::OrchestratorProbeRequestMessagePayload(
+            ProbeRequest::Start(_),
+        ) => Ok(PayloadRouting {
+            template_key: PROBE_WORKER.to_owned(),
+            prefix: PROBE_NAME_PREFIX.to_owned(),
+            action: MessageAction::Start,
+        }),
         OrchestratorMessagePayload::OrchestratorRequestMessagePayload(request) => {
             match request.action {
                 MessageAction::Start => Err(unsupported(id, "Start")),
@@ -199,6 +212,16 @@ pub(super) fn kit_for_payload(
             })?;
             Ok(Some(kit))
         }
+        OrchestratorMessagePayload::OrchestratorProbeRequestMessagePayload(
+            ProbeRequest::Start(start),
+        ) => {
+            let kit = build_probe_run_kit(pod_name, namespace, start).map_err(|error| {
+                QueueError::BackendError {
+                    cause: error.to_string(),
+                }
+            })?;
+            Ok(Some(kit))
+        }
         _ => Ok(None),
     }
 }
@@ -210,6 +233,20 @@ pub(super) fn derive_kube_name(worker_id: &WorkerId, prefix: &str) -> Result<Str
             prefix = %prefix,
             error = %error,
             "Failed to derive kube name from worker and id."
+        );
+        QueueError::BackendError {
+            cause: error.to_string(),
+        }
+    })
+}
+
+fn derive_probe_name(id: &str, prefix: &str) -> Result<String, QueueError> {
+    to_probe_pod_name(prefix, id).map_err(|error| {
+        error!(
+            id = %id,
+            prefix = %prefix,
+            error = %error,
+            "Failed to derive kube name from probe and id."
         );
         QueueError::BackendError {
             cause: error.to_string(),
@@ -277,6 +314,20 @@ impl KubernetesOrchestratorMessageQueue {
         let key = derive_key(id, &worker_id, payload)?;
         Ok((routing, worker_id, name, key))
     }
+
+    /// Probes bypass the reconciler: they carry no worker id, and the
+    /// dispatcher requeues a probe whose put fails.
+    async fn create_probe(
+        &self,
+        id: &str,
+        payload: &OrchestratorMessagePayload<Value>,
+    ) -> Result<(), QueueError> {
+        let routing = derive_routing(id, payload)?;
+        let name = derive_probe_name(id, &routing.prefix)?;
+        self.factory
+            .create_named(id, &routing.template_key, &name, payload)
+            .await
+    }
 }
 
 #[async_trait]
@@ -286,6 +337,18 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
         id: String,
         payload: OrchestratorMessagePayload<Value>,
     ) -> Result<OrchestratorMessage<Value>, QueueError> {
+        if matches!(
+            payload,
+            OrchestratorMessagePayload::OrchestratorProbeRequestMessagePayload(_)
+        ) {
+            self.create_probe(&id, &payload).await?;
+            return Ok(OrchestratorMessage::new(
+                id.clone(),
+                id,
+                PathBuf::new(),
+                payload,
+            ));
+        }
         let (routing, worker_id, name, key) = self.locate(&id, &payload)?;
         match routing.action {
             MessageAction::Start => {

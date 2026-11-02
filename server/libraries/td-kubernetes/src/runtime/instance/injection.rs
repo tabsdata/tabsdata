@@ -9,12 +9,14 @@ use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{
     Container, EnvVar, EnvVarSource, Pod, PodSpec, SecretKeySelector,
 };
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 
 use crate::base::constants::{
     ENV_TD_DATAFLOW__ABORT__MEMORY_THRESHOLD_PERCENT, ENV_TD_DATAFLOW__SPILL__DISK_LIMIT_PERCENT,
     ENV_TD_DATAFLOW__SPILL__ENABLED, ENV_TD_DATAFLOW__SPILL__FOLDER,
     ENV_TD_DATAFLOW__SPILL__MEMORY_THRESHOLD_PERCENT, ENV_TD_DATAFLOW__TEMPORARY_FOLDER,
-    KPROFILE_CONFIGS_FAMILY, SECRET_FAMILY_CONFIG, SECRET_FAMILY_LABEL,
+    KPROFILE_CONFIGS_FAMILY, SECRET_DELIVERY_ANNOTATION, SECRET_DELIVERY_FILE,
+    SECRET_FAMILY_CONFIG, SECRET_FAMILY_LABEL,
 };
 use crate::base::error::kubernetes::KubernetesError;
 use crate::base::error::launcher::LauncherError;
@@ -46,6 +48,7 @@ pub fn inject_into_pod(
     available_secrets: &BTreeSet<String>,
 ) -> Result<(), LauncherError> {
     let placement = PodPlacement::of(pod.metadata.labels.as_ref());
+    let delivery = SecretDelivery::of(Some(&pod.metadata));
     let spec =
         pod.spec
             .as_mut()
@@ -54,7 +57,7 @@ pub fn inject_into_pod(
                 cause: "pod has no spec".to_owned(),
             })?;
     inject_sizing(profile, pod_template_key, &placement, spec)?;
-    inject_secret_envs(profile, pod_template_key, spec, available_secrets)
+    inject_secret_envs(profile, pod_template_key, delivery, spec, available_secrets)
 }
 
 pub fn inject_into_job(
@@ -64,6 +67,11 @@ pub fn inject_into_job(
     available_secrets: &BTreeSet<String>,
 ) -> Result<(), LauncherError> {
     let placement = PodPlacement::of(job.metadata.labels.as_ref());
+    let delivery = SecretDelivery::of(
+        job.spec
+            .as_ref()
+            .and_then(|job_spec| job_spec.template.metadata.as_ref()),
+    );
     let spec = job
         .spec
         .as_mut()
@@ -73,7 +81,7 @@ pub fn inject_into_job(
             cause: "job has no spec.template.spec".to_owned(),
         })?;
     inject_sizing(profile, pod_template_key, &placement, spec)?;
-    inject_secret_envs(profile, pod_template_key, spec, available_secrets)
+    inject_secret_envs(profile, pod_template_key, delivery, spec, available_secrets)
 }
 
 pub fn inject_into_cronjob(
@@ -83,6 +91,14 @@ pub fn inject_into_cronjob(
     available_secrets: &BTreeSet<String>,
 ) -> Result<(), LauncherError> {
     let placement = PodPlacement::of(cronjob.metadata.labels.as_ref());
+    let delivery = SecretDelivery::of(
+        cronjob
+            .spec
+            .job_template
+            .spec
+            .as_ref()
+            .and_then(|job_spec| job_spec.template.metadata.as_ref()),
+    );
     let spec = cronjob
         .spec
         .job_template
@@ -94,7 +110,7 @@ pub fn inject_into_cronjob(
             cause: "cronjob has no spec.jobTemplate.spec.template.spec".to_owned(),
         })?;
     inject_sizing(profile, pod_template_key, &placement, spec)?;
-    inject_secret_envs(profile, pod_template_key, spec, available_secrets)
+    inject_secret_envs(profile, pod_template_key, delivery, spec, available_secrets)
 }
 
 pub fn inject_into_deployment(
@@ -104,6 +120,12 @@ pub fn inject_into_deployment(
     available_secrets: &BTreeSet<String>,
 ) -> Result<(), LauncherError> {
     let placement = PodPlacement::of(deployment.metadata.labels.as_ref());
+    let delivery = SecretDelivery::of(
+        deployment
+            .spec
+            .as_ref()
+            .and_then(|deployment_spec| deployment_spec.template.metadata.as_ref()),
+    );
     let spec = deployment
         .spec
         .as_mut()
@@ -113,12 +135,29 @@ pub fn inject_into_deployment(
             cause: "deployment has no spec.template.spec".to_owned(),
         })?;
     inject_sizing(profile, pod_template_key, &placement, spec)?;
-    inject_secret_envs(profile, pod_template_key, spec, available_secrets)
+    inject_secret_envs(profile, pod_template_key, delivery, spec, available_secrets)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SecretDelivery {
+    Env,
+    File,
+}
+
+impl SecretDelivery {
+    pub fn of(pod_metadata: Option<&ObjectMeta>) -> Self {
+        let file = pod_metadata
+            .and_then(|metadata| metadata.annotations.as_ref())
+            .and_then(|annotations| annotations.get(SECRET_DELIVERY_ANNOTATION))
+            .is_some_and(|delivery| delivery == SECRET_DELIVERY_FILE);
+        if file { Self::File } else { Self::Env }
+    }
 }
 
 pub fn inject_secret_envs(
     profile: &Profile,
     pod_template_key: &str,
+    delivery: SecretDelivery,
     spec: &mut PodSpec,
     available_secrets: &BTreeSet<String>,
 ) -> Result<(), LauncherError> {
@@ -129,6 +168,9 @@ pub fn inject_secret_envs(
                 cause: error.to_string(),
             }
         })?;
+    }
+    if delivery == SecretDelivery::File {
+        return Ok(());
     }
     let mounted = mounted_config_files(spec);
     let entries = collect_env_entries(profile, pod_template_key, &mounted, available_secrets)?;

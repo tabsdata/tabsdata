@@ -136,4 +136,9 @@ pub enum ResolverError {
          placeholders resolved at creation, such as '${{{{system:...}}}}'."
     )]
     SecretValuePlaceholderUnsupported { path: String, token: String } = 5037,
+    #[error(
+        "'{path}' sets {keys}, which the template does not hold there; only the template's \
+         settings can be configured at that level, so remove them."
+    )]
+    UnknownConfigKeys { path: String, keys: String } = 5038,
 }

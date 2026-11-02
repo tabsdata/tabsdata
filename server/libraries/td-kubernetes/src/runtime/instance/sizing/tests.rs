@@ -32,6 +32,83 @@ fn spec() -> PodSpec {
     }
 }
 
+fn limited(container: &Container, name: &str) -> Option<String> {
+    container
+        .resources
+        .as_ref()?
+        .limits
+        .as_ref()?
+        .get(name)
+        .map(|quantity| quantity.0.clone())
+}
+
+#[test]
+fn limits_reach_main_containers_only() {
+    let mut pod = spec();
+    let component = ComponentConfig {
+        resources: ResourcesConfig {
+            limits: LimitsConfig {
+                memory: Some("5Gi".to_owned()),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    apply_component(&component, &mut pod);
+
+    assert_eq!(
+        limited(&pod.containers[0], RESOURCE_MEMORY).as_deref(),
+        Some("5Gi")
+    );
+    assert_eq!(limited(&pod.containers[0], RESOURCE_CPU), None);
+    assert_eq!(
+        requested(&pod.containers[0], RESOURCE_CPU).as_deref(),
+        Some("1")
+    );
+    let init = &pod.init_containers.as_ref().unwrap()[0];
+    assert!(init.resources.as_ref().unwrap().limits.is_none());
+}
+
+#[test]
+fn no_limits_by_default() {
+    let mut pod = spec();
+    let component = ComponentConfig {
+        resources: ResourcesConfig {
+            cpu: Some("2".to_owned()),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    apply_component(&component, &mut pod);
+
+    assert!(
+        pod.containers[0]
+            .resources
+            .as_ref()
+            .unwrap()
+            .limits
+            .is_none()
+    );
+}
+
+#[test]
+fn aitdk_sizing_and_limits_parse() {
+    let config = TabsdataConfig::parse(
+        "pods:\n  service:\n    aitdk:\n      resources:\n        cpu: \"1\"\n        memory: 2Gi\n        limits:\n          memory: 5Gi\n",
+    )
+    .unwrap();
+    let aitdk = config.component("aitdk", Some("regular"));
+    assert_eq!(aitdk.resources.cpu.as_deref(), Some("1"));
+    assert_eq!(aitdk.resources.limits.memory.as_deref(), Some("5Gi"));
+    assert!(
+        config
+            .component("aiagent", Some("regular"))
+            .resources
+            .is_empty()
+    );
+}
+
 fn requested(container: &Container, name: &str) -> Option<String> {
     container
         .resources
@@ -50,6 +127,7 @@ fn resources_overwrite_every_container() {
             cpu: Some("4".to_owned()),
             memory: Some("16Gi".to_owned()),
             disk: Some("16Gi".to_owned()),
+            ..Default::default()
         },
         ..Default::default()
     };
@@ -148,6 +226,21 @@ fn named_components_take_their_own_entry() {
 }
 
 #[test]
+fn the_classifier_takes_its_own_entry_not_the_service_defaults() {
+    let mut config = TabsdataConfig::default();
+    config.pods.service.catalog_classify.resources.cpu = Some("0.5".to_owned());
+    config.pods.service.defaults.resources.cpu = Some("2".to_owned());
+
+    assert_eq!(
+        config
+            .component("catalog-classify", Some("regular"))
+            .resources
+            .cpu,
+        Some("0.5".to_owned())
+    );
+}
+
+#[test]
 fn ephemeral_tier_falls_back_to_function() {
     let mut config = TabsdataConfig::default();
     config.pods.service.defaults.resources.cpu = Some("1".to_owned());
@@ -166,6 +259,21 @@ fn ephemeral_tier_falls_back_to_function() {
             .resources
             .cpu,
         Some("4".to_owned())
+    );
+}
+
+#[test]
+fn connection_probes_take_the_probe_entry_not_the_function_one() {
+    let mut config = TabsdataConfig::default();
+    config.pods.function.component.resources.cpu = Some("4".to_owned());
+    config.pods.probe.resources.cpu = Some("250m".to_owned());
+
+    assert_eq!(
+        config
+            .component("connection-probe", Some("ephemeral"))
+            .resources
+            .cpu,
+        Some("250m".to_owned())
     );
 }
 

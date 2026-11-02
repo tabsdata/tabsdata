@@ -497,31 +497,92 @@ spec:
 #[test]
 #[cfg(feature = "enterprise")]
 fn a_true_aiagent_label_marks_a_workload_as_key_dependent() {
-    assert!(wants_ai_keys(&labelled(Some("true"))));
+    assert!(needs_ai_keys(&labelled(Some("true"))));
 }
 
 #[test]
 #[cfg(feature = "enterprise")]
 fn a_false_aiagent_label_leaves_a_workload_unconditional() {
-    assert!(!wants_ai_keys(&labelled(Some("false"))));
+    assert!(!needs_ai_keys(&labelled(Some("false"))));
 }
 
 #[test]
 #[cfg(feature = "enterprise")]
 fn an_absent_aiagent_label_leaves_a_workload_unconditional() {
-    assert!(!wants_ai_keys(&labelled(None)));
+    assert!(!needs_ai_keys(&labelled(None)));
 }
 
 #[test]
 #[cfg(feature = "enterprise")]
 fn a_quoted_aiagent_label_is_not_a_boolean() {
-    assert!(!wants_ai_keys(&labelled(Some("\"true\""))));
+    assert!(!needs_ai_keys(&labelled(Some("\"true\""))));
 }
 
 #[test]
 #[cfg(feature = "enterprise")]
 fn unparseable_yaml_leaves_a_workload_unconditional() {
-    assert!(!wants_ai_keys("this: [is: not: valid"));
+    assert!(!needs_ai_keys("this: [is: not: valid"));
+}
+
+#[cfg(feature = "enterprise")]
+fn secret(entries: &[(&str, &str)]) -> BTreeMap<String, Vec<u8>> {
+    entries
+        .iter()
+        .map(|(name, value)| ((*name).to_owned(), value.as_bytes().to_vec()))
+        .collect()
+}
+
+#[test]
+#[cfg(feature = "enterprise")]
+fn an_openai_key_alone_is_a_provider_key() {
+    assert!(provider_key_supplied(&secret(&[(
+        "AI_PROVIDERS__OPENAI__API_KEY",
+        "sk-x"
+    )])));
+}
+
+#[test]
+#[cfg(feature = "enterprise")]
+fn an_anthropic_key_alone_is_a_provider_key() {
+    assert!(provider_key_supplied(&secret(&[(
+        "AI_PROVIDERS__ANTHROPIC__API_KEY",
+        "sk-ant-x"
+    )])));
+}
+
+#[test]
+#[cfg(feature = "enterprise")]
+fn any_named_provider_key_counts() {
+    assert!(provider_key_supplied(&secret(&[(
+        "AI_PROVIDERS__AZURE_EU__API_KEY",
+        "k"
+    )])));
+}
+
+#[test]
+#[cfg(feature = "enterprise")]
+fn empty_or_blank_keys_do_not_count() {
+    assert!(!provider_key_supplied(&secret(&[
+        ("AI_PROVIDERS__OPENAI__API_KEY", ""),
+        ("AI_PROVIDERS__ANTHROPIC__API_KEY", "  \n"),
+    ])));
+}
+
+#[test]
+#[cfg(feature = "enterprise")]
+fn no_secret_entries_supply_no_key() {
+    assert!(!provider_key_supplied(&secret(&[])));
+}
+
+#[test]
+#[cfg(feature = "enterprise")]
+fn other_entries_are_not_provider_keys() {
+    assert!(!provider_key_supplied(&secret(&[
+        ("CONFIRM__KEYS", "abc"),
+        ("PROVIDERS__OPENAI__API_KEY", "sk-x"),
+        ("AI_PROVIDERS____API_KEY", "sk-x"),
+        ("AI_PROVIDERS__OPENAI__API_BASE", "http://x"),
+    ])));
 }
 
 const CONFIG_FILE_ARGUMENT: &str = "--config-file";

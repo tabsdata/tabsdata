@@ -8,6 +8,8 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use strum::{AsRefStr, EnumString};
 
+use crate::runtime::gateway::messaging::messenger::request::PROBE_WORKER;
+
 pub const TABSDATA_FILE: &str = "tabsdata.yaml";
 
 const TIER_EPHEMERAL: &str = "ephemeral";
@@ -24,6 +26,7 @@ pub struct PodsConfig {
     pub global: GlobalPodConfig,
     pub service: ServiceConfig,
     pub function: FunctionConfig,
+    pub probe: ComponentConfig,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -40,8 +43,10 @@ pub struct ServiceConfig {
     pub database: ComponentConfig,
     pub apiserver: ComponentConfig,
     pub aiagent: ComponentConfig,
-    pub aiembeddings: ComponentConfig,
-    pub aimetadata: ComponentConfig,
+    pub aitdk: ComponentConfig,
+    pub embedder: ComponentConfig,
+    #[serde(rename = "catalog-classify")]
+    pub catalog_classify: ComponentConfig,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, AsRefStr)]
@@ -50,8 +55,10 @@ pub enum Component {
     Database,
     Apiserver,
     Aiagent,
-    Aiembeddings,
-    Aimetadata,
+    Aitdk,
+    Embedder,
+    #[strum(serialize = "catalog-classify")]
+    CatalogClassify,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -121,9 +128,24 @@ pub struct ResourcesConfig {
     pub cpu: Option<String>,
     pub memory: Option<String>,
     pub disk: Option<String>,
+    pub limits: LimitsConfig,
 }
 
 impl ResourcesConfig {
+    pub fn is_empty(&self) -> bool {
+        self.cpu.is_none() && self.memory.is_none() && self.disk.is_none() && self.limits.is_empty()
+    }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LimitsConfig {
+    pub cpu: Option<String>,
+    pub memory: Option<String>,
+    pub disk: Option<String>,
+}
+
+impl LimitsConfig {
     pub fn is_empty(&self) -> bool {
         self.cpu.is_none() && self.memory.is_none() && self.disk.is_none()
     }
@@ -178,8 +200,9 @@ impl ServiceConfig {
             Component::Database => &self.database,
             Component::Apiserver => &self.apiserver,
             Component::Aiagent => &self.aiagent,
-            Component::Aiembeddings => &self.aiembeddings,
-            Component::Aimetadata => &self.aimetadata,
+            Component::Aitdk => &self.aitdk,
+            Component::Embedder => &self.embedder,
+            Component::CatalogClassify => &self.catalog_classify,
         }
     }
 }
@@ -192,6 +215,7 @@ impl TabsdataConfig {
     pub fn component(&self, component_label: &str, tier: Option<&str>) -> &ComponentConfig {
         match Component::from_str(component_label) {
             Ok(component) => self.pods.service.of(component),
+            Err(_) if component_label == PROBE_WORKER => &self.pods.probe,
             Err(_) if tier == Some(TIER_EPHEMERAL) => &self.pods.function.component,
             Err(_) => &self.pods.service.defaults,
         }

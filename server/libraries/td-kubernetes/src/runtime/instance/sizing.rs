@@ -13,7 +13,7 @@ use crate::base::constants::{
 use crate::base::error::launcher::LauncherError;
 use crate::runtime::instance::profile::Profile;
 use crate::runtime::instance::tabsdata::{
-    ComponentConfig, PlacementConfig, ResourcesConfig, TABSDATA_FILE, TabsdataConfig,
+    ComponentConfig, LimitsConfig, PlacementConfig, ResourcesConfig, TABSDATA_FILE, TabsdataConfig,
 };
 
 pub fn inject_sizing(
@@ -80,6 +80,7 @@ fn apply_resources(resources: &ResourcesConfig, spec: &mut PodSpec) {
     }
     for container in spec.containers.iter_mut() {
         overwrite_requests(resources, &mut container.resources);
+        overwrite_limits(&resources.limits, &mut container.resources);
     }
     if let Some(init_containers) = spec.init_containers.as_mut() {
         for container in init_containers.iter_mut() {
@@ -92,15 +93,38 @@ fn overwrite_requests(
     resources: &ResourcesConfig,
     requirements: &mut Option<ResourceRequirements>,
 ) {
+    overwrite_quantities(
+        [&resources.cpu, &resources.memory, &resources.disk],
+        requirements,
+        |requirements| &mut requirements.requests,
+    );
+}
+
+fn overwrite_limits(limits: &LimitsConfig, requirements: &mut Option<ResourceRequirements>) {
+    if limits.is_empty() {
+        return;
+    }
+    overwrite_quantities(
+        [&limits.cpu, &limits.memory, &limits.disk],
+        requirements,
+        |requirements| &mut requirements.limits,
+    );
+}
+
+fn overwrite_quantities(
+    [cpu, memory, disk]: [&Option<String>; 3],
+    requirements: &mut Option<ResourceRequirements>,
+    field: fn(&mut ResourceRequirements) -> &mut Option<BTreeMap<String, Quantity>>,
+) {
     let requirements = requirements.get_or_insert_with(ResourceRequirements::default);
-    let requests = requirements.requests.get_or_insert_with(BTreeMap::new);
+    let quantities = field(requirements).get_or_insert_with(BTreeMap::new);
     for (name, value) in [
-        (RESOURCE_CPU, &resources.cpu),
-        (RESOURCE_MEMORY, &resources.memory),
-        (RESOURCE_EPHEMERAL_STORAGE, &resources.disk),
+        (RESOURCE_CPU, cpu),
+        (RESOURCE_MEMORY, memory),
+        (RESOURCE_EPHEMERAL_STORAGE, disk),
     ] {
         if let Some(value) = value {
-            requests.insert(name.to_owned(), Quantity(value.clone()));
+            quantities.insert(name.to_owned(), Quantity(value.clone()));
         }
     }
 }

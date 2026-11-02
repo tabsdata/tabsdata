@@ -145,6 +145,7 @@ impl ResolveSession<'_> {
         init_map: &Mapping,
         path: &mut Vec<String>,
     ) -> Result<Value, ResolverError> {
+        self.refuse_unknown_keys(template_map, init_map, path)?;
         let mut rendered = Mapping::new();
         let omittable = self.schema.is_some_and(|schema| schema.optional_at(path));
         for (key, template_child) in template_map {
@@ -161,6 +162,30 @@ impl ResolveSession<'_> {
             rendered.insert(key.clone(), rendered_child);
         }
         Ok(Value::Mapping(rendered))
+    }
+
+    fn refuse_unknown_keys(
+        &self,
+        template_map: &Mapping,
+        init_map: &Mapping,
+        path: &[String],
+    ) -> Result<(), ResolverError> {
+        let unknown: Vec<String> = init_map
+            .keys()
+            .filter(|key| !template_map.contains_key(*key))
+            .map(|key| format!("'{}'", scalar_key(key)))
+            .collect();
+        if unknown.is_empty() {
+            return Ok(());
+        }
+        Err(ResolverError::UnknownConfigKeys {
+            path: if path.is_empty() {
+                self.file.to_owned()
+            } else {
+                self.displayed(path)
+            },
+            keys: unknown.join(", "),
+        })
     }
 
     fn resolve_open_mapping(

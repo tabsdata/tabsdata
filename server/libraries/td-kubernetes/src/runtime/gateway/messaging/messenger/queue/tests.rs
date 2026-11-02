@@ -8,15 +8,19 @@ use http::Method;
 use serde_yaml::Value;
 use td_bridge::messaging::{
     CronRequest, CronStartRequest, CronStopRequest, FunctionRequest, FunctionStartRequest,
-    FunctionStopRequest, OrchestratorMessagePayload, StageTriggerRequest, StageTriggerStartRequest,
-    StageTriggerStopRequest,
+    FunctionStopRequest, OrchestratorMessagePayload, ProbeRequest, ProbeStartRequest,
+    StageTriggerRequest, StageTriggerStartRequest, StageTriggerStopRequest,
 };
 use td_common::worker::{Callback, Decorator, HttpRequest, MessageAction, WorkerName};
 use td_objects::types::basic::{
-    CollectionId, CollectionName, ConnectionKind, CronMask, FunctionId, FunctionName,
-    FunctionVersionId, ProjectId, ProjectName, WorkerId,
+    CollectionId, CollectionName, ConnectionId, ConnectionKind, CronMask, FunctionId, FunctionName,
+    FunctionVersionId, ProbeId, ProjectId, ProjectName, WorkerId,
 };
 use url::Url;
+
+use crate::base::labels::{LABEL_FUNCTION_ID, LABEL_WORKER_ID};
+use crate::base::naming::to_connection_object_name;
+use crate::runtime::gateway::messaging::messenger::factory::worker_settings;
 
 use super::*;
 
@@ -250,4 +254,101 @@ fn cron_publisher_notify_is_unsupported() {
     let payload: OrchestratorMessagePayload<Value> =
         OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(CronRequest::Notify);
     assert!(derive_routing("job", &payload).is_err());
+}
+
+fn probe_payload(connection_id: ConnectionId) -> OrchestratorMessagePayload<Value> {
+    OrchestratorMessagePayload::OrchestratorProbeRequestMessagePayload(ProbeRequest::Start(
+        ProbeStartRequest {
+            probe_id: ProbeId::default(),
+            responder: responder(),
+            project_id: ProjectId::default(),
+            project: Some(ProjectName::try_from("project").unwrap()),
+            collection_id: CollectionId::default(),
+            collection: CollectionName::try_from("collection").unwrap(),
+            connection_id,
+            connection: ConnectionKind::try_from("tabsdatak.conn.mysql:MySQLSrcConn").unwrap(),
+            request: serde_json::json!({"kind": "check"}),
+        },
+    ))
+}
+
+#[test]
+fn probe_start_routes_to_the_connection_probe_template() {
+    let routing = derive_routing("task", &probe_payload(ConnectionId::default())).unwrap();
+    assert_eq!(routing.template_key, "connection-probe");
+    assert_eq!(routing.prefix, "prb");
+    assert!(matches!(routing.action, MessageAction::Start));
+}
+
+#[test]
+fn probe_kit_injects_the_connection_and_mounts_the_request() {
+    let connection_id = ConnectionId::default();
+    let kit = kit_for_payload("prb-x", "ns", &probe_payload(connection_id))
+        .unwrap()
+        .expect("a probe carries a run kit");
+    let connection_object = to_connection_object_name(&connection_id.to_string()).unwrap();
+    assert_eq!(
+        kit.connection_secret_name.as_deref(),
+        Some(connection_object.as_str())
+    );
+    assert_eq!(
+        kit.connection_configmap_name.as_deref(),
+        Some(connection_object.as_str())
+    );
+    assert!(kit.connection_envfrom.is_some());
+    assert!(
+        kit.labels
+            .iter()
+            .all(|(name, _)| name != LABEL_FUNCTION_ID && name != LABEL_WORKER_ID)
+    );
+
+    let settings = worker_settings(Some(&kit));
+    assert_eq!(
+        settings.probe_request_configmap_name.as_deref(),
+        Some("prb-x-probe")
+    );
+
+    let (configmaps, secrets, latch) = kit.into_companions();
+    assert_eq!(secrets.len(), 1);
+    assert!(latch.is_some());
+    let request = configmaps
+        .iter()
+        .find(|configmap| configmap.metadata.name.as_deref() == Some("prb-x-probe"))
+        .expect("the request configmap is created with the job");
+    let body = &request.data.as_ref().unwrap()["request.json"];
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(body).unwrap()["kind"],
+        "check"
+    );
+}
+
+#[test]
+fn a_function_kit_carries_no_probe_request() {
+    let payload: OrchestratorMessagePayload<Value> =
+        OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(CronRequest::Start(
+            CronStartRequest {
+                worker: WorkerName::CronTrigger,
+                worker_id: worker_id(),
+                resolver: resolver(),
+                trigger: trigger(),
+                responder: responder(),
+                project_id: ProjectId::default(),
+                project: None,
+                collection_id: CollectionId::default(),
+                collection: CollectionName::try_from("collection").unwrap(),
+                connection_id: None,
+                connection: None,
+                function_id: FunctionId::default(),
+                function_version_id: FunctionVersionId::try_from("fv20260101-0000000001").unwrap(),
+                function: FunctionName::try_from("function").unwrap(),
+                schedule: CronMask::try_from("* * * * *").unwrap(),
+            },
+        ));
+    let kit = kit_for_payload("crn-x", "ns", &payload).unwrap().unwrap();
+    assert!(
+        worker_settings(Some(&kit))
+            .probe_request_configmap_name
+            .is_none()
+    );
+    assert_eq!(kit.into_companions().0.len(), 1);
 }

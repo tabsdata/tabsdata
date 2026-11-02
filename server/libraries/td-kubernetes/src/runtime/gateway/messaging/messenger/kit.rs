@@ -10,7 +10,9 @@ use k8s_openapi::api::core::v1::{
     ConfigMap, ConfigMapEnvSource, Container, EnvFromSource, Pod, Secret, SecretEnvSource,
 };
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-use td_bridge::messaging::{CronStartRequest, FunctionStartRequest, StageTriggerStartRequest};
+use td_bridge::messaging::{
+    CronStartRequest, FunctionStartRequest, ProbeStartRequest, StageTriggerStartRequest,
+};
 use td_common::worker::{Callback, HttpCallback};
 
 use crate::base::constants::Scope;
@@ -37,6 +39,8 @@ const HEADER_AUTHORIZATION: &str = "authorization";
 
 const MAIN_NAME_SUFFIX: &str = "-main";
 const LATCH_NAME_SUFFIX: &str = "-latch";
+const PROBE_REQUEST_NAME_SUFFIX: &str = "-probe";
+const PROBE_REQUEST_KEY: &str = "request.json";
 const ENV_TD_LATCH: &str = "TD_LATCH";
 const LATCH_VALUE_READY: &str = "ready";
 const SECRET_ENV_PREFIX: &str = "SECRET__";
@@ -53,8 +57,29 @@ pub struct FunctionRunKit {
     pub connection_secret_name: Option<String>,
     pub connection_envfrom: Option<EnvFromSource>,
     pub cron_schedule: Option<String>,
+    pub probe_request_configmap: Option<ConfigMap>,
     pub labels: Vec<(String, String)>,
     pub annotations: Vec<(String, String)>,
+}
+
+impl FunctionRunKit {
+    pub fn probe_request_configmap_name(&self) -> Option<String> {
+        self.probe_request_configmap
+            .as_ref()
+            .and_then(|configmap| configmap.metadata.name.clone())
+    }
+
+    /// The per-run objects created with the workload: configmaps, secrets and
+    /// the latch.
+    pub fn into_companions(self) -> (Vec<ConfigMap>, Vec<Secret>, Option<ConfigMap>) {
+        let mut configmaps = vec![self.main_configmap];
+        configmaps.extend(self.probe_request_configmap);
+        (
+            configmaps,
+            vec![self.main_secret],
+            Some(self.latch_configmap),
+        )
+    }
 }
 
 pub(crate) fn build_worker_run_kit(
@@ -93,7 +118,9 @@ pub(crate) fn build_worker_run_kit(
     let latch_name = format!("{pod_name}{LATCH_NAME_SUFFIX}");
 
     let mut labels = request.labels();
-    labels.push((LABEL_WORKER_ID.to_owned(), worker_id));
+    if let Some(worker_id) = request.worker_id_label() {
+        labels.push((LABEL_WORKER_ID.to_owned(), worker_id));
+    }
     let annotations = request.annotations();
 
     let common_envfrom = vec![
@@ -137,6 +164,7 @@ pub(crate) fn build_worker_run_kit(
         connection_secret_name,
         connection_envfrom,
         cron_schedule: None,
+        probe_request_configmap: None,
         labels,
         annotations,
     })
@@ -165,6 +193,26 @@ pub fn build_cron_run_kit(
 ) -> Result<FunctionRunKit, KubeMessagingError> {
     let mut kit = build_worker_run_kit(pod_name, namespace, request)?;
     kit.cron_schedule = Some(request.schedule.to_string());
+    Ok(kit)
+}
+
+/// The probe request rides its own configmap, mounted as a file: an explorer
+/// entity doc can outgrow what an environment variable may carry.
+pub fn build_probe_run_kit(
+    pod_name: &str,
+    namespace: &str,
+    request: &ProbeStartRequest,
+) -> Result<FunctionRunKit, KubeMessagingError> {
+    let mut kit = build_worker_run_kit(pod_name, namespace, request)?;
+    let mut data = BTreeMap::new();
+    data.insert(PROBE_REQUEST_KEY.to_owned(), request.request.to_string());
+    kit.probe_request_configmap = Some(build_configmap(
+        &format!("{pod_name}{PROBE_REQUEST_NAME_SUFFIX}"),
+        namespace,
+        &kit.labels,
+        &kit.annotations,
+        data,
+    ));
     Ok(kit)
 }
 

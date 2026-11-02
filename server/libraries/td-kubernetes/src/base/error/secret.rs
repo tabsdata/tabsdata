@@ -164,6 +164,12 @@ pub enum SecretError {
     EntitySecretKeyMalformed { key: String } = 5022,
     #[error("Stored entity secret key '{key}' is not valid: {cause}.")]
     EntitySecretKeyInvalid { key: String, cause: String } = 5023,
+    #[error("Secret '{secret}' key '{key}' holds a value that is not valid UTF-8: {cause}.")]
+    ConfigSecretValueNotUtf8 {
+        secret: String,
+        key: String,
+        cause: String,
+    } = 5025,
     #[error(transparent)]
     Profile(#[from] ProfileError) = 5004,
     #[error(transparent)]

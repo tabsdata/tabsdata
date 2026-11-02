@@ -8,6 +8,7 @@ use indoc::indoc;
 
 use super::*;
 use crate::base::constants::{REQUIREMENTS_TD_ASSET, TABSDATA_REQUIREMENTS_LOCK_ASSET};
+use crate::runtime::gateway::resolver::fusion::resolve::ResolveOutcome;
 use crate::runtime::instance::manifest::Manifest;
 
 fn configs(entries: &[(&str, &str)]) -> RenderedConfigmap {
@@ -1006,5 +1007,107 @@ fn kminus_storage_goes_cloud_through_a_stub() {
     assert_eq!(
         images["options"],
         Value::Mapping(serde_yaml::Mapping::new())
+    );
+}
+
+fn resolved(
+    template: &str,
+    init: &str,
+    schema: Option<&str>,
+) -> Result<ResolveOutcome, ResolverError> {
+    let schema = schema.map(|text| Schema::parse("x.yamls", text).expect("schema"));
+    let template = bake_schema_secrets("x.yaml", template, schema.as_ref()).expect("bakes");
+    resolve_config_file(
+        "x.yaml",
+        &template,
+        init,
+        &SystemValues::default(),
+        &HashMap::new(),
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+        schema.as_ref(),
+    )
+}
+
+#[test]
+fn a_key_the_template_lacks_at_the_root_is_refused() {
+    let error = resolved("kept: 1\n", "kept: 1\nadded: 2\n", None).expect_err("refused");
+    assert!(
+        matches!(&error, ResolverError::UnknownConfigKeys { path, keys }
+            if path == "x.yaml" && keys == "'added'"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_key_the_template_lacks_in_a_nested_mapping_is_refused() {
+    let template = indoc! {"
+        service:
+          mode: plain
+    "};
+    let init = indoc! {"
+        service:
+          mode: remote
+          endpoint: e
+          retries: 3
+    "};
+    let error = resolved(template, init, None).expect_err("refused");
+    assert!(
+        matches!(&error, ResolverError::UnknownConfigKeys { path, keys }
+            if path == "x.yaml:service" && keys == "'endpoint', 'retries'"),
+        "{error}"
+    );
+}
+
+#[test]
+fn an_open_mapping_keeps_the_keys_the_template_lacks() {
+    let schema = indoc! {"
+        directives:
+          - at: options
+            treat: open
+    "};
+    let outcome = resolved(
+        "options: {}\n",
+        "options:\n  batch: 4\n  ratio: 0.4\n",
+        Some(schema),
+    )
+    .expect("resolves");
+    let rendered: Value = serde_yaml::from_str(&outcome.rendered).expect("yaml");
+    assert_eq!(rendered["options"]["batch"], Value::from(4));
+    assert_eq!(rendered["options"]["ratio"], Value::from(0.4));
+    assert!(outcome.secrets.is_empty());
+}
+
+#[test]
+fn a_secret_leaf_added_under_an_open_mapping_becomes_a_secret() {
+    let schema = indoc! {"
+        directives:
+          - at: service.api_key
+            treat: secret
+          - at: service
+            treat: open
+    "};
+    let outcome = resolved(
+        "service:\n  mode: plain\n",
+        "service:\n  mode: remote\n  endpoint: e\n  api_key: k-1\n",
+        Some(schema),
+    )
+    .expect("resolves");
+    let rendered: Value = serde_yaml::from_str(&outcome.rendered).expect("yaml");
+    assert_eq!(rendered["service"]["mode"], Value::from("remote"));
+    assert_eq!(rendered["service"]["endpoint"], Value::from("e"));
+    assert_eq!(
+        rendered["service"]["api_key"],
+        Value::String("${{secret}}".to_owned())
+    );
+    let secrets: Vec<(String, String)> = outcome
+        .secrets
+        .into_iter()
+        .map(|secret| (secret.key, secret.value))
+        .collect();
+    assert_eq!(
+        secrets,
+        vec![("SERVICE__API_KEY".to_owned(), "k-1".to_owned())]
     );
 }

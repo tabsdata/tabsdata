@@ -473,3 +473,70 @@ fn a_secret_key_left_over_from_a_removed_option_fails() {
     let error = settle_secret_keys(&input).expect_err("a removed option leaves an extra key");
     assert!(matches!(error, SecretError::SettlementKeysMismatch { .. }));
 }
+
+#[test]
+fn a_key_no_leaf_references_is_removed() {
+    let leaves = vec![leaf("password", None)];
+    let live = secret(&[("password", "s3cret"), ("AGENT_TOKEN", "old")]);
+    let aligned = alignment(&leaves, Some(&live), true);
+    assert_eq!(aligned.removed, vec!["AGENT_TOKEN".to_owned()]);
+    assert!(aligned.added.is_empty() && !aligned.created);
+}
+
+#[test]
+fn a_referenced_key_is_kept_even_when_empty_or_generated() {
+    let leaves = vec![
+        leaf("password", None),
+        leaf("token", Some(Generator::ServiceToken)),
+    ];
+    let live = secret(&[("password", ""), ("token", "held")]);
+    assert!(alignment(&leaves, Some(&live), true).is_noop());
+}
+
+#[test]
+fn a_newly_declared_key_is_added() {
+    let leaves = vec![leaf("password", None), leaf("api_key", None)];
+    let live = secret(&[("password", "s3cret"), ("old_key", "x")]);
+    let aligned = alignment(&leaves, Some(&live), true);
+    assert_eq!(aligned.added, vec!["api_key".to_owned()]);
+    assert_eq!(aligned.removed, vec!["old_key".to_owned()]);
+}
+
+#[test]
+fn a_config_without_a_secret_gets_one_with_every_key() {
+    let leaves = vec![leaf("beta", None), leaf("alpha", None)];
+    assert_eq!(
+        alignment(&leaves, None, true),
+        Alignment {
+            created: true,
+            added: vec!["alpha".to_owned(), "beta".to_owned()],
+            removed: vec![],
+        }
+    );
+}
+
+#[test]
+fn a_config_with_no_leaves_and_no_secret_gets_an_empty_one() {
+    let aligned = alignment(&[], None, true);
+    assert!(aligned.created && aligned.added.is_empty() && !aligned.is_noop());
+}
+
+#[test]
+fn every_key_of_a_config_with_no_leaves_is_removed() {
+    let live = secret(&[("beta", "b"), ("alpha", "a")]);
+    assert_eq!(
+        alignment(&[], Some(&live), true).removed,
+        vec!["alpha".to_owned(), "beta".to_owned()]
+    );
+}
+
+#[test]
+fn without_pruning_a_key_no_leaf_references_keeps_its_value() {
+    let leaves = vec![leaf("password", None), leaf("api_key", None)];
+    let live = secret(&[("password", "s3cret"), ("old_key", "x")]);
+    let aligned = alignment(&leaves, Some(&live), false);
+    assert_eq!(aligned.added, vec!["api_key".to_owned()]);
+    assert!(aligned.removed.is_empty());
+    let live = secret(&[("password", "s3cret"), ("api_key", ""), ("old_key", "x")]);
+    assert!(alignment(&leaves, Some(&live), false).is_noop());
+}

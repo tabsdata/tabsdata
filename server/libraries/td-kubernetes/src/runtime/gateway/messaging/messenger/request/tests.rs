@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use http::Method;
 use td_common::worker::{Decorator, HttpRequest, WorkerName};
 use td_objects::types::basic::{
-    CollectionId, CollectionName, ConnectionKind, CronMask, FunctionId, FunctionName,
-    FunctionVersionId, ProjectId, ProjectName, WorkerId,
+    CollectionId, CollectionName, ConnectionId, ConnectionKind, CronMask, FunctionId, FunctionName,
+    FunctionVersionId, ProbeId, ProjectId, ProjectName, WorkerId,
 };
 use url::Url;
 
@@ -83,6 +83,20 @@ fn cron_request() -> CronStartRequest {
         function_version_id: FunctionVersionId::try_from("fv20260101-0000000001").unwrap(),
         function: FunctionName::try_from("function").unwrap(),
         schedule: CronMask::try_from("* * * * *").unwrap(),
+    }
+}
+
+fn probe_request() -> ProbeStartRequest {
+    ProbeStartRequest {
+        probe_id: ProbeId::default(),
+        responder: callback(),
+        project_id: ProjectId::default(),
+        project: None,
+        collection_id: CollectionId::default(),
+        collection: CollectionName::try_from("collection").unwrap(),
+        connection_id: ConnectionId::default(),
+        connection: ConnectionKind::try_from("tabsdatak.conn.mysql:MySQLSrcConn").unwrap(),
+        request: serde_json::json!({"kind": "check"}),
     }
 }
 
@@ -166,4 +180,13 @@ fn absent_project_and_connection_are_not_annotated() {
     let annotations = function_request().annotations();
     assert_eq!(label(&annotations, ANNOTATION_PROJECT), None);
     assert_eq!(label(&annotations, ANNOTATION_CONNECTION), None);
+}
+
+#[test]
+fn a_probe_names_no_function_and_stays_out_of_the_observer() {
+    let request = probe_request();
+    assert_eq!(label(&request.labels(), LABEL_FUNCTION_ID), None);
+    assert_eq!(label(&request.annotations(), ANNOTATION_FUNCTION), None);
+    assert!(label(&request.labels(), LABEL_CONNECTION_ID).is_some());
+    assert_eq!(request.worker_id_label(), None);
 }

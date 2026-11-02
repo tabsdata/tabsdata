@@ -178,3 +178,6 @@ fn read_label(document: &Value, label: &str) -> Option<String> {
         .as_str()
         .map(str::to_owned)
 }
+
+#[cfg(test)]
+mod tests;

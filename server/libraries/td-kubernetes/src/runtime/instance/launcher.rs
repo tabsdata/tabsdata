@@ -2,6 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+#[cfg(feature = "enterprise")]
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::time::SystemTime;
 
@@ -21,7 +23,7 @@ use crate::base::constants::DbManagerMode;
 use crate::base::constants::SERVICE_TYPE_LOAD_BALANCER;
 #[cfg(feature = "enterprise")]
 use crate::base::constants::{
-    AIAGENT_CONFIG_FILE, AIAGENT_LABEL, AIAGENT_SECRET_KEY_ANTHROPIC, AIAGENT_SECRET_KEY_OPENAI,
+    AI_KEYS_LABEL, AIAGENT_CONFIG_FILE, AIAGENT_PROVIDER_KEY_PREFIX, AIAGENT_PROVIDER_KEY_SUFFIX,
     POD_YAML_FIELD_LABELS, POD_YAML_FIELD_METADATA,
 };
 use crate::base::constants::{
@@ -646,16 +648,33 @@ fn pods_for_tier(profile: &Profile, tier: Tier) -> Result<Vec<(&str, &str)>, Lau
 }
 
 #[cfg(feature = "enterprise")]
-fn wants_ai_keys(yaml: &str) -> bool {
+fn needs_ai_keys(yaml: &str) -> bool {
     let Ok(value) = serde_yaml::from_str::<serde_yaml::Value>(yaml) else {
         return false;
     };
     value
         .get(POD_YAML_FIELD_METADATA)
         .and_then(|metadata| metadata.get(POD_YAML_FIELD_LABELS))
-        .and_then(|labels| labels.get(AIAGENT_LABEL))
+        .and_then(|labels| labels.get(AI_KEYS_LABEL))
         .and_then(|value| value.as_bool())
         .unwrap_or(false)
+}
+
+/// Whether `name` is the secret entry of an assistant provider's key,
+/// `AI_PROVIDERS__<NAME>__API_KEY`.
+#[cfg(feature = "enterprise")]
+fn is_provider_key(name: &str) -> bool {
+    name.strip_prefix(AIAGENT_PROVIDER_KEY_PREFIX)
+        .and_then(|rest| rest.strip_suffix(AIAGENT_PROVIDER_KEY_SUFFIX))
+        .is_some_and(|provider| !provider.is_empty())
+}
+
+#[cfg(feature = "enterprise")]
+fn provider_key_supplied(data: &BTreeMap<String, Vec<u8>>) -> bool {
+    data.iter().any(|(name, value)| {
+        is_provider_key(name)
+            && std::str::from_utf8(value).is_ok_and(|value| !value.trim().is_empty())
+    })
 }
 
 #[cfg(feature = "enterprise")]
@@ -666,18 +685,12 @@ async fn ai_keys_supplied(context: &KubeContext) -> bool {
     let Ok(Some(data)) = get_secret(context, &name).await else {
         return false;
     };
-    [AIAGENT_SECRET_KEY_ANTHROPIC, AIAGENT_SECRET_KEY_OPENAI]
-        .iter()
-        .any(|key| {
-            data.get(*key)
-                .and_then(|value| std::str::from_utf8(value).ok())
-                .is_some_and(|value| !value.trim().is_empty())
-        })
+    provider_key_supplied(&data)
 }
 
 #[cfg(feature = "enterprise")]
 async fn retain_ai_workloads(context: &KubeContext, entries: &mut Vec<(&str, &str)>) {
-    if !entries.iter().any(|(_, yaml)| wants_ai_keys(yaml)) {
+    if !entries.iter().any(|(_, yaml)| needs_ai_keys(yaml)) {
         return;
     }
     if ai_keys_supplied(context).await {
@@ -685,14 +698,17 @@ async fn retain_ai_workloads(context: &KubeContext, entries: &mut Vec<(&str, &st
     }
     let mut skipped = Vec::new();
     entries.retain(|(key, yaml)| {
-        let wanted = wants_ai_keys(yaml);
+        let wanted = needs_ai_keys(yaml);
         if wanted {
             skipped.push((*key).to_owned());
         }
         !wanted
     });
     for key in skipped {
-        warn!("Skipping '{key}': no Anthropic or OpenAI key is configured.");
+        warn!(
+            "Skipping '{key}': no assistant provider key is configured \
+             ({AIAGENT_PROVIDER_KEY_PREFIX}<NAME>{AIAGENT_PROVIDER_KEY_SUFFIX})."
+        );
     }
 }
 

@@ -86,7 +86,14 @@ fn worker_with_no_matching_configs_yields_no_env() {
     let profile = build_profile(&[]);
     let mut spec = build_pod_spec_with(&["apiserver"]);
     let secrets: BTreeSet<String> = BTreeSet::new();
-    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &secrets).expect("ok");
+    inject_secret_envs(
+        &profile,
+        "apiserver.yaml",
+        SecretDelivery::Env,
+        &mut spec,
+        &secrets,
+    )
+    .expect("ok");
     assert!(names(&spec, "apiserver").is_empty());
 }
 
@@ -104,7 +111,14 @@ fn mounted_config_injects_secret_keys() {
     let mut spec = build_pod_spec_mounting(&["apiserver"], &["apiserver.yaml"]);
     let mut secrets: BTreeSet<String> = BTreeSet::new();
     secrets.insert("td-app-apiserver-secret-config-apiserver.yaml".to_owned());
-    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &secrets).expect("ok");
+    inject_secret_envs(
+        &profile,
+        "apiserver.yaml",
+        SecretDelivery::Env,
+        &mut spec,
+        &secrets,
+    )
+    .expect("ok");
     let injected = names(&spec, "apiserver");
     assert!(injected.contains(&"DATABASE__PASSWORD".to_owned()));
     assert!(injected.contains(&"JWT__SECRET".to_owned()));
@@ -122,7 +136,14 @@ fn secret_auto_placeholders_are_injected() {
     let mut spec = build_pod_spec_mounting(&["dbcreate"], &["dbmanager.database.yaml"]);
     let mut secrets: BTreeSet<String> = BTreeSet::new();
     secrets.insert("td-app-dbmanager-secret-config-dbmanager.database.yaml".to_owned());
-    inject_secret_envs(&profile, "dbmanager.yaml", &mut spec, &secrets).expect("ok");
+    inject_secret_envs(
+        &profile,
+        "dbmanager.yaml",
+        SecretDelivery::Env,
+        &mut spec,
+        &secrets,
+    )
+    .expect("ok");
     let injected = names(&spec, "dbcreate");
     assert!(injected.contains(&"DATABASE_SERVER__PASSWORD".to_owned()));
 }
@@ -152,7 +173,14 @@ fn server_secrets_stay_out_of_pods_not_mounting_the_file() {
     let mut secrets: BTreeSet<String> = BTreeSet::new();
     secrets.insert("td-app-apiserver-secret-config-apiserver.database.yaml".to_owned());
     secrets.insert("td-app-dbmanager-secret-config-dbmanager.database.yaml".to_owned());
-    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &secrets).expect("ok");
+    inject_secret_envs(
+        &profile,
+        "apiserver.yaml",
+        SecretDelivery::Env,
+        &mut spec,
+        &secrets,
+    )
+    .expect("ok");
     let injected = names(&spec, "apiserver");
     assert!(injected.contains(&"DATABASE__APISERVER__PASSWORD".to_owned()));
     assert!(
@@ -173,7 +201,14 @@ fn mounted_config_targets_all_containers() {
     let mut spec = build_pod_spec_mounting(&["apiserver", "sidecar"], &["apiserver.yaml"]);
     let mut secrets: BTreeSet<String> = BTreeSet::new();
     secrets.insert("td-app-apiserver-secret-config-apiserver.yaml".to_owned());
-    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &secrets).expect("ok");
+    inject_secret_envs(
+        &profile,
+        "apiserver.yaml",
+        SecretDelivery::Env,
+        &mut spec,
+        &secrets,
+    )
+    .expect("ok");
     assert_eq!(names(&spec, "apiserver"), vec!["DATABASE__PASSWORD"]);
     assert_eq!(names(&spec, "sidecar"), vec!["DATABASE__PASSWORD"]);
 }
@@ -209,7 +244,14 @@ fn only_mounted_configs_are_injected() {
     secrets.insert("td-app-apiserver-secret-config-apiserver.yaml".to_owned());
     secrets.insert("td-app-apiserver-secret-config-apiserver.log.yaml".to_owned());
     secrets.insert("td-app-tabsdata-secret-config-tabsdata.yaml".to_owned());
-    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &secrets).expect("ok");
+    inject_secret_envs(
+        &profile,
+        "apiserver.yaml",
+        SecretDelivery::Env,
+        &mut spec,
+        &secrets,
+    )
+    .expect("ok");
     let injected = names(&spec, "apiserver");
     assert!(injected.contains(&"DATABASE__PASSWORD".to_owned()));
     assert!(injected.contains(&"AUDIT__TOKEN".to_owned()));
@@ -230,8 +272,14 @@ fn missing_secret_in_cluster_is_a_hard_failure() {
     )]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &["apiserver.yaml"]);
     let secrets: BTreeSet<String> = BTreeSet::new();
-    let error =
-        inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &secrets).expect_err("missing");
+    let error = inject_secret_envs(
+        &profile,
+        "apiserver.yaml",
+        SecretDelivery::Env,
+        &mut spec,
+        &secrets,
+    )
+    .expect_err("missing");
     assert!(matches!(
         error,
         LauncherError::SecretEnvInjectionMissingSecrets { .. }
@@ -249,7 +297,14 @@ fn config_without_placeholders_does_not_require_secret() {
     )]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &["apiserver.yaml"]);
     let secrets: BTreeSet<String> = BTreeSet::new();
-    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &secrets).expect("ok");
+    inject_secret_envs(
+        &profile,
+        "apiserver.yaml",
+        SecretDelivery::Env,
+        &mut spec,
+        &secrets,
+    )
+    .expect("ok");
     assert!(names(&spec, "apiserver").is_empty());
 }
 
@@ -272,7 +327,14 @@ fn already_present_env_var_is_not_duplicated() {
     }
     let mut secrets: BTreeSet<String> = BTreeSet::new();
     secrets.insert("td-app-apiserver-secret-config-apiserver.yaml".to_owned());
-    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &secrets).expect("ok");
+    inject_secret_envs(
+        &profile,
+        "apiserver.yaml",
+        SecretDelivery::Env,
+        &mut spec,
+        &secrets,
+    )
+    .expect("ok");
     let injected = names(&spec, "apiserver");
     assert_eq!(injected, vec!["DATABASE__PASSWORD"]);
     let env = spec
@@ -296,7 +358,14 @@ fn global_envs_reach_every_container() {
         "},
     )]);
     let mut spec = build_pod_spec_mounting(&["apiserver", "sidecar"], &[]);
-    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &BTreeSet::new()).expect("ok");
+    inject_secret_envs(
+        &profile,
+        "apiserver.yaml",
+        SecretDelivery::Env,
+        &mut spec,
+        &BTreeSet::new(),
+    )
+    .expect("ok");
     for container in ["apiserver", "sidecar"] {
         let injected = names(&spec, container);
         assert!(injected.contains(&"TD_TRACE".to_owned()), "{container}");
@@ -316,7 +385,14 @@ fn global_envs_do_not_need_the_config_mounted() {
         "},
     )]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &[]);
-    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &BTreeSet::new()).expect("ok");
+    inject_secret_envs(
+        &profile,
+        "apiserver.yaml",
+        SecretDelivery::Env,
+        &mut spec,
+        &BTreeSet::new(),
+    )
+    .expect("ok");
     assert!(names(&spec, "apiserver").contains(&"TD_TRACE".to_owned()));
 }
 
@@ -352,7 +428,14 @@ fn an_empty_global_envs_map_injects_nothing() {
     "},
     )]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &[]);
-    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &BTreeSet::new()).expect("ok");
+    inject_secret_envs(
+        &profile,
+        "apiserver.yaml",
+        SecretDelivery::Env,
+        &mut spec,
+        &BTreeSet::new(),
+    )
+    .expect("ok");
     assert!(names(&spec, "apiserver").is_empty());
 }
 
@@ -381,7 +464,14 @@ fn an_unspecified_global_env_leaves_the_container_one_alone() {
             value_from: None,
         },
     ]);
-    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &BTreeSet::new()).expect("ok");
+    inject_secret_envs(
+        &profile,
+        "apiserver.yaml",
+        SecretDelivery::Env,
+        &mut spec,
+        &BTreeSet::new(),
+    )
+    .expect("ok");
     let entries = spec.containers[0].env.as_ref().expect("env");
     let value = |name: &str| {
         entries
@@ -433,7 +523,14 @@ fn a_global_env_wins_over_a_container_one() {
         value: Some("container".to_owned()),
         value_from: None,
     }]);
-    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &BTreeSet::new()).expect("ok");
+    inject_secret_envs(
+        &profile,
+        "apiserver.yaml",
+        SecretDelivery::Env,
+        &mut spec,
+        &BTreeSet::new(),
+    )
+    .expect("ok");
     let entries = spec.containers[0].env.as_ref().expect("env");
     let matches: Vec<_> = entries
         .iter()
@@ -464,7 +561,14 @@ fn a_global_env_overrides_an_init_container_one() {
         }]),
         ..Default::default()
     }]);
-    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &BTreeSet::new()).expect("ok");
+    inject_secret_envs(
+        &profile,
+        "apiserver.yaml",
+        SecretDelivery::Env,
+        &mut spec,
+        &BTreeSet::new(),
+    )
+    .expect("ok");
     let value = spec.init_containers.as_ref().expect("init containers")[0]
         .env
         .as_ref()
@@ -488,7 +592,13 @@ fn a_non_scalar_global_env_is_a_hard_failure() {
         "},
     )]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &[]);
-    let outcome = inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &BTreeSet::new());
+    let outcome = inject_secret_envs(
+        &profile,
+        "apiserver.yaml",
+        SecretDelivery::Env,
+        &mut spec,
+        &BTreeSet::new(),
+    );
     assert!(outcome.is_err());
 }
 
@@ -510,7 +620,14 @@ fn options_a_user_added_are_injected_one_env_each() {
     let mut spec = build_pod_spec_mounting(&["apiserver"], &["apiserver.storage.yaml"]);
     let mut secrets: BTreeSet<String> = BTreeSet::new();
     secrets.insert("td-app-apiserver-secret-config-apiserver.storage.yaml".to_owned());
-    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &secrets).expect("ok");
+    inject_secret_envs(
+        &profile,
+        "apiserver.yaml",
+        SecretDelivery::Env,
+        &mut spec,
+        &secrets,
+    )
+    .expect("ok");
     let mut injected = names(&spec, "apiserver");
     injected.sort();
     assert_eq!(
@@ -631,4 +748,77 @@ fn a_global_env_overrides_a_dataflow_env() {
         .as_deref(),
         Some("90")
     );
+}
+
+#[test]
+fn file_delivery_skips_secret_envs_but_keeps_global_envs() {
+    let profile = build_profile(&[
+        ("service.yaml", "remote:\n  key: ${{secret:api-key?}}\n"),
+        (
+            "tabsdata.yaml",
+            "pods:\n  global:\n    envs:\n      TD_TRACE: verbose\n",
+        ),
+    ]);
+    let mut spec = build_pod_spec_mounting(&["service"], &["service.yaml"]);
+    inject_secret_envs(
+        &profile,
+        "service.yaml",
+        SecretDelivery::File,
+        &mut spec,
+        &BTreeSet::new(),
+    )
+    .expect("a missing secret is not the launcher's concern under file delivery");
+    assert_eq!(names(&spec, "service"), vec!["TD_TRACE"]);
+}
+
+#[test]
+fn the_pod_annotation_selects_file_delivery() {
+    let annotated = |value: &str| ObjectMeta {
+        annotations: Some(BTreeMap::from([(
+            SECRET_DELIVERY_ANNOTATION.to_owned(),
+            value.to_owned(),
+        )])),
+        ..Default::default()
+    };
+    assert_eq!(
+        SecretDelivery::of(Some(&annotated("file"))),
+        SecretDelivery::File
+    );
+    assert_eq!(
+        SecretDelivery::of(Some(&annotated("env"))),
+        SecretDelivery::Env
+    );
+    assert_eq!(
+        SecretDelivery::of(Some(&ObjectMeta::default())),
+        SecretDelivery::Env
+    );
+    assert_eq!(SecretDelivery::of(None), SecretDelivery::Env);
+}
+
+#[test]
+fn a_deployment_reads_the_annotation_from_its_pod_template() {
+    use k8s_openapi::api::apps::v1::DeploymentSpec;
+    use k8s_openapi::api::core::v1::PodTemplateSpec;
+
+    let profile = build_profile(&[("service.yaml", "remote:\n  key: ${{secret:api-key?}}\n")]);
+    let mut deployment = Deployment {
+        spec: Some(DeploymentSpec {
+            template: PodTemplateSpec {
+                metadata: Some(ObjectMeta {
+                    annotations: Some(BTreeMap::from([(
+                        SECRET_DELIVERY_ANNOTATION.to_owned(),
+                        SECRET_DELIVERY_FILE.to_owned(),
+                    )])),
+                    ..Default::default()
+                }),
+                spec: Some(build_pod_spec_mounting(&["service"], &["service.yaml"])),
+            },
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    inject_into_deployment(&profile, "service.yaml", &mut deployment, &BTreeSet::new())
+        .expect("ok");
+    let spec = deployment.spec.unwrap().template.spec.unwrap();
+    assert!(names(&spec, "service").is_empty());
 }

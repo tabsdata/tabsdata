@@ -35,7 +35,7 @@ use crate::runtime::instance::upgrade::latch;
 use crate::runtime::instance::upgrade::lock::UpgradeLock;
 use crate::runtime::instance::upgrade::preflight::{Preflight, Standing, inspect};
 use crate::runtime::provider::{ClusterProvider, Provider, provider_for_instance_upgrading};
-use crate::runtime::secrets::settler::pending_secret_keys;
+use crate::runtime::secrets::settler::{pending_secret_keys, sync_secret_keys};
 
 struct Phases {
     total: usize,
@@ -561,9 +561,11 @@ async fn instance_upgrade_phase(
         verbose,
     )
     .await?;
+    let added = sync_secret_keys(context, &preflight.product_version, false).await?;
     info!(
         "Upgraded {} resource(s); {} retained.",
-        walked.applied, walked.retained
+        walked.applied + added,
+        walked.retained
     );
 
     latch::verify(context, instance, lock).await?;
@@ -575,6 +577,8 @@ async fn instance_upgrade_phase(
     provider.upgrade_database(reporter).await?;
     provider.upgrade_system(reporter, &preflight.rules).await?;
 
+    latch::verify(context, instance, lock).await?;
+    sync_secret_keys(context, &preflight.product_version, true).await?;
     latch::finalise(context, instance, lock, &preflight.product_version).await?;
 
     let mut settings = InstanceSettings::load(instance)?;

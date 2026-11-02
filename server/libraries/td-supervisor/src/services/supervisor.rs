@@ -60,8 +60,9 @@ use td_bridge::catalog::etc_folder::ETC_FOLDER;
 use td_bridge::messaging::OrchestratorMessage;
 use td_bridge::messaging::OrchestratorMessagePayload::{
     OrchestratorCronRequestMessagePayload, OrchestratorExceptionMessagePayload,
-    OrchestratorFunctionRequestMessagePayload, OrchestratorRequestMessagePayload,
-    OrchestratorResponseMessagePayload, OrchestratorStageTriggerRequestMessagePayload,
+    OrchestratorFunctionRequestMessagePayload, OrchestratorProbeRequestMessagePayload,
+    OrchestratorRequestMessagePayload, OrchestratorResponseMessagePayload,
+    OrchestratorStageTriggerRequestMessagePayload,
 };
 use td_bridge::messaging::file_queue::{MSG_FOLDER, ONGOING_FOLDER, PLANNED_FOLDER, QUEUED_FOLDER};
 use td_common::attach::check_nowait_env;
@@ -774,7 +775,8 @@ impl Supervisor {
                     | OrchestratorExceptionMessagePayload(_)
                     | OrchestratorFunctionRequestMessagePayload(_)
                     | OrchestratorStageTriggerRequestMessagePayload(_)
-                    | OrchestratorCronRequestMessagePayload(_) => {
+                    | OrchestratorCronRequestMessagePayload(_)
+                    | OrchestratorProbeRequestMessagePayload(_) => {
                         return Err(RuntimeError::new(
                             "Unexpected response message received".to_string(),
                         ));
@@ -1037,7 +1039,8 @@ impl Supervisor {
                         OrchestratorExceptionMessagePayload(_) |
                         OrchestratorFunctionRequestMessagePayload(_) |
                         OrchestratorStageTriggerRequestMessagePayload(_) |
-                        OrchestratorCronRequestMessagePayload(_) => {
+                        OrchestratorCronRequestMessagePayload(_) |
+                        OrchestratorProbeRequestMessagePayload(_) => {
                             return Err(RuntimeError::new("Unexpected response message received".to_string()));
                         }
                     };
@@ -1661,7 +1664,8 @@ impl Supervisor {
                         OrchestratorExceptionMessagePayload(_) |
                         OrchestratorFunctionRequestMessagePayload(_) |
                         OrchestratorStageTriggerRequestMessagePayload(_) |
-                        OrchestratorCronRequestMessagePayload(_) => {
+                        OrchestratorCronRequestMessagePayload(_) |
+                        OrchestratorProbeRequestMessagePayload(_) => {
                             return Err(RuntimeError::new("Unexpected response message received".to_string()));
                         }
                     };
@@ -2572,7 +2576,8 @@ impl Supervisor {
                     | OrchestratorExceptionMessagePayload(_)
                     | OrchestratorFunctionRequestMessagePayload(_)
                     | OrchestratorStageTriggerRequestMessagePayload(_)
-                    | OrchestratorCronRequestMessagePayload(_) => {
+                    | OrchestratorCronRequestMessagePayload(_)
+                    | OrchestratorProbeRequestMessagePayload(_) => {
                         return Err(InvalidMessageType);
                     }
                 };

@@ -35,6 +35,10 @@ enum PortRole {
     AiagentPrivate,
     Database,
     KminusApi,
+    #[cfg(feature = "enterprise")]
+    AitdkPrivate,
+    #[cfg(feature = "enterprise")]
+    EmbedderPrivate,
 }
 
 impl PortRole {
@@ -46,12 +50,17 @@ impl PortRole {
             Self::AiagentPrivate => "aiagent_private_port",
             Self::Database => "database_port",
             Self::KminusApi => "kminus_api_port",
+            #[cfg(feature = "enterprise")]
+            Self::AitdkPrivate => "aitdk_private_port",
+            #[cfg(feature = "enterprise")]
+            Self::EmbedderPrivate => "embedder_private_port",
         }
     }
 
     fn from_str(role: &str) -> Option<Self> {
         PORT_CATALOG
             .iter()
+            .chain(AFTER_KMINUS)
             .copied()
             .find(|candidate| candidate.as_str() == role)
     }
@@ -64,6 +73,10 @@ impl PortRole {
             Self::AiagentPrivate => "aiagent private port",
             Self::Database => "database port",
             Self::KminusApi => "kminus api port",
+            #[cfg(feature = "enterprise")]
+            Self::AitdkPrivate => "aitdk private port",
+            #[cfg(feature = "enterprise")]
+            Self::EmbedderPrivate => "embedder private port",
         }
     }
 }
@@ -76,6 +89,16 @@ const PORT_CATALOG: &[PortRole] = &[
     PortRole::Database,
     PortRole::KminusApi,
 ];
+
+/// kminus binds its own components from the kminus API port on (API server,
+/// controller manager, pod runner and its metrics, virtual kubelet, etcd and
+/// its peer port), so later roles start after that block.
+pub const KMINUS_RESERVED_PORTS: u16 = 7;
+
+#[cfg(feature = "enterprise")]
+const AFTER_KMINUS: &[PortRole] = &[PortRole::AitdkPrivate, PortRole::EmbedderPrivate];
+#[cfg(not(feature = "enterprise"))]
+const AFTER_KMINUS: &[PortRole] = &[];
 
 const RENAMED_ROLES: &[(&str, PortRole)] = &[
     #[cfg(feature = "enterprise")]
@@ -94,6 +117,21 @@ pub fn rename_roles(assigned: &mut [AssignedPort]) {
     }
 }
 
+pub fn add_missing_roles(assigned: &mut Vec<AssignedPort>) {
+    let Some(base) = assigned
+        .iter()
+        .find(|entry| entry.role == PortRole::ApiserverPublic.as_str())
+        .map(|entry| entry.port)
+    else {
+        return;
+    };
+    for entry in assign_ports(base) {
+        if !assigned.iter().any(|present| present.role == entry.role) {
+            assigned.push(entry);
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AssignedPort {
     pub role: String,
@@ -102,14 +140,22 @@ pub struct AssignedPort {
 }
 
 pub fn assign_ports(base: u16) -> Vec<AssignedPort> {
+    let assigned = |role: &PortRole, port: u16| AssignedPort {
+        role: role.as_str().to_owned(),
+        caption: role.caption().to_owned(),
+        port,
+    };
+    let after = base + PORT_CATALOG.len() as u16 - 1 + KMINUS_RESERVED_PORTS;
     PORT_CATALOG
         .iter()
         .enumerate()
-        .map(|(offset, role)| AssignedPort {
-            role: role.as_str().to_owned(),
-            caption: role.caption().to_owned(),
-            port: base + offset as u16,
-        })
+        .map(|(offset, role)| assigned(role, base + offset as u16))
+        .chain(
+            AFTER_KMINUS
+                .iter()
+                .enumerate()
+                .map(|(offset, role)| assigned(role, after + offset as u16)),
+        )
         .collect()
 }
 
@@ -416,6 +462,10 @@ pub fn apply_ports(values: &mut SystemValues, assigned: &[AssignedPort]) {
             PortRole::AiagentPrivate => values.aiagent_private_port = Some(port),
             PortRole::Database => values.database_port = Some(port),
             PortRole::KminusApi => values.kminus_api_port = Some(port),
+            #[cfg(feature = "enterprise")]
+            PortRole::AitdkPrivate => values.aitdk_private_port = Some(port),
+            #[cfg(feature = "enterprise")]
+            PortRole::EmbedderPrivate => values.embedder_private_port = Some(port),
         }
     }
 }

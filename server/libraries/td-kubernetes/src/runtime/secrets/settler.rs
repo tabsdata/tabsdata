@@ -18,6 +18,7 @@ use crate::runtime::secrets::discovery::{
     Generator, Requirement, SecretLeaf, extract_secret_leaves,
 };
 use crate::runtime::secrets::source::to_secret_name;
+use tracing::info;
 
 pub struct Settlement<'a> {
     pub config: &'a str,
@@ -209,6 +210,112 @@ fn resolve_generated_values<'a>(
             (*key, value)
         })
         .collect()
+}
+
+#[derive(Debug, PartialEq)]
+struct Alignment {
+    created: bool,
+    added: Vec<String>,
+    removed: Vec<String>,
+}
+
+impl Alignment {
+    fn is_noop(&self) -> bool {
+        !self.created && self.added.is_empty() && self.removed.is_empty()
+    }
+
+    fn describe(&self) -> String {
+        let mut parts = Vec::new();
+        if self.created {
+            parts.push("created".to_owned());
+        }
+        if !self.added.is_empty() {
+            parts.push(format!("added {}", self.added.join(", ")));
+        }
+        if !self.removed.is_empty() {
+            parts.push(format!("removed {}", self.removed.join(", ")));
+        }
+        parts.join("; ")
+    }
+}
+
+fn alignment(
+    leaves: &[SecretLeaf],
+    live: Option<&BTreeMap<String, Vec<u8>>>,
+    prune: bool,
+) -> Alignment {
+    let declared: BTreeSet<&str> = leaves.iter().map(|leaf| leaf.key.as_str()).collect();
+    let held: BTreeSet<&str> = live
+        .map(|data| data.keys().map(String::as_str).collect())
+        .unwrap_or_default();
+    Alignment {
+        created: live.is_none(),
+        added: declared
+            .difference(&held)
+            .map(|key| (*key).to_owned())
+            .collect(),
+        removed: held
+            .difference(&declared)
+            .filter(|_| prune)
+            .map(|key| (*key).to_owned())
+            .collect(),
+    }
+}
+
+/// Gives every config secret the keys its config declares; with `prune`, also
+/// drops the keys it no longer declares, with their values.
+pub async fn sync_secret_keys(
+    context: &KubeContext,
+    version: &str,
+    prune: bool,
+) -> Result<usize, SecretError> {
+    let mut synced = 0;
+    for (config_file, config_yaml) in cluster_configs(context).await? {
+        let mut yaml: serde_yaml::Value = serde_yaml::from_str(&config_yaml).map_err(|error| {
+            SecretError::ConfigYamlParseFailed {
+                config: config_file.clone(),
+                cause: error.to_string(),
+            }
+        })?;
+        let leaves = extract_secret_leaves(&config_file, &mut yaml)?;
+        let secret_name = to_secret_name(&config_file)?;
+        let live = get_secret(context, &secret_name).await?;
+        let alignment = alignment(&leaves, live.as_ref(), prune);
+        if alignment.is_noop() {
+            continue;
+        }
+        let mut data = BTreeMap::new();
+        for (key, bytes) in live.unwrap_or_default() {
+            if alignment.removed.contains(&key) {
+                continue;
+            }
+            let value = String::from_utf8(bytes).map_err(|error| {
+                SecretError::ConfigSecretValueNotUtf8 {
+                    secret: secret_name.clone(),
+                    key: key.clone(),
+                    cause: error.to_string(),
+                }
+            })?;
+            data.insert(key, value);
+        }
+        for key in &alignment.added {
+            data.insert(key.clone(), String::new());
+        }
+        upsert_secret(
+            context,
+            &secret_name,
+            data,
+            BTreeMap::new(),
+            BTreeMap::new(),
+            None,
+            Some(SECRET_FAMILY_CONFIG),
+            Some(version),
+        )
+        .await?;
+        info!("  {secret_name} -> {}", alignment.describe());
+        synced += 1;
+    }
+    Ok(synced)
 }
 
 pub struct PendingSecret {

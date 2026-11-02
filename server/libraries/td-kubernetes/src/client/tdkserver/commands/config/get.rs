@@ -17,7 +17,7 @@ use crate::base::reporter::{InteractiveReporter, Reporter};
 use crate::client::registry::{instance_edit_folder, instance_edit_input_folder};
 use crate::client::session::settings::SettingsContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
-use crate::client::tdkserver::commands::service::resolved_instance;
+use crate::client::tdkserver::commands::service::{resolved_instance, resolved_yes};
 use crate::client::tdkserver::common::confirm;
 use crate::client::tdkserver::widgets::show_hint;
 use crate::core::system::exit::{CommandResult, abort};
@@ -58,27 +58,28 @@ pub struct GetArguments {
 
     #[arg(
         long,
-        name = "force",
+        name = "yes",
+        short = 'y',
         required = false,
         num_args = 0..=1,
         default_missing_value = "true",
-        display_order = 80,
-        long_help = "Delete the existing edit folder without asking before downloading the \
-                     configs. Defaults to 'false'."
+        display_order = 120,
+        long_help = "Skip the interactive confirmation prompt and proceed immediately: an \
+                     existing edit folder is deleted before downloading the configs."
     )]
-    pub force: Option<bool>,
+    pub yes: Option<bool>,
 }
 
 pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> CommandResult {
     let GetArguments {
         instance,
         with_secrets,
-        force,
+        yes,
     } = arguments;
     let values = with_secrets.unwrap_or(false);
-    let force = force.unwrap_or(false);
 
     let settings = SettingsContext::settings();
+    let yes = resolved_yes(yes, &settings);
     let instance = resolved_instance(instance, &settings);
     let verbose = globals.verbose;
 
@@ -88,7 +89,7 @@ pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> 
     let profile = load_profile(provider.cluster_provider(), verbose)?;
     let context = provider.kube_context().await?;
 
-    if !discard_edit_folder(&name, force)? {
+    if !discard_edit_folder(&name, yes.value)? {
         return abort(Cancelled);
     }
 
@@ -194,20 +195,18 @@ pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> 
     Ok(())
 }
 
-fn discard_edit_folder(name: &str, force: bool) -> CommandResult<bool> {
+fn discard_edit_folder(name: &str, yes: bool) -> CommandResult<bool> {
     let folder = instance_edit_folder(name)?;
     if !folder.is_dir() {
         return Ok(true);
     }
-    if !force {
-        info!(
-            "The edit folder '{}' already exists and will be deleted before downloading.",
-            folder.display()
-        );
-        if !confirm(false, "Delete it and download the configs?")? {
-            info!("Operation cancelled.");
-            return Ok(false);
-        }
+    info!(
+        "The edit folder '{}' already exists and will be deleted before downloading.",
+        folder.display()
+    );
+    if !confirm(yes, "Delete it and download the configs?")? {
+        info!("Operation cancelled.");
+        return Ok(false);
     }
     fs::remove_dir_all(&folder).map_err(|error| {
         TdError::from(CliError::FolderRemoveFailed {

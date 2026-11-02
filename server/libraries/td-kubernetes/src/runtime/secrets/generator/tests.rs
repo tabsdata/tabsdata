@@ -10,6 +10,41 @@ fn the_signing_key_and_the_service_token_are_not_storable() {
     assert!(!Generator::ServiceToken.is_storable());
 }
 
+#[cfg(feature = "enterprise")]
+#[test]
+fn each_service_identity_token_is_its_own_non_storable_token_generator() {
+    for (name, expected) in [
+        (
+            "classifier_service_token",
+            Generator::ClassifierServiceToken,
+        ),
+        ("embedder_service_token", Generator::EmbedderServiceToken),
+    ] {
+        let generator = Generator::from_name(name).unwrap();
+        assert_eq!(generator, expected);
+        assert_eq!(generator.name(), name);
+        assert!(Generator::supported().contains(&name));
+        assert!(!generator.is_storable());
+        assert!(generator.accepts(&generator.generate()));
+        assert!(!generator.accepts("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.e30.sig"));
+    }
+}
+
+#[cfg(feature = "enterprise")]
+#[test]
+fn the_agent_confirm_key_is_a_storable_32_byte_base64_key() {
+    let generator = Generator::from_name("aiagent_confirm_key").unwrap();
+    assert_eq!(generator, Generator::AiagentConfirmKey);
+    assert_eq!(generator.name(), "aiagent_confirm_key");
+    assert!(Generator::supported().contains(&"aiagent_confirm_key"));
+    assert!(generator.is_storable());
+    let key = generator.generate();
+    assert_eq!(crate::base::codec::decode(&key).unwrap().len(), 32);
+    assert!(generator.accepts(&key));
+    assert!(!generator.accepts("short"));
+    assert_ne!(key, generator.generate());
+}
+
 #[test]
 fn the_postgres_generators_are_storable() {
     assert!(Generator::PostgresSystemUser.is_storable());

@@ -401,7 +401,7 @@ pub async fn command_quickstart(
         if !keyed
             && !confirm(
                 resolved_yes(yes, &settings).value,
-                "No Anthropic or OpenAI key provided. Proceed with no aiagent keys?",
+                "No Anthropic or OpenAI key provided. Proceed? The assistant starts but stays disabled until a key is added.",
             )?
         {
             return abort(Cancelled);

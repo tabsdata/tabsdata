@@ -63,12 +63,23 @@ impl WorkloadFactory {
     ) -> Result<(), QueueError> {
         let id = &logical_id_text(worker_id);
         let routing = derive_routing(id, payload)?;
-        let template = lookup_template(&self.templates, id, &routing.template_key)?;
         let name = derive_kube_name(worker_id, &routing.prefix)?;
-        let kit = kit_for_payload(&name, self.context.namespace(), payload)?;
+        self.create_named(id, &routing.template_key, &name, payload)
+            .await
+    }
+
+    pub(crate) async fn create_named(
+        &self,
+        id: &str,
+        template_key: &str,
+        name: &str,
+        payload: &OrchestratorMessagePayload<Value>,
+    ) -> Result<(), QueueError> {
+        let template = lookup_template(&self.templates, id, template_key)?;
+        let kit = kit_for_payload(name, self.context.namespace(), payload)?;
         match template.kind {
             TemplateKind::Pod => {
-                let mut pod = self.manifest_pod(template, &name, kit.as_ref()).await?;
+                let mut pod = self.manifest_pod(template, name, kit.as_ref()).await?;
                 let (configmaps, secrets, latch) = match kit {
                     Some(kit) => {
                         inject_common_envfrom_into_pod(&mut pod, &kit.common_envfrom);
@@ -77,11 +88,7 @@ impl WorkloadFactory {
                         }
                         inject_metadata_into_pod(&mut pod, &kit.labels, &kit.annotations);
                         self.apply_tabsdata_config_to_pod(&mut pod)?;
-                        (
-                            vec![kit.main_configmap],
-                            vec![kit.main_secret],
-                            Some(kit.latch_configmap),
-                        )
+                        kit.into_companions()
                     }
                     None => (Vec::new(), Vec::new(), None),
                 };
@@ -92,7 +99,7 @@ impl WorkloadFactory {
                     })?;
             }
             TemplateKind::Job => {
-                let mut job = self.manifest_job(template, &name, kit.as_ref()).await?;
+                let mut job = self.manifest_job(template, name, kit.as_ref()).await?;
                 let (configmaps, secrets, latch) = match kit {
                     Some(kit) => {
                         inject_common_envfrom_into_job(&mut job, &kit.common_envfrom);
@@ -101,11 +108,7 @@ impl WorkloadFactory {
                         }
                         inject_metadata_into_job(&mut job, &kit.labels, &kit.annotations);
                         self.apply_tabsdata_config_to_job(&mut job)?;
-                        (
-                            vec![kit.main_configmap],
-                            vec![kit.main_secret],
-                            Some(kit.latch_configmap),
-                        )
+                        kit.into_companions()
                     }
                     None => (Vec::new(), Vec::new(), None),
                 };
@@ -116,7 +119,7 @@ impl WorkloadFactory {
                     })?;
             }
             TemplateKind::CronJob => {
-                let mut cronjob = self.manifest_cronjob(template, &name, kit.as_ref()).await?;
+                let mut cronjob = self.manifest_cronjob(template, name, kit.as_ref()).await?;
                 let (configmaps, secrets, latch) = match kit {
                     Some(kit) => {
                         inject_common_envfrom_into_cronjob(&mut cronjob, &kit.common_envfrom);
@@ -128,11 +131,7 @@ impl WorkloadFactory {
                         }
                         inject_metadata_into_cronjob(&mut cronjob, &kit.labels, &kit.annotations);
                         self.apply_tabsdata_config_to_cronjob(&mut cronjob)?;
-                        (
-                            vec![kit.main_configmap],
-                            vec![kit.main_secret],
-                            Some(kit.latch_configmap),
-                        )
+                        kit.into_companions()
                     }
                     None => (Vec::new(), Vec::new(), None),
                 };
@@ -297,11 +296,12 @@ impl WorkloadFactory {
     }
 }
 
-fn worker_settings(kit: Option<&FunctionRunKit>) -> WorkerSettings {
+pub(super) fn worker_settings(kit: Option<&FunctionRunKit>) -> WorkerSettings {
     WorkerSettings {
         cron_schedule: kit.and_then(|kit| kit.cron_schedule.clone()),
         project_secret_name: kit.and_then(|kit| kit.project_secret_name.clone()),
         connection_configmap_name: kit.and_then(|kit| kit.connection_configmap_name.clone()),
         connection_secret_name: kit.and_then(|kit| kit.connection_secret_name.clone()),
+        probe_request_configmap_name: kit.and_then(FunctionRunKit::probe_request_configmap_name),
     }
 }

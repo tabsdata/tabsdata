@@ -25,7 +25,7 @@ use crate::base::error::cli::CliError;
 use crate::base::error::provider::ProviderError;
 use crate::core::system::exit::CommandResult;
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
-use crate::runtime::instance::ports::{AssignedPort, rename_roles};
+use crate::runtime::instance::ports::{AssignedPort, add_missing_roles, rename_roles};
 use crate::runtime::provider::ClusterProvider;
 use crate::runtime::provider::axes::Locality;
 
@@ -225,6 +225,7 @@ impl InstanceSettings {
             })
         })?;
         rename_roles(&mut settings.ports);
+        add_missing_roles(&mut settings.ports);
         Ok(settings)
     }
 
@@ -242,6 +243,7 @@ impl InstanceSettings {
             })
         })?;
         rename_roles(&mut settings.ports);
+        add_missing_roles(&mut settings.ports);
         Ok(settings)
     }
 

@@ -31,8 +31,8 @@ fn an_unknown_role_name_resolves_to_nothing() {
 #[test]
 fn assigned_ports_cover_the_whole_catalog() {
     let ports = assign_ports(DEFAULT_BASE_PORT);
-    assert_eq!(ports.len(), PORT_CATALOG.len());
-    for role in PORT_CATALOG {
+    assert_eq!(ports.len(), PORT_CATALOG.len() + AFTER_KMINUS.len());
+    for role in PORT_CATALOG.iter().chain(AFTER_KMINUS) {
         assert!(ports.iter().any(|entry| entry.role == role.as_str()));
     }
 }
@@ -152,4 +152,62 @@ fn a_current_role_is_left_alone() {
     let mut ports = assigned(&[(PortRole::ApiserverPublic, 2457)]);
     rename_roles(&mut ports);
     assert_eq!(ports, assigned(&[(PortRole::ApiserverPublic, 2457)]));
+}
+
+#[cfg(feature = "enterprise")]
+#[test]
+fn the_runner_and_embedder_ports_follow_the_ports_kminus_binds() {
+    let ports = assign_ports(DEFAULT_BASE_PORT);
+    let port_of = |role: PortRole| {
+        ports
+            .iter()
+            .find(|entry| entry.role == role.as_str())
+            .map(|entry| entry.port)
+    };
+    assert_eq!(port_of(PortRole::KminusApi), Some(DEFAULT_BASE_PORT + 4));
+    assert_eq!(
+        port_of(PortRole::AitdkPrivate),
+        Some(DEFAULT_BASE_PORT + 4 + KMINUS_RESERVED_PORTS)
+    );
+    assert_eq!(
+        port_of(PortRole::EmbedderPrivate),
+        Some(DEFAULT_BASE_PORT + 5 + KMINUS_RESERVED_PORTS)
+    );
+}
+
+#[cfg(feature = "enterprise")]
+#[test]
+fn a_stored_instance_gains_the_roles_added_since() {
+    let mut ports = assigned(&[
+        (PortRole::ApiserverPublic, 3657),
+        (PortRole::ApiserverPrivate, 3658),
+        (PortRole::AiagentPrivate, 3659),
+        (PortRole::Database, 3660),
+        (PortRole::KminusApi, 3661),
+    ]);
+    add_missing_roles(&mut ports);
+    assert_eq!(ports, assign_ports(3657));
+}
+
+#[test]
+fn a_complete_instance_is_left_alone() {
+    let mut ports = assign_ports(3657);
+    ports[1].port = 4000;
+    let before = ports.clone();
+    add_missing_roles(&mut ports);
+    assert_eq!(ports, before);
+}
+
+#[test]
+fn an_instance_without_an_apiserver_port_gains_nothing() {
+    let mut ports = Vec::new();
+    add_missing_roles(&mut ports);
+    assert!(ports.is_empty());
+}
+
+#[test]
+fn every_assigned_role_reads_back() {
+    for entry in assign_ports(DEFAULT_BASE_PORT) {
+        assert!(PortRole::from_str(&entry.role).is_some(), "{}", entry.role);
+    }
 }

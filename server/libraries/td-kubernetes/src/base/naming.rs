@@ -125,10 +125,18 @@ pub fn logical_id_text<K: KeyId>(id: &IdL<K>) -> String {
 }
 
 pub fn to_fn_pod_name(prefix: &str, worker_id: &WorkerId) -> Result<String, NamingError> {
+    to_pod_name(prefix, &logical_id_text(worker_id))
+}
+
+pub fn to_probe_pod_name(prefix: &str, probe_id: &str) -> Result<String, NamingError> {
+    to_pod_name(prefix, probe_id)
+}
+
+fn to_pod_name(prefix: &str, id: &str) -> Result<String, NamingError> {
     let assembled = format!(
         "{}{KUBE_NAME_SEPARATOR}{}",
         normalize_segment(NameSegment::Component, prefix)?,
-        normalize_segment(NameSegment::WorkerId, &logical_id_text(worker_id))?,
+        normalize_segment(NameSegment::WorkerId, id)?,
     );
     if !DNS_SUBDOMAIN_PATTERN.is_match(&assembled) {
         return Err(NamingError::AssembledIdentifierInvalid {

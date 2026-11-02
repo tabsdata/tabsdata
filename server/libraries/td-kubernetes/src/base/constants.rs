@@ -447,12 +447,16 @@ pub const TABSDATA_LABEL_NAMESPACE: &str = "tabsdata.com/";
 pub const KUBERNETES_LABEL_NAMESPACE: &str = "app.kubernetes.io/";
 
 pub const TIER_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "tier");
+/// Marks a workload that is useless without an AI provider key: it is not
+/// started while no `AI_PROVIDERS__<NAME>__API_KEY` is configured.
 #[cfg(feature = "enterprise")]
-pub const AIAGENT_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "aiagent");
+pub const AI_KEYS_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "aiagent");
 pub const SEQUENCE_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "sequence");
 pub const CONFIGMAP_FAMILY_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "configmap-family");
 pub const SECRET_FAMILY_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "secret-family");
 pub const SECRET_FAMILY_CONFIG: &str = "secret-config";
+pub const SECRET_DELIVERY_ANNOTATION: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "secret-delivery");
+pub const SECRET_DELIVERY_FILE: &str = "file";
 
 pub const SECRET_GENERATOR_JWT_SIGNING_KEY: &str = "jwt_signing_key";
 pub const SECRET_GENERATOR_POSTGRES_SYSTEM_USER: &str = "postgres_system_user";
@@ -461,6 +465,12 @@ pub const SECRET_GENERATOR_POSTGRES_APISERVER_PASSWORD: &str = "postgres_apiserv
 #[cfg(feature = "enterprise")]
 pub const SECRET_GENERATOR_POSTGRES_AIAGENT_PASSWORD: &str = "postgres_aiagent_password";
 pub const SECRET_GENERATOR_SERVICE_TOKEN: &str = "service_token";
+#[cfg(feature = "enterprise")]
+pub const SECRET_GENERATOR_CLASSIFIER_SERVICE_TOKEN: &str = "classifier_service_token";
+#[cfg(feature = "enterprise")]
+pub const SECRET_GENERATOR_EMBEDDER_SERVICE_TOKEN: &str = "embedder_service_token";
+#[cfg(feature = "enterprise")]
+pub const SECRET_GENERATOR_AIAGENT_CONFIRM_KEY: &str = "aiagent_confirm_key";
 
 pub const PART_OF_LABEL: &str = concatcp!(KUBERNETES_LABEL_NAMESPACE, "part-of");
 pub const PART_OF_TABSDATA: &str = "tabsdata";
@@ -511,9 +521,9 @@ pub const SECRET_CATEGORY_OPENAI_KEY: &str = "openai-key";
 #[cfg(feature = "enterprise")]
 pub const AIAGENT_CONFIG_FILE: &str = "aiagent.yaml";
 #[cfg(feature = "enterprise")]
-pub const AIAGENT_SECRET_KEY_ANTHROPIC: &str = "AI_PROVIDERS__ANTHROPIC__API_KEY";
+pub const AIAGENT_PROVIDER_KEY_PREFIX: &str = "AI_PROVIDERS__";
 #[cfg(feature = "enterprise")]
-pub const AIAGENT_SECRET_KEY_OPENAI: &str = "AI_PROVIDERS__OPENAI__API_KEY";
+pub const AIAGENT_PROVIDER_KEY_SUFFIX: &str = "__API_KEY";
 pub const SECRET_TABSDATA_KUBECONFIG: &str = "td-sys-tabsdata-secret-kubeconfig";
 pub const SECRET_KEY_KUBECONFIG: &str = "kubeconfig";
 

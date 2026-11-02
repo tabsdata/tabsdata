@@ -19,8 +19,9 @@ use std::str::FromStr;
 use td_bridge::messaging::OrchestratorMessage;
 use td_bridge::messaging::OrchestratorMessagePayload::{
     OrchestratorCronRequestMessagePayload, OrchestratorExceptionMessagePayload,
-    OrchestratorFunctionRequestMessagePayload, OrchestratorRequestMessagePayload,
-    OrchestratorResponseMessagePayload, OrchestratorStageTriggerRequestMessagePayload,
+    OrchestratorFunctionRequestMessagePayload, OrchestratorProbeRequestMessagePayload,
+    OrchestratorRequestMessagePayload, OrchestratorResponseMessagePayload,
+    OrchestratorStageTriggerRequestMessagePayload,
 };
 use td_bridge::messaging::file_queue::PayloadType;
 use td_common::execution_status::WorkerCallbackStatus;
@@ -107,7 +108,8 @@ impl WorkerNotifier for Callback {
                     | OrchestratorExceptionMessagePayload(_)
                     | OrchestratorFunctionRequestMessagePayload(_)
                     | OrchestratorStageTriggerRequestMessagePayload(_)
-                    | OrchestratorCronRequestMessagePayload(_) => {
+                    | OrchestratorCronRequestMessagePayload(_)
+                    | OrchestratorProbeRequestMessagePayload(_) => {
                         return Err(InvalidMessageType);
                     }
                 };
@@ -134,7 +136,8 @@ impl WorkerNotifier for Callback {
                                         | OrchestratorResponseMessagePayload(_)
                                         | OrchestratorFunctionRequestMessagePayload(_)
                                         | OrchestratorStageTriggerRequestMessagePayload(_)
-                                        | OrchestratorCronRequestMessagePayload(_) => {
+                                        | OrchestratorCronRequestMessagePayload(_)
+                                        | OrchestratorProbeRequestMessagePayload(_) => {
                                             return Err(InvalidMessageType);
                                         }
                                         OrchestratorExceptionMessagePayload(payload) => payload,
@@ -169,7 +172,8 @@ impl WorkerNotifier for Callback {
                                         | OrchestratorExceptionMessagePayload(_)
                                         | OrchestratorFunctionRequestMessagePayload(_)
                                         | OrchestratorStageTriggerRequestMessagePayload(_)
-                                        | OrchestratorCronRequestMessagePayload(_) => {
+                                        | OrchestratorCronRequestMessagePayload(_)
+                                        | OrchestratorProbeRequestMessagePayload(_) => {
                                             return Err(InvalidMessageType);
                                         }
                                         OrchestratorResponseMessagePayload(payload) => payload,

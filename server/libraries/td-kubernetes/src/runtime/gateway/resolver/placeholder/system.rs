@@ -66,6 +66,12 @@ pub enum SystemKey {
     #[cfg(feature = "enterprise")]
     #[strum(serialize = "tdk_aiagent_private_port")]
     AiagentPrivatePort,
+    #[cfg(feature = "enterprise")]
+    #[strum(serialize = "tdk_aitdk_private_port")]
+    AitdkPrivatePort,
+    #[cfg(feature = "enterprise")]
+    #[strum(serialize = "tdk_embedder_private_port")]
+    EmbedderPrivatePort,
     #[strum(serialize = "tdk_database_host")]
     DatabaseHost,
     #[strum(serialize = "tdk_database_port")]
@@ -84,6 +90,8 @@ pub enum SystemKey {
     ConnectionConfigmapName,
     #[strum(serialize = "tdk_connection_secret_name")]
     ConnectionSecretName,
+    #[strum(serialize = "tdk_probe_request_configmap_name")]
+    ProbeRequestConfigmapName,
     #[strum(serialize = "tdk_cron_schedule")]
     CronSchedule,
     #[strum(serialize = "tdk_dbmanager_mode")]
@@ -113,6 +121,7 @@ pub struct WorkerSettings {
     pub project_secret_name: Option<String>,
     pub connection_configmap_name: Option<String>,
     pub connection_secret_name: Option<String>,
+    pub probe_request_configmap_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -138,6 +147,10 @@ pub struct SystemValues {
     pub apiserver_private_port: Option<String>,
     #[cfg(feature = "enterprise")]
     pub aiagent_private_port: Option<String>,
+    #[cfg(feature = "enterprise")]
+    pub aitdk_private_port: Option<String>,
+    #[cfg(feature = "enterprise")]
+    pub embedder_private_port: Option<String>,
     pub database_host: Option<String>,
     pub database_port: Option<String>,
     pub database_name: Option<String>,
@@ -147,6 +160,7 @@ pub struct SystemValues {
     pub project_secret_name: Option<String>,
     pub connection_configmap_name: Option<String>,
     pub connection_secret_name: Option<String>,
+    pub probe_request_configmap_name: Option<String>,
     pub cron_schedule: Option<String>,
     pub dbmanager_mode: Option<String>,
     pub tdmanager_rules: Option<String>,
@@ -179,6 +193,10 @@ impl SystemValues {
             SystemKey::ApiserverPrivatePort => self.apiserver_private_port.as_deref(),
             #[cfg(feature = "enterprise")]
             SystemKey::AiagentPrivatePort => self.aiagent_private_port.as_deref(),
+            #[cfg(feature = "enterprise")]
+            SystemKey::AitdkPrivatePort => self.aitdk_private_port.as_deref(),
+            #[cfg(feature = "enterprise")]
+            SystemKey::EmbedderPrivatePort => self.embedder_private_port.as_deref(),
             SystemKey::DatabaseHost => self.database_host.as_deref(),
             SystemKey::DatabasePort => self.database_port.as_deref(),
             SystemKey::DatabaseName => self.database_name.as_deref(),
@@ -188,6 +206,7 @@ impl SystemValues {
             SystemKey::ProjectSecretName => self.project_secret_name.as_deref(),
             SystemKey::ConnectionConfigmapName => self.connection_configmap_name.as_deref(),
             SystemKey::ConnectionSecretName => self.connection_secret_name.as_deref(),
+            SystemKey::ProbeRequestConfigmapName => self.probe_request_configmap_name.as_deref(),
             SystemKey::CronSchedule => self.cron_schedule.as_deref(),
             SystemKey::DbManagerMode => self.dbmanager_mode.as_deref(),
             SystemKey::TdManagerRules => self.tdmanager_rules.as_deref(),
@@ -214,6 +233,7 @@ impl SystemValues {
         self.project_secret_name = settings.project_secret_name.clone();
         self.connection_configmap_name = settings.connection_configmap_name.clone();
         self.connection_secret_name = settings.connection_secret_name.clone();
+        self.probe_request_configmap_name = settings.probe_request_configmap_name.clone();
     }
 }
 
