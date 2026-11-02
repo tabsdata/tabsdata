@@ -9896,6 +9896,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ta-edition"
+version = "2.3.0"
+dependencies = [
+ "ta-apiserver",
+ "td-database",
+]
+
+[[package]]
 name = "ta-execution"
 version = "2.3.0"
 dependencies = [
@@ -10054,6 +10062,7 @@ dependencies = [
  "socket2",
  "strum 0.28.0",
  "ta-apiserver",
+ "ta-edition",
  "ta-services",
  "td-apiforge",
  "td-apiserver",
@@ -10075,6 +10084,7 @@ dependencies = [
  "te-apiserver",
  "te-authz",
  "te-database",
+ "te-edition",
  "te-services",
  "thiserror 2.0.21",
  "tokio",
@@ -10255,7 +10265,6 @@ version = "2.3.0"
 dependencies = [
  "async-trait",
  "futures-util",
- "inventory",
  "postgresql_embedded",
  "sea-query",
  "sea-query-sqlx",
@@ -10400,6 +10409,7 @@ dependencies = [
  "futures",
  "headers",
  "http",
+ "humantime",
  "itertools 0.15.0",
  "nonempty",
  "polars",
@@ -10480,6 +10490,7 @@ dependencies = [
  "chrono",
  "regex",
  "sea-query",
+ "sea-query-sqlx",
  "serde",
  "serde_json",
  "sqlx",
@@ -10536,6 +10547,7 @@ dependencies = [
  "path-slash",
  "serde",
  "serde_json",
+ "ta-edition",
  "td-apiserver",
  "td-build",
  "td-common",
@@ -10547,6 +10559,7 @@ dependencies = [
  "td-shuttle",
  "td-supervisor",
  "te-database",
+ "te-edition",
  "te-system",
  "tm-workspace",
  "tokio",
@@ -10771,6 +10784,7 @@ version = "2.3.0"
 dependencies = [
  "object_store 0.14.2",
  "serde_json",
+ "sqlx",
  "td-build",
  "td-common",
  "td-database",
@@ -10831,6 +10845,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "te-edition"
+version = "2.3.0"
+dependencies = [
+ "ta-edition",
+]
+
+[[package]]
 name = "te-execution"
 version = "2.3.0"
 dependencies = [
@@ -10852,6 +10873,7 @@ name = "te-services"
 version = "2.3.0"
 dependencies = [
  "td-build",
+ "td-common",
  "td-database",
  "td-error",
  "te-services",

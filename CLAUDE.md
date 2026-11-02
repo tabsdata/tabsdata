@@ -52,6 +52,13 @@ exist in both repos, and after dependency changes here ee needs re-locking
   via the `td_error!` / `api_error!` macros — follow existing crates.
 - Tests named `test_logging*` run isolated under a dedicated feature —
   don't rename them casually.
+- Other editions add `tdk` commands and wrap its invocations through the
+  neutral `tabsdatak/cli/_registry.py` hook (`cli_command`, `cli_extension`);
+  os commands read only `tabsdatak/cli/_machine.py` for how a program-driven
+  run differs. Sibling repos that extend tdk pin its leaf commands, so a new
+  or renamed leaf needs their tests run too.
+- `tdk-reference.md` documents only what os ships; `test_reference_drift.py`
+  checks every command and option it quotes against the click tree.
 
 ## Build / test
 

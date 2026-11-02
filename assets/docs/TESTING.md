@@ -280,6 +280,20 @@ deliberate act.
 without the suite. `--no-domains` (or `--light`) skips it, for a run against a domain you
 provisioned yourself. Point the tests at a different one with `TD_TEST_DB_DOMAIN=<name>`.
 
+A test that needs a database extension the default domain lacks names a domain that has it,
+from a manifest of its own, so the default run neither provisions that domain nor fails its
+export without it. The named domain outranks `TD_TEST_DB_DOMAIN`:
+
+```rust
+    #[td_test::test(db(domain = "<domain>"))]
+    async fn uses_the_extension(db: TdPool) {
+        ...
+    }
+```
+
+Extensions are database-wide and the db tests of a domain share its database, so none of them
+creates or drops one there: a test of that lifecycle takes a database of its own.
+
 Every domain task takes a mandatory `--python` or `--rust` to say which suite's domains it
 means: `cargo make domains_create --rust`, `cargo make domains_destroy --python`. The
 manifests are named to match, `domains_py.yaml` and `domains_rs.yaml`. On GA each platform

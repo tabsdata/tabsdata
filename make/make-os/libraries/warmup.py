@@ -6,9 +6,6 @@ import importlib
 import sys
 
 MODULES: tuple[str, ...] = (
-    "lancedb",
-    "fastembed",
-    "onnxruntime",
     "pandas",
     "pyarrow",
     "polars",

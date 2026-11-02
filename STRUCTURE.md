@@ -96,5 +96,5 @@ covers the implementer side.
 - `tabsdata-backend`, `tabsdata-control-plane`, `tabsdata-execution-plane` →
   `tabsdatak._subsystem`: the binary components of the backend tier and of the
   control and execution planes
-- `tabsdata-medallion` → `tabsdatak._medallion`: bronze, silver and gold
+- `tabsdata-medallion` → `tabsdatak.medallion`: bronze, silver and gold
   pipeline support
