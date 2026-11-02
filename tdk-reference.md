@@ -97,11 +97,12 @@ Applied where shown in each command. Every value option takes an argument.
                                   means no limit.
                                   These three come with every command that
                                   shows a table and apply only to `-o table`.
-      --profile NAME              Profile whose connection and settings the
+      --profile [NAME]            Profile whose connection and settings the
                                   command uses (`<NAME>-connection.json`,
-                                  `<NAME>-options.json`). Default: the profile
-                                  from `tdk set --profile`, else the bare files.
-                                  On every command; see Profiles.
+                                  `<NAME>-options.json`); with no NAME, the
+                                  default profile (the bare files). Default: the
+                                  profile from `tdk set --profile`, else the
+                                  bare files. On every command; see Profiles.
       --max-result N              Maximum rows a `list` command shows. Default: 100.
                                   0 lists everything. When rows are left over,
                                   the command says so (on stderr under
@@ -525,7 +526,9 @@ error: `'--timeout' applies only while waiting.`; on `plan|trx list` it needs
 
 - Out of time: exit 7 (`wait_timeout`). The hint names the command that
   continues the wait, e.g. `tdk plan get --plan <id> --wait`, with the
-  `--profile` the wait ran under; it never triggers or recovers again.
+  `--profile` the wait ran under (a bare `--profile` when that was the default
+  profile while `set --profile` records another); it never triggers or
+  recovers again.
 - Finished with a function run that did not succeed (a status whose health is
   `warning` or `error`): exit 8 (`run_failed`), with a hint naming `tdk fnrun
   diagnose --fnrun <id>`. A status tdk
@@ -699,11 +702,14 @@ port `2457` — so `set --server 127.0.0.1` means `http://127.0.0.1:2457`.
 A profile is a separate login and settings store: `<NAME>-connection.json` and
 `<NAME>-options.json` next to the bare `connection.json` / `options.json`, which
 are the default profile. Every command takes `--profile NAME` to run under a
-profile for that invocation, and `login --profile NAME` is how a profile's
-connection comes to exist. `set --profile NAME` records NAME in `profile.json`
-as the profile commands use when given no `--profile`, and stores the other
-settings of the same command in it; `unset --profile` removes `profile.json`,
-so the bare files apply again. `settings` names the profile it reports on.
+profile for that invocation, or a bare `--profile` (or `--profile=`) to run
+under the default profile whatever `set --profile` recorded; a bare `--profile`
+must not be followed by a positional argument, which it would take as NAME.
+`login --profile NAME` is how a profile's connection comes to exist. `set
+--profile NAME` records NAME in `profile.json` as the profile commands use when
+given no `--profile`, and stores the other settings of the same command in it;
+`unset --profile` removes `profile.json`, so the bare files apply again.
+`settings` names the profile it reports on.
 
 ## `tdk auth`
 

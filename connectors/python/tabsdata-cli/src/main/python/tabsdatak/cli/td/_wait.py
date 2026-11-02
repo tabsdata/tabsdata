@@ -30,6 +30,7 @@ from tabsdatak.cli.cli_utils import (
     output_format,
     progress,
     progress_console,
+    read_default_profile,
     render,
 )
 from tabsdatak.cli.td.execution_utils import span_projects
@@ -157,7 +158,13 @@ def _runs_table(runs, by_plan: bool) -> Table:
 
 def _resume(ctx: click.Context, argv: list[str]) -> list[str]:
     profile = active_profile(ctx)
-    return [*argv, "--profile", profile] if profile else argv
+    if profile:
+        return [*argv, "--profile", profile]
+    if ctx.obj.get("env_credential") is None and read_default_profile(
+        ctx.obj["tabsdata_directory"]
+    ):
+        return [*argv, "--profile"]
+    return argv
 
 
 def _observed(connection, read: Callable[[], dict], fallback: dict) -> dict:

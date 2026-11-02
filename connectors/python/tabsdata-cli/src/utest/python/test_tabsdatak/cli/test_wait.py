@@ -565,6 +565,23 @@ def test_resume_keeps_the_profile(clock, tmp_path):
     ]
 
 
+def test_resume_keeps_the_default_profile_over_a_set_one(clock, tmp_path):
+    (tmp_path / "profile.json").write_text(json.dumps({"profile": "dev"}))
+    client = _client(_connection(["R"], []))
+    argv = ["plan", "monitor", "--plan", "ep20260930-1", "--timeout", "2", "--profile"]
+    result = _invoke([*argv, "--machine"], client, tmp_path)
+    assert result.exit_code == ExitCode.WAIT_TIMEOUT, result.output
+    assert _document(result)["error"]["resume"][-2:] == ["--wait", "--profile"]
+
+
+def test_resume_needs_no_profile_without_a_set_one(clock, tmp_path):
+    client = _client(_connection(["R"], []))
+    argv = ["plan", "monitor", "--plan", "ep20260930-1", "--timeout", "2"]
+    result = _invoke([*argv, "--machine"], client, tmp_path)
+    assert result.exit_code == ExitCode.WAIT_TIMEOUT, result.output
+    assert _document(result)["error"]["resume"][-1] == "--wait"
+
+
 def test_an_unknown_run_status_is_not_a_failure(clock, tmp_path):
     runs = [_run_row("fr20260930-1", "C"), _run_row("FR2", "Q")]
     client = _client(_connection(["R", "F"], runs))

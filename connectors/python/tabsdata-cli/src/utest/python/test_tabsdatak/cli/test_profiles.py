@@ -123,11 +123,43 @@ def test_profile_option_is_reported_in_the_table_view(tmp_path):
     assert re.search(r"Profile\s+│ \(default\)", result.output), result.output
 
 
-@pytest.mark.parametrize("name", ["../x", "a/b", "", "-dev", "d e"])
+@pytest.mark.parametrize("argv", [["--profile"], ["--profile="]])
+def test_profile_option_without_a_name_selects_the_default_profile(argv, tmp_path):
+    _invoke(["set", "--profile", "dev"], tmp_path=tmp_path)
+
+    result, connection_files = _invoke(
+        ["settings", *argv, "-o", "json"], tmp_path=tmp_path
+    )
+    assert result.exit_code == 0, result.output
+    assert connection_files == [
+        str(tmp_path / "dev-connection.json"),
+        str(tmp_path / "connection.json"),
+    ]
+    assert json.loads(result.output)["profile"] is None
+
+    result, connection_files = _invoke(["settings", "--profile"], tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert connection_files[-1] == str(tmp_path / "connection.json")
+
+    result, connection_files = _invoke(
+        ["settings", "--profile", "--max-width", "0"], tmp_path=tmp_path
+    )
+    assert result.exit_code == 0, result.output
+    assert connection_files[-1] == str(tmp_path / "connection.json")
+    assert re.search(r"Profile\s+│ \(default\)", result.output), result.output
+
+
+@pytest.mark.parametrize("name", ["../x", "a/b", "_dev", "d e"])
 def test_profile_option_rejects_bad_names(name, tmp_path):
     result, _ = _invoke(["settings", "--profile", name], tmp_path=tmp_path)
     assert result.exit_code == 2
     assert "not a valid profile name" in result.output
+
+
+def test_profile_option_reads_a_dash_name_as_an_option(tmp_path):
+    result, _ = _invoke(["settings", "--profile", "-dev"], tmp_path=tmp_path)
+    assert result.exit_code == 2
+    assert "No such option" in result.output
 
 
 def test_logout_removes_the_profile_connection_only(tmp_path):

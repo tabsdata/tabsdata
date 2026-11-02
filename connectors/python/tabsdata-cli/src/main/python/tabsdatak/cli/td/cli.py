@@ -325,9 +325,10 @@ def _activate_profile(ctx: click.Context, profile: str | None):
 
 
 def _apply_profile(ctx: click.Context, param, value):
-    """``--profile`` option callback: run this command under the named profile
-    instead of the default one the root group loaded. Eager, so it lands before
-    ``--proj`` and the other options that act on the loaded connection."""
+    """``--profile`` option callback: run this command under the named profile,
+    or the default profile when given no name, instead of the one the root
+    group loaded. Eager, so it lands before ``--proj`` and the other options
+    that act on the loaded connection."""
     if value is not None:
         credential = ctx.obj.get("env_credential")
         if credential is not None:
@@ -336,22 +337,25 @@ def _apply_profile(ctx: click.Context, param, value):
                 f"'--profile' has no effect: the credential comes from "
                 f"{credential.env}.",
             )
-        _activate_profile(ctx, validate_profile_name(value))
+        _activate_profile(ctx, validate_profile_name(value) if value else None)
     return value
 
 
 def _profile_option() -> click.Option:
     return click.Option(
         ["--profile", "profile"],
-        metavar="NAME",
+        metavar="[NAME]",
+        is_flag=False,
+        flag_value="",
         expose_value=False,
         is_eager=True,
         callback=_apply_profile,
         help=(
             "Profile whose connection and settings this command uses: "
             "'<NAME>-connection.json' and '<NAME>-options.json' under the "
-            "Tabsdata directory. Default: the profile set with 'tdk set "
-            "--profile', else 'connection.json' and 'options.json'."
+            "Tabsdata directory; with no NAME, the default profile "
+            "('connection.json' and 'options.json'). Default: the profile set "
+            "with 'tdk set --profile', else the default profile."
         ),
     )
 
