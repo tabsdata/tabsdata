@@ -71,6 +71,18 @@ configs:
           child: UV_HTTP_CONNECT_TIMEOUT
           value: 60
         - op: insert-sibling-if-existing
+          leaf: pods.service.apiserver.placement
+          sibling: service_account
+          placement: after
+          value:
+            annotations: {}
+        - op: insert-sibling-if-existing
+          leaf: pods.service.apiserver.placement
+          sibling: worker_logs
+          placement: after
+          value:
+            workspace: null
+        - op: insert-sibling-if-existing
           leaf: pods.function.placement
           sibling: dataflow
           placement: after
@@ -100,16 +112,6 @@ configs:
                 - key: workload
                   value: batch
                   effect: NoSchedule
-        - op: insert-child-if-missing
-          leaf: pods.service.apiserver
-          child: service_account
-          value:
-            annotations: {}
-        - op: insert-child-if-missing
-          leaf: pods.service.apiserver
-          child: worker_logs
-          value:
-            workspace:
     tabsdata_docker.yaml:
       action: modify
       changes:
@@ -166,6 +168,12 @@ configs:
           child: UV_HTTP_CONNECT_TIMEOUT
           value: 60
         - op: insert-sibling-if-existing
+          leaf: pods.service.apiserver.placement
+          sibling: service_account
+          placement: after
+          value:
+            annotations: {}
+        - op: insert-sibling-if-existing
           leaf: pods.function.placement
           sibling: dataflow
           placement: after
@@ -194,11 +202,6 @@ configs:
                 - key: workload
                   value: batch
                   effect: NoSchedule
-        - op: insert-child-if-missing
-          leaf: pods.service.apiserver
-          child: service_account
-          value:
-            annotations: {}
     tabsdata_fargate.yaml:
       action: modify
       changes:
@@ -267,6 +270,19 @@ configs:
           child: UV_HTTP_CONNECT_TIMEOUT
           value: 60
         - op: insert-sibling-if-existing
+          leaf: pods.service.apiserver.placement
+          sibling: service_account
+          placement: after
+          value:
+            annotations: {}
+        - op: insert-sibling-if-existing
+          leaf: pods.service.apiserver.placement
+          sibling: worker_logs
+          placement: after
+          value:
+            bucket: null
+            location: null
+        - op: insert-sibling-if-existing
           leaf: pods.function.placement
           sibling: dataflow
           placement: after
@@ -296,17 +312,6 @@ configs:
                 - key: workload
                   value: batch
                   effect: NoSchedule
-        - op: insert-child-if-missing
-          leaf: pods.service.apiserver
-          child: service_account
-          value:
-            annotations: {}
-        - op: insert-child-if-missing
-          leaf: pods.service.apiserver
-          child: worker_logs
-          value:
-            bucket:
-            location:
     tabsdata_kminus.yaml:
       action: modify
       changes:
