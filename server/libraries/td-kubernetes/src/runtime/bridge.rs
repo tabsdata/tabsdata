@@ -12,6 +12,7 @@ use td_bridge::secret::SecretStore;
 use td_bridge::worker::WorkerHandler;
 use td_bridge::{BridgeProvider, Orchestrator};
 use td_common::crypto::install_crypto_provider;
+use td_log_archive::LogArchive;
 use tokio::task::JoinHandle;
 
 use crate::base::error::kubernetes::KubernetesError;
@@ -42,7 +43,8 @@ pub struct KubernetesBridgeProvider {
 impl KubernetesBridgeProvider {
     pub async fn new(context: KubeContext) -> Result<Self, KubernetesError> {
         let server_catalog = KubernetesServerCatalog::new();
-        let worker_handler = KubernetesWorkerHandler::new(context.clone());
+        let archive = LogArchive::from_environment(context.namespace()).await;
+        let worker_handler = KubernetesWorkerHandler::new(context.clone(), archive);
         let connection_store = KubernetesConnectionStore::new(context.clone());
         let secret_store = KubernetesSecretStore::new(context.clone());
         let pod_templates = PodTemplateIndex::load(&context).await?;

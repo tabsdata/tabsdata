@@ -310,8 +310,10 @@ mod tests_worker_log_files {
         let target = WorkerLogTarget {
             worker_id: worker_id.to_string(),
             worker_kind: WorkerName::Function,
+            decorator: None,
             log_patterns: vec![format!("*.{LOG_EXTENSION}")],
             casts: vec![],
+            finished: true,
         };
 
         let (paths, content): (Vec<PathBuf>, String) =
@@ -350,8 +352,10 @@ mod tests_worker_log_files {
         let target = WorkerLogTarget {
             worker_id: worker_id.to_string(),
             worker_kind: WorkerName::Function,
+            decorator: None,
             log_patterns: vec![format!("*.{LOG_EXTENSION}")],
             casts: vec![],
+            finished: true,
         };
 
         let paths: Vec<PathBuf> =
@@ -379,8 +383,10 @@ mod tests_worker_log_files {
         let target = WorkerLogTarget {
             worker_id: worker_id.to_string(),
             worker_kind: WorkerName::Function,
+            decorator: None,
             log_patterns: vec![format!("fn*.{LOG_EXTENSION}")],
             casts: vec!["1".to_string()],
+            finished: true,
         };
 
         let paths: Vec<PathBuf> =

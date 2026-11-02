@@ -10,13 +10,15 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_bridge::BridgeProviderHandle;
 use td_bridge::worker::{WorkerLogStream, WorkerLogTarget};
-use td_common::worker::WorkerName;
-use td_database::access::{AcrossProjects, DbPool};
+use td_common::worker::{Decorator, WorkerName};
+use td_database::access::{AccessMode, AcrossProjects, DbPool, SeesProjectRows};
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::ReadRequest;
+use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::worker::LogsExtension;
 use td_objects::dxo::worker::{LogsExtensionParam, LogsRetryParam, WorkerDB, WorkerParam};
-use td_objects::types::basic::{LogsCastNumber, WorkerType};
+use td_objects::types::basic::{LogsCastNumber, WorkerStatus, WorkerType};
 use td_objects::types::stream::BoxedSyncStream;
 use td_queries::Queries;
 use tokio::sync::mpsc;
@@ -38,8 +40,16 @@ async fn worker_log(
     let _grant = authz
         .require::<Project, DevelopProject>(&mut trx, &ctx, &worker.project_id)
         .await?;
+    let decorator = function_decorator(trx.get(authz.none()), &worker).await?;
 
-    worker_logs(&bridge, &worker, &extension.extension, &retry.retry).await
+    worker_logs(
+        &bridge,
+        &worker,
+        decorator,
+        &extension.extension,
+        &retry.retry,
+    )
+    .await
 }
 
 #[service_factory]
@@ -59,12 +69,38 @@ async fn worker_log_tail(
     let _grant = authz
         .require::<Project, DevelopProject>(&mut trx, &ctx, &worker.project_id)
         .await?;
+    let decorator = function_decorator(trx.get(authz.none()), &worker).await?;
 
-    worker_logs_tail(&bridge, &worker, &extension.extension, &retry.retry).await
+    worker_logs_tail(
+        &bridge,
+        &worker,
+        decorator,
+        &extension.extension,
+        &retry.retry,
+    )
+    .await
+}
+
+/// The decorator of the function a function run executes; triggers have none.
+async fn function_decorator<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
+    worker: &WorkerDB,
+) -> Result<Option<Decorator>, TdError> {
+    match worker.base.worker_type {
+        WorkerType::FunctionRunner => {
+            let function: FunctionDB = conn
+                .timeline()
+                .fetch_one(&worker.base.function_version_id)
+                .await?;
+            Ok(Some(function.base.decorator.to_message()))
+        }
+        WorkerType::CronTrigger | WorkerType::StageTrigger => Ok(None),
+    }
 }
 
 fn worker_log_target(
     worker: &WorkerDB,
+    decorator: Option<Decorator>,
     extensions: &[LogsExtension],
     casts: &[LogsCastNumber],
 ) -> WorkerLogTarget {
@@ -76,8 +112,25 @@ fn worker_log_target(
     WorkerLogTarget {
         worker_id: worker.id.to_string(),
         worker_kind,
+        decorator,
         log_patterns: extensions.iter().map(LogsExtension::glob_pattern).collect(),
         casts: casts.iter().map(|cast| cast.to_string()).collect(),
+        finished: is_finished(&worker.base.status),
+    }
+}
+
+fn is_finished(status: &WorkerStatus) -> bool {
+    match status {
+        WorkerStatus::Done
+        | WorkerStatus::Stopped
+        | WorkerStatus::Error
+        | WorkerStatus::Failed
+        | WorkerStatus::Canceled => true,
+        WorkerStatus::Scheduled
+        | WorkerStatus::Requested
+        | WorkerStatus::Running
+        | WorkerStatus::StopScheduled
+        | WorkerStatus::StopRequested => false,
     }
 }
 
@@ -101,10 +154,11 @@ fn into_boxed_sync_stream(stream: WorkerLogStream) -> BoxedSyncStream {
 pub async fn worker_logs(
     bridge: &BridgeProviderHandle,
     worker: &WorkerDB,
+    decorator: Option<Decorator>,
     extensions: &[LogsExtension],
     casts: &[LogsCastNumber],
 ) -> Result<BoxedSyncStream, TdError> {
-    let target = worker_log_target(worker, extensions, casts);
+    let target = worker_log_target(worker, decorator, extensions, casts);
     let stream = bridge.worker_handler().logs(&target).await?;
     Ok(into_boxed_sync_stream(stream))
 }
@@ -112,10 +166,11 @@ pub async fn worker_logs(
 pub async fn worker_logs_tail(
     bridge: &BridgeProviderHandle,
     worker: &WorkerDB,
+    decorator: Option<Decorator>,
     extensions: &[LogsExtension],
     casts: &[LogsCastNumber],
 ) -> Result<BoxedSyncStream, TdError> {
-    let target = worker_log_target(worker, extensions, casts);
+    let target = worker_log_target(worker, decorator, extensions, casts);
     let stream = bridge.worker_handler().logs_tail(&target).await?;
     Ok(into_boxed_sync_stream(stream))
 }
@@ -142,6 +197,26 @@ mod tests {
         TransactionKey, UserId,
     };
     use td_queries::test_utils::SeedEntry;
+
+    #[test]
+    fn only_final_statuses_count_as_finished() {
+        let finished = [
+            WorkerStatus::Done,
+            WorkerStatus::Stopped,
+            WorkerStatus::Error,
+            WorkerStatus::Failed,
+            WorkerStatus::Canceled,
+        ];
+        let ongoing = [
+            WorkerStatus::Scheduled,
+            WorkerStatus::Requested,
+            WorkerStatus::Running,
+            WorkerStatus::StopScheduled,
+            WorkerStatus::StopRequested,
+        ];
+        assert!(finished.iter().all(is_finished));
+        assert!(!ongoing.iter().any(is_finished));
+    }
 
     #[td_test::test(db)]
     async fn test_worker_logs(db: TdPool) -> Result<(), TdError> {

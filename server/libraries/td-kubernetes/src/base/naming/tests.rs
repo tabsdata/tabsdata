@@ -153,3 +153,32 @@ fn every_kminus_program_path_fits_windows() {
         too_long.join("\n  ")
     );
 }
+
+#[test]
+fn worker_workload_name_is_the_name_the_messenger_gives_the_workload() {
+    let worker_id = WorkerId::try_from("wkr20260713-0000000005").unwrap();
+    for (worker, decorator) in [
+        (WorkerName::Function, Some(Decorator::Publisher)),
+        (WorkerName::Function, Some(Decorator::Transformer)),
+        (WorkerName::Function, Some(Decorator::Subscriber)),
+        (WorkerName::Function, None),
+        (WorkerName::CronTrigger, None),
+        (WorkerName::StageTrigger, None),
+    ] {
+        let expected =
+            to_fn_pod_name(worker_name_prefix(&worker, decorator.as_ref()), &worker_id).unwrap();
+        assert_eq!(
+            worker_workload_name(&worker, decorator.as_ref(), &worker_id).unwrap(),
+            expected
+        );
+    }
+    assert_eq!(
+        worker_workload_name(
+            &WorkerName::Function,
+            Some(&Decorator::Publisher),
+            &worker_id
+        )
+        .unwrap(),
+        "pub-wkr20260713-5"
+    );
+}

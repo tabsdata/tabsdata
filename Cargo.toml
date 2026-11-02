@@ -49,6 +49,7 @@ members = [
     "server/libraries/td-error",
     "server/libraries/td-execution",
     "server/libraries/td-kubernetes",
+    "server/libraries/td-log-archive",
     "server/libraries/td-objects",
     "server/libraries/td-process",
     "server/libraries/td-python",
@@ -226,6 +227,9 @@ path = "server/libraries/td-execution"
 [workspace.dependencies.td-kubernetes]
 path = "server/libraries/td-kubernetes"
 
+[workspace.dependencies.td-log-archive]
+path = "server/libraries/td-log-archive"
+
 [workspace.dependencies.te-authz]
 path = "extensions/rust/te-authz"
 
@@ -329,6 +333,19 @@ version = "0.3.6"
 version = "0.1.92"
 
 [workspace.dependencies.atomic_enum]
+version = "0.3.0"
+
+[workspace.dependencies.aws-config]
+version = "1.12.0"
+default-features = false
+features = ["behavior-version-latest", "default-https-client", "rt-tokio"]
+
+[workspace.dependencies.aws-sdk-cloudwatchlogs]
+version = "1.156.0"
+default-features = false
+features = ["behavior-version-latest", "default-https-client", "rt-tokio"]
+
+[workspace.dependencies.aws-smithy-mocks]
 version = "0.3.0"
 
 [workspace.dependencies.axum]

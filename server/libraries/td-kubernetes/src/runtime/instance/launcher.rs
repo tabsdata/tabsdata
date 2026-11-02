@@ -47,6 +47,7 @@ use crate::kube::api::support::wait::Failable;
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::messaging::messenger::template::TemplateKind;
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
+use crate::runtime::instance::identity::inject_identity;
 use crate::runtime::instance::injection::{
     inject_into_cronjob, inject_into_deployment, inject_into_job, inject_into_pod,
     list_available_secrets,
@@ -199,9 +200,10 @@ pub async fn apply_authorization_phase(
         let bar = phase.add_resource(key);
         let outcome = match kind {
             TemplateKind::ServiceAccount => {
-                let account =
+                let mut account =
                     deserialize_pod_entry::<ServiceAccount>(key, yaml, Tier::Authorization, system)
                         .await?;
+                inject_identity(profile, key, &mut account)?;
                 rbac_api::upsert_service_account(context, &account, None)
                     .await
                     .map(|_| ())

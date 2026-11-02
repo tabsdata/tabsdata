@@ -50,6 +50,12 @@ pods:
       placement:
         selectors: {}
         tolerations: []
+      # Annotations for the apiserver's service account. To serve worker logs
+      # from CloudWatch once a worker's pod is gone, set
+      # eks.amazonaws.com/role-arn to an IAM role allowed logs:DescribeLogStreams
+      # and logs:GetLogEvents on the log group /tabsdata/<namespace>.
+      service_account:
+        annotations: {}
 
   function:
     priority: tabsdata-function

@@ -145,6 +145,11 @@ impl ResolveSession<'_> {
         init_map: &Mapping,
         path: &mut Vec<String>,
     ) -> Result<Value, ResolverError> {
+        // An empty mapping is a slot for keys the user chooses, such as
+        // node selectors or service account annotations.
+        if template_map.is_empty() {
+            return Ok(Value::Mapping(init_map.clone()));
+        }
         self.refuse_unknown_keys(template_map, init_map, path)?;
         let mut rendered = Mapping::new();
         let omittable = self.schema.is_some_and(|schema| schema.optional_at(path));

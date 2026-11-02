@@ -67,6 +67,13 @@ pub struct ComponentConfig {
     pub resources: ResourcesConfig,
     pub placement: PlacementConfig,
     pub priority: Option<String>,
+    pub service_account: ServiceAccountConfig,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ServiceAccountConfig {
+    pub annotations: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

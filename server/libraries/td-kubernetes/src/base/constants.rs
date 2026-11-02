@@ -592,6 +592,7 @@ pub const KUBE_KIND_JOB: &str = "Job";
 pub const KUBE_KIND_CRONJOB: &str = "CronJob";
 
 pub const LOG_POD_POLL_INTERVAL: Duration = Duration::from_millis(500);
+pub const LOG_POD_APPEARANCE_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 pub const KMINUS_MIN_NOFILE: u64 = 65535;
 

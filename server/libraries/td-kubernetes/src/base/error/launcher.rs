@@ -127,4 +127,12 @@ pub enum LauncherError {
         stage: String,
         attempts: usize,
     } = 5021,
+    #[error(
+        "Could not parse config '{config}' while annotating service account '{account}': {cause}."
+    )]
+    IdentityConfigParseFailed {
+        config: String,
+        account: String,
+        cause: String,
+    } = 5022,
 }

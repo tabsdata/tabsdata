@@ -447,6 +447,86 @@ fn non_scalar_init_value_is_structure_mismatch() {
 }
 
 #[test]
+fn an_empty_template_mapping_takes_the_keys_the_user_supplies() {
+    let template = indoc! {"
+        service_account:
+          annotations: {}
+    "};
+    let init = indoc! {"
+        service_account:
+          annotations:
+            eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/apiserver
+    "};
+    let value: Value = serde_yaml::from_str(&resolve(template, init).rendered).expect("yaml");
+    assert_eq!(
+        value["service_account"]["annotations"]["eks.amazonaws.com/role-arn"],
+        Value::String("arn:aws:iam::123456789012:role/apiserver".to_owned())
+    );
+}
+
+#[test]
+fn an_empty_template_mapping_left_empty_stays_empty() {
+    let template = "selectors: {}\n";
+    let value: Value = serde_yaml::from_str(&resolve(template, template).rendered).expect("yaml");
+    assert_eq!(
+        value["selectors"],
+        Value::Mapping(serde_yaml::Mapping::new())
+    );
+}
+
+#[test]
+fn keys_beyond_a_non_empty_template_mapping_are_still_refused() {
+    let template = indoc! {"
+        resources:
+          cpu: ${{literal:cpu}}
+    "};
+    let init = indoc! {"
+        resources:
+          cpu: \"2\"
+          gpu: \"1\"
+    "};
+    let error = resolve_error(template, init);
+    assert!(matches!(error, ResolverError::UnknownConfigKeys { .. }));
+}
+
+#[test]
+fn an_empty_template_mapping_given_a_scalar_is_structure_mismatch() {
+    let template = "selectors: {}\n";
+    let init = "selectors: zone-a\n";
+    let error = resolve_error(template, init);
+    assert!(matches!(error, ResolverError::StructureMismatch { .. }));
+}
+
+#[test]
+fn the_shipped_eks_config_keeps_the_apiserver_role_annotation() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../variant/resources/kprofile/configs/tabsdata_eks.yaml");
+    let template = std::fs::read_to_string(&path).expect("shipped eks config");
+    let annotated = template.replacen(
+        "      service_account:\n        annotations: {}",
+        "      service_account:\n        annotations:\n          \
+         eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/apiserver",
+        1,
+    );
+    assert_ne!(
+        annotated, template,
+        "the eks config declares the apiserver annotations"
+    );
+    let rendered = resolve(&template, &annotated).rendered;
+    let config = crate::runtime::instance::tabsdata::TabsdataConfig::parse(&rendered)
+        .expect("rendered config parses");
+    assert_eq!(
+        config
+            .component("apiserver", Some("authorization"))
+            .service_account
+            .annotations
+            .get("eks.amazonaws.com/role-arn")
+            .map(String::as_str),
+        Some("arn:aws:iam::123456789012:role/apiserver")
+    );
+}
+
+#[test]
 fn literal_required_missing_value_errors() {
     let template = "name: ${{literal:label}}\n";
     let init = "name: ${{literal:label}}\n";

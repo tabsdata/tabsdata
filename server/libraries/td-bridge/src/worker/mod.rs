@@ -11,15 +11,17 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures::Stream;
 use std::pin::Pin;
-use td_common::worker::WorkerName;
+use td_common::worker::{Decorator, WorkerName};
 use td_error::td_error;
 
 #[derive(Debug, Clone)]
 pub struct WorkerLogTarget {
     pub worker_id: String,
     pub worker_kind: WorkerName,
+    pub decorator: Option<Decorator>,
     pub log_patterns: Vec<String>,
     pub casts: Vec<String>,
+    pub finished: bool,
 }
 
 #[td_error]

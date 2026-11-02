@@ -4,6 +4,7 @@
 
 pub mod cluster;
 pub mod endpoint;
+pub mod identity;
 pub mod image;
 pub mod index;
 pub mod injection;

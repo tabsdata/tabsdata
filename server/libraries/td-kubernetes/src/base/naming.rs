@@ -152,6 +152,14 @@ fn to_pod_name(prefix: &str, id: &str) -> Result<String, NamingError> {
     Ok(assembled)
 }
 
+pub fn worker_workload_name(
+    worker: &WorkerName,
+    decorator: Option<&Decorator>,
+    worker_id: &WorkerId,
+) -> Result<String, NamingError> {
+    to_fn_pod_name(worker_name_prefix(worker, decorator), worker_id)
+}
+
 pub fn name_from_kube_resource_name<'a>(
     kube_name: &'a str,
     scope: Scope,
