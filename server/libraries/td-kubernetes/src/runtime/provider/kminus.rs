@@ -75,7 +75,9 @@ use crate::runtime::instance::profile::{
 use crate::runtime::instance::tabsdata::TABSDATA_FILE;
 use crate::runtime::instance::upgrade::guard::ensure_upgraded;
 use crate::runtime::instance::verify_manifest_compatibility;
-use crate::runtime::provider::kminus::cluster::{InstanceFolderGuard, KminusCluster};
+use crate::runtime::provider::kminus::cluster::{
+    InstanceFolderGuard, KminusCluster, prconfig_path,
+};
 use crate::runtime::provider::kminus::instance::KminusInstance;
 use crate::runtime::provider::outcome::{ClusterStopOutcome, ImagesOutcome, InstanceStopOutcome};
 use crate::runtime::provider::{
@@ -1290,6 +1292,11 @@ pub(crate) fn system_values_for(folder: &std::path::Path) -> CommandResult<Syste
         .file_name()
         .and_then(|name| name.to_str())
         .map(|name| name.to_owned());
+    let kminus_prconfig_path = Some(
+        prconfig_path(&folder.join(FOLDER_CLUSTER))
+            .to_string_lossy()
+            .to_string(),
+    );
     Ok(SystemValues {
         repository_url,
         repository_path,
@@ -1305,6 +1312,7 @@ pub(crate) fn system_values_for(folder: &std::path::Path) -> CommandResult<Syste
         pyenv_libexec_folder,
         exe_suffix,
         instance_name,
+        kminus_prconfig_path,
         tabsdata_version: Some(tabsdata_version()?),
         namespace_name: Some(DEFAULT_NAMESPACE.to_owned()),
         database_host: Some(DATABASE_HOST_LOOPBACK.to_owned()),

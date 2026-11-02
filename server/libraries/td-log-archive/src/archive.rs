@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! Where a worker's logs are read from once its pod is gone: the cloud's own
+//! Where a worker's logs are read from once its pod is gone: the cluster's own
 //! log store, picked from what the apiserver pod runs as.
 
 use std::sync::Arc;
@@ -11,6 +11,7 @@ use td_bridge::worker::WorkerLogStream;
 
 use crate::cloudlogging::CloudLoggingReader;
 use crate::cloudwatch::CloudWatchLogReader;
+use crate::kminus::PodRunnerReader;
 
 pub(crate) const STARTED_ON_LEEWAY_MILLIS: i64 = 30_000;
 
@@ -45,6 +46,9 @@ impl LogArchive {
             return CloudWatchLogReader::from_environment(namespace)
                 .await
                 .map(Self::new);
+        }
+        if let Some(reader) = PodRunnerReader::from_environment() {
+            return Some(Self::new(reader));
         }
         CloudLoggingReader::from_metadata(namespace)
             .await

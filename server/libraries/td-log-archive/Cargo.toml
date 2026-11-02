@@ -55,11 +55,13 @@ td-bridge = { workspace = true }
 async-stream = { workspace = true }
 aws-config = { workspace = true }
 aws-sdk-cloudwatchlogs = { workspace = true }
+base64 = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+serde_yaml = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 
@@ -68,4 +70,6 @@ td-log-archive = { workspace = true, features = ["td-test"] }
 aws-sdk-cloudwatchlogs = { workspace = true, features = ["test-util"] }
 aws-smithy-mocks = { workspace = true }
 futures = { workspace = true }
+rcgen = { workspace = true }
+tempfile = { workspace = true }
 wiremock = { workspace = true }

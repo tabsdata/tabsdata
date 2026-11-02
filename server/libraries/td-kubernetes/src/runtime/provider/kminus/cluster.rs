@@ -78,6 +78,7 @@ const KM_DATA_FOLDER: &str = "data";
 const KM_PIDS_FOLDER: &str = "pids";
 const KM_SYSCONFIG_FILE: &str = "kmsysconfig.yaml";
 const KM_KUBECONFIG_FILE: &str = "kubeconfig.yaml";
+const KM_PRCONFIG_FILE: &str = "vk-prconfig.yaml";
 
 const KM_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
@@ -560,6 +561,10 @@ impl Drop for InstanceFolderGuard {
             // fs::remove_dir_all(&folder).ok();
         }
     }
+}
+
+pub fn prconfig_path(cluster_folder: &Path) -> PathBuf {
+    cluster_folder.join(KM_CONFIG_FOLDER).join(KM_PRCONFIG_FILE)
 }
 
 fn read_km_pid(pids_folder: &Path) -> Option<u32> {

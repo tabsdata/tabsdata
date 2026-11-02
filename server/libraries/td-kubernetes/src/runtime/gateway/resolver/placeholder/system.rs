@@ -84,6 +84,8 @@ pub enum SystemKey {
     DatabaseSslRootCert,
     #[strum(serialize = "tdk_kminus_api_port")]
     KminusApiPort,
+    #[strum(serialize = "tdk_kminus_prconfig_path")]
+    KminusPrconfigPath,
     #[strum(serialize = "tdk_project_secret_name")]
     ProjectSecretName,
     #[strum(serialize = "tdk_connection_configmap_name")]
@@ -157,6 +159,7 @@ pub struct SystemValues {
     pub database_ssl_mode: Option<String>,
     pub database_ssl_root_cert: Option<String>,
     pub kminus_api_port: Option<String>,
+    pub kminus_prconfig_path: Option<String>,
     pub project_secret_name: Option<String>,
     pub connection_configmap_name: Option<String>,
     pub connection_secret_name: Option<String>,
@@ -203,6 +206,7 @@ impl SystemValues {
             SystemKey::DatabaseSslMode => self.database_ssl_mode.as_deref(),
             SystemKey::DatabaseSslRootCert => self.database_ssl_root_cert.as_deref(),
             SystemKey::KminusApiPort => self.kminus_api_port.as_deref(),
+            SystemKey::KminusPrconfigPath => self.kminus_prconfig_path.as_deref(),
             SystemKey::ProjectSecretName => self.project_secret_name.as_deref(),
             SystemKey::ConnectionConfigmapName => self.connection_configmap_name.as_deref(),
             SystemKey::ConnectionSecretName => self.connection_secret_name.as_deref(),

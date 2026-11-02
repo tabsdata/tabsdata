@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! Reads a worker's archived logs: what the cluster's cloud log store kept
+//! Reads a worker's archived logs: what the cluster's log store kept
 //! after the pod was removed. Live pod logs are read from the Kubernetes API by
 //! `td-kubernetes`, which falls back to this crate once the pod is gone.
 //!
@@ -13,6 +13,7 @@ mod archive;
 mod cloudlogging;
 mod cloudwatch;
 mod env;
+mod kminus;
 mod render;
 
 pub use archive::{ArchiveReader, ArchiveRequest, LogArchive};

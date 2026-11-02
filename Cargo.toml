@@ -612,6 +612,9 @@ version = "0.30.2"
 [workspace.dependencies.ratatui-textarea]
 version = "0.9.4"
 
+[workspace.dependencies.rcgen]
+version = "0.14.10"
+
 [workspace.dependencies.reedline]
 version = "0.52.1"
 
