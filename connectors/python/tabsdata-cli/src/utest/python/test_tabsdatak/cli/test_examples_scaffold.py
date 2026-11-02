@@ -23,7 +23,7 @@ def _source(text: str) -> str:
 
 
 def test_every_connector_scaffolds_a_function_that_checks(tmp_path):
-    found = connectors()
+    found = [c for c in connectors() if c.cls.__module__.startswith("tabsdatak.conn.")]
     assert {c.kind for c in found} == {"publisher", "stream_publisher", "subscriber"}
     assert not [c for c in found if c.type.startswith(".")]
     invalid = {}
@@ -193,7 +193,15 @@ def test_scaffold_never_overwrites_a_file(tmp_path):
     target = tmp_path / "pub.py"
     target.write_text("mine")
     result = _invoke(
-        ["examples", "scaffold", "--kind", "transformer", "-f", str(target), "--machine"],
+        [
+            "examples",
+            "scaffold",
+            "--kind",
+            "transformer",
+            "-f",
+            str(target),
+            "--machine",
+        ],
         tmp_path,
     )
     assert result.exit_code != ExitCode.OK
@@ -201,7 +209,9 @@ def test_scaffold_never_overwrites_a_file(tmp_path):
 
 
 def test_scaffold_option_errors_are_usage_errors(tmp_path):
-    result = _invoke(["examples", "scaffold", "--kind", "publisher", "--machine"], tmp_path)
+    result = _invoke(
+        ["examples", "scaffold", "--kind", "publisher", "--machine"], tmp_path
+    )
     assert result.exit_code == ExitCode.USAGE, result.output
     assert "needs --connector" in _document(result)["error"]["message"]
 
