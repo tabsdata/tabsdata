@@ -145,7 +145,7 @@ and the drop/re-create lifecycle around deltas.
 
 The snapshot guard itself (`crate::snapshot::assert_snapshot`, behind the
 `test-utils` feature) is generic over any `Fn(Backend) -> Vec<String>`, so other
-crates can gate their own schemas with it — `te-aiagent` does.
+crates can gate their own schemas with it — `te-schema` does.
 
 ## How it works
 
