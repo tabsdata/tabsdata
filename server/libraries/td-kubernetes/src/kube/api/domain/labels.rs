@@ -78,9 +78,7 @@ impl Labeled for CronJob {
 
 impl Labeled for Deployment {
     fn pod_metadata(&mut self) -> Option<&mut ObjectMeta> {
-        self.spec
-            .as_mut()
-            .map(|spec| template_metadata(&mut spec.template))
+        Some(template_metadata(&mut self.spec.template))
     }
 }
 

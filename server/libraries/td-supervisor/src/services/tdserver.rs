@@ -39,7 +39,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, exit};
 use std::thread::sleep;
 use std::{env, fs, io};
-use sysinfo::{Signal, System};
+use sysinfo::{RefreshKind, Signal};
 use tabled::settings::object::{Columns, Rows};
 use tabled::settings::style::{HorizontalLine, Style, VerticalLine};
 use tabled::settings::themes::BorderCorrection;
@@ -53,7 +53,7 @@ use td_common::env::REPOSITORY_URI_ENV;
 use td_common::env::{TABSDATA_HOME_DIR, check_flag_env, get_home_dir, to_absolute};
 use td_common::logging::set_log_level;
 use td_common::os::TD_DETACHED_SUBPROCESSES;
-use td_common::os::{name_program, terminate_process};
+use td_common::os::{name_program, system_with, terminate_process};
 use td_common::settings::INSTANCES_FOLDER;
 use td_common::status::ExitStatus::{GeneralError, NoAction, Success};
 use td_common::worker::WorkerClass::Regular;
@@ -2233,21 +2233,23 @@ fn command_worker_restart(arguments: WorkerRestartArguments) {
 }
 
 fn status_running_instances() {
-    let mut system = System::new_all();
-    system.refresh_all();
-
-    let mut instances: Vec<(sysinfo::Pid, PathBuf)> = system
-        .processes()
-        .iter()
-        .filter_map(|(&pid, process)| {
-            if !is_supervisor_process(process) {
-                return None;
-            }
-            let instance = supervisor_instance_argument(process);
-            let instance = supervisor_instance(instance);
-            Some((pid, instance))
+    let mut instances: Vec<(sysinfo::Pid, PathBuf)> = system_with(RefreshKind::everything())
+        .map(|mut system| {
+            system.refresh_all();
+            system
+                .processes()
+                .iter()
+                .filter_map(|(&pid, process)| {
+                    if !is_supervisor_process(process) {
+                        return None;
+                    }
+                    let instance = supervisor_instance_argument(process);
+                    let instance = supervisor_instance(instance);
+                    Some((pid, instance))
+                })
+                .collect()
         })
-        .collect();
+        .unwrap_or_default();
 
     if instances.is_empty() {
         info!("\nNo running instances found.\n");

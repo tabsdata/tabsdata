@@ -129,7 +129,7 @@ fn a_deployment_labels_its_pod_template_with_the_deployment_name() {
     "})
     .expect("the deployment parses");
     label_log_id(&mut deployment).expect("the name fits a label value");
-    let spec = deployment.spec.as_ref().expect("the deployment has a spec");
+    let spec = &deployment.spec;
     assert_eq!(
         log_id(spec.template.metadata.as_ref()),
         Some("srv-apiserver")

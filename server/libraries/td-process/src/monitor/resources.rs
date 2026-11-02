@@ -11,14 +11,15 @@ use std::process;
 
 use crate::monitor::memory::{MemoryStats, instance_memory};
 use crate::monitor::space::{SpaceStats, instance_space};
-use sysinfo::System;
+use sysinfo::{RefreshKind, System};
+use td_common::os::system_with;
 use tracing::debug;
 
 pub const TD_RESOURCES_MONITOR_CHECK_FREQUENCY: &str = "TD_RESOURCES_MONITOR_CHECK_FREQUENCY";
 pub const RESOURCES_MONITOR_CHECK_FREQUENCY: u64 = 60 * 15;
 
 pub struct ResourcesMonitor {
-    system: System,
+    system: Option<System>,
     locale: Locale,
 }
 
@@ -31,19 +32,22 @@ impl Default for ResourcesMonitor {
 impl ResourcesMonitor {
     pub fn new() -> Self {
         Self {
-            system: System::new_all(),
+            system: system_with(RefreshKind::everything()),
             locale: Locale::en,
         }
     }
 
     pub fn monitor(&mut self, instance: &Option<PathBuf>) {
-        self.system = System::new_all();
-        self.system.refresh_all();
+        self.system = system_with(RefreshKind::everything());
+        let Some(system) = self.system.as_mut() else {
+            return;
+        };
+        system.refresh_all();
 
         if let Some(folder) = instance {
             let mut log_message = String::from("\n· Memory:\n");
 
-            let (pm, vm, tm, um, fm) = self.memory();
+            let (pm, vm, tm, um, fm) = instance_memory(system, &self.locale);
             let memory_log = format!(
                 "\t- Process Physical Memory: {pm} mb\n\
                  \t- Process Virtual Memory.: {vm} mb\n\
@@ -72,8 +76,10 @@ impl ResourcesMonitor {
         }
     }
 
-    pub fn memory(&self) -> MemoryStats {
-        instance_memory(&self.system, &self.locale)
+    pub fn memory(&self) -> Option<MemoryStats> {
+        self.system
+            .as_ref()
+            .map(|system| instance_memory(system, &self.locale))
     }
 
     pub fn space(&self, instance: &Path) -> IndexMap<String, SpaceStats> {

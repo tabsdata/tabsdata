@@ -239,11 +239,7 @@ fn owned_by_job(pod: &Pod) -> bool {
 }
 
 fn deployment_row(deployment: &Deployment) -> DeploymentRow {
-    let desired = deployment
-        .spec
-        .as_ref()
-        .and_then(|spec| spec.replicas)
-        .unwrap_or(1);
+    let desired = deployment.spec.replicas.unwrap_or(1);
     let ready = deployment
         .status
         .as_ref()

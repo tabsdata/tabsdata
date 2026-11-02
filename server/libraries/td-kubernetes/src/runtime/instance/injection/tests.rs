@@ -802,7 +802,7 @@ fn a_deployment_reads_the_annotation_from_its_pod_template() {
 
     let profile = build_profile(&[("service.yaml", "remote:\n  key: ${{secret:api-key?}}\n")]);
     let mut deployment = Deployment {
-        spec: Some(DeploymentSpec {
+        spec: DeploymentSpec {
             template: PodTemplateSpec {
                 metadata: Some(ObjectMeta {
                     annotations: Some(BTreeMap::from([(
@@ -814,11 +814,11 @@ fn a_deployment_reads_the_annotation_from_its_pod_template() {
                 spec: Some(build_pod_spec_mounting(&["service"], &["service.yaml"])),
             },
             ..Default::default()
-        }),
+        },
         ..Default::default()
     };
     inject_into_deployment(&profile, "service.yaml", &mut deployment, &BTreeSet::new())
         .expect("ok");
-    let spec = deployment.spec.unwrap().template.spec.unwrap();
+    let spec = deployment.spec.template.spec.unwrap();
     assert!(names(&spec, "service").is_empty());
 }

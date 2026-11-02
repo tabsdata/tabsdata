@@ -7,7 +7,8 @@ use crate::monitor::memory::{physical_memory, virtual_memory};
 
 use std::path::Path;
 use std::thread::sleep;
-use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System};
+use td_common::os::system_with;
 
 pub type ProcessDistilled = (
     Pid,
@@ -26,7 +27,9 @@ pub type ProcessDistilled = (
 
 /// Function to get the process tree starting from a given PID.
 pub fn get_process_tree(pid: i32) -> Vec<ProcessDistilled> {
-    let mut system = System::new_all();
+    let Some(mut system) = system_with(RefreshKind::everything()) else {
+        return Vec::new();
+    };
     system.refresh_all();
     sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
     system.refresh_processes_specifics(

@@ -21,7 +21,7 @@ use std::process;
 use std::time::{Duration, Instant};
 #[cfg(not(target_os = "windows"))]
 use sysinfo::ProcessesToUpdate;
-use sysinfo::{Pid, Process, ProcessStatus, Signal, System};
+use sysinfo::{Pid, Process, ProcessStatus, RefreshKind, Signal, System};
 use tracing::{info, warn};
 
 pub const TD_DETACHED_SUBPROCESSES: &str = "TD_DETACHED_SUBPROCESSES";
@@ -72,9 +72,24 @@ pub fn name_program(path: &Path) -> PathBuf {
     path
 }
 
+/// The system's process table, or `None` when it cannot be read. The failure is
+/// logged, and callers treat it as an empty table, as sysinfo did before it
+/// reported the failure.
+pub fn system_with(refresh: RefreshKind) -> Option<System> {
+    match System::new_with_specifics(refresh) {
+        Ok(system) => Some(system),
+        Err(error) => {
+            warn!("Cannot read the system's process table: {error}");
+            None
+        }
+    }
+}
+
 /// Function to check if a process with a given PID exists.
 pub fn check_process(pid: i32) -> bool {
-    let mut system = System::new_all();
+    let Some(mut system) = system_with(RefreshKind::everything()) else {
+        return false;
+    };
     system.refresh_all();
     match system.process(Pid::from_u32(pid as u32)) {
         Some(process) => process.status() != ProcessStatus::Zombie,
@@ -84,7 +99,9 @@ pub fn check_process(pid: i32) -> bool {
 
 /// Function to terminate a process with a given PID using a specified signal.
 pub fn terminate_process(pid: i32, signal: Signal) -> Result<(), OsProcessError> {
-    let mut system = System::new_all();
+    let Some(mut system) = system_with(RefreshKind::everything()) else {
+        return Err(OsProcessError::ProcessNotFound(pid));
+    };
     system.refresh_all();
     if let Some(process) = system.process(Pid::from_u32(pid as u32)) {
         info!("Process with pid '{}' found: '{:?}'", pid, process.name());
@@ -103,7 +120,9 @@ pub fn terminate_process(pid: i32, signal: Signal) -> Result<(), OsProcessError>
 }
 
 pub fn terminate_process_tree(pid: i32, signal: Signal) -> Result<(), OsProcessError> {
-    let mut system = System::new_all();
+    let Some(mut system) = system_with(RefreshKind::everything()) else {
+        return Err(OsProcessError::ProcessNotFound(pid));
+    };
     system.refresh_all();
     let Some(process) = system.process(Pid::from_u32(pid as u32)) else {
         return Err(OsProcessError::ProcessNotFound(pid));
@@ -175,7 +194,9 @@ fn force_kill_tree(root: u32) {
 
 #[cfg(not(target_os = "windows"))]
 pub fn collect_descendants(root: u32) -> Vec<u32> {
-    let mut system = System::new();
+    let Some(mut system) = system_with(RefreshKind::nothing()) else {
+        return Vec::new();
+    };
     system.refresh_processes(ProcessesToUpdate::All, true);
     let mut descendants: Vec<u32> = Vec::new();
     let mut frontier: Vec<Pid> = vec![Pid::from_u32(root)];
@@ -402,7 +423,9 @@ mod tests {
     // Helper function to terminate a process with a specified signal and verify termination
     fn kill_process(signal: Signal) {
         fn is_process_alive(pid: Pid) -> bool {
-            let mut system = System::new();
+            let Some(mut system) = system_with(RefreshKind::nothing()) else {
+                return false;
+            };
             system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
             match system.process(pid) {
                 Some(process) => process.status() != ProcessStatus::Zombie,

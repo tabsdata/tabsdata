@@ -8,7 +8,8 @@ use std::process::{Command as SystemCommand, Output, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use sysinfo::{Pid, ProcessRefreshKind, ProcessStatus, ProcessesToUpdate, System, UpdateKind};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessStatus, ProcessesToUpdate, RefreshKind, UpdateKind};
+use td_common::os::system_with;
 use tracing::{debug, info, warn};
 
 use crate::base::trace;
@@ -174,7 +175,9 @@ pub fn seal_own_stdio() {
 }
 
 pub fn is_alive(pid: u32) -> bool {
-    let mut system = System::new();
+    let Some(mut system) = system_with(RefreshKind::nothing()) else {
+        return false;
+    };
     system.refresh_processes(ProcessesToUpdate::Some(&[Pid::from_u32(pid)]), true);
     match system.process(Pid::from_u32(pid)) {
         Some(process) => process.status() != ProcessStatus::Zombie,
@@ -183,7 +186,7 @@ pub fn is_alive(pid: u32) -> bool {
 }
 
 pub fn process_paths(pid: u32) -> Option<(Option<PathBuf>, Option<PathBuf>)> {
-    let mut system = System::new();
+    let mut system = system_with(RefreshKind::nothing())?;
     system.refresh_processes_specifics(
         ProcessesToUpdate::Some(&[Pid::from_u32(pid)]),
         true,
@@ -247,7 +250,9 @@ pub fn force_terminate_process_tree(pid: u32, grace: Duration) -> bool {
 }
 
 fn collect_descendants(root: u32) -> Vec<u32> {
-    let mut system = System::new();
+    let Some(mut system) = system_with(RefreshKind::nothing()) else {
+        return Vec::new();
+    };
     system.refresh_processes(ProcessesToUpdate::All, true);
     let root_pid = Pid::from_u32(root);
     let mut descendants: Vec<u32> = Vec::new();

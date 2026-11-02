@@ -392,18 +392,19 @@ impl Stamper for Stamping {
             println!("cargo:rustc-env=VERGEN_RUSTC_LLVM_VERSION={}", llvm_ver);
         }
 
-        let mut sys = System::new();
-        sys.refresh_cpu_all();
-        let cpu_name = if let Some(cpu) = sys.cpus().first() {
+        let sys = System::new().ok().map(|mut sys| {
+            sys.refresh_cpu_all();
+            sys
+        });
+        let cpu = sys.as_ref().and_then(|sys| sys.cpus().first());
+        let cpu_name = if let Some(cpu) = cpu {
             cpu.brand().to_string()
         } else {
             env::var("VERGEN_SYSINFO_CPU_BRAND").unwrap_or_else(|_| "?".to_string())
         };
         println!("cargo:rustc-env=VERGEN_SYSINFO_CPU_NAME={}", cpu_name);
 
-        let cpu_frequency = sys
-            .cpus()
-            .first()
+        let cpu_frequency = cpu
             .map(|cpu| cpu.frequency())
             .filter(|frequency| *frequency > 0)
             .map(|frequency| frequency.to_string())

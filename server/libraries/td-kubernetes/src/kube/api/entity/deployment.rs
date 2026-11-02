@@ -44,7 +44,7 @@ pub async fn create_deployment(
             });
     }
 
-    deployment.spec.get_or_insert_with(Default::default).paused = Some(true);
+    deployment.spec.paused = Some(true);
     let name = deployment.metadata.name.clone().unwrap_or_default();
 
     let creating = context.clone();
@@ -259,11 +259,7 @@ pub fn is_deployment_available() -> impl Condition<Deployment> + Clone + Send + 
         let Some(deployment) = deployment else {
             return false;
         };
-        let desired = deployment
-            .spec
-            .as_ref()
-            .and_then(|spec| spec.replicas)
-            .unwrap_or(1);
+        let desired = deployment.spec.replicas.unwrap_or(1);
         let ready = deployment
             .status
             .as_ref()
@@ -288,8 +284,9 @@ pub async fn pods_of_deployment(
 
     let labels = deployment
         .spec
+        .selector
+        .match_labels
         .as_ref()
-        .and_then(|spec| spec.selector.match_labels.as_ref())
         .filter(|labels| !labels.is_empty())
         .ok_or_else(|| KubeDeploymentError::MissingSelector {
             namespace: context.namespace().to_owned(),

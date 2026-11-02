@@ -15,7 +15,8 @@ use std::path::PathBuf;
 use std::{fs, io};
 use thiserror::Error;
 
-use td_common::os::check_process;
+use sysinfo::RefreshKind;
+use td_common::os::{check_process, system_with};
 use td_common::worker::{WORKER_OK_FILE, WORKER_PID_FILE};
 
 pub const DEFAULT_WORKER_FOLDER: &str = ".";
@@ -300,7 +301,9 @@ pub fn check_status(pid_path: PathBuf, live_pids: Option<&HashSet<i32>>) -> Work
 }
 
 pub fn snapshot_live_pids() -> HashSet<i32> {
-    let mut system = sysinfo::System::new_all();
+    let Some(mut system) = system_with(RefreshKind::everything()) else {
+        return HashSet::new();
+    };
     system.refresh_all();
     system
         .processes()

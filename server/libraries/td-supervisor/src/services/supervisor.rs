@@ -55,7 +55,7 @@ use std::time::Duration;
 use std::{fmt, panic, process};
 use strum::{AsRefStr, EnumString};
 use sysinfo::Signal::Kill;
-use sysinfo::{Pid, Signal};
+use sysinfo::{Pid, RefreshKind, Signal};
 use td_bridge::catalog::etc_folder::ETC_FOLDER;
 use td_bridge::messaging::OrchestratorMessage;
 use td_bridge::messaging::OrchestratorMessagePayload::{
@@ -74,7 +74,7 @@ use td_common::env::{
 use td_common::execution_status::WorkerCallbackStatus;
 use td_common::files::YAML_EXTENSION;
 use td_common::id::id;
-use td_common::os::terminate_process;
+use td_common::os::{system_with, terminate_process};
 use td_common::signal::terminate;
 use td_common::status::ExitStatus::{GeneralError, Success, TabsDataError};
 use td_common::worker::MessageAction;
@@ -593,7 +593,9 @@ impl Supervisor {
             );
         }
 
-        let mut system = sysinfo::System::new_all();
+        let Some(mut system) = system_with(RefreshKind::everything()) else {
+            return;
+        };
         system.refresh_all();
         let pid = process::id();
         if pid > 0 {
@@ -2764,7 +2766,9 @@ impl Supervisor {
     }
 
     async fn stop_processes(&self, signal: Signal) -> Result<(), RuntimeError> {
-        let mut system = sysinfo::System::new_all();
+        let Some(mut system) = system_with(RefreshKind::everything()) else {
+            return Ok(());
+        };
         system.refresh_all();
         let pid = process::id();
         if pid > 0 {

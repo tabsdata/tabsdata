@@ -324,7 +324,7 @@ fn cronjob_pod_template(cronjob: &CronJob) -> Option<Pod> {
 }
 
 fn deployment_pod_template(deployment: &Deployment) -> Option<Pod> {
-    let template = deployment.spec.as_ref()?.template.clone();
+    let template = deployment.spec.template.clone();
     Some(Pod {
         metadata: template.metadata.unwrap_or_default(),
         spec: template.spec,
