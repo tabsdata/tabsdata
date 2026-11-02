@@ -323,6 +323,39 @@ mod tests {
         );
     }
 
+    /// A request dropped while its `BEGIN` is in flight must not hand the
+    /// next one its connection inside that transaction.
+    #[td_test::domain("apiserver_postgres_internals")]
+    #[tokio::test]
+    async fn pg_begin_cancelled_in_flight_leaves_no_transaction(
+        domain_apiserver_postgres_internals: PostgresDomain,
+    ) {
+        let test_db = crate::test_utils::postgres::pool(&domain_apiserver_postgres_internals).await;
+        let mut config = crate::test_utils::postgres::schema_connectable(
+            &crate::test_utils::domain::admin_base(&domain_apiserver_postgres_internals),
+            test_db.schema(),
+        );
+        config.pool.regular = Some(PoolConfig {
+            min_connections: 0,
+            max_connections: 1,
+            acquire_timeout: Duration::from_secs(10),
+            ..PoolConfig::default()
+        });
+        let pool = crate::db(&config).await.unwrap();
+        pool.begin_ro().await.unwrap().rollback().await.unwrap();
+        for micros in (0..2000).step_by(10) {
+            let _ = tokio::time::timeout(Duration::from_micros(micros), pool.begin_ro()).await;
+
+            let mut conn = pool.begin_serializable().await.unwrap();
+            let read_only: String = sqlx::query_scalar("SHOW transaction_read_only")
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
+            assert_eq!(read_only, "off", "dropped after {micros}µs");
+            conn.rollback().await.unwrap();
+        }
+    }
+
     #[test]
     fn pool_options_full_mapping() {
         let pool = PoolConfig {

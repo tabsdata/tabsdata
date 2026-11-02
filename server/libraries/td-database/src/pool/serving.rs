@@ -165,15 +165,16 @@ impl TdPool {
     }
 
     pub async fn begin(&self) -> Result<Transaction<'static, Postgres>, Error> {
-        self.pool.begin().await
+        let pool = self.pool.clone();
+        uncancellable(async move { pool.begin().await }).await
     }
 
     /// Commits only what a serial order of the concurrent transactions would
     /// have; one that cannot fails with a serialization failure (40001) and is
     /// run again whole.
     pub async fn begin_serializable(&self) -> Result<Transaction<'static, Postgres>, Error> {
-        self.pool
-            .begin_with("BEGIN ISOLATION LEVEL SERIALIZABLE")
+        let pool = self.pool.clone();
+        uncancellable(async move { pool.begin_with("BEGIN ISOLATION LEVEL SERIALIZABLE").await })
             .await
     }
 
@@ -187,18 +188,23 @@ impl TdPool {
         &self,
         key: &str,
     ) -> Result<Option<Transaction<'static, Postgres>>, Error> {
-        let mut conn = self.pool.acquire().await?;
-        conn.close_on_drop();
-        if !conn.try_advisory_lock_text(key).await? {
-            conn.return_to_pool().await;
-            return Ok(None);
-        }
-        Transaction::begin(
-            conn,
-            Some("BEGIN ISOLATION LEVEL SERIALIZABLE".into_sql_str()),
-        )
+        let pool = self.pool.clone();
+        let key = key.to_owned();
+        uncancellable(async move {
+            let mut conn = pool.acquire().await?;
+            conn.close_on_drop();
+            if !conn.try_advisory_lock_text(&key).await? {
+                conn.return_to_pool().await;
+                return Ok(None);
+            }
+            Transaction::begin(
+                conn,
+                Some("BEGIN ISOLATION LEVEL SERIALIZABLE".into_sql_str()),
+            )
+            .await
+            .map(Some)
+        })
         .await
-        .map(Some)
     }
 
     /// `READ ONLY`, which the RLS `SET LOCAL` needs to scope to and in which a
@@ -206,9 +212,12 @@ impl TdPool {
     /// one snapshot and a commit cannot land between two of them. A read-only
     /// transaction never fails to serialize there.
     pub async fn begin_ro(&self) -> Result<Transaction<'static, Postgres>, Error> {
-        self.pool
-            .begin_with("BEGIN READ ONLY ISOLATION LEVEL REPEATABLE READ")
-            .await
+        let pool = self.pool.clone();
+        uncancellable(async move {
+            pool.begin_with("BEGIN READ ONLY ISOLATION LEVEL REPEATABLE READ")
+                .await
+        })
+        .await
     }
 
     /// Returns if the pool is closed.
@@ -227,4 +236,25 @@ impl TdPool {
     pub async fn shutdown(&self) {
         self.pool.close().await;
     }
+}
+
+/// Runs a transaction's opening to completion even when its caller is dropped
+/// (an HTTP handler whose client went away): sqlx 0.9.0 raises the transaction
+/// depth only once `BEGIN` has answered, so a drop in between queues no
+/// rollback and the pool hands the next caller a connection still inside the
+/// orphaned transaction. A completed but unclaimed transaction is dropped with
+/// the task, which queues its rollback.
+///
+/// TODO: remove once the workspace's sqlx carries
+/// <https://github.com/launchbadge/sqlx/pull/4394> (merged 2026-09-09 as
+/// `f1e94ec`, unreleased as of 0.9.0); tracked by
+/// <https://github.com/launchbadge/sqlx/issues/2805> and the release request
+/// <https://github.com/launchbadge/sqlx/issues/4495>. Removing it must keep
+/// `pg_begin_cancelled_in_flight_leaves_no_transaction` passing.
+async fn uncancellable<T: Send + 'static>(
+    opening: impl Future<Output = Result<T, Error>> + Send + 'static,
+) -> Result<T, Error> {
+    tokio::spawn(opening)
+        .await
+        .map_err(|e| Error::Io(std::io::Error::other(e)))?
 }
