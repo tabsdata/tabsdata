@@ -28,6 +28,10 @@ from tabsdatak.server._tdrunner.function._commons.document.state.stream import (
     KIND,
     StreamState,
 )
+from tabsdatak.server._tdrunner.function._commons.error.command import (
+    BadStreamStateError,
+    CommandErrorCode,
+)
 from tabsdatak.server._tdrunner.function._commons.manifests.stage import (
     MANIFEST_PREFIX,
 )
@@ -43,10 +47,6 @@ from tabsdatak.server._tdrunner.function._handlers.batch import (
     StageBatch,
     TableCountError,
     TableTypeError,
-)
-from tabsdatak.server._tdrunner.function._commons.error.command import (
-    BadStreamStateError,
-    CommandErrorCode,
 )
 from tabsdatak.spi import LazyFrameInput, StageFileStats, StreamSrcPlugin
 
