@@ -3,8 +3,9 @@
 #
 
 """Profiles: a per-command ``--profile NAME`` that runs a command under
-``<NAME>-connection.json`` / ``<NAME>-options.json``, and the default profile
-``tdk set --profile`` / ``tdk unset --profile`` keep in ``profile.json``.
+``<NAME>-connection.json`` / ``<NAME>-options.json`` (its login and pins), and
+the profile ``tdk set --profile`` / ``tdk unset --profile`` keep among the
+global settings in ``tdk-settings.json``.
 
 Same mock-client + tmp-dir seam as the other harnesses. The injected
 connection initialiser also records which connection file each activation
@@ -96,8 +97,9 @@ def test_default_profile_is_the_bare_files(tmp_path):
 
 
 def test_profile_option_selects_the_profile_files(tmp_path):
-    (tmp_path / "options.json").write_text(json.dumps({"hints": "enabled"}))
-    (tmp_path / "qa-options.json").write_text(json.dumps({"hints": "disabled"}))
+    (tmp_path / "tdk-settings.json").write_text(json.dumps({"hints": "disabled"}))
+    (tmp_path / "options.json").write_text(json.dumps({"pins": {"project": "a"}}))
+    (tmp_path / "qa-options.json").write_text(json.dumps({"pins": {"project": "b"}}))
 
     result, connection_files = _invoke(
         ["settings", "--profile", "qa", "-o", "json"], tmp_path=tmp_path
@@ -111,7 +113,20 @@ def test_profile_option_selects_the_profile_files(tmp_path):
     ]
     reported = json.loads(result.output)
     assert reported["profile"] == "qa"
+    assert reported["pins"]["project"] == "b"
     assert reported["hints"] == "disabled"
+
+
+def test_settings_but_the_pins_are_shared_by_every_profile(tmp_path):
+    _invoke(["set", "--hints", "false", "--proj", "sales"], tmp_path=tmp_path)
+
+    result, _ = _invoke(
+        ["settings", "--profile", "qa", "-o", "json"], tmp_path=tmp_path
+    )
+    reported = json.loads(result.output)
+    assert reported["hints"] == "disabled"
+    assert reported["pins"] == {"project": None, "collection": None}
+    assert not (tmp_path / "qa-options.json").exists()
 
 
 def test_profile_option_is_reported_in_the_table_view(tmp_path):
@@ -209,9 +224,9 @@ def test_login_runs_under_the_profile(tmp_path):
 def test_set_profile_records_the_default(tmp_path):
     result, _ = _invoke(["set", "--profile", "dev"], tmp_path=tmp_path)
     assert result.exit_code == 0, result.output
-    assert "Default profile set to dev" in result.output
-    assert _json(tmp_path / "profile.json") == {"profile": "dev"}
-    # Recording the default alone stores nothing else.
+    assert "Profile set to dev" in result.output
+    assert _json(tmp_path / "tdk-settings.json") == {"profile": "dev"}
+    # Recording the profile alone stores nothing else.
     assert not (tmp_path / "dev-options.json").exists()
     assert not (tmp_path / "options.json").exists()
 
@@ -219,25 +234,30 @@ def test_set_profile_records_the_default(tmp_path):
 def test_default_profile_applies_to_later_commands(tmp_path):
     _invoke(["set", "--profile", "dev"], tmp_path=tmp_path)
 
-    result, connection_files = _invoke(["set", "--hints", "false"], tmp_path=tmp_path)
+    result, connection_files = _invoke(
+        ["set", "--hints", "false", "--proj", "sales"], tmp_path=tmp_path
+    )
     assert result.exit_code == 0, result.output
     assert connection_files == [str(tmp_path / "dev-connection.json")]
-    assert _json(tmp_path / "dev-options.json")["hints"] == "disabled"
+    assert _json(tmp_path / "tdk-settings.json")["hints"] == "disabled"
+    assert _json(tmp_path / "dev-options.json") == {"pins": {"project": "sales"}}
     assert not (tmp_path / "options.json").exists()
 
     result, _ = _invoke(["settings", "-o", "json"], tmp_path=tmp_path)
     assert json.loads(result.output)["profile"] == "dev"
 
 
-def test_set_profile_stores_the_other_settings_in_that_profile(tmp_path):
+def test_set_profile_pins_in_that_profile(tmp_path):
     result, _ = _invoke(
         ["set", "--profile", "dev", "--server", "http://dev:2457", "--proj", "sales"],
         tmp_path=tmp_path,
     )
     assert result.exit_code == 0, result.output
-    saved = _json(tmp_path / "dev-options.json")
-    assert saved["server"] == "http://dev:2457"
-    assert saved["pins"]["project"] == "sales"
+    assert _json(tmp_path / "tdk-settings.json") == {
+        "profile": "dev",
+        "server": "http://dev:2457",
+    }
+    assert _json(tmp_path / "dev-options.json") == {"pins": {"project": "sales"}}
     assert not (tmp_path / "options.json").exists()
 
 
@@ -245,7 +265,7 @@ def test_set_profile_rejects_bad_names(tmp_path):
     result, _ = _invoke(["set", "--profile", "a/b"], tmp_path=tmp_path)
     assert result.exit_code == 2
     assert "not a valid profile name" in result.output
-    assert not (tmp_path / "profile.json").exists()
+    assert not (tmp_path / "tdk-settings.json").exists()
 
 
 def test_unset_profile_drops_the_default(tmp_path):
@@ -253,8 +273,8 @@ def test_unset_profile_drops_the_default(tmp_path):
 
     result, _ = _invoke(["unset", "--profile"], tmp_path=tmp_path)
     assert result.exit_code == 0, result.output
-    assert "Default profile unset (was dev)" in result.output
-    assert not (tmp_path / "profile.json").exists()
+    assert "Profile unset (was dev)" in result.output
+    assert _json(tmp_path / "tdk-settings.json") == {}
 
     result, connection_files = _invoke(["settings", "-o", "json"], tmp_path=tmp_path)
     assert connection_files == [str(tmp_path / "connection.json")]
@@ -264,7 +284,7 @@ def test_unset_profile_drops_the_default(tmp_path):
 def test_unset_profile_says_when_none_was_set(tmp_path):
     result, _ = _invoke(["unset", "--profile"], tmp_path=tmp_path)
     assert result.exit_code == 0, result.output
-    assert "No default profile was set" in result.output
+    assert "No profile was set" in result.output
 
 
 def test_unset_all_leaves_the_default_profile(tmp_path):
@@ -272,11 +292,58 @@ def test_unset_all_leaves_the_default_profile(tmp_path):
 
     result, _ = _invoke(["unset", "--all"], tmp_path=tmp_path)
     assert result.exit_code == 0, result.output
-    assert _json(tmp_path / "profile.json") == {"profile": "dev"}
-    assert "hints" not in _json(tmp_path / "dev-options.json")
+    assert _json(tmp_path / "tdk-settings.json") == {"profile": "dev"}
 
 
 def test_unset_profile_alone_stores_no_settings(tmp_path):
     result, _ = _invoke(["unset", "--profile"], tmp_path=tmp_path)
     assert result.exit_code == 0, result.output
     assert not (tmp_path / "options.json").exists()
+
+
+# --- the 2.2 layout: settings in each options file, the profile in profile.json
+
+
+def test_the_first_run_carries_over_the_2_2_settings(tmp_path):
+    (tmp_path / "profile.json").write_text(json.dumps({"profile": "dev"}))
+    (tmp_path / "options.json").write_text(json.dumps({"hints": "enabled"}))
+    (tmp_path / "dev-options.json").write_text(
+        json.dumps({
+            "hints": "disabled",
+            "server": "http://dev",
+            "pins": {"project": "p"},
+        })
+    )
+
+    result, connection_files = _invoke(["settings", "-o", "json"], tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert connection_files == [str(tmp_path / "dev-connection.json")]
+    reported = json.loads(result.output)
+    assert reported["profile"] == "dev"
+    assert reported["hints"] == "disabled"
+    assert reported["server"] == "http://dev"
+    assert reported["pins"]["project"] == "p"
+    assert _json(tmp_path / "tdk-settings.json") == {
+        "hints": "disabled",
+        "server": "http://dev",
+        "profile": "dev",
+    }
+
+
+def test_the_2_2_files_are_ignored_once_the_settings_exist(tmp_path):
+    (tmp_path / "tdk-settings.json").write_text(json.dumps({}))
+    (tmp_path / "profile.json").write_text(json.dumps({"profile": "dev"}))
+    (tmp_path / "options.json").write_text(json.dumps({"hints": "disabled"}))
+
+    result, connection_files = _invoke(["settings", "-o", "json"], tmp_path=tmp_path)
+    assert connection_files == [str(tmp_path / "connection.json")]
+    assert json.loads(result.output)["hints"] == "enabled"
+
+
+def test_pinning_drops_the_2_2_settings_from_the_options_file(tmp_path):
+    (tmp_path / "tdk-settings.json").write_text(json.dumps({}))
+    (tmp_path / "options.json").write_text(json.dumps({"hints": "disabled"}))
+
+    result, _ = _invoke(["set", "--proj", "sales"], tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert _json(tmp_path / "options.json") == {"pins": {"project": "sales"}}

@@ -36,16 +36,17 @@ from tabsdatak.cli.cli_utils import (
     clear_pins,
     cli_option_enabled,
     configured_server,
+    default_profile,
     format_option,
     get_credentials_file_path,
     hint_common_solutions,
     initialise_tabsdata_server_connection,
     load_cli_options,
+    load_settings,
     logical_prompt,
     make_console,
     output_format,
     progress,
-    read_default_profile,
     render,
     render_done,
     set_profile,
@@ -313,15 +314,11 @@ class _RootGroup(click.RichGroup):
 
 
 def _activate_profile(ctx: click.Context, profile: str | None):
-    """Load what every command reads from ``profile``: its connection, its
-    persisted settings and the prompt setting among them."""
+    """Load what every command reads from ``profile``: its connection and its
+    pins."""
     set_profile(ctx, profile)
     initialise_tabsdata_server_connection(ctx)
     load_cli_options(ctx)
-    # 'tdk set --prompt false' is a standing '--no-prompt'; the flag turns
-    # prompting off for a single invocation.
-    ctx.obj["prompt_setting"] = cli_option_enabled(ctx, OPTION_PROMPT)
-    ctx.obj["no_prompt"] = ctx.obj["no_prompt_flag"] or not ctx.obj["prompt_setting"]
 
 
 def _apply_profile(ctx: click.Context, param, value):
@@ -351,11 +348,9 @@ def _profile_option() -> click.Option:
         is_eager=True,
         callback=_apply_profile,
         help=(
-            "Profile whose connection and settings this command uses: "
-            "'<NAME>-connection.json' and '<NAME>-options.json' under the "
-            "Tabsdata directory; with no NAME, the default profile "
-            "('connection.json' and 'options.json'). Default: the profile set "
-            "with 'tdk set --profile', else the default profile."
+            "Profile whose login and pinned project and collection this "
+            "command uses; with no NAME, the default profile. Default: the "
+            "profile set with 'tdk set --profile', else the default profile."
         ),
     )
 
@@ -447,6 +442,7 @@ def cli(ctx: click.Context, no_prompt: bool):
             "no_prompt_flag": no_prompt,
             "env_credential": credential,
             "cli_options": {OPTION_PINS: {}},
+            "settings": {},
             "prompt_setting": True,
             "no_prompt": no_prompt,
         }
@@ -462,7 +458,12 @@ def cli(ctx: click.Context, no_prompt: bool):
             "tabsdata_directory": DEFAULT_TABSDATA_DIRECTORY,
             "no_prompt_flag": no_prompt,
         }
-        _activate_profile(ctx, read_default_profile(DEFAULT_TABSDATA_DIRECTORY))
+        load_settings(ctx)
+        # 'tdk set --prompt false' is a standing '--no-prompt'; the flag turns
+        # prompting off for a single invocation.
+        ctx.obj["prompt_setting"] = cli_option_enabled(ctx, OPTION_PROMPT)
+        ctx.obj["no_prompt"] = no_prompt or not ctx.obj["prompt_setting"]
+        _activate_profile(ctx, default_profile(ctx))
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to initialize CLI: {e}")

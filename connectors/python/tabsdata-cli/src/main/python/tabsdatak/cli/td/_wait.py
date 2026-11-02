@@ -27,10 +27,10 @@ from tabsdatak.cli.cli_utils import (
     active_profile,
     beautify_time,
     collection_label,
+    default_profile,
     output_format,
     progress,
     progress_console,
-    read_default_profile,
     render,
 )
 from tabsdatak.cli.td.execution_utils import span_projects
@@ -160,9 +160,7 @@ def _resume(ctx: click.Context, argv: list[str]) -> list[str]:
     profile = active_profile(ctx)
     if profile:
         return [*argv, "--profile", profile]
-    if ctx.obj.get("env_credential") is None and read_default_profile(
-        ctx.obj["tabsdata_directory"]
-    ):
+    if default_profile(ctx):
         return [*argv, "--profile"]
     return argv
 

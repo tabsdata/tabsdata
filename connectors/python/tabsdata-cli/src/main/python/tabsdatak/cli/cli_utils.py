@@ -65,18 +65,22 @@ def make_console(**kwargs) -> "Console":
 
 CONNECTION_FILE = "connection.json"
 OPTIONS_FILE = "options.json"
-# A profile keeps its own ``<NAME>-connection.json`` and ``<NAME>-options.json``;
-# the bare files are the default profile. ``tdk set --profile`` records the
-# profile used when a command is given no ``--profile`` here, as
-# ``{"profile": NAME}``.
-PROFILE_FILE = "profile.json"
+# A profile keeps its own ``<NAME>-connection.json`` and ``<NAME>-options.json``
+# (its pins); the bare files are the default profile. Every other setting is
+# shared by all profiles in ``tdk-settings.json``, the profile ``tdk set
+# --profile`` records among them.
+SETTINGS_FILE = "tdk-settings.json"
 PROFILE_KEY = "profile"
+# 2.2 kept the settings in each profile's options file and the profile in
+# ``profile.json``; the first run without ``tdk-settings.json`` carries over
+# the ones its commands used.
+LEGACY_PROFILE_FILE = "profile.json"
 
 DEFAULT_TABSDATA_DIRECTORY = tabsdata_directory()
 
-# Keys of the persisted settings in ``options.json``, all managed by ``tdk set``
-# / ``tdk unset``. On/off settings store ENABLED / DISABLED; ``pins`` nests the
-# pinned project and collection.
+# Keys of the persisted settings, all managed by ``tdk set`` / ``tdk unset``.
+# On/off settings store ENABLED / DISABLED; ``pins``, the one key of a profile's
+# options file, nests the pinned project and collection.
 OPTION_HINTS = "hints"
 OPTION_PROMPT = "prompt"
 OPTION_TRIGGER_WAIT = "trigger_wait"
@@ -88,6 +92,8 @@ DISABLED = "disabled"
 
 PIN_PROJECT = "project"
 PIN_COLLECTION = "collection"
+
+_SHARED_SETTINGS = (OPTION_HINTS, OPTION_PROMPT, OPTION_TRIGGER_WAIT, OPTION_SERVER)
 
 # Mirrors what tabsdatak.sdk._apiserver.process_url() fills in when a
 # user-typed server URL carries no protocol or no port; defined here so the
@@ -1240,26 +1246,10 @@ def profile_file_name(profile: str | None, file_name: str) -> str:
     return file_name if profile is None else f"{profile}-{file_name}"
 
 
-def read_default_profile(tabsdata_directory: str) -> str | None:
-    try:
-        with open(os.path.join(tabsdata_directory, PROFILE_FILE)) as f:
-            return json.load(f).get(PROFILE_KEY) or None
-    except FileNotFoundError:
-        return None
-
-
-def store_default_profile(tabsdata_directory: str, profile: str) -> None:
-    with open(os.path.join(tabsdata_directory, PROFILE_FILE), "w") as f:
-        json.dump({PROFILE_KEY: profile}, f)
-
-
-def clear_default_profile(tabsdata_directory: str) -> bool:
-    """Drop the default profile; whether there was one to drop."""
-    try:
-        os.remove(os.path.join(tabsdata_directory, PROFILE_FILE))
-    except FileNotFoundError:
-        return False
-    return True
+def default_profile(ctx: click.Context) -> str | None:
+    """The profile commands run under when given no ``--profile``, as set by
+    ``tdk set --profile``; ``None`` for the default one."""
+    return get_current_cli_option(ctx, PROFILE_KEY) or None
 
 
 def set_profile(ctx: click.Context, profile: str | None) -> None:
@@ -1288,15 +1278,62 @@ def get_credentials_file_path(ctx: click.Context) -> str:
     return ctx.obj["connection_file"]
 
 
+def load_settings(ctx: click.Context):
+    """Load the settings every profile shares."""
+    directory = ctx.obj["tabsdata_directory"]
+    path = os.path.join(directory, SETTINGS_FILE)
+    try:
+        with open(path) as f:
+            settings = json.load(f)
+    except FileNotFoundError:
+        settings = _legacy_settings(directory)
+        if settings:
+            _store_json(path, settings, "settings")
+    ctx.obj["settings"] = settings if isinstance(settings, dict) else {}
+
+
+def _legacy_settings(directory: str) -> dict:
+    profile = _read_json(os.path.join(directory, LEGACY_PROFILE_FILE)).get(PROFILE_KEY)
+    profile = profile if isinstance(profile, str) and profile else None
+    options = _read_json(
+        os.path.join(directory, profile_file_name(profile, OPTIONS_FILE))
+    )
+    settings = {key: options[key] for key in _SHARED_SETTINGS if key in options}
+    if profile is not None:
+        settings[PROFILE_KEY] = profile
+    return settings
+
+
+def _read_json(path: str) -> dict:
+    try:
+        with open(path) as f:
+            content = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return content if isinstance(content, dict) else {}
+
+
+def store_settings(ctx: click.Context):
+    _store_json(
+        os.path.join(ctx.obj["tabsdata_directory"], SETTINGS_FILE),
+        _settings(ctx),
+        "settings",
+    )
+
+
+def _settings(ctx: click.Context) -> dict:
+    return ctx.obj.setdefault("settings", {})
+
+
 def load_cli_options(ctx: click.Context):
+    """Load the pins of the active profile."""
     try:
         with open(get_cli_options_file_path(ctx)) as f:
             cli_options = json.load(f)
     except FileNotFoundError:
         cli_options = {}
-    pins = cli_options.get(OPTION_PINS)
-    cli_options[OPTION_PINS] = pins if isinstance(pins, dict) else {}
-    ctx.obj["cli_options"] = cli_options
+    pins = cli_options.get(OPTION_PINS) if isinstance(cli_options, dict) else None
+    ctx.obj["cli_options"] = {OPTION_PINS: pins if isinstance(pins, dict) else {}}
 
 
 def get_cli_options_file_path(ctx: click.Context) -> str:
@@ -1307,34 +1344,31 @@ def get_cli_options_file_path(ctx: click.Context) -> str:
 
 
 def store_cli_options(ctx: click.Context):
+    _store_json(get_cli_options_file_path(ctx), ctx.obj["cli_options"], "CLI options")
+
+
+def _store_json(path: str, content: dict, what: str):
     try:
-        with open(get_cli_options_file_path(ctx), "w") as f:
-            json.dump(ctx.obj["cli_options"], f)
+        with open(path, "w") as f:
+            json.dump(content, f)
     except Exception as e:
-        click.echo(f"Failed to store CLI options: {e}", err=True)
+        click.echo(f"Failed to store {what}: {e}", err=True)
         click.echo("This will not affect the rest of the command execution.", err=True)
 
 
 def get_current_cli_option(ctx: click.Context, option: str, default=None) -> str | None:
-    """
-    Get the current CLI option from the context.
-    """
-    cli_option = ctx.obj["cli_options"].get(option, default)
-    return cli_option
+    """A setting shared by every profile (persist with
+    :func:`store_settings`)."""
+    return _settings(ctx).get(option, default)
 
 
 def set_current_cli_option(ctx: click.Context, option: str, value: str):
-    """
-    Set the current CLI option in the context.
-    """
-    ctx.obj["cli_options"][option] = value
+    _settings(ctx)[option] = value
 
 
 def clear_current_cli_option(ctx: click.Context, option: str):
-    """
-    Remove a CLI option, restoring its default.
-    """
-    ctx.obj["cli_options"].pop(option, None)
+    """Remove a setting, restoring its default."""
+    _settings(ctx).pop(option, None)
 
 
 def cli_option_enabled(ctx: click.Context, option: str, default: bool = True) -> bool:
@@ -1348,7 +1382,7 @@ def cli_option_enabled(ctx: click.Context, option: str, default: bool = True) ->
 
 def set_cli_option_enabled(ctx: click.Context, option: str, enabled: bool):
     """Turn an on/off option on or off (persist with
-    :func:`store_cli_options`)."""
+    :func:`store_settings`)."""
     set_current_cli_option(ctx, option, ENABLED if enabled else DISABLED)
 
 
@@ -1381,7 +1415,7 @@ def login_server(ctx: click.Context) -> str | None:
 
 
 def get_pins(ctx: click.Context) -> dict:
-    """The pinned objects, as stored in the CLI options."""
+    """The pinned objects of the active profile, as stored in its options."""
     return ctx.obj["cli_options"].setdefault(OPTION_PINS, {})
 
 

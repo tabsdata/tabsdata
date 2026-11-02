@@ -116,7 +116,7 @@ def test_trigger_returns_the_plan_without_waiting(clock, tmp_path):
 
 
 def _trigger_wait(tmp_path, stored: str) -> None:
-    (tmp_path / "options.json").write_text(json.dumps({"trigger_wait": stored}))
+    (tmp_path / "tdk-settings.json").write_text(json.dumps({"trigger_wait": stored}))
 
 
 def test_no_wait_overrides_the_default_trigger_wait(clock, tmp_path):

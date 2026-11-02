@@ -1508,8 +1508,9 @@ def test_fn_get_keeps_the_id_of_a_parent_the_project_no_longer_lists(tmp_path):
 # ``settings`` -- kept out of the matrix.
 #
 # It is fully offline: it renders the persisted settings (loaded from
-# ``options.json`` in the tabsdata dir) and never calls the server. So instead
-# of a mock client we seed the settings file in the patched tabsdata dir.
+# ``tdk-settings.json`` and ``options.json`` in the tabsdata dir) and never
+# calls the server. So instead of a mock client we seed the pins file in the
+# patched tabsdata dir.
 # ---------------------------------------------------------------------------
 
 

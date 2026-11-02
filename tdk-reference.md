@@ -97,12 +97,11 @@ Applied where shown in each command. Every value option takes an argument.
                                   means no limit.
                                   These three come with every command that
                                   shows a table and apply only to `-o table`.
-      --profile [NAME]            Profile whose connection and settings the
-                                  command uses (`<NAME>-connection.json`,
-                                  `<NAME>-options.json`); with no NAME, the
-                                  default profile (the bare files). Default: the
-                                  profile from `tdk set --profile`, else the
-                                  bare files. On every command; see Profiles.
+      --profile [NAME]            Profile whose login and pinned project and
+                                  collection the command uses; with no NAME,
+                                  the default profile. Default: the profile
+                                  from `tdk set --profile`, else the default
+                                  profile. On every command; see Profiles.
       --max-result N              Maximum rows a `list` command shows. Default: 100.
                                   0 lists everything. When rows are left over,
                                   the command says so (on stderr under
@@ -659,11 +658,14 @@ permission list   [--user USER] [--proj PROJECT] [-o]
 
 ## `tdk set` / `tdk unset` / `tdk settings`
 
-Persistent CLI settings, stored in `options.json` under the Tabsdata directory
-(`~/.tabsdata`; credentials, profiles and client
-certificates live there too) and applied to every later invocation. `set` gives a setting a
-value, `unset` drops what was stored so the default applies again, and `settings`
-shows them all. Each takes any combination of its settings in one command.
+Persistent CLI settings, applied to every later invocation. The pinned project
+and collection are per profile: they belong to the profile the command runs
+under, stored in its options file. Every other setting is global, one value for
+all profiles, stored in `tdk-settings.json`. Both live under the Tabsdata
+directory (`~/.tabsdata`; credentials and client certificates live there too).
+`set` gives a setting a value, `unset` drops what was stored so the default
+applies again, and `settings` shows the global ones and the pins of the
+profile. Each takes any combination of its settings in one command.
 
 ```
 set   [--hints true|false] [--prompt true|false] [--trigger-wait true|false]
@@ -673,17 +675,17 @@ settings [-o]                                       # current settings
 ```
 
 `unset --all` is shorthand for every flag but `--profile` at once, leaving every
-setting of the profile at its shipped default.
+global setting and the pins of the profile at their shipped default.
 
-| Setting | What it does |
-|---|---|
-| `--hints true\|false` | Show the hints the CLI adds to errors. Default: true |
-| `--prompt true\|false` | Prompt for a missing value, or fail instead. Default: true |
-| `--trigger-wait true\|false` | Make `fn trigger` wait for its plan when given neither `--wait` nor `--no-wait`. Default: true. A machine run (agent mode) never reads it |
-| `--server SERVER` | Server `tdk login` uses without `--server` |
-| `--proj PROJECT` | Default project of project-scoped commands |
-| `--coll COLLECTION` | Default collection (requires a pinned project) |
-| `--profile NAME` | Profile commands run under when given no `--profile` (see Profiles) |
+| Setting | Scope | What it does |
+|---|---|---|
+| `--hints true\|false` | Global | Show the hints the CLI adds to errors. Default: true |
+| `--prompt true\|false` | Global | Prompt for a missing value, or fail instead. Default: true |
+| `--trigger-wait true\|false` | Global | Make `fn trigger` wait for its plan when given neither `--wait` nor `--no-wait`. Default: true. A machine run (agent mode) never reads it |
+| `--server SERVER` | Global | Server `tdk login` uses without `--server` |
+| `--proj PROJECT` | Per profile | Default project of project-scoped commands |
+| `--coll COLLECTION` | Per profile | Default collection (requires a pinned project) |
+| `--profile NAME` | Global | Profile commands run under when given no `--profile` (see Profiles) |
 
 `set --prompt false` is the standing form of the root `--no-prompt` flag: with
 prompting off no command prompts, and one missing a required value fails, naming
@@ -699,17 +701,23 @@ port `2457` — so `set --server 127.0.0.1` means `http://127.0.0.1:2457`.
 
 ### Profiles
 
-A profile is a separate login and settings store: `<NAME>-connection.json` and
+A profile is a separate login and set of pins: `<NAME>-connection.json` and
 `<NAME>-options.json` next to the bare `connection.json` / `options.json`, which
-are the default profile. Every command takes `--profile NAME` to run under a
+are the default profile. The other settings are global and apply under every
+profile. Every command takes `--profile NAME` to run under a
 profile for that invocation, or a bare `--profile` (or `--profile=`) to run
 under the default profile whatever `set --profile` recorded; a bare `--profile`
 must not be followed by a positional argument, which it would take as NAME.
 `login --profile NAME` is how a profile's connection comes to exist. `set
---profile NAME` records NAME in `profile.json` as the profile commands use when
-given no `--profile`, and stores the other settings of the same command in it;
-`unset --profile` removes `profile.json`, so the bare files apply again.
+--profile NAME` records NAME in `tdk-settings.json` as the profile commands use
+when given no `--profile`, and a `--proj` or `--coll` of the same command is
+pinned in it; `unset --profile` drops it, so the default profile applies again.
 `settings` names the profile it reports on.
+
+2.2 kept every setting in each profile's options file and the recorded profile
+in `profile.json`. The first command run without `tdk-settings.json` carries
+over the recorded profile and the settings of that profile's options file;
+`profile.json` and the old keys of the options files are then ignored.
 
 ## `tdk auth`
 

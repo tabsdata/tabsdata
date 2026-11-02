@@ -8,7 +8,7 @@
 ``login`` / ``shell`` are excluded: they drive real network auth and an
 interactive prompt loop respectively. Same mock-client + tmp-dir seam as the
 render / mutating harnesses; the settings commands are fully offline (they only
-read/write ``options.json`` in the tabsdata dir).
+read/write ``tdk-settings.json`` and ``options.json`` in the tabsdata dir).
 """
 
 from __future__ import annotations
@@ -42,10 +42,14 @@ def _invoke(argv, *, client, tmp_path):
 
 
 def _saved(tmp_path) -> dict:
+    return json.loads((tmp_path / "tdk-settings.json").read_text())
+
+
+def _pins(tmp_path) -> dict:
     return json.loads((tmp_path / "options.json").read_text())
 
 
-# --- set/unset --hints/--prompt: persist the values to options.json ---------
+# --- set/unset --hints/--prompt: persist the values to tdk-settings.json ----
 
 
 @pytest.mark.parametrize(
@@ -98,10 +102,8 @@ def test_several_settings_in_one_command(tmp_path):
         tmp_path=tmp_path,
     )
     assert result.exit_code == 0, result.output
-    saved = _saved(tmp_path)
-    assert saved["hints"] == "disabled"
-    assert saved["server"] == "http://srv:2457"
-    assert saved["pins"]["project"] == "sales"
+    assert _saved(tmp_path) == {"hints": "disabled", "server": "http://srv:2457"}
+    assert _pins(tmp_path) == {"pins": {"project": "sales"}}
 
 
 def test_unset_all_leaves_every_setting_at_its_default(tmp_path):
@@ -125,7 +127,8 @@ def test_unset_all_leaves_every_setting_at_its_default(tmp_path):
     result = _invoke(["unset", "--all"], client=_client(), tmp_path=tmp_path)
     assert result.exit_code == 0, result.output
     # Nothing stored but the (emptied) pins: every setting is back to default.
-    assert _saved(tmp_path) == {"pins": {"project": None, "collection": None}}
+    assert _saved(tmp_path) == {}
+    assert _pins(tmp_path) == {"pins": {"project": None, "collection": None}}
 
 
 @pytest.mark.parametrize(
@@ -138,6 +141,7 @@ def test_no_setting_is_a_usage_error(command, message, tmp_path):
     assert result.exit_code != 0
     assert message in result.output
     assert not (tmp_path / "options.json").exists()
+    assert not (tmp_path / "tdk-settings.json").exists()
 
 
 # --- set --prompt false: prompting is off for every later command -----------
@@ -248,7 +252,7 @@ def test_logout_calls_sdk_and_clears_local_state(tmp_path):
     client.logout.assert_called_once_with()
     # The stored credentials are removed and the pins are cleared.
     assert not (tmp_path / "connection.json").exists()
-    assert _saved(tmp_path)["pins"] == {}
+    assert _pins(tmp_path)["pins"] == {}
 
 
 def test_logout_ends_the_local_login_when_the_server_cannot_end_its_session(tmp_path):
