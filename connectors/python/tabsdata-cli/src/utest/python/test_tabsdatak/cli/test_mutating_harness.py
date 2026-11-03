@@ -489,7 +489,7 @@ def test_delete_requires_confirmation(case: MutCase, tmp_path):
     argv[argv.index("--confirm") + 1] = "not-the-word"
     client = _client()
     result = _invoke(argv, client=client, tmp_path=tmp_path)
-    assert result.exit_code != 0
+    assert result.exit_code == 2
     assert getattr(client, case.method).call_count == 0
     assert "not confirmed" in result.output.lower()
 

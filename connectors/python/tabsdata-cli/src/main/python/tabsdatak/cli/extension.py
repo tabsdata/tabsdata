@@ -39,8 +39,14 @@ from tabsdatak.cli._examples import (
 )
 from tabsdatak.cli._machine import Machine, running
 from tabsdatak.cli._registry import cli_command, cli_extension
-from tabsdatak.cli._unattended import UNATTENDED_ENV, unattended_cause
+from tabsdatak.cli._unattended import (
+    UNATTENDED_ENV,
+    UNATTENDED_MARKERS,
+    coding_agent,
+    unattended_cause,
+)
 from tabsdatak.cli.cli_utils import (
+    active_profile,
     command_failure,
     configured_server,
     format_option,
@@ -57,6 +63,7 @@ from tabsdatak.cli.cli_utils import (
     render_deleted,
     render_done,
     render_list,
+    require_word,
     take,
     verify_login_or_prompt,
     version_skew,
@@ -97,12 +104,15 @@ __all__ = [
     "TdkError",
     "TdkException",
     "UNATTENDED_ENV",
+    "UNATTENDED_MARKERS",
+    "active_profile",
     "capability",
     "capability_of",
     "checks_view",
     "classify",
     "cli_command",
     "cli_extension",
+    "coding_agent",
     "command_failure",
     "configured_server",
     "connector_kind",
@@ -130,6 +140,7 @@ __all__ = [
     "render_deleted",
     "render_done",
     "render_list",
+    "require_word",
     "root_command",
     "running",
     "snippet_metadata",

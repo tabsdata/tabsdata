@@ -10,7 +10,11 @@ import sys
 
 import pytest
 
-from tabsdatak.cli._unattended import unattended_cause
+from tabsdatak.cli._unattended import (
+    UNATTENDED_MARKERS,
+    coding_agent,
+    unattended_cause,
+)
 
 _OS_ONLY = (
     "import sys\n"
@@ -32,34 +36,53 @@ _OS_ONLY = (
         ({"CLAUDECODE": "1"}, "CLAUDECODE is set"),
         ({"GEMINI_CLI": "1"}, "GEMINI_CLI is set"),
         ({"CODEX_THREAD_ID": "t-1"}, "CODEX_THREAD_ID is set"),
+        ({"CURSOR_AGENT": "1"}, "CURSOR_AGENT is set"),
+        ({"VSCODE_AGENT": "1"}, "VSCODE_AGENT is set"),
+        ({"OPENCODE": "1"}, "OPENCODE is set"),
         ({"CLAUDECODE": " "}, None),
+        ({"CLAUDECODE": "0"}, None),
+        ({"CLAUDECODE": "False"}, None),
+        ({"CLAUDECODE": "false", "OPENCODE": "1"}, "OPENCODE is set"),
     ],
 )
 def test_unattended_cause_reads_the_environment(env, cause):
     assert unattended_cause(env) == cause
 
 
-def test_an_unattended_session_never_waits_on_open_stdin(tmp_path):
+@pytest.mark.parametrize(
+    "env, agent",
+    [
+        ({}, None),
+        ({"TDK_AGENT": "1"}, None),
+        ({"TDK_AGENT": "1", "CURSOR_AGENT": "1"}, "CURSOR_AGENT"),
+        ({"VSCODE_AGENT": "1"}, "VSCODE_AGENT"),
+        ({"CLAUDECODE": " "}, None),
+    ],
+)
+def test_coding_agent_names_only_a_host_marker(env, agent):
+    assert coding_agent(env) == agent
+
+
+def _user_env(home, **extra) -> dict[str, str]:
     env = {
         key: value
         for key, value in os.environ.items()
         if not key.startswith("TDK_")
         and key
-        not in (
-            "GEMINI_CLI",
-            "CODEX_THREAD_ID",
-            "FORCE_COLOR",
-            "PY_COLORS",
-            "GITHUB_ACTIONS",
-        )
+        not in (*UNATTENDED_MARKERS, "FORCE_COLOR", "PY_COLORS", "GITHUB_ACTIONS")
     }
     env.update({
-        "HOME": str(tmp_path),
-        "USERPROFILE": str(tmp_path),
-        "CLAUDECODE": "1",
+        "HOME": str(home),
+        "USERPROFILE": str(home),
         "COLUMNS": "250",
         "PYTHONIOENCODING": "utf-8",
+        **extra,
     })
+    return env
+
+
+def test_an_unattended_session_never_waits_on_open_stdin(tmp_path):
+    env = _user_env(tmp_path, CLAUDECODE="1")
     process = subprocess.Popen(
         [sys.executable, "-c", _OS_ONLY, "login"],
         stdin=subprocess.PIPE,
@@ -80,3 +103,19 @@ def test_an_unattended_session_never_waits_on_open_stdin(tmp_path):
     assert "unattended session (CLAUDECODE is set)" in stderr
     assert "Missing required value: --server." in stderr
     assert "Pass --server." in stderr
+
+
+def test_a_closed_stdin_names_the_flag_instead_of_aborting(tmp_path):
+    done = subprocess.run(
+        [sys.executable, "-c", _OS_ONLY, "login"],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        env=_user_env(tmp_path),
+        encoding="utf-8",
+        timeout=60,
+    )
+    assert done.returncode == 2, done.stderr
+    assert "Missing required value: --server." in done.stderr
+    assert "Standard input is not a terminal" in done.stderr
+    assert "Pass --server." in done.stderr
+    assert "Aborted" not in done.stderr

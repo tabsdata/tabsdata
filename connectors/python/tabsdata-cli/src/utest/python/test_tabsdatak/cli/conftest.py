@@ -8,6 +8,8 @@ import logging
 
 import pytest
 
+from tabsdatak.cli._unattended import UNATTENDED_MARKERS
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -22,9 +24,7 @@ def _neutralize_tdk_env(monkeypatch):
         "TDK_SERVER",
         "TDK_PROJECT",
         "TDK_AGENT",
-        "CLAUDECODE",
-        "GEMINI_CLI",
-        "CODEX_THREAD_ID",
+        *UNATTENDED_MARKERS,
     ):
         monkeypatch.delenv(var, raising=False)
 

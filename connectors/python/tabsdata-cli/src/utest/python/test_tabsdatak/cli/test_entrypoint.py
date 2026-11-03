@@ -10,6 +10,7 @@ import sys
 from unittest.mock import patch
 
 from tabsdatak.cli import main
+from tabsdatak.cli._unattended import UNATTENDED_MARKERS
 from tabsdatak.common._compatibility import PackageVersionError
 
 
@@ -60,9 +61,7 @@ def _python_dash_m(unattended: bool, *argv):
         if key
         not in (
             "TDK_AGENT",
-            "CLAUDECODE",
-            "GEMINI_CLI",
-            "CODEX_THREAD_ID",
+            *UNATTENDED_MARKERS,
             "FORCE_COLOR",
             "PY_COLORS",
             "GITHUB_ACTIONS",

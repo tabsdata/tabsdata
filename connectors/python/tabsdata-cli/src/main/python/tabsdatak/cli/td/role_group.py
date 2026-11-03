@@ -16,6 +16,7 @@ from tabsdatak.cli.cli_utils import (
     max_result_option,
     present,
     render,
+    require_word,
     set_pin,
     store_cli_options,
     take,
@@ -200,13 +201,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
     )
     click.echo(f"Deleting role: {name}")
     click.echo("-" * 10)
-    confirm = confirm or logical_prompt(
-        ctx, "Please type 'delete' to confirm deletion", option="--confirm"
-    )
-    if confirm != "delete":
-        raise click.ClickException(
-            "Deletion not confirmed. The confirmation word is 'delete'."
-        )
+    require_word(ctx, confirm, "delete", "Please type 'delete' to confirm deletion")
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         server.delete_role(name)

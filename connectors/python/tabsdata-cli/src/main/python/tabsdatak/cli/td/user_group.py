@@ -20,6 +20,7 @@ from tabsdatak.cli.cli_utils import (
     render_deleted,
     render_entity,
     render_list,
+    require_word,
     take,
     verify_login_or_prompt,
     view_options,
@@ -103,13 +104,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
     name = name or logical_prompt(ctx, "Name of the user to delete", option="--name")
     progress(ctx, f"Deleting user: {name}")
     progress(ctx, "-" * 10)
-    confirm = confirm or logical_prompt(
-        ctx, "Please type 'delete' to confirm deletion", option="--confirm delete"
-    )
-    if confirm != "delete":
-        raise click.ClickException(
-            "Deletion not confirmed. The confirmation word is 'delete'."
-        )
+    require_word(ctx, confirm, "delete", "Please type 'delete' to confirm deletion")
     try:
         ctx.obj["tabsdataserver"].delete_user(name)
         render_deleted(ctx, kind="user", name=name, message="User deleted successfully")

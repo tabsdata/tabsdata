@@ -17,6 +17,7 @@ import pytest
 from click.testing import CliRunner
 
 import tabsdatak.cli as cli_package
+from tabsdatak.cli._unattended import UNATTENDED_MARKERS
 from tabsdatak.cli.td.cli import cli
 from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
@@ -112,7 +113,7 @@ def test_named_options_are_flags_of_the_command():
 def test_a_run_that_may_not_prompt_names_the_missing_option(
     tmp_path, monkeypatch, argv, env
 ):
-    for name in ("TDK_AGENT", "CLAUDECODE", "GEMINI_CLI", "CODEX_THREAD_ID"):
+    for name in ("TDK_AGENT", *UNATTENDED_MARKERS):
         monkeypatch.delenv(name, raising=False)
     for name, value in env.items():
         monkeypatch.setenv(name, value)

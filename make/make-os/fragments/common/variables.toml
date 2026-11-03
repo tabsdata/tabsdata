@@ -30,7 +30,10 @@ script = [
         claude = get_env CLAUDECODE
         gemini = get_env GEMINI_CLI
         codex = get_env CODEX_THREAD_ID
-        agent = trim "${claude}${gemini}${codex}"
+        cursor = get_env CURSOR_AGENT
+        vscode = get_env VSCODE_AGENT
+        opencode = get_env OPENCODE
+        agent = trim "${claude}${gemini}${codex}${cursor}${vscode}${opencode}"
         in_agent = is_empty ${agent}
         in_agent = not ${in_agent}
 

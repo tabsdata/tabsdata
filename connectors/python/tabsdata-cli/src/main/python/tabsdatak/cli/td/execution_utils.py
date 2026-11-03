@@ -28,6 +28,7 @@ from tabsdatak.cli.cli_utils import (
     present,
     render,
     render_list,
+    require_word,
     take,
 )
 from tabsdatak.common._tabular import Column, Kind, TableView, show
@@ -732,15 +733,9 @@ def emit_scope_logs(
 
 
 def confirm_cancel(ctx: click.Context, confirm: str, subject: str) -> None:
-    confirm = confirm or logical_prompt(
-        ctx,
-        f"Please type 'cancel' to confirm canceling {subject}",
-        option="--confirm cancel",
+    require_word(
+        ctx, confirm, "cancel", f"Please type 'cancel' to confirm canceling {subject}"
     )
-    if confirm != "cancel":
-        raise click.ClickException(
-            "Cancellation not confirmed. The confirmation word is 'cancel'."
-        )
 
 
 def diagnose_options(fn):

@@ -216,6 +216,18 @@ def _prompting_disabled_message(ctx: click.Context) -> str:
     )
 
 
+def require_word(ctx: click.Context, given: str | None, word: str, prompt: str):
+    """Asks for the confirmation ``word`` unless ``given``, and fails as a
+    usage error, with the flag that supplies it, unless it matches."""
+    given = given or logical_prompt(ctx, prompt, option=f"--confirm {word}")
+    if given != word:
+        raise TdkException(
+            "usage",
+            f"Not confirmed: the confirmation word is '{word}'.",
+            hint=f"Pass --confirm {word}.",
+        )
+
+
 def logical_prompt(
     ctx: click.Context,
     message: str,
@@ -246,8 +258,17 @@ def logical_prompt(
             return prompt_with_escape(
                 message, default=default_value, hide_input=hide_input
             )
-        else:
+        try:
             return click.prompt(message, default=default_value, hide_input=hide_input)
+        except click.Abort:
+            if option is None:
+                raise
+            raise TdkException(
+                "missing_argument",
+                f"Missing required value: {option}. Standard input is not a "
+                "terminal and has no answer for it.",
+                hint=hint or f"Pass {option}.",
+            ) from None
     except (KeyboardInterrupt, EOFError):
         click.echo(err=True)
         raise click.Abort() from None

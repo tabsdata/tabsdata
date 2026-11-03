@@ -30,6 +30,7 @@ from tabsdatak.cli.cli_utils import (
     render_deleted,
     render_entity,
     render_list,
+    require_word,
     resolve_all_projects,
     serialize,
     take,
@@ -268,13 +269,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
     )
     progress(ctx, f"Deleting collection: {name}")
     progress(ctx, "-" * 10)
-    confirm = confirm or logical_prompt(
-        ctx, "Please type 'delete' to confirm deletion", option="--confirm delete"
-    )
-    if confirm != "delete":
-        raise click.ClickException(
-            "Deletion not confirmed. The confirmation word is 'delete'."
-        )
+    require_word(ctx, confirm, "delete", "Please type 'delete' to confirm deletion")
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         server.delete_collection(name)

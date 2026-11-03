@@ -117,7 +117,8 @@ Applied where shown in each command. Every value option takes an argument.
                                   it returned; pass the same filters and order.
       --confirm WORD              Confirm a destructive op without the prompt by
                                   giving its word: `delete`, or `cancel` for
-                                  `plan|trx cancel`.
+                                  `plan|trx cancel`; another word is a usage
+                                  error (exit 2).
   -h, --help                      Show help.
 ```
 
@@ -1017,12 +1018,16 @@ reports which kind of credential is in use. `TDK_PROJECT` is the default
 project, in every mode: `--proj` overrides it, and it overrides the pinned
 project.
 
-### `TDK_AGENT`, `CLAUDECODE`, `GEMINI_CLI`, `CODEX_THREAD_ID`
+### `TDK_AGENT`, `CLAUDECODE`, `GEMINI_CLI`, `CODEX_THREAD_ID`, `CURSOR_AGENT`, `VSCODE_AGENT`, `OPENCODE`
 
 An unattended session never prompts: `TDK_AGENT=1`, or any of the variables
-coding agents set (`CLAUDECODE`, `GEMINI_CLI`, `CODEX_THREAD_ID`), turns
-prompting off as `--no-prompt` does, and a missing value fails naming the
-variable. An installed extension may read the same variables for more.
+coding agents set (`CLAUDECODE`, `GEMINI_CLI`, `CODEX_THREAD_ID`,
+`CURSOR_AGENT`, `VSCODE_AGENT`, `OPENCODE`; set to `0` or `false`, one counts
+as unset), turns prompting off as `--no-prompt` does, and a missing value fails
+naming the variable. An installed extension may read the same variables for
+more. Without any of them, a prompt whose standard input is not a terminal and
+ends without an answer fails the same way (`missing_argument`, exit 2, naming
+the option to pass) instead of aborting.
 
 ### `TDK_TOKEN`
 

@@ -30,6 +30,7 @@ from tabsdatak.cli.cli_utils import (
     logical_prompt,
     max_result_option,
     output_format,
+    require_word,
     present,
     progress,
     proj_option,
@@ -172,13 +173,7 @@ def delete(ctx: click.Context, name: str, coll: str, confirm: str):
     coll, name = _resolve_table(ctx, coll, name)
     progress(ctx, f"Deleting table '{name}' in collection '{coll}'")
     progress(ctx, "-" * 10)
-    confirm = confirm or logical_prompt(
-        ctx, "Please type 'delete' to confirm deletion", option="--confirm delete"
-    )
-    if confirm != "delete":
-        raise click.ClickException(
-            "Deletion not confirmed. The confirmation word is 'delete'."
-        )
+    require_word(ctx, confirm, "delete", "Please type 'delete' to confirm deletion")
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         server.delete_table(coll, name)
