@@ -300,3 +300,20 @@ def test_entry_point_binding_shape():
     from tabsdatak.spi import StreamStageSrc
 
     assert issubclass(CdcStageSrc, StreamStageSrc)
+
+
+def test_a_batch_of_empty_files_leaves_the_cursor_as_it_is(tmp_path):
+    # Its staged files hold no row, so it has no largest key: no cursor is
+    # stored where there was none, and a prior one is kept, not compared
+    # with a missing key.
+    tables = [_write(tmp_path / "a.parquet", []), _write(tmp_path / "b.parquet", [])]
+
+    fresh = FakeCtx(tmp_path / "fresh")
+    out = CdcStageSrcPlugin().process_files(fresh, [tables])
+    assert _read(out[0][0]) == []
+    assert _cursor(fresh) == (None, None)
+
+    resumed = FakeCtx(tmp_path / "resumed", _seed("6", "3"))
+    out = CdcStageSrcPlugin().process_files(resumed, [tables])
+    assert _read(out[0][0]) == []
+    assert _cursor(resumed) == ("6", "3")

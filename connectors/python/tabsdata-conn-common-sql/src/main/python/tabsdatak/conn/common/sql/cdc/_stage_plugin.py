@@ -190,7 +190,9 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
                     cause=e, index=index, reason=str(e)
                 )
 
-            if high_water.height:
+            # A batch whose staged files hold no row has no largest key:
+            # the one row then holds nulls, and the cursor stays as it is.
+            if high_water.height and None not in high_water.row(0):
                 # seg/ord come from decimal128(38,0) columns, so ``row``
                 # hands them back as ``Decimal``. ``max`` compares the
                 # ``(seg, ord)`` tuples lexicographically (``prior`` was
