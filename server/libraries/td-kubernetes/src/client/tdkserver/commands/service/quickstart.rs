@@ -80,7 +80,11 @@ pub struct QuickstartArguments {
         name = "instance",
         required = false,
         display_order = 10,
-        long_help = "Name of the instance to initialize, create and start. Defaults to 'tabsdata'."
+        long_help = "Name of the instance to initialize, create and start. Defaults to \
+                     'tabsdata'. On Windows, a 'kminus' instance is rejected before anything \
+                     is written when the paths of its executables, built from the home \
+                     folder, the user name and the instance name, would exceed the Windows \
+                     path limit."
     )]
     pub instance: Option<String>,
 

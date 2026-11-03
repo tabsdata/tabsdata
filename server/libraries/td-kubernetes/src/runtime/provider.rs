@@ -56,7 +56,9 @@ use crate::runtime::instance::launcher::{provision_database, provision_pyvenvs, 
 use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::ports::apply_ports;
 use crate::runtime::instance::profile::bundle::Axis;
-use crate::runtime::instance::profile::{Profile, parse_from_configmaps, read_family_configmaps};
+use crate::runtime::instance::profile::{
+    Profile, RenderedConfigmap, parse_from_configmaps, read_family_configmaps,
+};
 use crate::runtime::instance::upgrade::guard::{ensure_upgraded, require_supplied_secrets};
 use crate::runtime::instance::verify_instance_version;
 use crate::runtime::provider::axes::{Lifecycle, Locality, Location, Platform, Workload};
@@ -393,6 +395,13 @@ pub trait Provider: Send + Sync {
     }
 
     fn system_values(&self) -> CommandResult<SystemValues>;
+    fn ensure_executable_paths_fit(
+        &self,
+        _pods: &RenderedConfigmap,
+        _system: &SystemValues,
+    ) -> CommandResult {
+        Ok(())
+    }
     fn secret_generators(&self, phase: SecretPhase) -> Vec<Box<dyn SecretGenerator>>;
 
     fn view(&self) -> InstanceView;

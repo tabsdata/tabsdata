@@ -3,6 +3,7 @@
 //
 
 pub mod cluster;
+pub mod executable;
 pub mod instance;
 pub mod postmaster;
 
@@ -78,6 +79,7 @@ use crate::runtime::instance::verify_manifest_compatibility;
 use crate::runtime::provider::kminus::cluster::{
     InstanceFolderGuard, KminusCluster, prconfig_path,
 };
+use crate::runtime::provider::kminus::executable::ensure_windows_executable_paths_fit;
 use crate::runtime::provider::kminus::instance::KminusInstance;
 use crate::runtime::provider::outcome::{ClusterStopOutcome, ImagesOutcome, InstanceStopOutcome};
 use crate::runtime::provider::{
@@ -333,6 +335,23 @@ impl Provider for KminusProvider {
 
     fn system_values(&self) -> CommandResult<SystemValues> {
         system_values_for(&self.folder)
+    }
+
+    fn ensure_executable_paths_fit(
+        &self,
+        pods: &RenderedConfigmap,
+        system: &SystemValues,
+    ) -> CommandResult {
+        if !cfg!(windows) {
+            return Ok(());
+        }
+        ensure_windows_executable_paths_fit(
+            &self.name,
+            &self.cluster.data_path().to_string_lossy(),
+            pods,
+            system,
+        )?;
+        Ok(())
     }
 
     fn secret_generators(&self, phase: SecretPhase) -> Vec<Box<dyn SecretGenerator>> {

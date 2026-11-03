@@ -329,7 +329,10 @@ pub struct InstanceArguments {
         long_help = "Instance name. The instance lives in ~/.tabsdata/instances/<name>. \
                      For the 'kminus' provider it is initialized, created and registered \
                      there; for every other provider it is initialized and registered there, \
-                     while its cluster is managed externally."
+                     while its cluster is managed externally. On Windows, a 'kminus' \
+                     instance's paths grow with the home folder, the user name and this \
+                     name, and 'init' and 'create' reject an instance whose paths would \
+                     exceed the Windows path limit: keep the name short."
     )]
     pub name: Option<String>,
 }

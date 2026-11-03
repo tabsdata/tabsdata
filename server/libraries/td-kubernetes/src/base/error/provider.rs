@@ -253,6 +253,31 @@ pub enum ProviderError {
          `kubectl`) and try again."
     )]
     ClusterNotRunningExternal { provider: String } = 14,
+    #[error(
+        "The instance '{instance}' cannot be created: an executable of the instance would \
+         sit at a path of {length} characters, above the Windows limit of {limit}:\n\n  {path}\n\n\
+         These paths are built from your home folder, your user name and the instance name. \
+         To shorten them, relocate your home folder to a shorter location, use a shorter user \
+         id, or choose a shorter instance name. Do not stretch to the limit: leave headroom, \
+         as later versions may need deeper folder structures."
+    )]
+    ExecutablePathTooLong {
+        instance: String,
+        path: String,
+        length: usize,
+        limit: usize,
+    } = 16,
+    #[error("Could not parse the pod manifest 'pods/{pod}': {cause}.")]
+    PodSpecParseFailed { pod: String, cause: String } = 5130,
+    #[error(
+        "Could not resolve the executable of container '{container}' in pod manifest \
+         'pods/{pod}': '{command}'."
+    )]
+    ExecutablePlaceholderUnresolved {
+        pod: String,
+        container: String,
+        command: String,
+    } = 5131,
 }
 
 #[cfg(test)]

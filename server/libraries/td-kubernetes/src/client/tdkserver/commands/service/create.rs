@@ -52,7 +52,10 @@ pub struct CreateArguments {
         name = "instance",
         required = false,
         display_order = 10,
-        long_help = "Name of the instance to create. Defaults to 'tabsdata'."
+        long_help = "Name of the instance to create. Defaults to 'tabsdata'. On Windows, a \
+                     'kminus' instance is rejected before anything is created when the paths \
+                     of its executables, built from the home folder, the user name and the \
+                     instance name, would exceed the Windows path limit."
     )]
     pub instance: Option<String>,
 
@@ -159,6 +162,9 @@ pub async fn create_instance(
     )
     .await?;
 
+    let mut system = provider.system_values()?;
+    provider.ensure_executable_paths_fit(&profile.pods, &system)?;
+
     if settings.provider != ClusterProvider::Kminus {
         let context = provider.kube_context().await?;
         ensure_cluster_reachable(context.client()).await?;
@@ -185,7 +191,6 @@ pub async fn create_instance(
     settings.ports = assigned.clone();
     settings.save()?;
 
-    let mut system = provider.system_values()?;
     let mut vault = Vault::of(&settings.name)?;
     if settings.provider == ClusterProvider::Kminus {
         vault.provision(&profile)?;

@@ -53,7 +53,10 @@ pub struct InitArguments {
         required = false,
         display_order = 10,
         long_help = "Name of the instance whose editable input config folder is produced. \
-                     Defaults to 'tabsdata'."
+                     Defaults to 'tabsdata'. On Windows, a 'kminus' instance is rejected \
+                     before anything is written when the paths of its executables, built \
+                     from the home folder, the user name and the instance name, would exceed \
+                     the Windows path limit."
     )]
     pub instance: Option<String>,
 
@@ -220,6 +223,11 @@ pub async fn init_instance(
         None,
     )
     .await?;
+
+    if provider == ClusterProvider::Kminus {
+        let system = built.system_values()?;
+        built.ensure_executable_paths_fit(&profile.pods, &system)?;
+    }
 
     if details.value {
         if provider == ClusterProvider::Kminus {

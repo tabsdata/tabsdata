@@ -235,11 +235,12 @@ impl KminusCluster {
         self.staging_path().join(FOLDER_PROFILE)
     }
 
+    pub fn data_path(&self) -> PathBuf {
+        self.path.join(KM_DATA_FOLDER)
+    }
+
     pub fn pids_path(&self) -> PathBuf {
-        self.path
-            .join(KM_DATA_FOLDER)
-            .join(KM_BINARY)
-            .join(KM_PIDS_FOLDER)
+        self.data_path().join(KM_BINARY).join(KM_PIDS_FOLDER)
     }
 
     fn warn_on_log_count(&self) {
