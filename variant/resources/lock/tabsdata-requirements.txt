@@ -113,7 +113,7 @@ packaging==26.3
 pandas==3.1.0
 pg8000==1.31.6
 pillow==13.0.0
-pip==26.2.2
+pip==26.3
 pip-tools==7.6.2
 platformdirs==4.14.3
 polars==2.1.0

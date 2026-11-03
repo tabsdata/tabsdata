@@ -130,7 +130,7 @@ parsedatetime==2.6
 pathspec==1.1.1
 pdoc==16.0.0
 pillow==13.0.0
-pip==26.2.2
+pip==26.3
 pip-api==0.0.35
 pip-audit==2.10.1
 pip-requirements-parser==32.0.1
@@ -169,7 +169,7 @@ pytest-reporter-html1==0.9.5
 pytest-timeout==2.4.0
 pytest-xdist==3.8.0
 python-dateutil==2.9.0.post0
-python-discovery==1.9.0
+python-discovery==1.9.1
 python-dotenv==1.2.4
 python-on-whales==0.81.0
 python-slugify==9.1.3
