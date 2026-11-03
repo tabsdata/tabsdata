@@ -122,6 +122,13 @@ double-quote convention to embed a literal quote."""
 Db2TableNamesSpec: TypeAlias = list[Db2TableNameSpec]
 """A list of Db2 table names (see `Db2TableNameSpec`)."""
 
+Db2CdcTableNamesSpec: TypeAlias = Annotated[
+    list[Db2TableNameSpec], _validation.DB2_DISTINCT_TABLES_VALIDATION
+]
+"""The tables a Db2 CDC stream tracks (see `Db2TableNameSpec`), each
+at most once: names that differ only in quoting, or in the case of an
+unquoted part (upper-cased, as Db2 folds them), are the same table."""
+
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 """Write disposition when the target table exists: `"append"` adds
 rows; `"replace"` truncates before insert."""
@@ -508,7 +515,7 @@ class Db2CdcStreamSrc(StreamSrc):
     declare a `ctx` parameter.
 
     Args:
-        tables: Qualified `cd_schema.cd_table` CD table names.
+        tables: Qualified `cd_schema.cd_table` CD table names, each listed once.
         start_from: Where to begin -- `"full"`, `"head"` (replay each
             tracked CD table from the origin), `"tail"` (each table's
             current watermark), a `CommitSeqPosition`, a
@@ -547,7 +554,7 @@ class Db2CdcStreamSrc(StreamSrc):
     """
 
     # devguide-ref: CDC cursor / resume (start_from, offset persistence)
-    tables: list[Db2TableNameSpec]
+    tables: Db2CdcTableNamesSpec
     start_from: Db2CdcStartFromSpec
     columns_format: CdcColumnsFormatSpec = "columns"
     flatten_columns: bool = True

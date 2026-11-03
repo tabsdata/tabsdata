@@ -12,6 +12,7 @@ them."""
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Annotated, Any, TypeAlias
 
 from pydantic import AfterValidator, model_validator
@@ -332,7 +333,7 @@ def unfqn(
         parts = list(value.split(sep))
     else:
         assert c is not None
-        parts = _split_quoted(value, sep, q, c, esc)
+        parts = [part for part, _ in _split_quoted(value, sep, q, c, esc)]
 
     if total_parts is not None:
         if len(parts) > total_parts:
@@ -350,15 +351,16 @@ def _split_quoted(
     q: str,
     c: str,
     esc: str | None,
-) -> list[str | None]:
-    """Walk ``value`` char by char in per-part-quote mode.
+) -> list[tuple[str, bool]]:
+    """Walk ``value`` char by char in per-part-quote mode, pairing each
+    part with whether it was quoted.
 
     ``q`` is the opening delimiter and ``c`` the closing one. For
     symmetric quoting (the common case) ``q == c``; for asymmetric
     quoting (e.g. MSSQL ``[...]``) ``q != c``.
     """
     n = len(value)
-    parts: list[str | None] = []
+    parts: list[tuple[str, bool]] = []
     i = 0
 
     while True:
@@ -383,7 +385,7 @@ def _split_quoted(
                 raise ValueError(
                     f"unfqn: unterminated quoted identifier in FQN: {value!r}"
                 )
-            parts.append("".join(buf))
+            parts.append(("".join(buf), True))
         else:
             # Bare part: read until next separator.
             j = i
@@ -398,7 +400,7 @@ def _split_quoted(
                 raise ValueError(
                     f"unfqn: empty element at position {i} in FQN: {value!r}"
                 )
-            parts.append(value[i:j])
+            parts.append((value[i:j], False))
             i = j
 
         if i >= n:
@@ -487,6 +489,59 @@ def name_validate(
             },
         ),
     )
+
+
+def distinct_names_validate(
+    fqn_def: FqnDef,
+    fold: Callable[[str], str] = str,
+) -> AfterValidator:
+    """Build the validator rejecting a list of FQN-shaped names that names
+    the same object twice (``CONN_37``).
+
+    Two names are the same when their parts are: quoting is dropped, and
+    each unquoted part goes through ``fold``, the case folding the target
+    system applies to unquoted identifiers. An unqualified name is never
+    the same as a qualified one, since the level it defaults to is only
+    known to the system.
+
+    Args:
+        fqn_def: the FQN syntax the names are written in.
+        fold: the folding of an unquoted part; unchanged by default.
+    """
+
+    def identity(value: str) -> tuple[str, ...]:
+        return tuple(
+            part if quoted else fold(part)
+            for part, quoted in marked_parts(value, fqn_def)
+        )
+
+    def validate(values: list[str]) -> list[str]:
+        seen: dict[tuple[str, ...], int] = {}
+        for index, value in enumerate(values):
+            first = seen.setdefault(identity(value), index)
+            if first != index:
+                raise ConstraintError(
+                    ConnErrorCode.CONN_37, value=value, first=values[first]
+                )
+        return values
+
+    return AfterValidator(validate)
+
+
+def marked_parts(value: str, spec: FqnDef) -> list[tuple[str, bool]]:
+    """Split a fully-qualified-name as :func:`unfqn` does, pairing each
+    part with whether it was quoted. Under ``outer_only`` every part is
+    quoted.
+
+    Raises:
+        ValueError: ``value`` is not a valid FQN in ``spec``.
+    """
+    if spec.quote is None or spec.outer_only:
+        return [(part, spec.outer_only) for part in unfqn(value, spec)]
+    if not value:
+        raise ValueError("unfqn: value must be non-empty")
+    close = spec.close_quote if spec.close_quote is not None else spec.quote
+    return _split_quoted(value, spec.separator, spec.quote, close, spec.escape)
 
 
 # --- FQN splitting helpers -------------------------------------------

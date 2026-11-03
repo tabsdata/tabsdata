@@ -431,3 +431,23 @@ def test_postgres_conn_rejects_missing_credentials(cls):
     with pytest.raises(ConnInitException) as ei:
         cls(uri="postgresql://h:5432/d")  # type: ignore[call-arg]
     assert ei.value.api_error is PostgresErrorCode.POSTGRES_1
+
+
+@pytest.mark.parametrize(
+    "tables",
+    [
+        ["public.users", "public.users"],
+        ["public.users", "PUBLIC.Users"],
+        ["public.users", '"public"."users"'],
+    ],
+    ids=["same", "unquoted-case", "quoted"],
+)
+def test_postgres_cdc_stream_src_rejects_a_table_listed_twice(tables):
+    with pytest.raises(ConnInitException, match="CONN-37") as ei:
+        _cdc_stream_src(tables=tables)
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_11
+
+
+def test_postgres_cdc_stream_src_keeps_a_quoted_name_in_another_case():
+    src = _cdc_stream_src(tables=["public.users", 'public."Users"'])
+    assert src.tables == ["public.users", 'public."Users"']

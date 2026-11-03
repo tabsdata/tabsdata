@@ -8,7 +8,11 @@ from __future__ import annotations
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._validation import FqnDef, name_validate
+from tabsdatak.conn.common._validation import (
+    FqnDef,
+    distinct_names_validate,
+    name_validate,
+)
 from tabsdatak.conn.db2.error import Db2ErrorCode
 
 # --- URI -------------------------------------------------------------
@@ -31,3 +35,5 @@ _DB2_FQN_DEF = FqnDef(separator=".", quote='"', escape='"')
 
 # Validator for the ``Db2TableNameSpec`` field.
 DB2_TABLE_FQN_VALIDATION = name_validate(_DB2_FQN_DEF, max_parts=2, syntax="DB2")
+
+DB2_DISTINCT_TABLES_VALIDATION = distinct_names_validate(_DB2_FQN_DEF, str.upper)

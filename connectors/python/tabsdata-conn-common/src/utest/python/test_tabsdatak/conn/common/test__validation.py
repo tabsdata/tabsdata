@@ -8,11 +8,11 @@ import pytest
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation
-from tabsdatak.conn.common.error import ConnErrorCode, ConnInitException
-from tabsdatak.error import ConstraintError
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._validation import FqnDef, fqn, unfqn
-
+from tabsdatak.conn.common.error import ConnErrorCode, ConnInitException
+from tabsdatak.error import ConstraintError
 
 # ---------------------------------------------------------------------------
 # _validation.FqnDef -- construction-time invariants
@@ -216,28 +216,38 @@ def test_fqn_rejects_empty_element():
 
 def test_complete_levels_fills_single_leading_none():
     from tabsdatak.conn.common._validation import complete_levels
+
     assert complete_levels([None, "schema", "users"], ["main", None, None]) == [
-        "main", "schema", "users",
+        "main",
+        "schema",
+        "users",
     ]
 
 
 def test_complete_levels_fills_multiple_leading_nones():
     from tabsdatak.conn.common._validation import complete_levels
-    assert complete_levels(
-        [None, None, "users"], ["main", "default", None]
-    ) == ["main", "default", "users"]
+
+    assert complete_levels([None, None, "users"], ["main", "default", None]) == [
+        "main",
+        "default",
+        "users",
+    ]
 
 
 def test_complete_levels_no_op_when_already_fully_qualified():
     from tabsdatak.conn.common._validation import complete_levels
+
     assert complete_levels(["a", "b", "c"], ["x", "y", None]) == ["a", "b", "c"]
 
 
 def test_complete_levels_leaves_partial_when_default_absent():
     # No default for the missing level -> left None (not raised).
     from tabsdatak.conn.common._validation import complete_levels
+
     assert complete_levels([None, "schema", "users"], [None, None, None]) == [
-        None, "schema", "users",
+        None,
+        "schema",
+        "users",
     ]
 
 
@@ -246,28 +256,38 @@ def test_complete_levels_stops_at_first_absent_default_no_slot_shift():
     # but the adjacent (inner) default absent must NOT pull the outer
     # default down into the inner slot. Contiguous fill stops at the gap.
     from tabsdatak.conn.common._validation import complete_levels
-    assert complete_levels(
-        [None, None, "users"], ["project", None, None]
-    ) == [None, None, "users"]
+
+    assert complete_levels([None, None, "users"], ["project", None, None]) == [
+        None,
+        None,
+        "users",
+    ]
 
 
 def test_complete_levels_fills_inner_then_stops_at_outer_gap():
     from tabsdatak.conn.common._validation import complete_levels
+
     # Inner default present, outer absent -> fill inner only.
-    assert complete_levels(
-        [None, None, "users"], [None, "dataset", None]
-    ) == [None, "dataset", "users"]
+    assert complete_levels([None, None, "users"], [None, "dataset", None]) == [
+        None,
+        "dataset",
+        "users",
+    ]
 
 
 def test_complete_levels_does_not_overwrite_present_part():
     from tabsdatak.conn.common._validation import complete_levels
+
     assert complete_levels(["given", "b", "c"], ["dflt", None, None]) == [
-        "given", "b", "c",
+        "given",
+        "b",
+        "c",
     ]
 
 
 def test_complete_levels_round_trip_with_unfqn_and_fqn():
     from tabsdatak.conn.common._validation import complete_levels
+
     spec = FqnDef(separator=".", quote="`")
     parsed = unfqn("schema.users", spec, total_parts=3)
     full = complete_levels(parsed, ["main", None, None])
@@ -276,18 +296,21 @@ def test_complete_levels_round_trip_with_unfqn_and_fqn():
 
 def test_complete_levels_rejects_length_mismatch():
     from tabsdatak.conn.common._validation import complete_levels
+
     with pytest.raises(ValueError, match="parts has 2 entries, defaults has 3"):
         complete_levels(["a", "b"], ["x", "y", "z"])
 
 
 def test_complete_levels_rejects_none_after_leading_run():
     from tabsdatak.conn.common._validation import complete_levels
+
     with pytest.raises(ValueError, match="None at position 1 after the leading run"):
         complete_levels(["a", None, "c"], ["x", "y", "z"])
 
 
 def test_complete_levels_returns_new_list_not_aliased():
     from tabsdatak.conn.common._validation import complete_levels
+
     parts: list[str | None] = ["a", "b", "c"]
     out = complete_levels(parts, [None, None, None])
     out.append("mutated")
@@ -320,11 +343,17 @@ def test_unfqn_per_part_quote_keeps_separator_inside_quoted():
 
 
 def test_unfqn_per_part_doubled_quote_escape_unescapes():
-    assert unfqn('"a""b"."c"', FqnDef(separator=".", quote='"', escape='"')) == ['a"b', "c"]
+    assert unfqn('"a""b"."c"', FqnDef(separator=".", quote='"', escape='"')) == [
+        'a"b',
+        "c",
+    ]
 
 
 def test_unfqn_per_part_backslash_escape_unescapes():
-    assert unfqn('"a\\"b"."c"', FqnDef(separator=".", quote='"', escape="\\")) == ['a"b', "c"]
+    assert unfqn('"a\\"b"."c"', FqnDef(separator=".", quote='"', escape="\\")) == [
+        'a"b',
+        "c",
+    ]
 
 
 def test_unfqn_rejects_unterminated_quoted_identifier():
@@ -510,7 +539,10 @@ def test_unfqn_total_parts_rejects_negative():
     [
         (FqnDef(separator="."), ["a", "b", "c"]),
         (FqnDef(separator=".", quote="`"), ["catalog", "schema", "table"]),
-        (FqnDef(separator=".", quote="`"), ["databricks-ci-catalog", "default", "users"]),
+        (
+            FqnDef(separator=".", quote="`"),
+            ["databricks-ci-catalog", "default", "users"],
+        ),
         (FqnDef(separator=".", quote='"', escape='"'), ['weird"name', "x"]),
         (FqnDef(separator=".", quote="`", outer_only=True), ["proj", "ds", "tbl"]),
         (FqnDef(separator=":", quote="'", escape="\\"), ["a:b", "c'd", "e"]),
@@ -527,7 +559,9 @@ def test_unfqn_total_parts_rejects_negative():
             ["a]b", "c"],
         ),
         (
-            FqnDef(separator=".", quote="[", close_quote="]", escape="]", outer_only=True),
+            FqnDef(
+                separator=".", quote="[", close_quote="]", escape="]", outer_only=True
+            ),
             ["proj", "ds", "tbl"],
         ),
     ],
@@ -545,18 +579,21 @@ def test_name_validate_returns_value_constraints_instance():
     # noinspection PyProtectedMember
     import tabsdatak._api as _api
     from tabsdatak.conn.common._validation import name_validate
+
     v = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
     assert isinstance(v, _api.ValueConstraints)
 
 
 def test_name_validate_returned_validator_passes_valid_name():
     from tabsdatak.conn.common._validation import name_validate
+
     v = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
     assert v.validate("catalog.schema.users") == "catalog.schema.users"
 
 
 def test_name_validate_returned_validator_passes_quoted_name():
     from tabsdatak.conn.common._validation import name_validate
+
     v = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
     assert v.validate("`databricks-ci-catalog`.schema.users") == (
         "`databricks-ci-catalog`.schema.users"
@@ -565,6 +602,7 @@ def test_name_validate_returned_validator_passes_quoted_name():
 
 def test_name_validate_rejects_too_many_parts():
     from tabsdatak.conn.common._validation import name_validate
+
     v = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
     with pytest.raises(ConstraintError, match="exceeds the maximum of 3") as ei:
         v.validate("a.b.c.d")
@@ -573,6 +611,7 @@ def test_name_validate_rejects_too_many_parts():
 
 def test_name_validate_rejects_invalid_syntax():
     from tabsdatak.conn.common._validation import name_validate
+
     v = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
     with pytest.raises(ConstraintError, match="unterminated quoted identifier") as ei:
         v.validate("`unterminated")
@@ -581,6 +620,7 @@ def test_name_validate_rejects_invalid_syntax():
 
 def test_name_validate_rejects_empty_value():
     from tabsdatak.conn.common._validation import name_validate
+
     v = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
     with pytest.raises(ConstraintError, match="value must be non-empty") as ei:
         v.validate("")
@@ -589,6 +629,7 @@ def test_name_validate_rejects_empty_value():
 
 def test_name_validate_max_parts_1_allows_single_part():
     from tabsdatak.conn.common._validation import name_validate
+
     v = name_validate(FqnDef(separator=".", quote="`"), max_parts=1)
     assert v.validate("users") == "users"
     with pytest.raises(ConstraintError, match="exceeds the maximum of 1"):
@@ -597,27 +638,34 @@ def test_name_validate_max_parts_1_allows_single_part():
 
 def test_name_validate_rejects_zero_max_parts():
     from tabsdatak.conn.common._validation import name_validate
+
     with pytest.raises(ValueError, match="max_parts must be a positive integer"):
         name_validate(FqnDef(separator=".", quote="`"), max_parts=0)
 
 
 def test_name_validate_rejects_negative_max_parts():
     from tabsdatak.conn.common._validation import name_validate
+
     with pytest.raises(ValueError, match="max_parts must be a positive integer"):
         name_validate(FqnDef(separator=".", quote="`"), max_parts=-1)
 
 
 def test_name_validate_used_in_annotated_type_via_pydantic():
     from typing import Annotated
+
     from pydantic import TypeAdapter
+
     from tabsdatak.conn.common._validation import name_validate
 
-    NameSpec = Annotated[str, name_validate(FqnDef(separator=".", quote="`"), max_parts=3)]
+    NameSpec = Annotated[
+        str, name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
+    ]
     ta = TypeAdapter(NameSpec)
 
     assert ta.validate_python("catalog.schema.users") == "catalog.schema.users"
 
     from pydantic import ValidationError
+
     with pytest.raises(ValidationError):
         ta.validate_python("a.b.c.d")
     with pytest.raises(ValidationError):
@@ -626,6 +674,7 @@ def test_name_validate_used_in_annotated_type_via_pydantic():
 
 def test_name_validate_works_with_outer_only_spec():
     from tabsdatak.conn.common._validation import name_validate
+
     v = name_validate(FqnDef(separator=".", quote="`", outer_only=True), max_parts=3)
     assert v.validate("`proj.ds.tbl`") == "`proj.ds.tbl`"
     with pytest.raises(ConstraintError, match="exceeds the maximum of 3"):
@@ -634,6 +683,7 @@ def test_name_validate_works_with_outer_only_spec():
 
 def test_name_validate_each_call_returns_fresh_validator():
     from tabsdatak.conn.common._validation import name_validate
+
     v1 = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
     v2 = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
     assert v1 is not v2
@@ -641,6 +691,7 @@ def test_name_validate_each_call_returns_fresh_validator():
 
 def test_name_validate_works_with_asymmetric_bracket_spec():
     from tabsdatak.conn.common._validation import name_validate
+
     spec = FqnDef(separator=".", quote="[", close_quote="]", escape="]")
     v = name_validate(spec, max_parts=3)
     assert v.validate("[db].[schema].[table]") == "[db].[schema].[table]"
@@ -777,7 +828,8 @@ def test_validate_conn_cfg_rejects_invalid():
 
 def test_conn_cfg_validator_constant_is_after_validator():
     # Sanity: the exported constant wraps the function in a pydantic
-    # AfterValidator so callers can use ``Annotated[..., _validation.CONN_CFG_VALIDATION]``.
+    # AfterValidator so callers can use
+    # ``Annotated[..., _validation.CONN_CFG_VALIDATION]``.
     assert _validation.CONN_CFG_VALIDATION.func is _validation.validate_conn_cfg
 
 
@@ -809,4 +861,65 @@ def test_validate_entity_whitelist_reports_index_of_bad_regex():
 
 
 def test_entity_whitelist_validator_constant_is_after_validator():
-    assert _validation.ENTITY_WHITELIST_VALIDATION.func is _validation.validate_entity_whitelist
+    assert (
+        _validation.ENTITY_WHITELIST_VALIDATION.func
+        is _validation.validate_entity_whitelist
+    )
+
+
+# ---------------------------------------------------------------------------
+# _validation.distinct_names_validate / marked_parts
+# ---------------------------------------------------------------------------
+
+_DOUBLE_QUOTED = FqnDef(separator=".", quote='"', escape='"')
+
+
+@pytest.mark.parametrize(
+    "value, spec, expected",
+    [
+        ('a."B"', _DOUBLE_QUOTED, [("a", False), ("B", True)]),
+        ('"a""b".c', _DOUBLE_QUOTED, [('a"b', True), ("c", False)]),
+        ("a.b", FqnDef(separator="."), [("a", False), ("b", False)]),
+        (
+            "`a.b`",
+            FqnDef(separator=".", quote="`", outer_only=True),
+            [("a", True), ("b", True)],
+        ),
+    ],
+    ids=["mixed", "escaped", "unquoted", "outer-only"],
+)
+def test_marked_parts_pairs_each_part_with_its_quoting(value, spec, expected):
+    assert _validation.marked_parts(value, spec) == expected
+
+
+def test_marked_parts_rejects_an_invalid_name():
+    with pytest.raises(ValueError):
+        _validation.marked_parts('"a', _DOUBLE_QUOTED)
+
+
+@pytest.mark.parametrize(
+    "values",
+    [["s.t", "s.t"], ["s.t", '"s"."t"'], ["s.t", "S.T"]],
+    ids=["same", "quoted", "folded"],
+)
+def test_distinct_names_validate_rejects_the_same_name_twice(values):
+    validate = _validation.distinct_names_validate(_DOUBLE_QUOTED, str.lower).func
+    with pytest.raises(ConstraintError) as ei:
+        validate(values)
+    assert ei.value.code is ConnErrorCode.CONN_37
+    assert repr(values[1]) in str(ei.value) and repr(values[0]) in str(ei.value)
+
+
+@pytest.mark.parametrize(
+    "values",
+    [["s.t", "s.u"], ["s.t", 's."T"'], ["t", "s.t"]],
+    ids=["different", "quoted-case", "unqualified"],
+)
+def test_distinct_names_validate_keeps_distinct_names(values):
+    validate = _validation.distinct_names_validate(_DOUBLE_QUOTED, str.lower).func
+    assert validate(values) is values
+
+
+def test_distinct_names_validate_keeps_the_case_without_a_fold():
+    validate = _validation.distinct_names_validate(_DOUBLE_QUOTED).func
+    assert validate(["s.t", "S.T"]) == ["s.t", "S.T"]

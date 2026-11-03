@@ -4,14 +4,13 @@
 
 from __future__ import annotations
 
-from tabsdatak.error import DEBUG_FRAMES_ENV_VAR, TabsdataException
 from tabsdatak.conn.common.error import (
     ConnErrorCode,
     ConnException,
     ConnInitException,
     ConnStreamException,
 )
-
+from tabsdatak.error import DEBUG_FRAMES_ENV_VAR, TabsdataException
 
 # ---------------------------------------------------------------------------
 # Hierarchy
@@ -113,4 +112,5 @@ def test_codes_have_expected_names_with_intentional_gap():
         "CONN_34",
         "CONN_35",
         "CONN_36",
+        "CONN_37",
     ]

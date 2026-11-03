@@ -438,3 +438,23 @@ def test_db2_conn_rejects_missing_credentials(cls):
     with pytest.raises(ConnInitException) as ei:
         cls(uri="db2+ibm_db://h:50000/db")  # type: ignore[call-arg]
     assert ei.value.api_error is Db2ErrorCode.DB2_1
+
+
+@pytest.mark.parametrize(
+    "tables",
+    [
+        ["CDSCHEMA.USERS_CD", "CDSCHEMA.USERS_CD"],
+        ["CDSCHEMA.USERS_CD", "cdschema.users_cd"],
+        ["CDSCHEMA.USERS_CD", '"CDSCHEMA"."USERS_CD"'],
+    ],
+    ids=["same", "unquoted-case", "quoted"],
+)
+def test_db2_cdc_stream_src_rejects_a_table_listed_twice(tables):
+    with pytest.raises(ConnInitException, match="CONN-37") as ei:
+        _cdc_stream_src(tables=tables)
+    assert ei.value.api_error is Db2ErrorCode.DB2_11
+
+
+def test_db2_cdc_stream_src_keeps_a_quoted_name_in_another_case():
+    src = _cdc_stream_src(tables=["CDSCHEMA.USERS_CD", '"CDSCHEMA"."users_cd"'])
+    assert src.tables == ["CDSCHEMA.USERS_CD", '"CDSCHEMA"."users_cd"']

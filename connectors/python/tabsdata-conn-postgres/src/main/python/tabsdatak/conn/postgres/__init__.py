@@ -125,6 +125,13 @@ literal quote."""
 PostgresTableNamesSpec: TypeAlias = list[PostgresTableNameSpec]
 """A list of Postgres table names (see `PostgresTableNameSpec`)."""
 
+PostgresCdcTableNamesSpec: TypeAlias = Annotated[
+    list[PostgresTableNameSpec], _validation.POSTGRES_DISTINCT_TABLES_VALIDATION
+]
+"""The tables a Postgres CDC stream tracks (see `PostgresTableNameSpec`), each
+at most once: names that differ only in quoting, or in the case of an
+unquoted part (lower-cased, as Postgres folds them), are the same table."""
+
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 """Write disposition when the target table exists: `"append"` adds
 rows; `"replace"` truncates before insert."""
@@ -490,7 +497,7 @@ class PostgresCdcStreamSrc(StreamSrc):
     as a list of frames and must NOT declare a `ctx` parameter.
 
     Args:
-        tables: Qualified `schema.table` names to track.
+        tables: Qualified `schema.table` names to track, each listed once.
         replication_slot: Logical replication slot to attach to.
         start_from: Where to begin -- `"full"`, `"head"` (replay from the
             oldest retained WAL), `"tail"` (current WAL LSN) or an
@@ -548,7 +555,7 @@ class PostgresCdcStreamSrc(StreamSrc):
     """
 
     # devguide-ref: CDC cursor / resume (start_from, offset persistence)
-    tables: list[PostgresTableNameSpec]
+    tables: PostgresCdcTableNamesSpec
     replication_slot: str
     start_from: PostgresCdcStartFromSpec
     replication_slot_behavior: ReplicationSlotBehaviorSpec = "reuse"

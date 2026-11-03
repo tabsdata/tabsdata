@@ -199,3 +199,8 @@ class ConnErrorCode(ErrorCode):
         "The stream restarted {restarts} times in a row without staging anything, "
         "the last time because {reason}; it stops so the cause can be addressed",
     )
+    CONN_37 = ErrorDef(
+        ConnInitException,
+        "The name {value!r} is listed more than once: it names the same object "
+        "as {first!r}",
+    )  # distinct_names_validate

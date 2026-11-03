@@ -8,7 +8,11 @@ from __future__ import annotations
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._validation import FqnDef, name_validate
+from tabsdatak.conn.common._validation import (
+    FqnDef,
+    distinct_names_validate,
+    name_validate,
+)
 from tabsdatak.conn.mysql.error import MysqlErrorCode
 
 # --- URI -------------------------------------------------------------
@@ -32,3 +36,5 @@ _MYSQL_FQN_DEF = FqnDef(separator=".", quote="`", escape="`")
 # Validator for the ``MySQLTableNameSpec`` field. Built once from
 # ``FQN_DEF`` so per-field annotations stay declarative.
 MYSQL_TABLE_FQN_VALIDATION = name_validate(_MYSQL_FQN_DEF, max_parts=2, syntax="MySQL")
+
+MYSQL_DISTINCT_TABLES_VALIDATION = distinct_names_validate(_MYSQL_FQN_DEF)

@@ -213,6 +213,13 @@ doubled-backtick convention to embed a literal backtick."""
 MySQLTableNamesSpec: TypeAlias = list[MySQLTableNameSpec]
 """A list of MySQL table names (see `MySQLTableNameSpec`)."""
 
+MySQLCdcTableNamesSpec: TypeAlias = Annotated[
+    list[MySQLTableNameSpec], _validation.MYSQL_DISTINCT_TABLES_VALIDATION
+]
+"""The tables a MySQL CDC stream tracks (see `MySQLTableNameSpec`), each
+at most once: names that differ only in quoting, or in the case of an
+unquoted part (unchanged, as MySQL keeps the case it is given), are the same table."""
+
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 """Write disposition when the target table exists: `"append"` adds
 rows; `"replace"` truncates before insert."""
@@ -519,7 +526,7 @@ class MySQLCdcStreamSrc(StreamSrc):
     as a list of frames and must NOT declare a `ctx` parameter.
 
     Args:
-        tables: Qualified `schema.table` names to track.
+        tables: Qualified `schema.table` names to track, each listed once.
         start_from: Where to begin reading when no prior offset is
             persisted -- `"full"`, the `"head"` / `"tail"` keyword, a
             `GtidPosition`, a `BinlogPosition` or a `TimestampPosition`.
@@ -570,7 +577,7 @@ class MySQLCdcStreamSrc(StreamSrc):
     """
 
     # devguide-ref: CDC cursor / resume (start_from, offset persistence)
-    tables: list[MySQLTableNameSpec]
+    tables: MySQLCdcTableNamesSpec
     start_from: MySQLCdcStartFromSpec
     columns_format: CdcColumnsFormatSpec = "columns"
     flatten_columns: bool = True

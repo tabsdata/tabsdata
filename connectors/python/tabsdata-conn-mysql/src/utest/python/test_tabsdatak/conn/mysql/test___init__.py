@@ -474,3 +474,19 @@ def test_mysql_conn_rejects_missing_credentials(cls):
     with pytest.raises(ConnInitException) as ei:
         cls(uri="mysql://h:3306/d")  # type: ignore[call-arg]
     assert ei.value.api_error is MysqlErrorCode.MYSQL_1
+
+
+@pytest.mark.parametrize(
+    "tables",
+    [["app.city", "app.city"], ["app.city", "`app`.`city`"]],
+    ids=["same", "quoted"],
+)
+def test_mysql_cdc_stream_src_rejects_a_table_listed_twice(tables):
+    with pytest.raises(ConnInitException, match="CONN-37") as ei:
+        MySQLCdcStreamSrc(tables=tables, start_from="tail")
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_11
+
+
+def test_mysql_cdc_stream_src_keeps_tables_differing_in_case():
+    src = MySQLCdcStreamSrc(tables=["app.city", "app.City"], start_from="tail")
+    assert src.tables == ["app.city", "app.City"]
