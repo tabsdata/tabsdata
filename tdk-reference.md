@@ -326,6 +326,10 @@ table download --name NAME  [--proj PROJECT] [--coll COLLECTION] --file FILE [--
                             #   fails (exit 1, partial file removed) once the table outgrows the
                             #   room in FILE's directory: its free space less 16 MiB, at most the
                             #   process's file size limit (RLIMIT_FSIZE)
+                            # schema, data, download and profile fail with not_found (exit 5)
+                            # when no committed version holds data at the point asked for (none
+                            # yet, its run still going or failed, or only runs without data); an
+                            # empty table is a version with data and gives zero rows
 table delete   --name NAME  [--proj PROJECT] [--coll COLLECTION] [--confirm delete]
 table stats    --name NAME  [--proj PROJECT] [--coll COLLECTION] [--at TS|--at-trx TRX|--version V] [-o]
 table profile  --name NAME  [--proj PROJECT] [--coll COLLECTION] [--at TS|--at-trx TRX|--version V]
@@ -896,8 +900,7 @@ of wrapping it. `tdk --version` prints the client version.
 `-o jsonb` carries the full objects, and so does every document this section and
 the command sections describe. `-o json` and `-o yaml` give the same document but
 for the shapes tdk 2.2 printed, which scripts parse: a listing is the bare array
-of its items, `table data` an array of row objects (`[]` when the table holds no
-data at that version, as for `table schema`), worker logs `{"logs": "Worker
+of its items, `table data` an array of row objects, worker logs `{"logs": "Worker
 <id>\n<log>"}`, one block per worker, and `examples list` items also carry
 `description`. A machine run, such as the agent mode of the AI package, always
 gives the `jsonb` document, `-o json` included.

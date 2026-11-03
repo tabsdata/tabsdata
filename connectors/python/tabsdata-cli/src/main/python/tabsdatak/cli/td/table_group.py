@@ -29,8 +29,6 @@ from tabsdatak.cli.cli_utils import (
     list_params,
     logical_prompt,
     max_result_option,
-    output_format,
-    require_word,
     present,
     progress,
     proj_option,
@@ -39,6 +37,7 @@ from tabsdatak.cli.cli_utils import (
     render_done,
     render_list,
     require_id,
+    require_word,
     split_csv,
     tabular,
     take,
@@ -70,14 +69,28 @@ def _size_mb(data_bytes) -> str | None:
     return f"{int(data_bytes) / (1024 * 1024):.2f}"
 
 
-NO_DATA_AT_VERSION = "The table holds no data at that version"
-
-
-def render_no_data(ctx: click.Context) -> None:
-    if output_format(ctx) == "table":
-        click.echo(NO_DATA_AT_VERSION)
+def no_data(
+    coll: str, name: str, version: str | None, at: str | None, at_trx: str | None
+) -> TdkException:
+    """The error for a table with no committed version holding data at the
+    point asked for: never produced, its run still going or failed, or only
+    runs that produced no data. An empty table is a version with data."""
+    if version:
+        point = f" at version {version}"
+    elif at_trx:
+        point = f" at transaction {at_trx}"
+    elif at:
+        point = f" at {at}"
     else:
-        render(ctx, data=None, compat=[])
+        point = " yet"
+    return TdkException(
+        "not_found",
+        f"Table '{name}' in collection '{coll}' has no committed data{point}.",
+        hint=(
+            f"'tdk table versions --coll {coll} --name {name}' lists its versions; "
+            "a run still going or failed has not committed one."
+        ),
+    )
 
 
 UNCOMMITTED_VERSION_STATES = {
@@ -294,20 +307,15 @@ def download(
                 hint="Free some space, or download to another directory.",
             ) from None
         warn_uncommitted_version(server, coll, name, version, downloaded is not None)
+        if downloaded is None:
+            raise no_data(coll, name, version, at, at_trx)
         render_done(
             ctx,
             action="download",
             kind="table",
             id=name,
-            details={
-                "collection": coll,
-                "file": file if downloaded is not None else None,
-            },
-            message=(
-                "Table downloaded successfully"
-                if downloaded is not None
-                else f"{NO_DATA_AT_VERSION}; no file was written"
-            ),
+            details={"collection": coll, "file": file},
+            message="Table downloaded successfully",
         )
     except Exception as e:
         raise command_failure(ctx, "download table", e)
@@ -579,8 +587,7 @@ def data(
         warn_uncommitted_version(server, coll, name, version, table_data is not None)
 
         if table_data is None:
-            render_no_data(ctx)
-            return
+            raise no_data(coll, name, version, at, at_trx)
 
         if file:
             # Diagnostics to stderr so json/yaml stdout stays parseable.
@@ -702,8 +709,7 @@ def schema(
         warn_uncommitted_version(server, coll, name, version, table_schema is not None)
 
         if table_schema is None:
-            render_no_data(ctx)
-            return
+            raise no_data(coll, name, version, at, at_trx)
 
         def _view():
             return TableView(

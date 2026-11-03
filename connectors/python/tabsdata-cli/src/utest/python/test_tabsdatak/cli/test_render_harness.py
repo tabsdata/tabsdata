@@ -1066,7 +1066,15 @@ CASES: tuple[RenderCase, ...] = (
         ["trx", "list"],
         _set_trx_list,
         _listing(_TRANSACTIONS_OUT),
-        ("tx20260301-1", "ep20260301-1", "proj-a", "coll-a", "2026-03-01", "admin", "Committed"),
+        (
+            "tx20260301-1",
+            "ep20260301-1",
+            "proj-a",
+            "coll-a",
+            "2026-03-01",
+            "admin",
+            "Committed",
+        ),
     ),
     RenderCase(
         "fnrun-list",
@@ -1153,7 +1161,16 @@ CASES: tuple[RenderCase, ...] = (
         ["table", "versions", "-c", "coll-a", "--name", "tbl-a"],
         _set_table_versions,
         _listing(_DATAVERSIONS_OUT),
-        ("DV_1", "fn-a", "FV_1", "ep20260301-1", "tx20260301-1", "2026-03-01", "42", "1.00"),
+        (
+            "DV_1",
+            "fn-a",
+            "FV_1",
+            "ep20260301-1",
+            "tx20260301-1",
+            "2026-03-01",
+            "42",
+            "1.00",
+        ),
     ),
     RenderCase(
         # payload is built from attributes; a None project is null (json) / "-" (table).
@@ -1338,7 +1355,9 @@ def test_worker_logs_carries_worker_log_in_every_format(tmp_path):
     client = _client()
     _set_worker_log(client)
     result = _invoke(
-        ["worker", "logs", "--worker", "wkr20260301-1"], client=client, tmp_path=tmp_path
+        ["worker", "logs", "--worker", "wkr20260301-1"],
+        client=client,
+        tmp_path=tmp_path,
     )
     assert result.exit_code == 0, result.output
     assert "W1" in result.output
@@ -1485,9 +1504,10 @@ def test_pinned_collection_notice_stays_out_of_machine_output(tmp_path):
         ["collection", "get", "-o", "json"], client=client, tmp_path=tmp_path
     )
     assert result.exit_code == 0, result.output
-    assert json.loads(result.stdout) == _normalize(
-        {**_COLLECTIONS[0], "tags": {"stage": "gold"}}
-    )
+    assert json.loads(result.stdout) == _normalize({
+        **_COLLECTIONS[0],
+        "tags": {"stage": "gold"},
+    })
     assert "Using currently pinned collection: coll-a" in result.stderr
 
 
@@ -1583,23 +1603,43 @@ def test_table_data_wide_is_a_deprecated_max_width_0(tmp_path):
     [
         (["table", "data", "-c", "coll-a", "--name", "tbl-a"], "sample_table"),
         (["table", "schema", "-c", "coll-a", "--name", "tbl-a"], "get_table_schema"),
+        (
+            ["table", "download", "-c", "coll-a", "--name", "tbl-a", "--file", "t.pq"],
+            "download_table",
+        ),
     ],
 )
-def test_table_reads_say_when_the_table_holds_no_data(tmp_path, argv, call):
+def test_a_table_without_committed_data_is_not_found(tmp_path, argv, call):
     client = _client()
     getattr(client, call).return_value = None
 
     result = _invoke(argv, client=client, tmp_path=tmp_path)
-    assert result.exit_code == 0, result.output
-    assert "The table holds no data at that version" in result.output
+    assert result.exit_code == 5, result.output
+    assert "Table 'tbl-a' in collection 'coll-a' has no committed data yet." in (
+        result.output
+    )
 
-    result = _invoke([*argv, "-o", "jsonb"], client=client, tmp_path=tmp_path)
-    assert result.exit_code == 0, result.output
-    assert json.loads(result.output) is None
+    result = _invoke([*argv, "--machine"], client=client, tmp_path=tmp_path)
+    assert result.exit_code == 5, result.output
+    error = json.loads(result.stdout)["error"]
+    assert error["type"] == "not_found"
+    assert error["hint"] == (
+        "'tdk table versions --coll coll-a --name tbl-a' lists its versions; "
+        "a run still going or failed has not committed one."
+    )
 
-    result = _invoke([*argv, "-o", "json"], client=client, tmp_path=tmp_path)
-    assert result.exit_code == 0, result.output
-    assert json.loads(result.output) == []
+
+def test_no_committed_data_names_the_point_asked_for(tmp_path):
+    client = _client()
+    client.sample_table.return_value = None
+    client.list_dataversions.return_value = []
+    argv = ["table", "data", "-c", "coll-a", "--name", "tbl-a", "--machine"]
+
+    result = _invoke([*argv, "--version", "dv1"], client=client, tmp_path=tmp_path)
+    assert (
+        "has no committed data at version dv1."
+        in json.loads(result.stdout)["error"]["message"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -1616,19 +1656,15 @@ def test_table_data_warns_when_the_version_is_not_committed(tmp_path, rows, serv
 
     argv = ["table", "data", "-c", "coll-a", "--name", "tbl-a", "--version", "dv-6"]
     result = _invoke([*argv, "-o", "jsonb"], client=client, tmp_path=tmp_path)
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == (0 if rows is not None else 5), result.output
     assert f"Warning: version dv-6 failed; {served}" in result.stderr
-    expected = (
-        None
-        if rows is None
-        else {
+    if rows is not None:
+        assert json.loads(result.stdout) == {
             "columns": [{"name": "a", "dtype": "Int64"}],
             "rows": [[1]],
             "row_count": 1,
             "truncated": False,
         }
-    )
-    assert json.loads(result.stdout) == expected
 
 
 def test_table_data_does_not_warn_for_a_committed_version(tmp_path):
