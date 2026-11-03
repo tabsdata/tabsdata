@@ -14,6 +14,8 @@ ones) before running its ``_setup.py`` standing in that directory.
 
 from __future__ import annotations
 
+import errno
+import os
 import shutil
 import subprocess
 import sys
@@ -55,6 +57,13 @@ BUNDLED = "bundled"
 SETUP_FILE = "_setup.py"
 ERROR_FILE = "error.txt"
 DATA_DIR_SUFFIX = "-data"
+
+
+def _open_new(path: str | Path, mode: str, **kwargs):
+    # Windows' exclusive create follows a dangling symlink and creates its target.
+    if os.path.lexists(path):
+        raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), str(path))
+    return open(path, mode, **kwargs)
 
 
 @cli_command
@@ -231,7 +240,10 @@ def _extract_snippet(ctx: click.Context, example: Example, target: Path) -> None
     destination = target / example.path.name
     target.mkdir(parents=True, exist_ok=True)
     try:
-        with open(example.path, "rb") as source, open(destination, "xb") as written:
+        with (
+            open(example.path, "rb") as source,
+            _open_new(destination, "xb") as written,
+        ):
             shutil.copyfileobj(source, written)
     except FileExistsError:
         raise TdkException(
@@ -391,7 +403,7 @@ def scaffold(
         raise click.UsageError(str(e))
     if file:
         try:
-            with open(file, "x", encoding="utf-8") as written:
+            with _open_new(file, "x", encoding="utf-8") as written:
                 written.write(made.source)
         except FileExistsError:
             raise TdkException("conflict", f"'{file}' already exists.") from None
