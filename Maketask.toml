@@ -90,6 +90,7 @@ run_task = [
         "check_rs",
         "clippy_rs",
         "fmt_rs",
+        "lint_rs",
         "license_rs",
         "outdated_rs",
         "machete_rs",
@@ -809,7 +810,7 @@ run_task = [
         "__os__test_py_ta_tableframe",
         "__os__test_py_te_examples",
         "__os__test_py_te_tableframe",
-        "__os__test_py_te_variant",
+        "__os__test_py_te_variant"
     ] }
 ]
 
