@@ -8,7 +8,7 @@ Open-source core of Tabsdata: a publish/subscribe system for tables. Users write
 Python functions decorated as publishers, transformers, and subscribers, composed
 into flows. Rust server + Python SDK.
 
-Shared multi-repo rules (symlinks, commits, comments, refactors), hosted in
+Shared multi-repo rules (symlinks, commits, comments, refactors, cross-platform), hosted in
 the ee sibling checkout (import is skipped when ee is absent):
 @../tabsdata-ee/variant/devutils/agents/GUIDELINES.md
 
