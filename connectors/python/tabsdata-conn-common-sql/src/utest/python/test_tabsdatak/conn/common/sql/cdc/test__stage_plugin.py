@@ -18,14 +18,17 @@ value -- since the scratch store holds only scalars."""
 
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 
 import polars as pl
+import pytest
 
 from tabsdatak.conn.common.sql.cdc._stage_plugin import (
     CDC_STAGE_SRC,
     CdcStageSrc,
     CdcStageSrcPlugin,
+    _key_order,
     _ord_key,
     _seg_key,
 )
@@ -302,11 +305,167 @@ def test_entry_point_binding_shape():
     assert issubclass(CdcStageSrc, StreamStageSrc)
 
 
+# The fast path: when the staged files already hold every key once and in
+# key order, ``process_files`` concatenates them instead of removing
+# duplicates and sorting. Terms, as in ``_key_order``: ``seg`` is the
+# committed transaction a row belongs to (``-1`` for an initial load),
+# ``ord`` its position inside that transaction, and the key is the pair
+# ``(seg, ord)``, compared segment first.
+
+
+def _reference(frames: list[pl.LazyFrame], prior: tuple | None) -> pl.DataFrame:
+    """What ``process_files`` produced before the fast path: duplicates
+    removed keeping the earliest-staged row, sorted by key, then filtered by
+    the cursor."""
+    rows = (
+        pl
+        .concat(frames, how="vertical_relaxed")
+        .with_row_index("arrival")
+        .filter(
+            pl.col("arrival")
+            == pl.col("arrival").min().over([CDC_META_SEG, CDC_META_ORD])
+        )
+        .drop("arrival")
+        .sort([CDC_META_SEG, CDC_META_ORD])
+    )
+    if prior is not None:
+        seg, ordinal = prior
+        rows = rows.filter(
+            (pl.col(CDC_META_SEG) == -1)
+            | (pl.col(CDC_META_SEG) > seg)
+            | ((pl.col(CDC_META_SEG) == seg) & (pl.col(CDC_META_ORD) > ordinal))
+        )
+    return rows.collect()
+
+
+SCENARIOS = {
+    "initial load in order": (
+        [[(-1, 0, "load"), (-1, 1, "a")], [(-1, 2, "b"), (-1, 3, "c")]],
+        [0, 1],
+    ),
+    "files staged out of key order": (
+        [[(7, 0, "c"), (7, 1, "d")], [(5, 0, "a"), (6, 3, "b")]],
+        [1, 0],
+    ),
+    "a load then its changes": (
+        [[(-1, 0, "load"), (-1, 1, "a")], [(40, 0, "x"), (41, 2, "y")]],
+        [0, 1],
+    ),
+    "an empty file among them": (
+        [[(1, 0, "a")], [], [(2, 0, "b")]],
+        [0, 2, 1],
+    ),
+    "a key repeated across files": (
+        [[(1, 0, "a"), (2, 0, "b")], [(2, 0, "b-dup"), (3, 0, "c")]],
+        None,
+    ),
+    "a key repeated in a file": (
+        [[(1, 0, "a"), (1, 0, "a-dup"), (2, 0, "b")]],
+        None,
+    ),
+    "a key going backwards in a file": (
+        [[(1, 0, "a"), (3, 0, "c"), (2, 0, "b")]],
+        None,
+    ),
+    "ordinals going backwards in a segment": (
+        [[(5, 2, "b"), (5, 1, "a")]],
+        None,
+    ),
+    "overlapping files without a shared key": (
+        [[(1, 0, "a"), (3, 0, "c")], [(2, 0, "b"), (4, 0, "d")]],
+        None,
+    ),
+    "only empty files": ([[], []], None),
+}
+
+
+def _staged(tmp_path: Path, files: list[list[tuple]]) -> list[LazyFrameInput]:
+    return [
+        _write(tmp_path / f"{position}.parquet", rows)
+        for position, rows in enumerate(files)
+    ]
+
+
+@pytest.mark.parametrize("name", SCENARIOS)
+def test_key_order_finds_the_order_only_when_no_key_repeats_or_overlaps(tmp_path, name):
+    files, expected = SCENARIOS[name]
+    tables = _staged(tmp_path, files)
+    assert _key_order([table.frame for table in tables]) == expected
+
+
+def test_key_order_refuses_a_null_key(tmp_path):
+    path = tmp_path / "null.parquet"
+    pl.DataFrame({
+        CDC_META_SEG: [1, None],
+        CDC_META_ORD: [0, 1],
+        "payload": ["a", "b"],
+    }).with_columns(
+        pl.col(CDC_META_SEG).cast(pl.Decimal(38, 0)),
+        pl.col(CDC_META_ORD).cast(pl.Decimal(38, 0)),
+    ).write_parquet(path)
+    assert _key_order([pl.scan_parquet(path)]) is None
+
+
+def test_key_order_sees_a_repeat_at_a_row_group_boundary(tmp_path):
+    # The comparison with the previous row must hold across the chunks the
+    # file is streamed in, not only inside each.
+    rows = 250_000
+    keys = pl.int_range(0, rows, eager=True)
+    repeated = keys.scatter(100_000, 99_999)
+    path = tmp_path / "boundary.parquet"
+    pl.DataFrame({
+        CDC_META_SEG: pl.repeat(-1, rows, eager=True),
+        CDC_META_ORD: repeated,
+    }).with_columns(
+        pl.col(CDC_META_SEG).cast(pl.Decimal(38, 0)),
+        pl.col(CDC_META_ORD).cast(pl.Decimal(38, 0)),
+    ).write_parquet(path, row_group_size=100_000)
+    assert _key_order([pl.scan_parquet(path)]) is None
+
+
+@pytest.mark.parametrize("prior", [None, ("6", "3"), ("-1", "1")])
+@pytest.mark.parametrize("name", SCENARIOS)
+def test_rows_cursor_and_order_match_the_dedup_and_sort(tmp_path, name, prior):
+    files, _ = SCENARIOS[name]
+    tables = _staged(tmp_path, files)
+    seeded = {} if prior is None else _seed(*prior)
+    ctx = FakeCtx(tmp_path / "work", seeded)
+
+    out = CdcStageSrcPlugin().process_files(ctx, [tables])
+
+    expected = _reference(
+        [table.frame for table in tables],
+        None if prior is None else tuple(Decimal(value) for value in prior),
+    )
+    assert out[0][0].frame.collect().equals(expected)
+    reference = FakeCtx(tmp_path / "reference", seeded)
+    _reference_cursor(reference, [table.frame for table in tables], prior)
+    assert _cursor(ctx) == _cursor(reference)
+
+
+def _reference_cursor(ctx: FakeCtx, frames: list[pl.LazyFrame], prior) -> None:
+    """The cursor ``process_files`` stores: the largest key of the
+    deduplicated rows, never below the prior cursor, and left as it is when
+    the batch has no key."""
+    high_water = (
+        _reference(frames, None)
+        .filter(pl.col(CDC_META_SEG) == pl.col(CDC_META_SEG).max())
+        .select(pl.col(CDC_META_SEG).max(), pl.col(CDC_META_ORD).max())
+    )
+    if not high_water.height or None in high_water.row(0):
+        return
+    batch = high_water.row(0)
+    if prior is not None:
+        batch = max(tuple(Decimal(value) for value in prior), batch)
+    ctx.set_attr(_seg_key(0), str(batch[0]))
+    ctx.set_attr(_ord_key(0), str(batch[1]))
+
+
 def test_a_batch_of_empty_files_leaves_the_cursor_as_it_is(tmp_path):
     # Its staged files hold no row, so it has no largest key: no cursor is
     # stored where there was none, and a prior one is kept, not compared
     # with a missing key.
-    tables = [_write(tmp_path / "a.parquet", []), _write(tmp_path / "b.parquet", [])]
+    tables = _staged(tmp_path, [[], []])
 
     fresh = FakeCtx(tmp_path / "fresh")
     out = CdcStageSrcPlugin().process_files(fresh, [tables])

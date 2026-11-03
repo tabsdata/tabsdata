@@ -42,6 +42,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from tabsdatak.conn.common.sql.cdc._initial_load import INITIAL_LOAD_SEGMENT
 from tabsdatak.conn.common.sql.cdc.constants import CDC_META_ORD, CDC_META_SEG
@@ -55,6 +56,9 @@ from tabsdatak.spi import (
     TableMode,
     _StreamStageSrcConn,
 )
+
+if TYPE_CHECKING:
+    import polars as pl
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +76,85 @@ def _seg_key(index: int) -> str:
 
 def _ord_key(index: int) -> str:
     return f"{_TABLE_PREFIX}.{index}.ord"
+
+
+def _key_order(frames: list[pl.LazyFrame]) -> list[int] | None:
+    """The order in which to concatenate the staged files of one table so
+    that the result is already free of duplicate keys and sorted by key,
+    or ``None`` when no such order exists.
+
+    Terms:
+
+    * ``seg`` (segment): the committed transaction a CDC row belongs to,
+      as a number that grows in commit order; ``-1`` for every row of an
+      initial load.
+    * ``ord`` (ordinal): the position of the row inside its segment.
+    * key: the pair ``(seg, ord)``, compared segment first, then ordinal.
+
+    The order exists when:
+
+    * no key in any file is null;
+    * within each file, every key is strictly greater than the one in the
+      row before it, so no key repeats and none goes backwards;
+    * ordered by their first key, each file starts after the previous file
+      ends, so no two files share a range of keys;
+    * at least one file has a row.
+
+    Files without rows go last, as they add nothing. An initial load always
+    qualifies: its segment is ``-1`` throughout and its ordinal counts up,
+    file after file.
+
+    Each file is read once, only its key columns, streamed into one row of
+    facts: rows, nulls, ascending, first key and last key. The comparison
+    with the previous row is added as a column before those facts are
+    taken, on purpose: computed among them, polars holds the whole key
+    columns in memory instead of streaming them.
+
+    Returns:
+        The positions of ``frames`` in that order, or ``None``.
+    """
+    import polars as pl
+
+    segment, ordinal = pl.col(CDC_META_SEG), pl.col(CDC_META_ORD)
+    ascending = (
+        (segment > segment.shift())
+        | ((segment == segment.shift()) & (ordinal > ordinal.shift()))
+        | (segment.shift().is_null() & ordinal.shift().is_null())
+    ).alias("ascending")
+    spans: list[tuple[tuple, tuple, int]] = []
+    empty: list[int] = []
+    for position, frame in enumerate(frames):
+        rows, ascends, nulls, first, last = (
+            frame
+            .select(segment, ordinal)
+            .with_columns(ascending)
+            .select(
+                pl.len(),
+                pl.col("ascending").all(),
+                (segment.null_count() + ordinal.null_count()).alias("nulls"),
+                pl.struct(segment, ordinal).first().alias("first"),
+                pl.struct(segment, ordinal).last().alias("last"),
+            )
+            .collect(engine="streaming")
+            .row(0)
+        )
+        if rows == 0:
+            empty.append(position)
+            continue
+        if nulls or not ascends:
+            return None
+        spans.append((
+            (first[CDC_META_SEG], first[CDC_META_ORD]),
+            (last[CDC_META_SEG], last[CDC_META_ORD]),
+            position,
+        ))
+    if not spans:
+        return None
+    spans.sort()
+    for (_, previous_last, _), (next_first, _, _) in zip(spans, spans[1:]):
+        if next_first <= previous_last:
+            return None
+    return [position for _, _, position in spans] + empty
 
 
 class CdcStageSrc(StreamStageSrc):
@@ -98,7 +181,13 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
         filtering), all lazily, as one table; the new high-water
         ``(seg, ord)`` is persisted via ``ctx.set_attr``. An empty input
         slot yields an empty output slot. Returns the per-slot tables to
-        publish (see module docstring for the full contract)."""
+        publish (see module docstring for the full contract).
+
+        Removing duplicates and sorting cost a pass that holds the whole
+        batch's keys. When :func:`_key_order` finds the staged files
+        already hold every key once and in order, as an initial load
+        always does, both are skipped: the files are concatenated in key
+        order, which is exactly what they would have produced."""
         import polars as pl
 
         results: list[Iterable[LazyFrameInput]] = []
@@ -110,29 +199,46 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
                 continue
 
             lazy_frames = [table.frame for table in tables]
-            # Stays lazy end to end: the dedup is a window aggregation rather
-            # than ``unique(keep="first")`` so it does not depend on engine
-            # row order (which the parallel/streaming engine does not
-            # preserve), and the result is returned as a frame the runtime
-            # streams to its landing, never materialised whole.
-            #
-            # ``concat`` keeps file order, so a global row index over it is a
-            # true arrival order; within each ``(seg, ord)`` group the row
-            # with the minimum arrival is the earliest-staged one. Selecting
-            # it by ``min().over`` (not ``keep="first"``) makes the surviving
-            # duplicate deterministic regardless of how the engine schedules
-            # the scan.
-            deduped = (
-                pl
-                .concat(lazy_frames, how="vertical_relaxed")
-                .with_row_index("arrival")
-                .filter(
-                    pl.col("arrival")
-                    == pl.col("arrival").min().over([CDC_META_SEG, CDC_META_ORD])
+            try:
+                order = _key_order(lazy_frames)
+            except (pl.exceptions.PolarsError, OSError) as e:
+                raise SqlCdcErrorCode.CDC_15.exception(
+                    cause=e, index=index, reason=str(e)
                 )
-                .drop("arrival")
-                .sort([CDC_META_SEG, CDC_META_ORD])
-            )
+            if order is not None:
+                # Fast path: no key repeats and the files, in this order,
+                # already hold the rows sorted by key. Removing duplicates
+                # would drop nothing and sorting would just place the files
+                # one after another, so they are concatenated in that order.
+                deduped = pl.concat(
+                    [lazy_frames[position] for position in order],
+                    how="vertical_relaxed",
+                )
+            else:
+                # Stays lazy end to end: the dedup is a window aggregation
+                # rather than ``unique(keep="first")`` so it does not depend
+                # on engine row order (which the parallel/streaming engine
+                # does not preserve), and the result is returned as a frame
+                # the runtime streams to its landing, never materialised
+                # whole.
+                #
+                # ``concat`` keeps file order, so a global row index over it
+                # is a true arrival order; within each ``(seg, ord)`` group
+                # the row with the minimum arrival is the earliest-staged
+                # one. Selecting it by ``min().over`` (not ``keep="first"``)
+                # makes the surviving duplicate deterministic regardless of
+                # how the engine schedules the scan.
+                deduped = (
+                    pl
+                    .concat(lazy_frames, how="vertical_relaxed")
+                    .with_row_index("arrival")
+                    .filter(
+                        pl.col("arrival")
+                        == pl.col("arrival").min().over([CDC_META_SEG, CDC_META_ORD])
+                    )
+                    .drop("arrival")
+                    .sort([CDC_META_SEG, CDC_META_ORD])
+                )
 
             # The cursor is stored as two scalar scratch entries (seg and
             # ord), each the ``str`` of a decimal128(38,0) value -- the
@@ -168,16 +274,22 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
                 emitted = deduped
 
             try:
-                # High-water ``(seg, ord)`` over the de-duplicated batch.
-                # ``ord`` is scoped within ``seg``, so the cursor is the
-                # largest ``ord`` among the rows at the largest ``seg`` --
-                # computed explicitly rather than read positionally off the
-                # sorted frame, which the engine does not guarantee to leave
-                # in sort order. Streamed into a one-row frame; the batch
-                # itself is never collected. Taken from the pre-filter frame
-                # so an already-seen batch can never lower the stored cursor.
+                # The high-water mark: the largest key ``(seg, ord)`` in the
+                # batch, which becomes the cursor. It is the largest ``ord``
+                # among the rows with the largest ``seg``, computed rather
+                # than read off the last sorted row, since the engine does
+                # not promise to keep sort order. Streamed into one row.
+                #
+                # * Taken before the cursor filter, so a batch of rows
+                #   already published never lowers the cursor.
+                # * Taken over the staged rows themselves, not the
+                #   deduplicated ones: removing duplicates keeps one row of
+                #   every key, so the largest key is the same, without
+                #   running the dedup and the sort a second time.
                 high_water = (
-                    deduped
+                    pl
+                    .concat(lazy_frames, how="vertical_relaxed")
+                    .select(CDC_META_SEG, CDC_META_ORD)
                     .filter(pl.col(CDC_META_SEG) == pl.col(CDC_META_SEG).max())
                     .select(
                         pl.col(CDC_META_SEG).max().alias(CDC_META_SEG),
