@@ -660,10 +660,9 @@ class PythonEnvironment:
             "compileall",
             "-j",
             "0",
+            "-q",
+            str(self.lib()),
         ]
-        if not verbose:
-            command.append("-q")
-        command.append(str(self.lib()))
         try:
             subprocess.run(command, capture_output=not verbose)
         except Exception as error:
