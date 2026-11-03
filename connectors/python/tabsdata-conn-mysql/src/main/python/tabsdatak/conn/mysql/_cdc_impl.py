@@ -1381,7 +1381,7 @@ class BinlogIngester(CdcIngester):
                     # own, which a statement the stream does not see does.
                     self._complete_transaction(gtid)
                     gtid = offset = None
-                if seq == 0 and time.monotonic() > deadline:
+                if seq == 0 and time.monotonic() >= deadline:
                     self._carry_gtid = event.gtid
                     return
                 gtid = event.gtid
@@ -1419,7 +1419,7 @@ class BinlogIngester(CdcIngester):
                 gtid = offset = None
                 seq = 0
             elif isinstance(event, HeartbeatLogEvent):
-                if seq == 0 and time.monotonic() > deadline:
+                if seq == 0 and time.monotonic() >= deadline:
                     self._carry_gtid = gtid
                     return
             elif isinstance(event, (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent)):
