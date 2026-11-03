@@ -143,6 +143,36 @@ def test_apiserver_authentication_header_includes_bearer_when_set():
     assert s.authentication_header == {"Authorization": "Bearer abc123"}
 
 
+def test_a_refusal_carries_the_server_version():
+    import requests
+
+    class _Resp:
+        status_code = 426
+        headers = {a.VERSION_HEADER: "2.0.0"}
+
+        def raise_for_status(self):
+            raise requests.exceptions.HTTPError("426")
+
+        def json(self):
+            return {"error": "upgrade_required"}
+
+    with pytest.raises(a.APIServerError) as excinfo:
+        a.APIServer.raise_for_status(_Resp())
+    assert excinfo.value.server_version == "2.0.0"
+
+
+def test_requests_name_the_client_version(monkeypatch):
+    sent = {}
+
+    def get(url, headers, **kwargs):
+        sent.update(headers)
+
+    monkeypatch.setattr(a.GET_HTTP_SESSION, "get", get)
+    a.APIServer("host").request_once("get", "/status")
+    assert sent[a.VERSION_HEADER] == a.client_version()
+    assert sent["User-Agent"] == f"tabsdata/{a.client_version()}"
+
+
 def test_apiserver_certificate_file_is_none_when_not_https():
     s = a.APIServer("host")
     assert s.certificate_file is None

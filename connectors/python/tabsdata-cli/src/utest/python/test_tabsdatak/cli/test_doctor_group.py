@@ -16,6 +16,7 @@ from click.testing import CliRunner
 from tabsdatak.cli import _doctor
 from tabsdatak.cli._errors import ExitCode
 from tabsdatak.cli.td.cli import cli
+from tabsdatak.sdk._apiserver import APIServerError
 from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
 LOCAL_PYTHON = (
@@ -124,9 +125,7 @@ def test_offline_skips_the_server_checks(tmp_path):
     result = _invoke(["doctor", "--offline", "--machine"], client, tmp_path)
     assert result.exit_code == ExitCode.OK, result.output
     checks = _checks(_document(result))
-    assert {
-        checks[n]["status"] for n in ("server", "login", "connectors")
-    } == {"skip"}
+    assert {checks[n]["status"] for n in ("server", "login", "connectors")} == {"skip"}
     assert checks["python"]["status"] == "warn"
     client.connection.runtime_info_get.assert_not_called()
 
@@ -168,6 +167,31 @@ def test_version_skew_warns(tmp_path):
     assert "versions differ" in server["detail"]
 
 
+def test_refused_version_fails(tmp_path):
+    client = _client()
+    refused = APIServerError(
+        {"error": "upgrade_required"}, status=426, server_version="2.0.0"
+    )
+    client.connection.runtime_info_get.side_effect = refused
+    type(client).status = PropertyMock(side_effect=refused)
+    result = _invoke(["doctor", "--check", "server", "--machine"], client, tmp_path)
+    assert result.exit_code == ExitCode.FAILURE, result.output
+    server = _checks(_document(result))["server"]
+    assert server["status"] == "fail"
+    assert "server 2.0.0, client 1.0.0" in server["detail"]
+
+
+def test_refused_version_fails_login_with_the_version_fix(tmp_path):
+    client = _client()
+    client.auth_info.side_effect = APIServerError(
+        {"error": "upgrade_required"}, status=426, server_version="2.0.0"
+    )
+    result = _invoke(["doctor", "--check", "login", "--machine"], client, tmp_path)
+    login = _checks(_document(result))["login"]
+    assert login["status"] == "fail"
+    assert login["fix"] == _doctor.VERSION_FIX
+
+
 def test_expiring_session_warns(tmp_path):
     client = _client()
     client.connection.refresh_token = None
@@ -196,7 +220,9 @@ def test_skipped_non_registry_packages_warn(tmp_path):
     with patch.object(
         _doctor, "bundle_analysis", return_value=([], ["mylib (editable)"])
     ):
-        result = _invoke(["doctor", "--check", "venv", "--machine"], _client(), tmp_path)
+        result = _invoke(
+            ["doctor", "--check", "venv", "--machine"], _client(), tmp_path
+        )
     assert result.exit_code == ExitCode.OK, result.output
     venv = _checks(_document(result))["venv"]
     assert venv["status"] == "warn"
@@ -231,7 +257,9 @@ def test_bundle_analysis_bundles_index_packages_and_skips_the_rest():
 
 def test_outside_a_venv_fails(tmp_path):
     with patch.object(_doctor.sys, "prefix", _doctor.sys.base_prefix):
-        result = _invoke(["doctor", "--check", "venv", "--machine"], _client(), tmp_path)
+        result = _invoke(
+            ["doctor", "--check", "venv", "--machine"], _client(), tmp_path
+        )
     assert result.exit_code == ExitCode.FAILURE, result.output
     assert _checks(_document(result))["venv"]["status"] == "fail"
 
@@ -272,8 +300,8 @@ def test_table_view_reports_the_failure(tmp_path):
 def test_the_checks_wrap_their_detail_and_fix_instead_of_cutting_them():
     from tabsdatak.cli.td.doctor_group import checks_view
 
-    view = checks_view(
-        [{"name": "search", "status": "warn", "detail": "d" * 200, "fix": "f" * 200}]
-    )
+    view = checks_view([
+        {"name": "search", "status": "warn", "detail": "d" * 200, "fix": "f" * 200}
+    ])
 
     assert view.wrap

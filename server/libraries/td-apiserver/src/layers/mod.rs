@@ -4,6 +4,7 @@
 
 pub mod authorization;
 pub mod catch_panic;
+pub mod client_version;
 pub mod compression;
 pub mod internal_token;
 pub mod project_resolver;

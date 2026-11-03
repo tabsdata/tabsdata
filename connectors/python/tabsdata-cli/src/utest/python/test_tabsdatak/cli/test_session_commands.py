@@ -20,7 +20,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
+from tabsdatak.cli import cli_utils
 from tabsdatak.cli.td.cli import cli
+from tabsdatak.sdk._apiserver import APIServerError
 from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
 
@@ -298,3 +300,18 @@ def test_password_change_n_is_a_deprecated_new_password(tmp_path):
     assert result.exit_code == 0, result.output
     server.return_value.change_password.assert_called_once_with("alice", "old", "new")
     assert "'-n' is deprecated" in result.stderr
+
+
+def test_a_refused_version_login_gives_no_credentials_hint():
+    refused = APIServerError(
+        {"error_description": "install tabsdata 2.0.0"}, status=426
+    )
+    ctx = MagicMock()
+    with (
+        patch("tabsdatak.sdk._apiserver.obtain_connection", side_effect=refused),
+        patch.object(cli_utils, "get_credentials_file_path", return_value=None),
+        patch.object(cli_utils, "show_hint") as hint,
+        pytest.raises(Exception, match="install tabsdata 2.0.0"),
+    ):
+        cli_utils.utils_login(ctx, "http://server", "admin", "secret")
+    hint.assert_not_called()

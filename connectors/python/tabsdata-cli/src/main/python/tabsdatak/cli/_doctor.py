@@ -17,6 +17,7 @@ PASS, WARN, FAIL, SKIP = "pass", "warn", "fail", "skip"
 EXPIRY_WARNING_SECONDS = 10 * 60
 MAX_BUNDLED_EXTRAS = 25
 LOGIN_FIX = "Run 'tdk login', or set TDK_SERVER together with TDK_TOKEN or TDK_BEARER."
+VERSION_FIX = "Install the tabsdata release that matches the server."
 
 
 def _result(name: str, status: str, detail: str, fix: str | None = None) -> dict:
@@ -36,10 +37,14 @@ def _client_version() -> str | None:
         return None
 
 
-def _describe(error: Exception) -> str:
+def _classify(error: Exception):
     from tabsdatak.cli._errors import classify
 
-    return classify(error).message
+    return classify(error)
+
+
+def _describe(error: Exception) -> str:
+    return _classify(error).message
 
 
 class Probe:
@@ -125,6 +130,16 @@ def check_server(probe: Probe) -> dict:
         status = probe.server.status
         server_version = probe.runtime().get("version")
     except Exception as error:
+        if _classify(error).type == "version_mismatch":
+            from tabsdatak.cli.cli_utils import server_version as read_version
+
+            return _result(
+                "server",
+                FAIL,
+                f"server {read_version(probe.server)}, client {_client_version()}: "
+                "the server refuses this client's version",
+                VERSION_FIX,
+            )
         return _result(
             "server",
             FAIL,
@@ -139,7 +154,7 @@ def check_server(probe: Probe) -> dict:
             "server",
             WARN,
             f"{detail}, client {client}: versions differ",
-            "Install the tabsdata release that matches the server.",
+            VERSION_FIX,
         )
     return _result("server", PASS, f"{detail}, client {client}")
 
@@ -155,7 +170,10 @@ def check_login(probe: Probe) -> dict:
         renewable = bool(connection.refresh_token)
         info = probe.server.auth_info()
     except Exception as error:
-        return _result("login", FAIL, _describe(error), LOGIN_FIX)
+        refused = _classify(error).type == "version_mismatch"
+        return _result(
+            "login", FAIL, _describe(error), VERSION_FIX if refused else LOGIN_FIX
+        )
     detail = f"logged in as {info.get('name')}"
     if connection.project:
         detail += f", project {connection.project}"

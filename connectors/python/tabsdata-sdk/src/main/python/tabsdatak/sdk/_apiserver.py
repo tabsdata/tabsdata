@@ -13,7 +13,9 @@ import os
 import time
 from contextlib import contextmanager, nullcontext
 from email.utils import parsedate_to_datetime
+from functools import cache
 from http import HTTPStatus
+from importlib.metadata import PackageNotFoundError, version as package_version
 from typing import List
 from urllib.parse import quote, urlparse
 
@@ -31,6 +33,8 @@ PORT_SEPARATOR = ":"
 
 BASE_API_URL_V1 = "/api/v1"
 BASE_API_URL = BASE_API_URL_V1
+
+VERSION_HEADER = "X-Td-Version"
 
 
 DEFAULT_TABSDATA_DIRECTORY = tabsdata_directory()
@@ -59,6 +63,14 @@ DEFAULT_LIST_ENDPOINT_PARAMETERS = [
 ]
 
 logger = logging.getLogger(__name__)
+
+
+@cache
+def client_version() -> str | None:
+    try:
+        return package_version("tabsdata-sdk")
+    except PackageNotFoundError:
+        return None
 
 
 def _path_segment(value) -> str:
@@ -160,6 +172,7 @@ class APIServerError(Exception):
         dictionary,
         status: int | None = None,
         retry_after: float | None = None,
+        server_version: str | None = None,
     ):
         if not isinstance(dictionary, dict):
             dictionary = {"error_description": str(dictionary)}
@@ -168,6 +181,7 @@ class APIServerError(Exception):
         self.error_description = dictionary.get("error_description")
         self.status = status
         self.retry_after = retry_after
+        self.server_version = server_version
         super().__init__(
             self.error_description if self.error_description else "Unknown error"
         )
@@ -182,6 +196,7 @@ class APIServerError(Exception):
             detail,
             status=response.status_code,
             retry_after=_retry_after_seconds(response.headers.get("Retry-After")),
+            server_version=response.headers.get(VERSION_HEADER),
         )
 
 
@@ -442,6 +457,10 @@ class APIServer:
 
     def request_once(self, method: str, path: str, content_type=None, **kwargs):
         headers = dict(self.authentication_header)
+        version = client_version()
+        if version:
+            headers[VERSION_HEADER] = version
+            headers["User-Agent"] = f"tabsdata/{version}"
         if content_type:
             headers["Content-Type"] = content_type
         session = GET_HTTP_SESSION if method == "get" else DEFAULT_HTTP_SESSION

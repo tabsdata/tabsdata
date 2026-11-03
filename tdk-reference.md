@@ -851,7 +851,7 @@ failed and never stops the others.
 | Check | Fails / warns when |
 |---|---|
 | `python` | fails when the local `X.Y.Z` is not one the server accepts (exact match, the rule behind `COMMON_11`); warns when the server cannot be consulted |
-| `server` | fails when the server is unreachable; warns when its version differs from the client's |
+| `server` | fails when the server is unreachable or refuses the client's tabsdata version; warns when an older server, which does not refuse it, runs another version |
 | `login` | fails without valid credentials; warns when a session that cannot be renewed expires within 10 minutes |
 | `venv` | fails outside a virtual environment; warns for installed packages from no registry (editable, local, VCS), which are not bundled with functions, and for more than 25 extra registry packages |
 | `uv` | fails when `uv` is not on `PATH` |
@@ -992,7 +992,7 @@ Every command exits with one of these codes, whatever the output format.
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | Server error, server unavailable or rate limited, server unreachable, invalid request, aborted prompt, unexpected failure |
+| 1 | Server error, server unavailable or rate limited, server unreachable, a server running another tabsdata version, invalid request, aborted prompt, unexpected failure |
 | 2 | Usage error: bad or missing option, no project selected |
 | 3 | Not logged in, or the credential was refused |
 | 4 | Forbidden, including operations a service token or a session cannot perform |

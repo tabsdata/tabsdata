@@ -11,6 +11,7 @@
 //!   compression           responses the client accepts compressed
 //!   timeout               504 past the request timeout
 //!   ── /api/v1 ──────────────────────────────────────────────
+//!   client version        426 for a client naming another version
 //!   authorization         Bearer routes: the caller's RequestContext
 //!   project resolution    project-scoped routes: the {project} id
 //!   handler
@@ -23,6 +24,7 @@
 use crate::apiserver::server::{Server, ServerBuilder, ServerError};
 use crate::apiserver::{ApiServerCtx, BASE_API_URL, V1};
 use crate::layers::authorization::{AuthorizationState, authorization_layer};
+use crate::layers::client_version::client_version_layer;
 use crate::layers::project_resolver::project_resolver_layer;
 use crate::layers::{catch_panic, compression, timeout, trace};
 use axum::middleware::from_fn_with_state;
@@ -74,7 +76,11 @@ impl ApiServerV1 {
                         AuthorizationState::new(&context.services, context.routes.clone()),
                         authorization_layer,
                     ))
-                });
+                })
+                .layer(from_fn_with_state(
+                    context.services.runtime_context.clone(),
+                    client_version_layer,
+                ));
 
             let router = utoipa_axum::router::OpenApiRouter::default()
                 .nest(V1, router)

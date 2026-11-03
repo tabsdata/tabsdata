@@ -34,6 +34,7 @@ ERROR_TYPES: dict[str, ExitCode] = {
     "invalid_request": ExitCode.FAILURE,
     "internal": ExitCode.FAILURE,
     "checks_failed": ExitCode.FAILURE,
+    "version_mismatch": ExitCode.FAILURE,
     "aborted": ExitCode.FAILURE,
     "usage": ExitCode.USAGE,
     "missing_argument": ExitCode.USAGE,
@@ -102,6 +103,8 @@ def _api_error_type(status: int | None, error: str | None, code: str | None) -> 
         return "not_found"
     if status in (409, 423):
         return "conflict"
+    if status == 426:
+        return "version_mismatch"
     if status == 429:
         return "rate_limited"
     if status == 503:

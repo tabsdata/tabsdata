@@ -20,6 +20,8 @@ async fn runtime_info(
     Ok(runtime_context.info().clone())
 }
 
+pub const UNKNOWN_VERSION: &str = "-unknown-";
+
 #[derive(Debug, Getters)]
 #[getset(get = "pub")]
 pub struct RuntimeContext {
@@ -38,15 +40,22 @@ impl RuntimeContext {
 }
 
 #[cfg(feature = "test-utils")]
-impl Default for RuntimeContext {
-    fn default() -> Self {
+impl RuntimeContext {
+    pub fn with_version(version: &str) -> Self {
         RuntimeContext {
             info: RuntimeInfo {
-                version: TabsdataVersion::try_from("-unknown-").unwrap(),
+                version: TabsdataVersion::try_from(version).unwrap(),
                 build_manifest: BuildManifest::default(),
                 python_versions: vec![],
             },
         }
+    }
+}
+
+#[cfg(feature = "test-utils")]
+impl Default for RuntimeContext {
+    fn default() -> Self {
+        RuntimeContext::with_version(UNKNOWN_VERSION)
     }
 }
 

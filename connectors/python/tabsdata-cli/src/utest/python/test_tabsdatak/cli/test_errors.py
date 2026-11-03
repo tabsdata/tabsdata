@@ -48,6 +48,7 @@ def _api(status: int, code: str | None = None, error: str | None = None):
         (404, "FunctionError::1003", "not_found", "not_found"),
         (409, None, None, "conflict"),
         (423, None, None, "conflict"),
+        (426, None, "upgrade_required", "version_mismatch"),
         (429, None, None, "rate_limited"),
         (503, None, None, "unavailable"),
         (500, None, "internal_error", "server_error"),

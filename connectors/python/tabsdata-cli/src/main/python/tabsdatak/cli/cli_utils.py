@@ -26,6 +26,7 @@ import re
 import sys
 import weakref
 from contextlib import contextmanager
+from http import HTTPStatus
 from itertools import islice
 from types import ModuleType
 from typing import TYPE_CHECKING, Any, Iterable, Iterator, Sequence
@@ -283,7 +284,7 @@ def utils_login(
                 "checked by "
                 "executing 'tdserver status'.",
             )
-        elif isinstance(e, APIServerError):
+        elif isinstance(e, APIServerError) and e.status != HTTPStatus.UPGRADE_REQUIRED:
             show_hint(
                 ctx,
                 (
@@ -886,10 +887,14 @@ def server_version(server) -> str | None:
         return _SERVER_VERSIONS[server]
     except (KeyError, TypeError):
         pass
+    from tabsdatak.sdk._apiserver import APIServerError
+
     try:
         found = (server.connection.runtime_info_get().json().get("data") or {}).get(
             "version"
         )
+    except APIServerError as error:
+        found = error.server_version
     except Exception as error:
         logger.debug("The server version could not be read: %s", error)
         found = None
