@@ -90,9 +90,9 @@ control, and earlier versions remain readable.
 The division of labor is deliberate. The agent does discovery, duplication checks, assembly and
 boilerplate; the engineer decides and approves.
 
-* **MCP server** - exposes the catalog, table versions, dependency graph and execution history, as
-  well as the operations to define, trigger and inspect functions, to external AI agents such as
-  Claude, Cursor or your own.
+* **Coding agents** - agents such as Claude Code, Codex or Cursor drive Tabsdata through the `tdk`
+  CLI in their own shell: under an agent it never prompts and answers each command with one JSON
+  document and a fixed exit code.
 * **Built-in agent** - in the Tabsdata UI, scoped to operations: what ran, what failed and why.
 
 For more details refer to [Tabsdata Getting Started](https://docs.tabsdata.com/guide/introduction)

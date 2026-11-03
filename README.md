@@ -18,7 +18,7 @@ Copyright 2025 Tabsdata Inc.
 
 [Tabsdata](https://tabsdata.com/) is an **agentic data engineering platform** built on a **Pub/Sub for Tables** core. Publishers bring external data in as tables, transformers produce new tables from existing ones, and subscribers deliver tables to the systems that consume them. Every run produces a new immutable table version, and lineage is recorded by the execution itself.
 
-An AI agent does the discovery, duplication checks, assembly, and testing of a dataflow; an engineer reviews and approves every change. Because the agent runs inside the same system that tracks every table, version, dependency, and definition, it works with full context and cannot break what it can't see. Tabsdata exposes all of its functionality over MCP, so external agents can be guided through data engineering work on it as well.
+An AI agent does the discovery, duplication checks, assembly, and testing of a dataflow; an engineer reviews and approves every change. Because the agent runs inside the same system that tracks every table, version, dependency, and definition, it works with full context and cannot break what it can't see. Coding agents such as Claude Code, Codex or Cursor use all of its functionality through the `tdk` CLI in their shell, so they can be guided through data engineering work on it as well.
 
 Tabsdata lands beside your stack: your warehouse stays the center of gravity, and Tabsdata delivers governed, versioned tables into it. Existing workloads and the tools that run them are untouched; new workloads run end to end on Tabsdata.
 
