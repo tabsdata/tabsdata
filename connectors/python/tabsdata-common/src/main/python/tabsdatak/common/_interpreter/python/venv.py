@@ -91,10 +91,7 @@ TABSDATA_CONNECTORS_NAMES: tuple[str, ...] = (
     "tabsdata-server",
 )
 
-TABSDATA_EE_CONNECTORS_NAMES: tuple[str, ...] = (
-    "tabsdata-agentkit",
-    "tabsdata-mcp",
-)
+TABSDATA_EE_CONNECTORS_NAMES: tuple[str, ...] = ("tabsdata-agentkit",)
 
 TABSDATA_PACKAGES_NAMES: frozenset[str] = frozenset(
     canonicalize_name(name)
