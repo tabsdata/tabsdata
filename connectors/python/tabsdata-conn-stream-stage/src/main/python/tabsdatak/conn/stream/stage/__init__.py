@@ -16,13 +16,11 @@ last-modified order; a per-flow cursor advances one manifest per run.
 
 from __future__ import annotations
 
-import fnmatch
 import json
 import logging
 from collections.abc import Iterable
 from datetime import datetime
 from typing import Any, Protocol, cast
-from urllib.parse import urlparse
 
 import obstore
 
@@ -30,6 +28,7 @@ from tabsdatak.common._storage.frames import FrameLocator
 from tabsdatak.common._storage.landed import LANDING_SUFFIX, LandedPair, LandedTable
 from tabsdatak.common._storage.transfer import OBJECT_STORES, StorageLocation
 from tabsdatak.conn.common._cursor import LastModifiedCursor
+from tabsdatak.conn.common._find import Listed, find
 from tabsdatak.conn.stream.stage.error import ManifestStageErrorCode
 from tabsdatak.spi import (
     LazyFrameInput,
@@ -94,30 +93,24 @@ class ManifestStageSrcPlugin(SrcPlugin[_StreamStageSrcConn, StreamStageSrc]):
                 pattern=pattern,
                 reason=str(error),
             )
-        manifests = sorted(
-            (
-                item
-                for item in listing["objects"]
-                if fnmatch.fnmatchcase(
-                    item["path"].rpartition(PATH_SEPARATOR)[2],
-                    MANIFEST_PATTERN,
-                )
-            ),
-            key=lambda item: (item["last_modified"], item["path"]),
-        )
         cursor = LastModifiedCursor.decode(
             cast(str | None, ctx.get_attr(MANIFEST_CURSOR_KEY)),
             MANIFEST_INITIAL_LASTMOD,
         )
-        key = urlparse(pattern).path
-        chosen = None
-        for item in manifests:
-            name = item["path"].rpartition(PATH_SEPARATOR)[2]
-            if cursor.take(key, name, item["last_modified"]):
-                chosen = item["path"]
-                break
+        listed = (
+            Listed(item["path"].rpartition(PATH_SEPARATOR)[2], item["last_modified"])
+            for item in listing["objects"]
+        )
+        found = find(
+            listed,
+            MANIFEST_PATTERN,
+            cursor,
+            max_files=1,
+        )
         ctx.set_attr(MANIFEST_CURSOR_KEY, cursor.encode())
-        return chosen
+        if not found.selected:
+            return None
+        return f"{MANIFESTS_FOLDER}{PATH_SEPARATOR}{found.selected[0].name}"
 
     @staticmethod
     def read_manifest(location: StorageLocation, path: str) -> list[list[str]]:

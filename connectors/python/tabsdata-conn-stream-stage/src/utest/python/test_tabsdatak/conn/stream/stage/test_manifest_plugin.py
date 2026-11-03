@@ -22,6 +22,7 @@ from tabsdatak.conn.common._cursor import LastModifiedCursor
 from tabsdatak.conn.stream.stage import (
     MANIFEST_CURSOR_KEY,
     MANIFEST_INITIAL_LASTMOD,
+    MANIFEST_PATTERN,
     ManifestStageSrcPlugin,
 )
 from tabsdatak.conn.stream.stage.error import ManifestStageException
@@ -128,14 +129,29 @@ def test_a_stored_cursor_resumes_past_what_it_took(stage, tmp_path):
     manifest(stage, "a", [[parquet(stage, "a.parquet", [1])]], NOON)
     manifest(stage, "b", [[parquet(stage, "b.parquet", [2])]], NOON + 10)
     cursor = LastModifiedCursor.decode(None, MANIFEST_INITIAL_LASTMOD)
-    pattern = f"{stage.as_posix()}/manifests/stream-manifest-*.json"
     cursor.take(
-        pattern,
+        MANIFEST_PATTERN,
         "stream-manifest-a.json",
         datetime.fromtimestamp(NOON, tz=timezone.utc),
     )
     ctx = Ctx(tmp_path, {MANIFEST_CURSOR_KEY: cursor.encode()})
     assert ids(read(stage, ctx)) == [[[2]]]
+
+
+# Stored by a 2.2 / 2.3 stream stage:
+# - it had read `stream-manifest-a.json`;
+# - last modified at NOON.
+def test_a_cursor_stored_by_a_released_stream_stage_resumes(stage, tmp_path):
+    manifest(stage, "a", [[parquet(stage, "a.parquet", [1])]], NOON)
+    manifest(stage, "b", [[parquet(stage, "b.parquet", [2])]], NOON + 10)
+    stored = (
+        "eyJpbml0aWFsIjoiMTk3MC0wMS0wMVQwMDowMDowMFoiLCJlbnRyaWVzIjp7InN0cmVhbS1tYW5p"
+        "ZmVzdC0qLmpzb24iOnsibGFzdG1vZCI6IjIwMjYtMDYtMTZUMTI6MDA6MDBaIiwibmFtZXMiOlsi"
+        "c3RyZWFtLW1hbmlmZXN0LWEuanNvbiJdfX19"
+    )
+    ctx = Ctx(tmp_path, {MANIFEST_CURSOR_KEY: stored})
+    assert ids(read(stage, ctx)) == [[[2]]]
+    assert read(stage, ctx) == []
 
 
 def test_every_slot_reads_its_tables_in_order(stage, tmp_path):

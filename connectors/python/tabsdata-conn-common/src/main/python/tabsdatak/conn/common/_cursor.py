@@ -5,29 +5,66 @@
 """An incremental cursor over the files a pattern matches, by last-modified
 time.
 
-Per pattern, it keeps the latest last-modified time taken and the names taken
-at that time: a file is taken when it is newer than that time, or as old and
-not taken yet, so files sharing a time are each taken once. Before a pattern
-has taken anything, a file is taken from the cursor's initial time on.
+Per pattern it keeps:
 
-It is stored as a base64 JSON document (``{"V1": {"initial_last_modified":
-..., "entries": {pattern: [time, [names]]}}}``), the format the file-based
-connectors have kept their incremental state in, so a state stored by any of
-them reads back unchanged.
+- the latest last-modified time taken;
+- the names taken at that time.
+
+A file is taken when:
+
+- the pattern has taken nothing yet and the file is not older than the
+  cursor's initial time;
+- it is newer than the latest time taken;
+- it is as old as the latest time taken and its name was not taken yet, so
+  files sharing a time are each taken once.
+
+Storage, as unpadded base64 JSON:
+
+- written: the format released sources keep their state in::
+
+    {
+      "initial": "<time>",
+      "entries": {
+        "<pattern>": {
+          "lastmod": "<time>",
+          "names": ["<name>", ...]
+        }
+      }
+    }
+
+- also read: the V1 format::
+
+    {
+      "V1": {
+        "initial_last_modified": "<time>",
+        "entries": {
+          "<pattern>": ["<time>", ["<name>", ...]]
+        }
+      }
+    }
 """
 
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-VERSION = "V1"
-INITIAL_KEY = "initial_last_modified"
+INITIAL_KEY = "initial"
 ENTRIES_KEY = "entries"
+LASTMOD_KEY = "lastmod"
+NAMES_KEY = "names"
+V1_KEY = "V1"
+V1_INITIAL_KEY = "initial_last_modified"
 UTC_SUFFIX = "Z"
 FRACTION_DIGITS = 6
+JSON_SEPARATORS = (",", ":")
+
+
+class CursorError(ValueError):
+    pass
 
 
 @dataclass
@@ -45,28 +82,50 @@ class LastModifiedCursor:
     def decode(cls, value: str | None, initial: datetime) -> LastModifiedCursor:
         if value is None:
             return cls(initial)
-        padded = value + "=" * (-len(value) % 4)
-        state = json.loads(base64.b64decode(padded))[VERSION]
-        return cls(
-            instant(state[INITIAL_KEY]),
-            {
-                pattern: Taken(instant(last_modified), list(names))
-                for pattern, (last_modified, names) in state[ENTRIES_KEY].items()
-            },
-        )
+        stripped = value.rstrip("=")
+        try:
+            document = base64.b64decode(
+                stripped + "=" * (-len(stripped) % 4), validate=True
+            )
+        except (binascii.Error, ValueError) as error:
+            raise CursorError(f"The stored cursor is not base64: {error}") from error
+        try:
+            state = json.loads(document)
+            if V1_KEY in state:
+                v1 = state[V1_KEY]
+                return cls(
+                    instant(v1[V1_INITIAL_KEY]),
+                    {
+                        pattern: Taken(instant(last_modified), list(names))
+                        for pattern, (last_modified, names) in v1[ENTRIES_KEY].items()
+                    },
+                )
+            return cls(
+                instant(state[INITIAL_KEY]),
+                {
+                    pattern: Taken(instant(entry[LASTMOD_KEY]), list(entry[NAMES_KEY]))
+                    for pattern, entry in state[ENTRIES_KEY].items()
+                },
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise CursorError(f"The stored cursor cannot be read: {error}") from error
 
     def encode(self) -> str:
         state = {
-            VERSION: {
-                INITIAL_KEY: text(self.initial),
-                ENTRIES_KEY: {
-                    pattern: [text(taken.last_modified), taken.names]
-                    for pattern, taken in self.entries.items()
-                },
+            INITIAL_KEY: text(self.initial),
+            ENTRIES_KEY: {
+                pattern: {
+                    LASTMOD_KEY: text(taken.last_modified),
+                    NAMES_KEY: taken.names,
+                }
+                for pattern, taken in self.entries.items()
             },
         }
-        encoded = base64.b64encode(json.dumps(state).encode())
-        return encoded.decode().rstrip("=")
+        document = json.dumps(state, separators=JSON_SEPARATORS).encode()
+        return base64.b64encode(document).decode().rstrip("=")
+
+    def at_or_after_initial(self, last_modified: datetime) -> bool:
+        return last_modified >= self.initial
 
     def take(self, pattern: str, name: str, last_modified: datetime) -> bool:
         taken = self.entries.get(pattern)
@@ -86,24 +145,36 @@ class LastModifiedCursor:
         return True
 
 
-# A stored time may carry nanoseconds; a datetime holds microseconds, as store
-# listings report them, so the extra digits are dropped.
+# - Nanoseconds are cut to microseconds: a datetime holds no more, nor do store
+#   listings.
+# - A time without an offset is refused.
 def instant(value: str) -> datetime:
     stamp = value.removesuffix(UTC_SUFFIX)
+    offset = "+00:00" if value.endswith(UTC_SUFFIX) else ""
     if "." in stamp:
         seconds, fraction = stamp.split(".", 1)
-        offset = ""
         for sign in ("+", "-"):
             if sign in fraction:
-                fraction, offset = fraction.split(sign, 1)
-                offset = f"{sign}{offset}"
-        stamp = f"{seconds}.{fraction[:FRACTION_DIGITS]:0<{FRACTION_DIGITS}}{offset}"
-    parsed = datetime.fromisoformat(stamp)
+                fraction, rest = fraction.split(sign, 1)
+                offset = f"{sign}{rest}"
+        stamp = f"{seconds}.{fraction[:FRACTION_DIGITS]:0<{FRACTION_DIGITS}}"
+    parsed = datetime.fromisoformat(f"{stamp}{offset}")
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
+        raise ValueError(f"the time {value!r} has no offset")
     return parsed.astimezone(timezone.utc)
 
 
+# As released sources write a UTC time:
+# - whole seconds: no fraction;
+# - otherwise: 3 digits when they hold it, else 6.
 def text(value: datetime) -> str:
-    utc = value.astimezone(timezone.utc).replace(tzinfo=None)
-    return f"{utc.isoformat(timespec='microseconds')}{UTC_SUFFIX}"
+    utc = value.astimezone(timezone.utc)
+    seconds = utc.strftime("%Y-%m-%dT%H:%M:%S")
+    micros = utc.microsecond
+    if micros == 0:
+        fraction = ""
+    elif micros % 1000 == 0:
+        fraction = f".{micros // 1000:03d}"
+    else:
+        fraction = f".{micros:06d}"
+    return f"{seconds}{fraction}{UTC_SUFFIX}"
