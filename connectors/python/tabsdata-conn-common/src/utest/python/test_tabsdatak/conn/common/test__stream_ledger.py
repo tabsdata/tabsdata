@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import logging
+import re
 from pathlib import Path
 
 import polars as pl
@@ -14,6 +16,8 @@ from tabsdatax.itest.fixture.functions.stream import LocalStage
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._ledger import StageLedger
 from tabsdatak.spi import LazyFrameInput
+
+LEDGER_LOGGER = "tabsdatak.conn.common._stream._ledger"
 
 
 def table(*values: int) -> pa.Table:
@@ -117,3 +121,22 @@ def test_discarding_leaves_what_others_sent(stage):
     ledger.write("s.a", table(1))
     ledger.discard()
     assert stage.pending == other
+
+
+def test_the_staged_line_keeps_the_wording_the_performance_suite_reads(stage, caplog):
+    # tabsdata-dt's performance suite (xp-tool/suites/performance/scripts/
+    # cdc_throughput.py) reads this line off the stream worker's log to count
+    # the rows and bytes staged. Rewording it breaks that check.
+    ledger = StageLedger(ctx=stage, slots=["s.a"])
+    with caplog.at_level(logging.DEBUG, logger=LEDGER_LOGGER):
+        ledger.write("s.a", table(1, 2, 3))
+
+    [record] = [r for r in caplog.records if r.name == LEDGER_LOGGER]
+    [stats] = ledger.manifest()[0]
+    assert record.getMessage() == (
+        f"Staged 3 row(s) and {stats.bytes} byte(s) of s.a as {stats.name}"
+    )
+    assert re.fullmatch(
+        r"Staged \d+ row\(s\) and \d+ byte\(s\) of \S+ as \S+",
+        record.getMessage(),
+    )

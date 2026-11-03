@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import re
 import urllib.error
 from pathlib import Path
 from types import SimpleNamespace
@@ -330,3 +332,19 @@ def test_a_failed_unstage_is_only_a_warning(tmp_path, caplog):
     command.context.unstage = unreachable
     command.stream()
     assert "Cannot unstage" in caplog.text
+
+
+def test_the_start_line_keeps_the_wording_the_performance_suite_reads(tmp_path, caplog):
+    # tabsdata-dt's performance suite (xp-tool/suites/performance/scripts/
+    # cdc_throughput.py) starts its clock at this line of the stream worker's
+    # log. Rewording it breaks that check.
+    command = streaming(tmp_path, SendingPlugin())
+    with caplog.at_level(logging.INFO):
+        command.stream()
+
+    [record] = [r for r in caplog.records if r.getMessage().startswith("Running ")]
+    assert record.name.endswith("stream_source_plugin.runner")
+    assert re.fullmatch(
+        r"Running SendingPlugin for \S+ on \S+, staging to file:///s with .*",
+        record.getMessage(),
+    )

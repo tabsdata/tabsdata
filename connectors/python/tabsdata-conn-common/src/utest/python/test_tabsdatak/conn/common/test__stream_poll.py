@@ -4,8 +4,12 @@
 
 from __future__ import annotations
 
+import logging
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._poll import SourcePoll
+
+POLL_LOGGER = "tabsdatak.conn.common._stream._poll"
 
 
 class Clock:
@@ -80,3 +84,23 @@ def test_a_poll_with_records_logs_them_with_its_seconds(caplog):
     with caplog.at_level("DEBUG", logger="tabsdatak.conn.common._stream._poll"):
         poll.log()
     assert [(r.levelname, r.args) for r in caplog.records] == [("DEBUG", (1, 1.25))]
+
+
+def test_the_poll_line_keeps_the_wording_the_performance_suite_reads(caplog):
+    # tabsdata-dt's performance suite (xp-tool/suites/performance/scripts/
+    # cdc_throughput.py) reads this line off the stream worker's log to
+    # measure how fast the source is read. Rewording it breaks that check.
+    clock = Clock()
+
+    def source():
+        clock.now += 0.25
+        yield "a"
+
+    poll = SourcePoll(source(), clock=clock)
+    list(poll)
+    with caplog.at_level(logging.DEBUG, logger=POLL_LOGGER):
+        poll.log()
+
+    [record] = caplog.records
+    assert record.name == POLL_LOGGER
+    assert record.getMessage() == "Polled 1 record(s) from the source in 0.250 s"
