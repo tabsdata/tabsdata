@@ -124,7 +124,7 @@ script = [
 
     set_env PYTHONWARNINGS ignore
 
-    ee_packages = array tabsdata-agent tabsdata-mcp
+    ee_packages = array tabsdata-agent tabsdata-agentkit
     for ee_package in ${ee_packages}
         installed = exec uv pip show --quiet ${ee_package}
         if eq ${installed.code} 0

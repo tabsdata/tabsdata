@@ -334,7 +334,7 @@ script = [
 
         ee_connectors_py_root_folder = get_env EE_CONNECTORS_PY_ROOT_FOLDER
         if is_empty ${ee_connectors_py_root_folder}
-            ee_modules = array tabsdatak.ag tabsdatak.mcp
+            ee_modules = array tabsdatak.ag tabsdatak.agentkit
             for module in ${ee_modules}
                 debug "🔸🔸🔸 Checking non-import: ${module}"
                 result = exec python -c "import ${module}"
