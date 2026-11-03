@@ -132,6 +132,7 @@ def build_table(
         return build_record_table(view, render_cell, wrap)
     table = Table(
         box=box.HEAVY_HEAD,
+        safe_box=False,
         border_style=BORDER,
         header_style="",
         show_lines=view.rules,
