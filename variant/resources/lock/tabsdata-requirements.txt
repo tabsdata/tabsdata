@@ -12,7 +12,7 @@ anyio==4.16.0
 archspec==0.2.7
 asn1crypto==1.5.1
 attrs==26.1.0
-authlib==1.9.2
+authlib==1.9.3
 avro==1.12.2
 azure-common==1.1.28
 azure-core==1.41.0
@@ -54,7 +54,7 @@ filelock==3.32.7
 frozenlist==1.8.0
 fsspec==2026.9.0
 google-api-core==2.43.2
-google-auth==2.62.0
+google-auth==2.62.1
 google-cloud-bigquery==3.47.0
 google-cloud-compute==1.56.0
 google-cloud-container==2.67.0
@@ -83,7 +83,7 @@ ijson==3.6.0
 importlib-metadata==10.1.0
 isodate==0.7.2
 jmespath==1.1.0
-joserfc==1.7.7
+joserfc==1.8.0
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 kubernetes==37.0.1

@@ -370,7 +370,7 @@ version = "0.23.1"
 version = "1.12.1"
 
 [workspace.dependencies.calamine]
-version = "0.37.0"
+version = "0.38.0"
 
 [workspace.dependencies.chrono]
 version = "0.4.45"
