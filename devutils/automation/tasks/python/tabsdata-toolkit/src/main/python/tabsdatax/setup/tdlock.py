@@ -2,12 +2,14 @@
 # Copyright 2025 Tabsdata Inc.
 #
 
+import glob
 import logging
 import os
 import subprocess
 from datetime import datetime
 
 from tabsdatax.setup.common.config import TD_SETUP_GENERATE_LOCKS, TRUE_VALUES
+from tabsdatax.setup.common.edition import ee_connectors_folder
 
 TABSDATA = "tabsdata"
 TABSDATA_OS = "tabsdata-os"
@@ -80,5 +82,18 @@ def generate_requirements_lock(root_path, package_resources_folder):
                     "requirements-third-party-all.txt",
                 )
             )
+
+    requirements.extend(
+        sorted(
+            glob.glob(
+                os.path.join(
+                    ee_connectors_folder(root_path),
+                    "tabsdata-*",
+                    "requirements",
+                    "requirements-third-party.txt",
+                )
+            )
+        )
+    )
 
     write_requirements_lock(requirements, output_path, cwd=root_path)
