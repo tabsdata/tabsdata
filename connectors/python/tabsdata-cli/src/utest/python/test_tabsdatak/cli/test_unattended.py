@@ -53,14 +53,20 @@ def test_an_unattended_session_never_waits_on_open_stdin(tmp_path):
             "GITHUB_ACTIONS",
         )
     }
-    env.update({"HOME": str(tmp_path), "CLAUDECODE": "1", "COLUMNS": "250"})
+    env.update({
+        "HOME": str(tmp_path),
+        "USERPROFILE": str(tmp_path),
+        "CLAUDECODE": "1",
+        "COLUMNS": "250",
+        "PYTHONIOENCODING": "utf-8",
+    })
     process = subprocess.Popen(
         [sys.executable, "-c", _OS_ONLY, "login"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env=env,
-        text=True,
+        encoding="utf-8",
     )
     try:
         code = process.wait(timeout=60)

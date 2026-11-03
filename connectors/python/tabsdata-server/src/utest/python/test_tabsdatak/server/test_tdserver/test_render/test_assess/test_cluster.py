@@ -4,6 +4,9 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import pytest
 import yaml
 
@@ -60,19 +63,20 @@ def test_a_named_namespace_wins():
 
 
 def test_the_named_kubeconfig_wins_over_the_environment(monkeypatch):
-    monkeypatch.setenv("KUBECONFIG", "/from/environment")
-    found = kubeconfig_of(Target(instance="probe", kubeconfig="/from/argument"))
-    assert str(found) == "/from/argument"
+    monkeypatch.setenv("KUBECONFIG", str(Path("/from/environment")))
+    named = str(Path("/from/argument"))
+    assert kubeconfig_of(Target(instance="probe", kubeconfig=named)) == Path(named)
 
 
 def test_the_environment_is_read_when_no_kubeconfig_is_named(monkeypatch):
-    monkeypatch.setenv("KUBECONFIG", "/from/environment")
-    assert str(kubeconfig_of(Target(instance="probe"))) == "/from/environment"
+    monkeypatch.setenv("KUBECONFIG", str(Path("/from/environment")))
+    assert kubeconfig_of(Target(instance="probe")) == Path("/from/environment")
 
 
 def test_only_the_first_entry_of_a_kubeconfig_list_is_read(monkeypatch):
-    monkeypatch.setenv("KUBECONFIG", "/first:/second:/third")
-    assert str(kubeconfig_of(Target(instance="probe"))) == "/first"
+    entries = [str(Path(name).absolute()) for name in ("/first", "/second", "/third")]
+    monkeypatch.setenv("KUBECONFIG", os.pathsep.join(entries))
+    assert kubeconfig_of(Target(instance="probe")) == Path(entries[0])
 
 
 def test_an_empty_kubeconfig_variable_falls_back_to_the_home_of_the_user(monkeypatch):

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, fields
 
 import pytest
@@ -170,7 +171,7 @@ def test_load_rejects_a_missing_file(tmp_path, sample):
 )
 def test_load_rejects_a_malformed_manifest(tmp_path, sample, content):
     path = written(tmp_path, content.format(key=sample.key))
-    with pytest.raises(ManifestError, match=str(path)):
+    with pytest.raises(ManifestError, match=re.escape(str(path))):
         manifest_class(sample).load(path)
 
 

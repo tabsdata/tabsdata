@@ -40,7 +40,7 @@ def _write_bundle(path: Path, members: dict[str, str]) -> None:
     staging = path.parent / f"{path.name}.staging"
     for name, text in members.items():
         (staging / name).parent.mkdir(parents=True, exist_ok=True)
-        (staging / name).write_text(text)
+        (staging / name).write_bytes(text.encode("utf-8"))
     with open(path, "wb") as raw:
         with zstandard.ZstdCompressor().stream_writer(raw, closefd=False) as stream:
             with tarfile.open(fileobj=stream, mode="w|") as tar:
@@ -296,7 +296,13 @@ def test_add_package_replaces_the_pin_of_the_same_package(tmp_path):
 
     client.patch_function.side_effect = patch_function
     argv = [*_PATCH, "--source", _source(tmp_path / "src")]
-    argv += ["--add-package", "Polars==1.5", "--add-package", "requests>=2", "--machine"]
+    argv += [
+        "--add-package",
+        "Polars==1.5",
+        "--add-package",
+        "requests>=2",
+        "--machine",
+    ]
     result = _invoke(argv, tmp_path, client)
     assert result.exit_code == ExitCode.OK, result.output
     assert seen["requirements"]["publicPackages"] == ["Polars==1.5", "requests>=2"]
@@ -307,7 +313,9 @@ def test_add_package_and_requirements_exclude_each_other(tmp_path):
     requirements = tmp_path / "req.yaml"
     requirements.write_text("pythonVersion: 3.12.1\n")
     argv = [*_PATCH, "--source", _source(tmp_path / "src"), "--add-package", "x==1"]
-    result = _invoke([*argv, "--requirements", str(requirements), "--machine"], tmp_path, client)
+    result = _invoke(
+        [*argv, "--requirements", str(requirements), "--machine"], tmp_path, client
+    )
     assert result.exit_code == ExitCode.USAGE, result.output
     assert client.download_function_bundle.call_count == 0
 
@@ -317,7 +325,9 @@ def test_bundle_extract_refuses_a_non_empty_directory(tmp_path):
     target.mkdir()
     (target / "keep.txt").write_text("mine")
     client = _client()
-    result = _invoke([*_BUNDLE, "--extract", str(target), "--machine"], tmp_path, client)
+    result = _invoke(
+        [*_BUNDLE, "--extract", str(target), "--machine"], tmp_path, client
+    )
     assert result.exit_code == ExitCode.CONFLICT, result.output
     assert client.download_function_bundle.call_count == 0
     forced = _invoke(

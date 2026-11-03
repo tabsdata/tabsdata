@@ -68,12 +68,13 @@ def _python_dash_m(unattended: bool, *argv):
             "GITHUB_ACTIONS",
         )
     }
+    env["PYTHONIOENCODING"] = "utf-8"
     if unattended:
         env["TDK_AGENT"] = "1"
     return subprocess.run(
         [sys.executable, "-m", "tabsdatak.cli", *argv],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         timeout=120,
         env=env,
     )

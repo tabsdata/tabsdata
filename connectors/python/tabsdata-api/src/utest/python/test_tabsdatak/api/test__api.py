@@ -4,14 +4,17 @@
 
 from __future__ import annotations
 
+import dataclasses as _stdlib_dc
 import inspect
 import logging
 import sys
+import textwrap
 from dataclasses import FrozenInstanceError
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from pydantic import ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic.dataclasses import dataclass as _pdc
 
 # noinspection PyProtectedMember
 from tabsdatak import _api, _connectors as _connectors, _info, api as m, spi, tableframe
@@ -22,10 +25,10 @@ from tabsdatak.api import (
 )
 from tabsdatak.error import (
     DEBUG_FRAMES_ENV_VAR,
-    ConstraintError,
     ApiErrorCode,
     ApiException,
     ApiInitException,
+    ConstraintError,
 )
 
 
@@ -400,11 +403,6 @@ _MissingStepSrc.__api_version__ = "2.0"
 # All must round-trip identically through _api.JsonSerde.
 # ---------------------------------------------------------------------------
 
-import dataclasses as _stdlib_dc
-
-from pydantic import BaseModel
-from pydantic.dataclasses import dataclass as _pdc
-
 
 @_stdlib_dc.dataclass
 class _StdlibConn(spi.Conn):
@@ -608,12 +606,31 @@ def test_import_user_module_does_not_hijack_installed_from_non_user_code(
 
 
 def test_callable_from_str_resolves_transitive_sibling_chain(tmp_path, monkeypatch):
-    """The entry imports a sibling that imports a third sibling (a -> b);
-    the whole chain must resolve at runtime from the bundle folder."""
-    (tmp_path / "b.py").write_text("bv = 'CHAIN'\n", encoding="utf-8")
-    (tmp_path / "a.py").write_text("from b import bv\n\nav = bv\n", encoding="utf-8")
+    """The entry imports a sibling that imports a third sibling
+    (chain_head -> chain_tail); the whole chain must resolve at runtime from
+    the bundle folder."""
+    (tmp_path / "chain_tail.py").write_text("bv = 'CHAIN'\n", encoding="utf-8")
+    (tmp_path / "chain_head.py").write_text(
+        textwrap.dedent(
+            """\
+            from chain_tail import bv
+
+            av = bv
+            """
+        ),
+        encoding="utf-8",
+    )
     (tmp_path / "m.py").write_text(
-        "from a import av\n\ndef x():\n    return av\n", encoding="utf-8"
+        textwrap.dedent(
+            """\
+            from chain_head import av
+
+
+            def x():
+                return av
+            """
+        ),
+        encoding="utf-8",
     )
     monkeypatch.syspath_prepend(str(tmp_path))
 
@@ -930,22 +947,19 @@ def test_secret_json_round_trips():
 # ---------------------------------------------------------------------------
 
 
-from datetime import datetime as _dt, timezone as _tz
-
-
 @_api.dataclass(ApiErrorCode.API_14)
 class _SrcWithDt(m.Src):
-    when: _dt
+    when: datetime
 
 
 def test_naive_datetime_rejected_on_construction():
     with pytest.raises(ApiException, match="timezone-aware"):
-        _SrcWithDt(when=_dt(2026, 1, 1))
+        _SrcWithDt(when=datetime(2026, 1, 1))
 
 
 def test_tz_aware_datetime_accepted_on_construction():
-    s = _SrcWithDt(when=_dt(2026, 1, 1, tzinfo=_tz.utc))
-    assert s.when.tzinfo is _tz.utc
+    s = _SrcWithDt(when=datetime(2026, 1, 1, tzinfo=timezone.utc))
+    assert s.when.tzinfo is timezone.utc
 
 
 def test_naive_iso_string_rejected_after_coercion():
@@ -960,7 +974,7 @@ def test_tz_aware_iso_string_accepted_after_coercion():
     assert s.when.tzinfo is not None
 
 
-def test_cron_trigger_round_trips():
+def test_cron_trigger_round_trips_through_json():
     # CronTrigger has only ``mask`` today (start / end were removed
     # from Trigger when the schema was simplified).
     t = m.CronTrigger(mask="0 0 * * *")
@@ -1021,7 +1035,7 @@ def test_naive_datetime_rejected_on_load_from_json():
     # rejected on `from_json`. The error surfaces as pydantic's
     # ValidationError (the `_api.dataclass` ApiError-wrapper only fires
     # at construction time, not on `TypeAdapter.validate_json`).
-    s = _SrcWithDt(when=_dt(2026, 1, 1, tzinfo=_tz.utc))
+    s = _SrcWithDt(when=datetime(2026, 1, 1, tzinfo=timezone.utc))
     envelope = s.to_dict()
     envelope["spec"]["when"] = "2026-01-01T00:00:00"  # strip the offset
     import json

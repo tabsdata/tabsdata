@@ -52,7 +52,7 @@ def test_a_record_with_a_location_without_mount_reads_anonymously():
 
 def test_a_record_with_a_file_reads_it_locally():
     table = TableFile.of(InputRecord(file="/t.parquet"))
-    assert table.uri == "file:///t.parquet"
+    assert table.uri == Path("/t.parquet").absolute().as_uri()
     assert table.declaration == AnonymousMountDeclaration()
 
 

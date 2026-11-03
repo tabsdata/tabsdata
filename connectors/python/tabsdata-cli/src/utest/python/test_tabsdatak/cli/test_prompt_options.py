@@ -47,7 +47,7 @@ def _flags(function: ast.FunctionDef) -> set[str]:
 
 def _prompts():
     for path in sorted(CLI_ROOT.rglob("*.py")):
-        tree = ast.parse(path.read_text())
+        tree = ast.parse(path.read_text(encoding="utf-8"))
         for function in ast.walk(tree):
             if not isinstance(function, ast.FunctionDef):
                 continue

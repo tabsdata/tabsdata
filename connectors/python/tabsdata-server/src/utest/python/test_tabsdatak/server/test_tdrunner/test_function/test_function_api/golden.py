@@ -42,7 +42,7 @@ def plain(value: object, roots: tuple[str, ...]) -> object:
     if isinstance(value, str):
         for root in roots:
             value = value.replace(root, ROOT)
-        return value
+        return value.replace(os.sep, "/") if ROOT in value else value
     if isinstance(value, list):
         return [plain(item, roots) for item in value]
     if isinstance(value, dict):

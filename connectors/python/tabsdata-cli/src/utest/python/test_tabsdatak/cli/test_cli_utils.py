@@ -17,6 +17,7 @@ CLI integration suite; here we test what's purely functional:
 from __future__ import annotations
 
 import sys
+import textwrap
 
 import pytest
 
@@ -243,9 +244,10 @@ def test_dynamic_import_synthetic_prefix_not_observable(tmp_path):
 def test_dynamic_import_rewrites_module_on_user_defined_classes(tmp_path):
     """Top-level user-defined classes in the same file get their
     ``__module__`` rewritten too. ``info.to_json`` serialises ``conn``
-    / ``source`` via ``qualified_class(type(obj))`` (= ``f"{cls.__module__}:{cls.__qualname__}"``),
-    so a user-defined ``Conn`` / ``Src`` subclass would otherwise be
-    stamped with the synthetic prefix and the runner's
+    / ``source`` via ``qualified_class(type(obj))``
+    (= ``f"{cls.__module__}:{cls.__qualname__}"``), so a user-defined
+    ``Conn`` / ``Src`` subclass would otherwise be stamped with the
+    synthetic prefix and the runner's
     ``_load_function_def`` would fail to import it from
     ``user_code/<file>.py``."""
     user_file = tmp_path / "stream_publisher.py"
@@ -307,18 +309,36 @@ def test_dynamic_import_resolves_absolute_sibling(tmp_path):
 
 
 def test_dynamic_import_resolves_chained_absolute_siblings(tmp_path):
-    (tmp_path / "b.py").write_text("VALUE = 'B'\n", encoding="utf-8")
-    (tmp_path / "a.py").write_text(
-        "import b\n\ndef from_a():\n    return b.VALUE\n", encoding="utf-8"
+    (tmp_path / "chain_tail.py").write_text("VALUE = 'B'\n", encoding="utf-8")
+    (tmp_path / "chain_head.py").write_text(
+        textwrap.dedent(
+            """\
+            import chain_tail
+
+
+            def from_head():
+                return chain_tail.VALUE
+            """
+        ),
+        encoding="utf-8",
     )
     (tmp_path / "main.py").write_text(
-        "import a\n\ndef run():\n    return a.from_a()\n", encoding="utf-8"
+        textwrap.dedent(
+            """\
+            import chain_head
+
+
+            def run():
+                return chain_head.from_head()
+            """
+        ),
+        encoding="utf-8",
     )
 
     fn = cli_utils._dynamic_import_function_from_path(f"{tmp_path / 'main.py'}::run")
     assert fn() == "B"
-    assert "a" not in sys.modules
-    assert "b" not in sys.modules
+    assert "chain_head" not in sys.modules
+    assert "chain_tail" not in sys.modules
 
 
 def test_dynamic_import_does_not_shadow_installed_package(tmp_path):
@@ -456,18 +476,26 @@ def test_dynamic_import_nested_entry_records_dotted_module(tmp_path):
 
 
 def test_dynamic_import_nested_entry_resolves_all_relative_levels(tmp_path):
-    sub = tmp_path / "a" / "b" / "c"
+    sub = tmp_path / "outer" / "mid" / "inner"
     sub.mkdir(parents=True)
     (sub / "sibling.py").write_text("S = 'SIB'\n", encoding="utf-8")
-    (tmp_path / "a" / "b" / "cousin.py").write_text("C = 'COU'\n", encoding="utf-8")
-    (tmp_path / "a" / "top.py").write_text("T = 'TOP'\n", encoding="utf-8")
+    (tmp_path / "outer" / "mid" / "cousin.py").write_text(
+        "C = 'COU'\n", encoding="utf-8"
+    )
+    (tmp_path / "outer" / "top.py").write_text("T = 'TOP'\n", encoding="utf-8")
     (sub / "d.py").write_text(
-        "from .sibling import S\n"
-        "from ..cousin import C\n"
-        "from a.top import T\n"
-        "\n"
-        "def x():\n"
-        "    return f'{S}/{C}/{T}'\n",
+        textwrap.dedent(
+            """\
+            from outer.top import T
+
+            from ..cousin import C
+            from .sibling import S
+
+
+            def x():
+                return f"{S}/{C}/{T}"
+            """
+        ),
         encoding="utf-8",
     )
 
@@ -475,7 +503,7 @@ def test_dynamic_import_nested_entry_resolves_all_relative_levels(tmp_path):
         f"{sub / 'd.py'}::x", bundle_root=str(tmp_path)
     )
     assert fn() == "SIB/COU/TOP"
-    assert fn.__module__ == "a.b.c.d"
+    assert fn.__module__ == "outer.mid.inner.d"
 
 
 def test_dynamic_import_bundle_root_defaults_to_file_folder(tmp_path):

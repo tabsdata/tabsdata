@@ -90,6 +90,7 @@ def test_the_root_command_and_version_resolve_on_call():
 
 def test_the_tabsdata_directory_follows_home_at_call_time(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     assert extension.tabsdata_directory() == str(tmp_path / ".tabsdata")
 
 
