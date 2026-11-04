@@ -71,7 +71,7 @@ class SourcePlugin(Command[RunSourcePluginArguments]):
     request_file: Path
     bundle_folder: Path
     connection_file: Path
-    output_folder: Path
+    context_folder: Path
     state_folder: Path
     inputs_manifest_file: Path
     request: Request
@@ -88,7 +88,7 @@ class SourcePlugin(Command[RunSourcePluginArguments]):
         self.request_file = arguments.request
         self.bundle_folder = arguments.bundle_folder
         self.connection_file = arguments.connection_file
-        self.output_folder = arguments.output_folder
+        self.context_folder = arguments.context_folder
         self.state_folder = arguments.state_folder
         self.inputs_manifest_file = arguments.inputs_manifest
 
@@ -102,7 +102,7 @@ class SourcePlugin(Command[RunSourcePluginArguments]):
         return 0
 
     def load(self) -> None:
-        self.output_folder.mkdir(parents=True, exist_ok=True)
+        self.context_folder.mkdir(parents=True, exist_ok=True)
         self.request = Request.load(self.request_file, RunSourcePluginErrorCode.RSP_1)
         self.publisher = FunctionBundle(self.bundle_folder).definition(
             KINDS,
@@ -115,7 +115,7 @@ class SourcePlugin(Command[RunSourcePluginArguments]):
             f"({type(self.publisher).__name__}, "
             f"cardinality {self.binding.cardinality})"
         )
-        self.context = SourceContext.from_info(self.output_folder, self.request.info)
+        self.context = SourceContext.from_info(self.context_folder, self.request.info)
         self.state = State(self.request, self.state_folder)
 
     def bind(self) -> SourceBinding:
@@ -153,11 +153,11 @@ class SourcePlugin(Command[RunSourcePluginArguments]):
                 state_file=error.uri,
                 detail=error.detail,
             )
-        logger.debug(f"Source context ready on {self.output_folder}")
+        logger.debug(f"Source context ready on {self.context_folder}")
 
     def land(self) -> None:
         plugin = self.binding.plugin
-        self.handoff = Handoff.of(plugin, self.output_folder)
+        self.handoff = Handoff.of(plugin, self.context_folder)
         if self.handoff.legacy and SourceContract(type(plugin)).deprecated():
             logger.warning(warn_legacy_src(type(plugin)))
         self.names = self.binding.input_names(self.publisher)

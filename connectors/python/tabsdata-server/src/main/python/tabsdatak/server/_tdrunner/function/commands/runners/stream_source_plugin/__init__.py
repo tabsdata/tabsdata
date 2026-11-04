@@ -24,7 +24,7 @@ INFORMATION = (
 )
 MANUAL = (
     "stream-source-plugin --request <PATH> --bundle-folder <PATH> "
-    "--output-folder <PATH> --connection-file <PATH> --liveness <PATH>\n\n"
+    "--context-folder <PATH> --connection-file <PATH> --liveness <PATH>\n\n"
     "Loads the stream publisher from --bundle-folder, its stream source plugin "
     "from the connectors registry and the connection from --connection-file, "
     "opens the function stage --request names, and runs the plugin until it "

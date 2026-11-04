@@ -23,7 +23,7 @@ INFORMATION = (
 )
 MANUAL = (
     "function --request <PATH> --bundle-folder <PATH> "
-    "--inputs-manifest <PATH> --output-folder <PATH> "
+    "--inputs-manifest <PATH> --context-folder <PATH> "
     "--outputs-manifest <PATH> --state-folder <PATH> --liveness <PATH>\n\n"
     "Loads the function definition from --bundle-folder (publisher, stream "
     "publisher, transformer or subscriber), builds each input from "

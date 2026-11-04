@@ -250,7 +250,7 @@ class Driver:
             request=self.request,
             bundle_folder=self.path("bundle"),
             inputs_manifest=self.path(inputs_manifest),
-            output_folder=self.path("out"),
+            context_folder=self.path("out"),
             outputs_manifest=self.path("fn/out/outputs-manifest.yaml"),
             state_folder=self.path("state"),
         )
@@ -270,7 +270,7 @@ class Driver:
             "source-plugin",
             request=self.request,
             bundle_folder=self.path("bundle"),
-            output_folder=self.path("in"),
+            context_folder=self.path("in"),
             inputs_manifest=self.path("fn/in/inputs-manifest.yaml"),
             state_folder=self.path("state"),
             connection_file=connection,

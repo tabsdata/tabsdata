@@ -99,7 +99,7 @@ def source_plugin(tmp_path: Path, **state) -> SourcePlugin:
         RunSourcePluginArguments(
             request=tmp_path / "request.yaml",
             bundle_folder=tmp_path / "bundle",
-            output_folder=tmp_path / "output",
+            context_folder=tmp_path / "output",
             inputs_manifest=tmp_path / "inputs.yaml",
             state_folder=tmp_path / "state",
             connection_file=tmp_path / "connection.yaml",
@@ -309,7 +309,7 @@ def set_arguments(
     monkeypatch,
     request_path: Path,
     bundle_folder: Path,
-    output_folder: Path,
+    context_folder: Path,
     inputs_manifest: Path,
     liveness: Path,
     *,
@@ -322,7 +322,7 @@ def set_arguments(
     if state_dir is None:
         # Default to a sibling dir of out_dir so callers that don't care
         # about state lifecycle don't have to plumb a path.
-        state_dir = output_folder.parent / "state"
+        state_dir = context_folder.parent / "state"
         state_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(
         sys,
@@ -333,8 +333,8 @@ def set_arguments(
             str(request_path),
             "--bundle-folder",
             str(bundle_folder),
-            "--output-folder",
-            str(output_folder),
+            "--context-folder",
+            str(context_folder),
             "--inputs-manifest",
             str(inputs_manifest),
             "--connection-file",
@@ -905,8 +905,8 @@ def test_main_end_to_end_happy_path(
     group `tabsdatak.connectors`).
     """
     request_path = write_request(tmp_path / "request.yaml")
-    output_folder = tmp_path / "out"
-    output_folder.mkdir()
+    context_folder = tmp_path / "out"
+    context_folder.mkdir()
     manifest = tmp_path / "manifest.yaml"
     liveness = tmp_path / "live"
     # The source connection's base_path is the srcdata dir the
@@ -920,7 +920,7 @@ def test_main_end_to_end_happy_path(
         monkeypatch,
         request_path,
         built_bundle,
-        output_folder,
+        context_folder,
         manifest,
         liveness,
         connection_file=connection_file,
@@ -931,7 +931,7 @@ def test_main_end_to_end_happy_path(
     assert status == 0, f"main() returned {status} (non-zero)"
 
     # Nothing is copied to a local parquet on the way: the source file lands.
-    assert list(output_folder.rglob("*.parquet")) == []
+    assert list(context_folder.rglob("*.parquet")) == []
 
     # The landed table holds the input rows.
     table = pq.read_table(tmp_path / "landing" / "0.0.t")
@@ -1073,8 +1073,8 @@ def test_main_hydrates_and_drains_initial_values(
     main() run the plugin (which is unaware of state), and verify drain
     produced this run's local state file. The publisher plugin doesn't
     itself mutate ctx, so the drained dict equals the hydrated one."""
-    output_folder = tmp_path / "out"
-    output_folder.mkdir()
+    context_folder = tmp_path / "out"
+    context_folder.mkdir()
     state_dir = tmp_path / "state"
     previous = tmp_path / "storage" / "state-in.t"
     previous.parent.mkdir()
@@ -1118,7 +1118,7 @@ def test_main_hydrates_and_drains_initial_values(
         monkeypatch,
         req_path,
         built_bundle,
-        output_folder,
+        context_folder,
         manifest,
         liveness,
         connection_file=connection_file,

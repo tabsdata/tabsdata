@@ -59,7 +59,7 @@ DEFINITION_ERRORS = DefinitionErrors(
 class StreamSourcePlugin(Command[RunStreamSourcePluginArguments]):
     request_file: Path
     bundle_folder: Path
-    output_folder: Path
+    context_folder: Path
     connection_file: Path
     journal_file: Path
     request: StreamerRequest
@@ -73,7 +73,7 @@ class StreamSourcePlugin(Command[RunStreamSourcePluginArguments]):
         super().__init__(arguments)
         self.request_file = arguments.request
         self.bundle_folder = arguments.bundle_folder
-        self.output_folder = arguments.output_folder
+        self.context_folder = arguments.context_folder
         self.connection_file = arguments.connection_file
         self.journal_file = arguments.journal_file
 
@@ -87,7 +87,7 @@ class StreamSourcePlugin(Command[RunStreamSourcePluginArguments]):
         return 0
 
     def load(self) -> None:
-        self.output_folder.mkdir(parents=True, exist_ok=True)
+        self.context_folder.mkdir(parents=True, exist_ok=True)
         self.request = StreamerRequest.load(
             self.request_file,
             RunStreamSourcePluginErrorCode.RSSP_1,
@@ -106,7 +106,7 @@ class StreamSourcePlugin(Command[RunStreamSourcePluginArguments]):
         )
         staging = self.open_stage()
         self.context = StreamSourceContext.from_info(
-            self.output_folder,
+            self.context_folder,
             self.request.info,
             staging=staging,
             batch=StageBatch(
@@ -180,7 +180,7 @@ class StreamSourcePlugin(Command[RunStreamSourcePluginArguments]):
             )
         logger.info(
             f"Running {type(self.plugin).__name__} for {self.function_name} on "
-            f"{self.output_folder}, staging to {self.context.staging.uri} with "
+            f"{self.context_folder}, staging to {self.context.staging.uri} with "
             f"{thresholds}"
         )
         try:

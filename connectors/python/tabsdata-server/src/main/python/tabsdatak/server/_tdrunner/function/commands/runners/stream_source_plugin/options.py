@@ -19,7 +19,7 @@ class RunStreamSourcePluginArguments(CommandArguments):
     bundle_folder: Path = option(
         help="Extracted bundle folder (function_def.json + user code).",
     )
-    output_folder: Path = option(
+    context_folder: Path = option(
         help=(
             "Local working folder the stream source plugin writes into; "
             "staging a batch uploads its files to the function stage."

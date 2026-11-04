@@ -20,7 +20,7 @@ class RunFunctionArguments(CommandArguments):
     inputs_manifest: Path = option(
         help="Path to the inputs manifest the previous step wrote."
     )
-    output_folder: Path = option(help="Working folder of the function context.")
+    context_folder: Path = option(help="Working folder of the function context.")
     outputs_manifest: Path = option(
         help=(
             "Path where the outputs manifest is written, with the location and "

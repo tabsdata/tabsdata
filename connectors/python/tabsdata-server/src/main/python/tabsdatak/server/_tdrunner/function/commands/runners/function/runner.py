@@ -102,7 +102,7 @@ class Function(Command[RunFunctionArguments]):
     request_file: Path
     bundle_folder: Path
     inputs_manifest_file: Path
-    output_folder: Path
+    context_folder: Path
     outputs_manifest_file: Path
     state_folder: Path
     project_secret: ProjectSecret
@@ -124,7 +124,7 @@ class Function(Command[RunFunctionArguments]):
         self.request_file = arguments.request
         self.bundle_folder = arguments.bundle_folder
         self.inputs_manifest_file = arguments.inputs_manifest
-        self.output_folder = arguments.output_folder
+        self.context_folder = arguments.context_folder
         self.outputs_manifest_file = arguments.outputs_manifest
         self.state_folder = arguments.state_folder
 
@@ -162,7 +162,7 @@ class Function(Command[RunFunctionArguments]):
                 entries=len(self.entries),
                 slots=len(self.table_modes),
             )
-        self.output_folder.mkdir(parents=True, exist_ok=True)
+        self.context_folder.mkdir(parents=True, exist_ok=True)
 
     def load_inputs(self) -> tuple[InputEntry, ...]:
         path = self.inputs_manifest_file
@@ -225,7 +225,7 @@ class Function(Command[RunFunctionArguments]):
             self.context = None
             return
         context = FunctionContext.from_info(
-            self.output_folder,
+            self.context_folder,
             self.request.info,
         ).with_project_secret(self.project_secret)
         try:
@@ -238,7 +238,7 @@ class Function(Command[RunFunctionArguments]):
             )
         self.context = context
         self.call_arguments.append(context)
-        logger.debug(f"Function context ready on {self.output_folder}")
+        logger.debug(f"Function context ready on {self.context_folder}")
 
     def invoke(self) -> None:
         self.output_tables = self.resolve_output_tables()

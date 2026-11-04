@@ -70,7 +70,7 @@ def stream_source_plugin(tmp_path: Path, **state) -> StreamSourcePlugin:
         RunStreamSourcePluginArguments(
             request=tmp_path / "request.yaml",
             bundle_folder=tmp_path / "bundle",
-            output_folder=tmp_path / "output",
+            context_folder=tmp_path / "output",
             connection_file=tmp_path / "connection.yaml",
             liveness=tmp_path / "liveness",
             responder_url="http://127.0.0.1:1",

@@ -17,7 +17,7 @@ from tabsdatak.server._tdrunner.function._commons.run.arguments import (
 class RunSourcePluginArguments(CommandArguments):
     request: Path = option(help="Path to the request file.")
     bundle_folder: Path = option(help="Folder holding the extracted bundle.")
-    output_folder: Path = option(
+    context_folder: Path = option(
         help="Folder where the source plugin writes its parquet files."
     )
     inputs_manifest: Path = option(

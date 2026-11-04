@@ -414,7 +414,7 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
             - --bundle-folder
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
-            - --output-folder
+            - --context-folder
             - $(CONTAINER_ROOT)/tabsdata/shared/in
             - --inputs-manifest
             - $(CONTAINER_ROOT)/tabsdata/shared/fn/in/inputs-manifest.yaml
@@ -490,8 +490,8 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
             - --inputs-manifest
             - $(CONTAINER_ROOT)/tabsdata/shared/fn/in/inputs-manifest.yaml
-            - --output-folder
-            - $(CONTAINER_ROOT)/tabsdata/shared/out
+            - --context-folder
+            - $(CONTAINER_ROOT)/tabsdata/shared/context
             - --outputs-manifest
             - $(CONTAINER_ROOT)/tabsdata/shared/fn/out/outputs-manifest.yaml
             - --state-folder

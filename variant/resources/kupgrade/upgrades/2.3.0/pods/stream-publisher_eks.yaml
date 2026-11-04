@@ -422,8 +422,8 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
             - --bundle-folder
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
-            - --output-folder
-            - $(CONTAINER_ROOT)/tabsdata/shared/out
+            - --context-folder
+            - $(CONTAINER_ROOT)/tabsdata/shared/context
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
