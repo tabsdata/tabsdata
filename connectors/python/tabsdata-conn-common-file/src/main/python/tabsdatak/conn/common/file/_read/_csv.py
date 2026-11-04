@@ -207,15 +207,9 @@ class AutoCsv:
             "raise_if_empty": False,
         }
 
-    # ToDo(PW2): provisional, until polars can be told a block's width. polars
-    # takes a file's width from its header: rows short of it get nulls,
-    # wider ones fail or, with `truncate_ragged_lines`, are cut. A block is
-    # parsed behind a made-up header line as wide as its widest record, so
-    # its rows read as polars reads them; the header's columns are renamed
-    # to the real names after. The made-up names are a letter and a number;
-    # the letter is the first of `HEADER_LETTERS` that is not the separator,
-    # the quote or the comment prefix's first character, so the line splits
-    # into the width and is not taken for a comment.
+    # polars takes a block's width only from a header line, so each block is
+    # parsed behind a made-up one as wide as its widest record. Its letter
+    # avoids the separator, the quote and the comment prefix.
     def header(self, width: int) -> bytes:
         separator = self.options.get(SEPARATOR, DEFAULT_SEPARATOR)
         taken = {
