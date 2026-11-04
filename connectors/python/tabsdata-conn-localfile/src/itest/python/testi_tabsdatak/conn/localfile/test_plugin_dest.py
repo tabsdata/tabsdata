@@ -12,6 +12,7 @@ import polars as pl
 import pytest
 from tabsdatax.itest.fixture.backends.fs import FsDomain, fs_domain
 from tabsdatax.itest.fixture.functions.files import PluginDestCtx, PluginSrcCtx
+from testi_tabsdatak.conn.common.landed import taken
 from testi_tabsdatak.conn.localfile.backend import dest_conn, scratch, src_conn
 
 from tabsdatak.conn.common.file.typing_ import DestFileFormat
@@ -49,13 +50,14 @@ def test_dest_then_src_round_trip(domain_fs: FsDomain, request: pytest.FixtureRe
     )
     assert (base / "users.parquet").exists()
 
-    out = plugin.LocalFileSrcPlugin().read_in(
+    slots = plugin.LocalFileSrcPlugin().read_in(
         PluginSrcCtx(work_src), src_conn(base), LocalFileSrc(paths=["users.parquet"])
     )
+    out = taken(slots, work_src / "landed")
 
     assert len(out) == 1
     assert len(out[0]) >= 1
-    df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
+    df = out[0][0].frame.select("id", "name").sort("id")
     assert df.to_dicts() == ROWS
 
 

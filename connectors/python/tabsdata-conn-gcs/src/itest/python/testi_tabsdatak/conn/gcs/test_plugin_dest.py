@@ -18,6 +18,7 @@ from tabsdatax.itest.fixture.functions.files import (
     PluginSrcCtx,
     download_object,
 )
+from testi_tabsdatak.conn.common.landed import taken
 from testi_tabsdatak.conn.gcs.backend import dest_conn, run_prefix, src_conn, store
 
 from tabsdatak.conn.common.file.typing_ import DestFileFormat
@@ -49,15 +50,16 @@ def test_dest_then_src_round_trip(system_gcs: GCSSystem, tmp_path: Path):
 
     work = tmp_path / "work-src"
     work.mkdir()
-    out = plugin.GCSSrcPlugin().read_in(
+    slots = plugin.GCSSrcPlugin().read_in(
         PluginSrcCtx(work),
         src_conn(system_gcs, prefix),
         GCSSrc(paths=["users.parquet"]),
     )
+    out = taken(slots, work / "landed")
 
     assert len(out) == 1
     assert len(out[0]) >= 1
-    df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
+    df = out[0][0].frame.select("id", "name").sort("id")
     assert df.to_dicts() == ROWS
 
 

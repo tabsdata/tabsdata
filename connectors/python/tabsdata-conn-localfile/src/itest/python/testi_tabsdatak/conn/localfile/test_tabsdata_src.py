@@ -41,15 +41,11 @@ def _entity_file(domain: FsDomain, fmt: str) -> Path:
     return first_provisioned_file(domain.base_path / fmt, f"{publisher.ENTITY}_*.{fmt}")
 
 
-def _reference(domain: FsDomain, source_format: str) -> pl.DataFrame:
+def _reference(domain: FsDomain) -> pl.DataFrame:
     """What the published table must hold. The staged model is identical across
-    formats, so the csv copy is the reference for every one of them -- except that
-    the transporter reads a quoted empty csv cell as null, where polars' own read
-    keeps it as an empty string."""
-    frame = pl.read_csv(_entity_file(domain, "csv"))
-    if source_format == "csv":
-        frame = frame.with_columns(pl.col(pl.String).replace("", None))
-    return frame
+    formats, so the csv copy, as polars reads it, is the reference for every one
+    of them."""
+    return pl.read_csv(_entity_file(domain, "csv"))
 
 
 @pytest.mark.parametrize(
@@ -70,7 +66,7 @@ def test_publisher_reads_format_from_fs_domain(
     collection_factory: CollectionFactory,
 ) -> None:
     domain = domain_fs_world_xs
-    expected = _reference(domain, source_format)
+    expected = _reference(domain)
     collection = collection_factory(
         "sources", src_conn(domain.base_path / source_format)
     )

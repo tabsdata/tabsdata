@@ -43,17 +43,13 @@ def _entity_key(domain: S3Domain, fmt: str) -> str:
     return f"{str(domain.base_path).strip('/')}/{matches[0]}"
 
 
-def _reference(domain: S3Domain, source_format: str, tmp_path: Path) -> pl.DataFrame:
+def _reference(domain: S3Domain, tmp_path: Path) -> pl.DataFrame:
     """What the published table must hold. The staged model is identical across
-    formats, so the csv copy is the reference for every one of them -- except that
-    the transporter reads a quoted empty csv cell as null, where polars' own read
-    keeps it as an empty string."""
+    formats, so the csv copy, as polars reads it, is the reference for every one
+    of them."""
     local = tmp_path / "reference.csv"
     store(domain).download(_entity_key(domain, "csv"), local)
-    frame = pl.read_csv(local)
-    if source_format == "csv":
-        frame = frame.with_columns(pl.col(pl.String).replace("", None))
-    return frame
+    return pl.read_csv(local)
 
 
 @pytest.mark.parametrize(
@@ -75,7 +71,7 @@ def test_publisher_reads_format_from_s3_domain(
     tmp_path: Path,
 ) -> None:
     domain = domain_s3_world_xs
-    expected = _reference(domain, source_format, tmp_path)
+    expected = _reference(domain, tmp_path)
     collection = collection_factory(
         "sources", src_conn(domain, f"{domain.base_path}/{source_format}")
     )

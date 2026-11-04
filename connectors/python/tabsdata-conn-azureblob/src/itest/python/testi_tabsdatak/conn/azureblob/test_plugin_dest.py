@@ -24,6 +24,7 @@ from testi_tabsdatak.conn.azureblob.backend import (
     src_conn,
     store,
 )
+from testi_tabsdatak.conn.common.landed import taken
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.azureblob import AzureBlobDest, AzureBlobSrc, _plugin as plugin
@@ -57,15 +58,16 @@ def test_dest_then_src_round_trip(system_azureblob: AzureblobSystem, tmp_path: P
 
     work = tmp_path / "work-src"
     work.mkdir()
-    out = plugin.AzureBlobSrcPlugin().read_in(
+    slots = plugin.AzureBlobSrcPlugin().read_in(
         PluginSrcCtx(work),
         src_conn(system_azureblob, prefix),
         AzureBlobSrc(paths=["users.parquet"]),
     )
+    out = taken(slots, work / "landed")
 
     assert len(out) == 1
     assert len(out[0]) >= 1
-    df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
+    df = out[0][0].frame.select("id", "name").sort("id")
     assert df.to_dicts() == ROWS
 
 
