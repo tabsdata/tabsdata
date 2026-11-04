@@ -11,30 +11,32 @@ import polars as pl
 import pytest
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
-from tabsdatak.conn.common.types import UserPassword
-
-from tabsdatak.conn.common.sql.constants import (
-    SQL_META_INITIAL_VALUES,
-    SQL_META_QUERY,
-)
-
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine import (
     sqlalchemy_reader as saw_reader,
     sqlalchemy_writer as saw_writer,
 )
-from tabsdatak.conn.db2 import Db2DestConn, Db2SrcConn, Db2Dest, Db2Src
+from tabsdatak.conn.common.sql.constants import (
+    SQL_META_INITIAL_VALUES,
+    SQL_META_QUERY,
+)
+from tabsdatak.conn.common.types import UserPassword
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.db2 import _impl as impl
-
 # noinspection PyProtectedMember
-from tabsdatak.conn.db2 import _plugin as plugin
-from tabsdatak.conn.db2.error import (
-    Db2RuntimeException,
-    Db2ErrorCode,
+from tabsdatak.conn.db2 import (
+    Db2Dest,
+    Db2DestConn,
+    Db2Src,
+    Db2SrcConn,
+    _impl as impl,
+    _plugin as plugin,
 )
 from tabsdatak.conn.db2._explorer import Db2ConnectionExplorer
+from tabsdatak.conn.db2.error import (
+    Db2ErrorCode,
+    Db2RuntimeException,
+)
 
 # noinspection PyProtectedMember
 from test_tabsdatak.conn.common.sql._testing import CtxStub
@@ -238,14 +240,12 @@ def test_resolve_src_cfg_returns_defaults_when_empty():
 
 
 def test_resolve_src_cfg_applies_overrides():
-    cfg = plugin._resolve_src_cfg(
-        {
-            "db2.logging_level": 20,
-            "tabsdata.sql.read_engine": "polarsSqlAlchemyRead",
-            "tabsdata.sql.chunk_size": 500,
-            "tabsdata.src_metadata.drop": True,
-        }
-    )
+    cfg = plugin._resolve_src_cfg({
+        "db2.logging_level": 20,
+        "tabsdata.sql.read_engine": "polarsSqlAlchemyRead",
+        "tabsdata.sql.chunk_size": 500,
+        "tabsdata.src_metadata.drop": True,
+    })
     assert cfg.logging_level == 20
     assert cfg.read_engine == "polarsSqlAlchemyRead"
     assert cfg.chunk_size == 500
@@ -259,13 +259,11 @@ def test_resolve_src_cfg_warns_on_unknown_key_via_raw_dict(caplog):
 
 
 def test_resolve_dest_cfg_applies_overrides():
-    cfg = plugin._resolve_dest_cfg(
-        {
-            "db2.logging_level": 20,
-            "tabsdata.sql.write_engine": "polarsSqlAlchemyWrite",
-            "tabsdata.sql.chunk_size": 500,
-        }
-    )
+    cfg = plugin._resolve_dest_cfg({
+        "db2.logging_level": 20,
+        "tabsdata.sql.write_engine": "polarsSqlAlchemyWrite",
+        "tabsdata.sql.chunk_size": 500,
+    })
     assert cfg.logging_level == 20
     assert cfg.write_engine == "polarsSqlAlchemyWrite"
     assert cfg.chunk_size == 500
@@ -300,7 +298,7 @@ def test_read_in_uses_resolved_initial_values(work_dir, monkeypatch):
 
     monkeypatch.setattr(_factory, "get_read_engine", lambda *a, **kw: _FakeEngine())
 
-    ctx = CtxStub(work_dir, scratch={"last_modified": "from-ctx"})
+    ctx = CtxStub(work_dir, attributes={"last_modified": "from-ctx"})
     src = Db2Src(
         queries=["SELECT * FROM t WHERE ts > :last_modified"],
         initial_values={"last_modified": "from-seed-ignored"},

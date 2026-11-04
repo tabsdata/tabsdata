@@ -389,7 +389,7 @@ class DatabricksSrc(Src):
             `tabsdata.src_metadata.drop`.
     """
 
-    # devguide-ref: source bind-value seeding & ctx scratch state
+    # devguide-ref: source bind-value seeding & ctx attributes
 
     queries: QueriesSpec
     initial_values: BasicDictSpec | None = None

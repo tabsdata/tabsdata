@@ -23,7 +23,7 @@ files through unchanged.
 * drops every row at or before the ``(seg, ord)`` published by the previous
   run -- a lexicographic compare, so the unpublished tail of a segment that
   was split across runs is still emitted (the cursor is tracked per slot in
-  the per-flow scratch store); when no prior pair exists, no rows are
+  the per-flow attribute store); when no prior pair exists, no rows are
   dropped;
 * persists the highest ``(seg, ord)`` seen so the next run resumes strictly
   after it.
@@ -62,9 +62,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Per-slot keys under the per-flow scratch store holding the highest CDC
-# ``(seg, ord)`` pair published so far. The pair is two scalar scratch
-# entries (seg and ord stored separately, since the scratch store holds
+# Per-slot keys under the per-flow attribute store holding the highest CDC
+# ``(seg, ord)`` pair published so far. The pair is two scalar
+# attributes (seg and ord stored separately, since the attribute store holds
 # only scalars). Both are suffixed with the slot's positional index so a
 # multi-table CDC flow tracks each output slot (table) independently.
 _TABLE_PREFIX = "cdc-table"
@@ -240,9 +240,9 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
                     .sort([CDC_META_SEG, CDC_META_ORD])
                 )
 
-            # The cursor is stored as two scalar scratch entries (seg and
+            # The cursor is stored as two scalar attributes (seg and
             # ord), each the ``str`` of a decimal128(38,0) value -- the
-            # scratch store holds scalars, and ``str`` keeps the pair exact
+            # attribute store holds scalars, and ``str`` keeps the pair exact
             # across the full range. They are written together, so both are
             # present or both absent; restore to ``Decimal`` for comparison.
             prior_seg_str = ctx.get_attr(_seg_key(index))
@@ -309,7 +309,7 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
                 # hands them back as ``Decimal``. ``max`` compares the
                 # ``(seg, ord)`` tuples lexicographically (``prior`` was
                 # restored to ``Decimal`` above, so the compare is exact).
-                # Persist each as ``str`` -- the scratch store holds scalars
+                # Persist each as ``str`` -- the attribute store holds scalars
                 # and ``str`` preserves the full decimal128(38,0) range.
                 seg, ordinal = high_water.row(0)
                 batch_max = (seg, ordinal)

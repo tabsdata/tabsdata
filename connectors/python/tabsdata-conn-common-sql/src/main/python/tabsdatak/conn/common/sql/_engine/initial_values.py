@@ -18,7 +18,7 @@ def resolve_initial_values(
     Walks ``seed`` (the user's first-run ``Src.initial_values``) bind
     name by bind name. For each, prefers ``ctx.get_attr(name)`` --
     that's where the previous run's persisted value lands -- and
-    falls back to the seed when the ctx scratch has no entry for
+    falls back to the seed when the ctx attributes have no entry for
     that name.
 
     Returns ``None`` when ``seed`` is None (no placeholders in any

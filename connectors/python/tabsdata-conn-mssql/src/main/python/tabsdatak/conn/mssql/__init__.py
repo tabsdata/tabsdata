@@ -236,7 +236,7 @@ class MSSQLSrc(Src):
                 return city
     """
 
-    # devguide-ref: source bind-value seeding & ctx scratch state
+    # devguide-ref: source bind-value seeding & ctx attributes
 
     queries: QueriesSpec
     transactional: bool = True

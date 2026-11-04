@@ -329,13 +329,13 @@ class PluginCtx(_FlowCtx, ABC):
     @property
     @abstractmethod
     def work_dir(self) -> Path:
-        """Per-trx scratch directory the plugin writes parquet to.
+        """Per-trx working directory the plugin writes parquet to.
         Cleaned up by the runtime after the trx completes."""
 
 
 class SrcPluginCtx(TransactionCtx, PluginCtx, ABC):
     """Context handed to `SrcPlugin.read_in` -- combines `TransactionCtx`
-    (trx identifiers + scratch state) with `PluginCtx` (flow
+    (trx identifiers + per-flow attributes) with `PluginCtx` (flow
     identifiers + work dir).
 
     :categories: spi

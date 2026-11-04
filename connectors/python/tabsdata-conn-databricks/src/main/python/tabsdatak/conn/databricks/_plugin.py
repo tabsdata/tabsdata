@@ -69,7 +69,7 @@ def _resolve_initial_values(ctx: SrcPluginCtx, src: DatabricksSrc) -> dict | Non
     Walks ``src.initial_values`` (the user's first-run seed) bind
     name by bind name. For each, prefers ``ctx.get_attr(name)`` --
     that's where the previous run's persisted value lands -- and
-    falls back to the seed when the ctx scratch has no entry for
+    falls back to the seed when the ctx attributes have no entry for
     that name.
 
     Returns ``None`` when ``src.initial_values`` is None (no

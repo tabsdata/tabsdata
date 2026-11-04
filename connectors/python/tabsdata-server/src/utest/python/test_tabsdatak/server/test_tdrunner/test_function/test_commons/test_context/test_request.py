@@ -74,7 +74,7 @@ def test_set_attr_overwrites_existing_value():
 
 def test_set_attr_accepts_all_basic_type_shapes():
     """``BasicTypeSpec`` is ``str | int | float | bool`` -- every scalar
-    shape round-trips through the scratch store."""
+    shape round-trips through the attribute store."""
     c = _ctx()
     c.set_attr("s", "x")
     c.set_attr("i", 42)
@@ -105,14 +105,14 @@ def test_add_metadata_is_still_a_noop():
 # --- hydrate / drain (runtime-only) -------------------------------------
 
 
-def test_hydrate_populates_scratch():
+def test_hydrate_populates_the_attributes():
     c = _ctx()
     c.hydrate({"a": "1", "b": 2})
     assert c.get_attr("a") == "1"
     assert c.get_attr("b") == 2
 
 
-def test_drain_returns_full_scratch():
+def test_drain_returns_all_the_attributes():
     c = _ctx()
     c.set_attr("x", "v")
     c.set_attr("y", 42)
@@ -185,12 +185,12 @@ def test_separate_instances_have_separate_scratch_stores():
 def test_set_attr_rejects_non_str_key_at_call_site():
     """``ContextKeySpec`` is plain ``str``, but a non-string key must
     still raise at the user's ``set_attr`` call site rather than
-    silently landing in the scratch store and exploding later at
+    silently landing in the attribute store and exploding later at
     drain time."""
     c = _ctx()
     with pytest.raises(ContextValueError, match="ContextKeySpec"):
         c.set_attr(123, "v")  # type: ignore[arg-type]
-    # Failure means the scratch store stayed clean.
+    # Failure means the attribute store stayed clean.
     assert 123 not in c.drain()
 
 

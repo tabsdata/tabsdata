@@ -57,7 +57,7 @@ from tabsdatak.spi import Conn
 
 # Combined budget for every dataframe carried by a `DataGenSrc` or a
 # `DevFrameSrc`, measured as the length of its base64-encoded parquet payload.
-# Per-flow scratch-state key holding a chunked slot's next-row offset.
+# Per-flow attribute key holding a chunked slot's next-row offset.
 _OFFSET_PREFIX = "datagen.offset."
 MAX_DATA_BYTES = 10 * 1024 * 1024
 

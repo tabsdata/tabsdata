@@ -79,7 +79,7 @@ class _StagedManifest:
 
 
 class _CdcCtx(StreamSrcPluginCtx):
-    """The trx scratch the plugin stages into.
+    """The stream source context the plugin stages through.
 
     ``active`` holds the run open until ``until`` sees what the test expects
     staged, and then for ``GRACE_POLLS`` more polls, so whatever should not

@@ -12,9 +12,9 @@ within its ``seg``, so the cursor is the full ``(seg, ord)`` pair. The
 ``SrcPluginCtx`` surface the plugin touches (``work_dir`` / ``get_attr`` /
 ``set_attr``) is faked; no transporter or manifest is involved.
 
-The cursor is persisted as two scalar scratch entries -- ``seg`` and
+The cursor is persisted as two scalar attributes -- ``seg`` and
 ``ord`` stored separately, each the ``str`` of the decimal128(38, 0)
-value -- since the scratch store holds only scalars."""
+value -- since the attribute store holds only scalars."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ from tabsdatak.spi import LazyFrameInput
 
 class FakeCtx:
     """Minimal stand-in for the ``SrcPluginCtx`` surface ``process_files``
-    consumes: a scratch ``work_dir`` plus the per-flow attr store."""
+    consumes: a working directory (``work_dir``) plus the per-flow attribute store."""
 
     def __init__(self, work_dir: Path, attrs: dict | None = None):
         self._work_dir = work_dir
@@ -81,12 +81,12 @@ def _read(table: LazyFrameInput) -> list[tuple[int, int]]:
 
 def _cursor(ctx: FakeCtx, index: int = 0) -> tuple:
     """The stored ``(seg, ord)`` cursor for ``index`` -- two scalar ``str``
-    scratch entries, or ``(None, None)`` when nothing was stored."""
+    attributes, or ``(None, None)`` when nothing was stored."""
     return (ctx.get_attr(_seg_key(index)), ctx.get_attr(_ord_key(index)))
 
 
 def _seed(seg: str, ordinal: str, index: int = 0) -> dict:
-    """Seed a FakeCtx scratch store with a prior ``(seg, ord)`` cursor."""
+    """Seed a FakeCtx attribute store with a prior ``(seg, ord)`` cursor."""
     return {_seg_key(index): seg, _ord_key(index): ordinal}
 
 
@@ -179,7 +179,7 @@ def test_dedup_and_cursor_filter_combine_in_one_run(tmp_path):
 
 def test_cursor_stored_as_scalar_strings(tmp_path):
     # seg/ord are decimal128(38, 0); the cursor is persisted as two scalar
-    # ``str`` scratch entries and the decimal dtype survives the parquet
+    # ``str`` attributes and the decimal dtype survives the parquet
     # round trip of the staged rows themselves.
     f1 = _write(tmp_path / "a.parquet", [(1, 1, "a"), (3, 1, "c"), (4, 1, "d")])
     f2 = _write(tmp_path / "b.parquet", [(2, 1, "b"), (3, 1, "c-dup")])

@@ -67,7 +67,7 @@ def build_serde(
         :class:`ConfluentSchemaRegistry` for the Confluent
         family, :class:`AwsGlueSchemaRegistry` for the Glue
         family.
-    :param working_dir: Scratch dir for protobuf compilation.
+    :param working_dir: Working directory for protobuf compilation.
     :param sr_client: Pre-built schema-registry client. Used by
         Confluent / Glue paths.
     :param sr_client_alt: Second Confluent SR client (Protobuf SR

@@ -21,7 +21,7 @@ class RunStreamSourcePluginArguments(CommandArguments):
     )
     output_folder: Path = option(
         help=(
-            "Local scratch folder the stream source plugin writes into; "
+            "Local working folder the stream source plugin writes into; "
             "staging a batch uploads its files to the function stage."
         ),
     )

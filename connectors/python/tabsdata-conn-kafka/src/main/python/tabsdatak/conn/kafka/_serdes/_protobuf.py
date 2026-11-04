@@ -35,7 +35,7 @@ def get_protobuf_class(
     descriptor set, then resolve ``message_name`` against the
     generated descriptors.
 
-    :param working_dir: Scratch dir for the temporary ``.proto``
+    :param working_dir: Working directory for the temporary ``.proto``
         and descriptor-set files.
     :param protobuf_schema: ``.proto`` source.
     :param message_name: Fully-qualified message name to resolve

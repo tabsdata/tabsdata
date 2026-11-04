@@ -15,7 +15,7 @@ from tabsdatax.itest.fixture.functions.files import PluginSrcCtx
 
 class WatermarkSrcCtx(PluginSrcCtx):
     """A ``PluginSrcCtx`` that remembers what ``set_attr`` stored, standing in for
-    the trx scratch the server carries between function runs -- what makes a
+    the per-flow attributes the server carries between function runs -- what makes a
     second ``read_in`` resume from the advanced ``initial_values`` bind instead of
     the seed. The plain ``PluginSrcCtx`` is inert, so a second read there would be
     indistinguishable from a first one."""

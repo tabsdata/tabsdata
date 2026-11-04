@@ -124,7 +124,7 @@ def publish_in_order(
     manifests: list[list[list[Path]]], work: Path, id_column: str
 ) -> set[int]:
     """The row ids the stage publisher publishes when every staged manifest
-    reaches it in the order it was staged, with one scratch store carried
+    reaches it in the order it was staged, with one attribute store carried
     across them as the server carries it between runs."""
     ctx = WatermarkSrcCtx(work)
     published: set[int] = set()

@@ -31,7 +31,7 @@ class FromFlowRequestCtx(FlowCtx):
     _function_id: str
     _function: str
     _function_version_id: str
-    _scratch: dict[str, BasicTypeSpec]
+    _attributes: dict[str, BasicTypeSpec]
 
     def __init__(
         self,
@@ -52,7 +52,7 @@ class FromFlowRequestCtx(FlowCtx):
         self._function_id = function_id
         self._function = function
         self._function_version_id = function_version_id
-        self._scratch = {}
+        self._attributes = {}
 
     @staticmethod
     def validate_key(key: Any) -> None:
@@ -106,23 +106,23 @@ class FromFlowRequestCtx(FlowCtx):
         return self._function_version_id
 
     def get_attr(self, attr: ContextKeySpec) -> BasicTypeSpec | None:
-        return self._scratch.get(attr)
+        return self._attributes.get(attr)
 
     # Values are checked when the state is written, so the None the SPI allows
-    # still round-trips through the scratch store; keys fail here, at the
+    # still round-trips through the attribute store; keys fail here, at the
     # user's call site.
     def set_attr(self, attr: ContextKeySpec, val: BasicTypeSpec | None):
         self.validate_key(attr)
-        self._scratch[attr] = val
+        self._attributes[attr] = val
 
     def add_metadata(self, attr: ContextKeySpec, val: BasicTypeSpec | None):
         pass
 
     def hydrate(self, initial: dict[str, BasicTypeSpec]) -> None:
-        self._scratch.update(initial)
+        self._attributes.update(initial)
 
     def drain(self) -> dict[str, BasicTypeSpec]:
-        return copy.deepcopy(self._scratch)
+        return copy.deepcopy(self._attributes)
 
 
 class FromRequestCtx(TransactionCtx, FromFlowRequestCtx):

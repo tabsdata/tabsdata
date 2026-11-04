@@ -33,7 +33,7 @@ pytestmark = pytest.mark.conn_dev
 
 
 class FakeSrcCtx:
-    """Minimal SrcPluginCtx double: a work dir plus persistent scratch."""
+    """Minimal SrcPluginCtx double: a working directory plus per-flow attributes."""
 
     def __init__(self, work_dir: Path):
         self._work_dir = work_dir

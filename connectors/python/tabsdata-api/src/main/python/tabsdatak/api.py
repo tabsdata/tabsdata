@@ -27,7 +27,7 @@ run time.
 
 The `FunctionCtx` interface (`TransactionCtx` + `FlowCtx`) is what the
 runtime hands to every decorated function so it can read trx and
-flow identifiers and persist per-flow scratch state across
+flow identifiers and persist per-flow attributes across
 invocations.
 """
 
@@ -663,16 +663,16 @@ def subscriber(
     return _subscriber
 
 
-# Per-flow scratch-key identifier. Plain string -- the framework
+# Per-flow attribute key. Plain string -- the framework
 # packs all `set_attr` entries into a single `user_namespace`
 # Parquet cell, so the key never appears as a Parquet column name
 # and doesn't need DNS-1123 / column-name constraints.
 ContextKeySpec: TypeAlias = str
 
 # The framework's basic scalar value type: the JSON-scalar set shared by
-# the per-flow scratch store (`get_attr` / `set_attr`), connector
+# the per-flow attribute store (`get_attr` / `set_attr`), connector
 # seed dicts, and stream resume state. Deliberately excludes `Decimal`
-# and any nested (list / dict) shape -- a scratch value is a single
+# and any nested (list / dict) shape -- an attribute value is a single
 # scalar. A connector that needs arbitrary precision serialises it to
 # `str` itself (see the CDC `(seg, ord)` cursor). Round-trips
 # losslessly through the state Parquet (see the initial-values codec).
@@ -692,7 +692,7 @@ class TransactionCtx(TransactionCtxLegacy, ABC):
     parameter (not allowed on `@stream_publisher`). Carries the
     identifiers of the execution, transaction and function run it
     belongs to (named as the server API names them), a per-flow
-    scratch store that survives across invocations (`get_attr` /
+    attribute store that survives across invocations (`get_attr` /
     `set_attr`), and a metadata sink (`add_metadata`).
     """
 
@@ -733,15 +733,15 @@ class TransactionCtx(TransactionCtxLegacy, ABC):
 
     @abstractmethod
     def get_attr(self, attr: ContextKeySpec) -> BasicTypeSpec | None:
-        """Read a per-flow scratch value (returns `None` if
+        """Read a per-flow attribute (returns `None` if
         unset)."""
 
     @abstractmethod
     def set_attr(self, attr: ContextKeySpec, val: BasicTypeSpec | None):
-        """Write a per-flow scratch value -- persists across trx
+        """Write a per-flow attribute -- persists across trx
         invocations within the same flow.
 
-        Connectors may reserve namespaces under this scratch store
+        Connectors may reserve namespaces under this attribute store
         for their own internal bookkeeping (`file-lastmod.*` is
         the only one today). Writing to such names from user code
         can corrupt connector state -- pick names that don't
@@ -813,7 +813,7 @@ class FunctionCtx(TransactionCtx, FlowCtx, ABC):
 
     :categories: functions
 
-    Combines `TransactionCtx` (trx identifiers + per-flow scratch state via
+    Combines `TransactionCtx` (trx identifiers + per-flow attributes via
     `get_attr` / `set_attr`) with `FlowCtx` (flow identifiers), so
     the function can read state from the previous run and persist state
     for the next. It also gives the function the secrets of its project

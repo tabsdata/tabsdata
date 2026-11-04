@@ -54,17 +54,17 @@ pytestmark = pytest.mark.databricks
 class _Ctx:
     """Duck-typed SrcPluginCtx for unit tests.
 
-    Exposes ``work_dir`` plus a minimal in-memory scratch store so
+    Exposes ``work_dir`` plus a minimal in-memory attribute store so
     tests for the ctx-vs-Src-field fallback (see ``_resolve_initial_values``)
     can drive ``get_attr`` / ``set_attr`` without instantiating
     a real :class:`tabsdatak.spi.SrcPluginCtx`.
     """
 
     def __init__(
-        self, work: Path, scratch: dict | None = None, transaction_id: str = "TRX_1"
+        self, work: Path, attributes: dict | None = None, transaction_id: str = "TRX_1"
     ) -> None:
         self._work = work
-        self._scratch: dict = dict(scratch) if scratch else {}
+        self._attributes: dict = dict(attributes) if attributes else {}
         self.transaction_id = transaction_id
 
     @property
@@ -72,10 +72,10 @@ class _Ctx:
         return self._work
 
     def get_attr(self, key):
-        return self._scratch.get(key)
+        return self._attributes.get(key)
 
     def set_attr(self, key, val) -> None:
-        self._scratch[key] = val
+        self._attributes[key] = val
 
 
 @pytest.fixture
@@ -492,7 +492,7 @@ def test_resolve_initial_values_returns_none_when_src_has_no_seed(work_dir):
 
 
 def test_resolve_initial_values_returns_seed_when_ctx_empty(work_dir):
-    """First run for a flow: ctx scratch has no entry for any bind
+    """First run for a flow: ctx attributes have no entry for any bind
     name, fall back to the user-supplied Src seed for each."""
     ctx = _Ctx(work_dir)
     src = DatabricksSrc(
@@ -509,7 +509,7 @@ def test_resolve_initial_values_prefers_ctx_per_bind_name(work_dir):
     used for the names ctx doesn't have."""
     ctx = _Ctx(
         work_dir,
-        scratch={
+        attributes={
             "last_modified": "2026-05-28T00:00:00Z",
             "min_id": 1234,
         },
@@ -528,7 +528,7 @@ def test_resolve_initial_values_prefers_ctx_per_bind_name(work_dir):
 def test_resolve_initial_values_partial_ctx_falls_back_per_name(work_dir):
     """If ctx has one bind name set but not another, the missing
     name falls back to the seed -- per-name granularity."""
-    ctx = _Ctx(work_dir, scratch={"last_modified": "2026-05-28T00:00:00Z"})
+    ctx = _Ctx(work_dir, attributes={"last_modified": "2026-05-28T00:00:00Z"})
     src = DatabricksSrc(
         queries=["SELECT 1"],
         initial_values={"last_modified": "seed-ts", "min_id": 42},
@@ -541,7 +541,7 @@ def test_resolve_initial_values_preserves_falsy_ctx_values(work_dir):
     """Uses ``is not None`` (not truthiness): a legitimately falsy
     value persisted last run (``0``, ``False``, ``""``) isn't
     silently shadowed by the seed."""
-    ctx = _Ctx(work_dir, scratch={"min_id": 0, "flag": False, "label": ""})
+    ctx = _Ctx(work_dir, attributes={"min_id": 0, "flag": False, "label": ""})
     src = DatabricksSrc(
         queries=["SELECT 1"],
         initial_values={"min_id": 999, "flag": True, "label": "default"},
@@ -556,7 +556,7 @@ def test_resolve_initial_values_heterogeneous_primitive_values(work_dir):
     cleanly."""
     ctx = _Ctx(
         work_dir,
-        scratch={
+        attributes={
             "last_modified": "2026-01-15T00:00:00Z",
             "min_id": 1234,
         },
@@ -583,7 +583,7 @@ def test_read_in_uses_resolved_initial_values(work_dir, monkeypatch):
 
     monkeypatch.setattr(impl, "read_all_queries", fake_read_all_queries)
 
-    ctx = _Ctx(work_dir, scratch={"last_modified": "from-ctx"})
+    ctx = _Ctx(work_dir, attributes={"last_modified": "from-ctx"})
     src = DatabricksSrc(
         queries=["SELECT * FROM t WHERE ts > {last_modified}"],
         initial_values={"last_modified": "from-seed-ignored"},

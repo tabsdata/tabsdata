@@ -449,7 +449,7 @@ def test_drain_an_empty_ctx_writes_an_empty_state(tmp_path):
 
 def test_drain_a_bad_value_raises(tmp_path):
     context = _context()
-    context._scratch["k"] = object()  # type: ignore[assignment]
+    context._attributes["k"] = object()  # type: ignore[assignment]
     request = _request(system_output=(_output(_stored(tmp_path, "s.t")),))
     with pytest.raises(StateWriteError) as raised:
         _drain(context, request, tmp_path)
