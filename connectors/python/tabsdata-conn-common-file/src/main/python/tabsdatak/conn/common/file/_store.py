@@ -47,6 +47,7 @@ class Stream:
     def __init__(self, chunks: Iterator[memoryview]) -> None:
         self.chunks = chunks
         self.buffer = bytearray()
+        self.closed = False
 
     def read(self, size: int = -1) -> bytes:
         while size < 0 or len(self.buffer) < size:
@@ -66,6 +67,7 @@ class Stream:
         closer = getattr(self.chunks, "close", None)
         if closer is not None:
             closer()
+        self.closed = True
 
 
 class Ranged:
@@ -76,6 +78,7 @@ class Ranged:
         self.position = 0
         self.cached_at = -1
         self.cached = b""
+        self.closed = False
 
     def read(self, size: int = -1) -> bytes:
         end = self.size if size < 0 else min(self.position + size, self.size)
@@ -113,6 +116,7 @@ class Ranged:
 
     def close(self) -> None:
         self.cached = b""
+        self.closed = True
 
 
 @dataclass(frozen=True)

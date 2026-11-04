@@ -14,12 +14,14 @@ from tabsdatak.common._fileformat.error import FileFormatErrorCode
 from tabsdatak.common._fileformat.taxonomy import SrcFileFormat
 from tabsdatak.conn.common._cursor import LastModifiedCursor
 from tabsdatak.conn.common._find import PATH_SEPARATOR, Found, find, split_pattern
+from tabsdatak.conn.common.file._codecs import decompressed
 from tabsdatak.conn.common.file._plugin import (
     _LASTMOD_KEY_PREFIX,
     FilePluginErrors,
     ReaderConf,
     sheet_in,
 )
+from tabsdatak.conn.common.file._read._blocks import Readable
 from tabsdatak.conn.common.file._read._policy import Format, policy
 from tabsdatak.conn.common.file._select import accepts, codec, plain
 from tabsdatak.conn.common.file._store import FileStore
@@ -155,7 +157,7 @@ def tables(
         found = codec(path)
         if found is not None and not CODECS_ENABLED:
             raise FileCommonErrorCode.FILE_COMMON_37.exception(path=path, codec=found)
-        table = read(store, file_format, options, path)
+        table = read(store, file_format, options, path, found)
         if cfg.drop_metadata:
             yield table
             continue
@@ -171,8 +173,13 @@ def read(
     file_format: SrcFileFormat,
     options: dict | None,
     path: str,
+    compression: str | None,
 ) -> LazyFrameInput:
     match file_format:
+        case SrcFileFormat.EXCEL | SrcFileFormat.PARQUET if compression is not None:
+            raise FileCommonErrorCode.FILE_COMMON_38.exception(
+                path=path, format=file_format.value
+            )
         case SrcFileFormat.PARQUET:
             return LazyFrameInput(store.scan_parquet(path))
         case SrcFileFormat.EXCEL:
@@ -185,9 +192,14 @@ def read(
         ):
             name = path.rpartition(PATH_SEPARATOR)[2]
             reader = policy(READERS[file_format], name, options)
-            return reader.read(lambda: store.open(path))
+            return reader.read(lambda: opened(store, path, compression))
         case _:
             raise ValueError(f"The format '{file_format}' cannot be read")
+
+
+def opened(store: FileStore, path: str, compression: str | None) -> Readable:
+    stream = store.open(path)
+    return stream if compression is None else decompressed(stream, compression)
 
 
 def described(table: LazyFrameInput, where: str) -> LazyFrameInput:
