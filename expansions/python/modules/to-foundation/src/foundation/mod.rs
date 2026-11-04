@@ -3,6 +3,7 @@
 //
 
 pub mod graphics;
+pub mod readers;
 pub mod symbols;
 pub mod watashi;
 
@@ -22,6 +23,7 @@ const ROOT_MODULE_PATH: &str = "tabsdata.expansions.foundation";
 const WATASHI_MODULE_NAME: &str = "watashi";
 const SYMBOLS_MODULE_NAME: &str = "symbols";
 const GRAPHICS_MODULE_NAME: &str = "graphics";
+const READERS_MODULE_NAME: &str = "readers";
 
 #[pymodule]
 fn _foundation(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -63,6 +65,12 @@ fn _foundation(module: &Bound<'_, PyModule>) -> PyResult<()> {
     graphics_module.add_function(wrap_pyfunction!(graphics::render, &graphics_module)?)?;
 
     graphics_module.add_class::<graphics::ImageProtocol>()?;
+
+    let readers_module = register_py_module(READERS_MODULE_NAME, &root_module, py)?;
+
+    readers_module.add_function(wrap_pyfunction!(readers::avro::avro, &readers_module)?)?;
+
+    readers_module.add_class::<readers::ArrowStream>()?;
 
     Ok(())
 }

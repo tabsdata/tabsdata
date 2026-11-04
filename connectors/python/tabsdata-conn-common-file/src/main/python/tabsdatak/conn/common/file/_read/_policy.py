@@ -15,6 +15,7 @@ from collections.abc import Callable, Mapping
 from enum import Enum
 from typing import Any, Protocol
 
+from tabsdatak.conn.common.file._read._avro import Avro
 from tabsdatak.conn.common.file._read._blocks import BLOCK_SIZE, Readable
 from tabsdatak.conn.common.file._read._csv import AutoCsv
 from tabsdatak.conn.common.file._read._log import Log
@@ -27,9 +28,10 @@ class Inference(Enum):
 
 
 class Format(Enum):
+    AVRO = "avro"
     CSV = "csv"
-    NDJSON = "ndjson"
     LOG = "log"
+    NDJSON = "ndjson"
 
 
 class Policy(Protocol):
@@ -46,8 +48,14 @@ def policy(
 ) -> Policy:
     if inference is not Inference.AUTO:
         raise ValueError(f"The inference '{inference.value}' is unknown")
-    if file_format is Format.CSV:
-        return AutoCsv(options, block_size=block_size)
-    if file_format is Format.NDJSON:
-        return AutoNdjson(block_size=block_size)
-    return Log(name, block_size=block_size)
+    match file_format:
+        case Format.AVRO:
+            return Avro()
+        case Format.CSV:
+            return AutoCsv(options, block_size=block_size)
+        case Format.LOG:
+            return Log(name, block_size=block_size)
+        case Format.NDJSON:
+            return AutoNdjson(block_size=block_size)
+        case _:
+            raise ValueError(f"The format '{file_format}' has no policy")

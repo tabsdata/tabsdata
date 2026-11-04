@@ -67,6 +67,8 @@ tm-pyo3 = { workspace = true }
 
 # External dependencies
 
+arrow = { workspace = true }
+arrow-avro = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
 image = { workspace = true, features = ["png"] }

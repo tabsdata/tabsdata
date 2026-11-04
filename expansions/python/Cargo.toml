@@ -105,6 +105,14 @@ path = "../../server/libraries/td-error"
 
 # External dependencies
 
+[workspace.dependencies.arrow]
+version = "60.1.0"
+default-features = false
+features = ["ffi"]
+
+[workspace.dependencies.arrow-avro]
+version = "60.1.0"
+
 [workspace.dependencies.base64]
 version = "0.23.1"
 
