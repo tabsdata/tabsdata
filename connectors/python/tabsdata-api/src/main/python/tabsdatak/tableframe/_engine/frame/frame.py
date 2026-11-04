@@ -234,15 +234,23 @@ class EngineFrame(BaseFrame):
     def _cached(self) -> Self:
         return self._clone(self._lf.cache())
 
+    # ToDo: deprecate; the runner decides the columns in ColumnPolicy and
+    # writes through _sink_plan.
     def _sink_native(self, path) -> None:
         self._sink_native_plan(path).collect(engine="streaming")
 
+    # ToDo: deprecate; the runner decides the columns in ColumnPolicy and
+    # writes through _sink_plan.
     def _sink_user(self, path) -> None:
         self._sink_user_plan(path).collect(engine="streaming")
 
+    # ToDo: deprecate; the runner decides the columns in ColumnPolicy and
+    # writes through _sink_plan.
     def _sink_public(self, path) -> None:
         self._sink_public_plan(path).collect(engine="streaming")
 
+    # ToDo: deprecate; the runner decides the columns in ColumnPolicy and
+    # writes through _sink_plan.
     def _sink_native_plan(self, path, storage_options=None) -> pl.LazyFrame:
         return self._sink_plan(
             self._persisted(),
@@ -250,6 +258,8 @@ class EngineFrame(BaseFrame):
             storage_options,
         )
 
+    # ToDo: deprecate; the runner decides the columns in ColumnPolicy and
+    # writes through _sink_plan.
     def _sink_user_plan(self, path, storage_options=None) -> pl.LazyFrame:
         return self._sink_plan(
             self._strip(drop_system_columns=True),
@@ -257,6 +267,8 @@ class EngineFrame(BaseFrame):
             storage_options,
         )
 
+    # ToDo: deprecate; the runner decides the columns in ColumnPolicy and
+    # writes through _sink_plan.
     def _sink_public_plan(self, path, storage_options=None) -> pl.LazyFrame:
         return self._sink_plan(
             self._strip(
