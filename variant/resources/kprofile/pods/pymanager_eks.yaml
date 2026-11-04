@@ -96,7 +96,7 @@ spec:
       volumes:
       - name: assets
         projected:
-          defaultMode: 493
+          defaultMode: 0o755
           sources:
           - configMap:
               name: td-app-requirements-fn-asset-requirements-fn.txt
