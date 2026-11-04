@@ -142,3 +142,9 @@ def test_the_file_is_read_once_and_closed(tmp_path):
     land(AutoCsv(block_size=BLOCK).read(source), tmp_path)
     assert len(source.streams) == 1
     assert source.streams[0].closed
+
+
+@pytest.mark.parametrize("missing_is_null", [True, False])
+def test_an_empty_field_is_null_whatever_missing_is_null_says(tmp_path, missing_is_null):
+    landed = land(read(b"a,b\n1,\n", {"missing_is_null": missing_is_null}), tmp_path)
+    assert landed.served.to_dicts() == [{"a": 1, "b": None}]

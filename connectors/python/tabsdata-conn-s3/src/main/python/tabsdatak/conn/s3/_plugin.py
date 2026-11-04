@@ -4,24 +4,32 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
+from tabsdatak.common._storage.transfer import (
+    AWS_ACCESS_KEY_ID_OPTION,
+    AWS_REGION_OPTION,
+    AWS_SECRET_ACCESS_KEY_OPTION,
+)
 from tabsdatak.common._transporter.handler.handler import TransporterHandler
-from tabsdatak.conn.common.file import _plugin
+from tabsdatak.conn.common.file import _plugin, _source
+from tabsdatak.conn.common.file._store import FileStore, forwarded
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert, cloud_full_path
 from tabsdatak.conn.s3 import S3Dest, S3DestConn, S3Src, S3SrcConn
 from tabsdatak.conn.s3._explorer import S3ConnectionExplorer
 from tabsdatak.conn.s3.error import S3ErrorCode
+from tabsdatak.error import ApiException
 from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
+    LazyFrameInput,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
-    TableFileInput,
     TableFileSpec,
     TableMode,
 )
@@ -61,6 +69,22 @@ def run_env(conn: _AnyS3Conn, handler: TransporterHandler) -> dict[str, str]:
     }
 
 
+def file_store(conn: S3SrcConn) -> FileStore:
+    prefix = conn._base_path().strip("/")
+    root = f"s3://{conn._bucket()}/{prefix}" if prefix else f"s3://{conn._bucket()}"
+    try:
+        credentials = {
+            AWS_ACCESS_KEY_ID_OPTION: _convert(conn.credentials.access_key_id, str),
+            AWS_SECRET_ACCESS_KEY_OPTION: _convert(
+                conn.credentials.secret_access_key, str
+            ),
+            AWS_REGION_OPTION: conn._region(),
+        }
+    except ApiException as e:
+        raise ERRORS.cred_resolution.exception(cause=e, reason=str(e))
+    return FileStore(root, {**credentials, **forwarded(root, conn.conn_cfg)})
+
+
 # --- Error-code bundle --------------------------------------------
 
 
@@ -82,12 +106,12 @@ class S3SrcPlugin(SrcPlugin[S3SrcConn, S3Src]):
         ctx: SrcPluginCtx,
         conn: S3SrcConn,
         src: S3Src,
-    ) -> list[list[TableFileInput]]:
-        return _plugin.import_files(
+    ) -> list[Iterable[LazyFrameInput]]:
+        return _source.read_files(
             ctx=ctx,
             cfg=_plugin.ReaderConf.from_src(conn, src),
-            build_location=build_location,
-            run_env=run_env,
+            store=file_store(conn),
+            origin=lambda store, path: store.uri(path),
             errors=ERRORS,
         )
 

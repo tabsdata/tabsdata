@@ -203,11 +203,19 @@ class GCSSrc(Src):
             the worksheet -- `1`-based over every sheet the workbook
             declares, hidden ones included. Two paths may name different
             sheets of one workbook, giving a slot each.
-        format: File format -- one of `AUTO`, `CSV`, `JSON`,
-            `AVRO`, `PARQUET`, `LOG`, `EXCEL`. `AUTO` (the default)
-            infers it from the file extension. `EXCEL` reads one
-            worksheet of an `.xlsx` workbook, named by the path's `#<n>`
-            fragment.
+        format: File format, by extension:
+
+            * `AUTO` (the default): taken from the path's extension, the
+              one before a compression extension if it ends in one
+              (`*.json.gz` is `JSON`).
+            * `AVRO`: `.avro`.
+            * `CSV`: `.csv`.
+            * `EXCEL`: `.xlsx`; one worksheet, named by the path's `#<n>`
+              fragment.
+            * `JSON`: `.json`, `.jsonl`, `.ndjson`; one JSON object per
+              line.
+            * `LOG`: `.log`; one row per line.
+            * `PARQUET`: `.parquet`, `.pq`.
         format_cfg: Optional per-format reader options (source-side
             keys only), keyed by the `SrcFileFormat`. `EXCEL` takes
             `has_header` (default `True`); with `False` the first row is
@@ -225,6 +233,23 @@ class GCSSrc(Src):
             registration time are never deleted -- they
             were never read. Only valid when `initial_last_modified` is set; the default
             is `False`.
+        include_compressed: Also take compressed files. A path takes
+            a file whose name matches it plus one compression extension
+            (`data/*.json` takes `a.json.gz`, not `a.json.csv`), and a
+            file whose name ends in a compression extension only when
+            this is `True`; a path that itself ends in one requires it.
+            The extension alone names the codec:
+
+            * `.br`: Brotli.
+            * `.bz2`: bzip2.
+            * `.gz`: gzip.
+            * `.lz4`: LZ4 frame.
+            * `.xz`: XZ.
+            * `.zlib`: zlib.
+            * `.zst`, `.zstd`: Zstandard.
+
+            Defaults to `False`. Reading compressed files is not
+            available yet.
 
     Examples:
         Read a single object, selecting the CSV format explicitly:
@@ -260,6 +285,7 @@ class GCSSrc(Src):
     initial_last_modified: datetime | None = None
     src_cfg: SrcCfgSpec | None = None
     purge: bool = False
+    include_compressed: bool = False
 
     def validate(self) -> None:
         """Cross-field validation of `format`, `paths` and `format_cfg`
@@ -274,6 +300,9 @@ class GCSSrc(Src):
                 self.format, self.paths, self.format_cfg
             )
             _file_validation.validate_src_purge(self.purge, self.initial_last_modified)
+            _file_validation.validate_src_compressed(
+                self.include_compressed, self.paths
+            )
         except Exception as e:
             raise GCSErrorCode.GCS_3.exception(cause=e, side="src")
 

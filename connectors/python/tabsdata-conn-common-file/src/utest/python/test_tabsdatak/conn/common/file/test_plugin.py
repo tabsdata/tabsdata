@@ -401,8 +401,9 @@ _STUB_ERRORS = _plugin.FilePluginErrors(
 class _StubSrc:
     """Duck-typed stand-in for any connector's Src dataclass --
     ReaderConf.from_src only reads ``.paths``, ``.format``,
-    ``.format_cfg``, ``.initial_last_modified``, ``.src_cfg`` and
-    ``.purge`` (``conn`` is now passed in separately by the plugin)."""
+    ``.format_cfg``, ``.initial_last_modified``, ``.src_cfg``, ``.purge``
+    and ``.include_compressed`` (``conn`` is now passed in separately by the
+    plugin)."""
 
     def __init__(self):
         self.paths = ["a.csv", "b.csv"]
@@ -411,6 +412,7 @@ class _StubSrc:
         self.initial_last_modified = datetime(2026, 1, 1, tzinfo=timezone.utc)
         self.src_cfg = None
         self.purge = False
+        self.include_compressed = False
 
 
 def test_reader_conf_from_src_translates_fields():
@@ -1146,6 +1148,7 @@ class _Src:
         self.initial_last_modified = None
         self.src_cfg = None
         self.purge = False
+        self.include_compressed = False
 
 
 @pytest.mark.parametrize(

@@ -35,6 +35,7 @@ from tabsdatak.spi import (
 FIRST_BLOCK_OPTIONS = ("has_header", "skip_rows", "skip_rows_after_header")
 DECIMAL_COMMA = "decimal_comma"
 TRY_PARSE_DATES = "try_parse_dates"
+MISSING_IS_NULL = "missing_is_null"
 QUOTE_CHAR = "quote_char"
 EOL_CHAR = "eol_char"
 SEPARATOR = "separator"
@@ -54,6 +55,7 @@ class AutoCsv:
     ) -> None:
         self.options = dict(options or {})
         self.try_parse_dates = bool(self.options.pop(TRY_PARSE_DATES, False))
+        self.options.pop(MISSING_IS_NULL, None)
         self.block_size = block_size
 
     def read(self, open_: Callable[[], Readable]) -> LazyFrameInput:

@@ -20,6 +20,7 @@ from tabsdatax.itest.fixture.backends.s3 import S3System, s3_system
 from tabsdatax.itest.fixture.functions.files import ObjectStore, PluginSrcCtx
 
 # from testi_tabsdatak.conn.common import ebcdic
+from testi_tabsdatak.conn.common.landed import taken
 from testi_tabsdatak.conn.common.plugin_ctx import LastModSrcCtx
 from testi_tabsdatak.conn.s3.backend import run_prefix, src_conn, store
 
@@ -160,9 +161,9 @@ def _stage(
 def _read_back(system: S3System, prefix: str, src: S3Src, tmp_path: Path):
     work = tmp_path / f"work-src-{uuid.uuid4().hex}"
     work.mkdir()
-    return plugin.S3SrcPlugin().read_in(
-        PluginSrcCtx(work), src_conn(system, prefix), src
-    )
+    ctx = PluginSrcCtx(work)
+    slots = plugin.S3SrcPlugin().read_in(ctx, src_conn(system, prefix), src)
+    return taken(slots, work / "landed")
 
 
 @s3_system("s3")
@@ -179,7 +180,7 @@ def test_src_wildcard_in_basename_matches_multiple_objects(
     out = _read_back(system_s3, prefix, S3Src(paths=["*.parquet"]), tmp_path)
     assert len(out) == 1
     assert len(out[0]) >= 3
-    names = sorted(pl.read_parquet(f.file).select("name").item(0, 0) for f in out[0])
+    names = sorted(f.frame.select("name").item(0, 0) for f in out[0])
     assert names == ["a.parquet", "b.parquet", "c.parquet"]
 
 
@@ -215,7 +216,7 @@ def test_src_initial_last_modified_filters_out_older_objects(
         S3Src(paths=["*.parquet"], initial_last_modified=cutoff),
         tmp_path,
     )
-    names = sorted(pl.read_parquet(f.file).select("name").item(0, 0) for f in out[0])
+    names = sorted(f.frame.select("name").item(0, 0) for f in out[0])
     assert names == ["new"]
 
 
@@ -242,7 +243,7 @@ def test_src_reads_each_format(
     prefix = run_prefix(system_s3.sys_path, "td-integ")
     _stage(store(system_s3), prefix, name, tmp_path, writer=writer)
     out = _read_back(system_s3, prefix, S3Src(paths=[name], format=fmt), tmp_path)
-    df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
+    df = out[0][0].frame.select("id", "name").sort("id")
     assert df.to_dicts() == ROWS
 
 
@@ -254,11 +255,12 @@ def _baseline() -> datetime:
 
 
 def _names(slot) -> list[str]:
-    return sorted(pl.read_parquet(f.file).select("name").item(0, 0) for f in slot)
+    return sorted(f.frame.select("name").item(0, 0) for f in slot)
 
 
 def _read_with(ctx, system: S3System, prefix: str, src: S3Src):
-    return plugin.S3SrcPlugin().read_in(ctx, src_conn(system, prefix), src)
+    slots = plugin.S3SrcPlugin().read_in(ctx, src_conn(system, prefix), src)
+    return taken(slots, ctx.work_dir / "landed")
 
 
 def _work(tmp_path: Path, name: str) -> Path:
@@ -413,7 +415,7 @@ def test_src_excel_sheet_fragment_selects_the_worksheet(
 
     assert len(out) == 1
     assert len(out[0]) == 1
-    assert pl.read_parquet(out[0][0].file).select("tag").item(0, 0) == "from-sheet-2"
+    assert out[0][0].frame.select("tag").item(0, 0) == "from-sheet-2"
 
 
 @s3_system("s3")
@@ -428,7 +430,7 @@ def test_src_excel_two_paths_name_two_sheets_of_one_workbook(
 
     # One worksheet list covers both slots: slot 0 named sheet 2, slot 1 named
     # none and reads the first sheet rather than inheriting its neighbour's.
-    assert [pl.read_parquet(slot[0].file).select("tag").item(0, 0) for slot in out] == [
+    assert [slot[0].frame.select("tag").item(0, 0) for slot in out] == [
         "from-sheet-2",
         "from-sheet-1",
     ]
@@ -455,7 +457,7 @@ def test_src_excel_has_header_false_generates_column_names(
     out = _read_back(system_s3, prefix, src, tmp_path)
 
     # With no header row the columns are named positionally and row 1 is data.
-    df = pl.read_parquet(out[0][0].file).select("column_1", "column_2")
+    df = out[0][0].frame.select("column_1", "column_2")
     assert df.to_dicts() == [
         {"column_1": "id", "column_2": "name"},
         {"column_1": "a", "column_2": "alice"},
@@ -495,7 +497,7 @@ def test_src_excel_has_header_false_generates_column_names(
 #     )
 #     out = _read_back(system_s3, prefix, src, tmp_path)
 #
-#     assert pl.read_parquet(out[0][0].file).select("NAME", "COUNT").to_dicts() == [
+#     assert out[0][0].frame.select("NAME", "COUNT").to_dicts() == [
 #         {"NAME": "ALICE", "COUNT": 42},
 #         {"NAME": "BOB", "COUNT": 7},
 #     ]
@@ -529,7 +531,7 @@ def test_src_excel_has_header_false_generates_column_names(
 #     )
 #     out = _read_back(system_s3, prefix, src, tmp_path)
 #
-# assert pl.read_parquet(out[0][0].file).select("PACK", "BIN", "RATE").to_dicts() == [
+# assert out[0][0].frame.select("PACK", "BIN", "RATE").to_dicts() == [
 #         {"PACK": -26, "BIN": 0, "RATE": 1.0}
 #     ]
 
@@ -555,5 +557,5 @@ def test_src_excel_has_header_false_generates_column_names(
 #
 #     # Two objects, two layouts: the per-path copybook list is narrowed per slot.
 #     assert len(out) == 2
-#     assert pl.read_parquet(out[0][0].file).select("NAME").item(0, 0) == "ZOE"
-#     assert pl.read_parquet(out[1][0].file).select("QTY").item(0, 0) == 250
+#     assert out[0][0].frame.select("NAME").item(0, 0) == "ZOE"
+#     assert out[1][0].frame.select("QTY").item(0, 0) == 250

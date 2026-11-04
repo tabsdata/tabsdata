@@ -15,6 +15,7 @@ from tabsdatax.itest.fixture.backends.fs import FsDomain, fs_domain
 from tabsdatax.itest.fixture.functions.files import PluginSrcCtx
 
 # from testi_tabsdatak.conn.common import ebcdic
+from testi_tabsdatak.conn.common.landed import Served, taken
 from testi_tabsdatak.conn.common.plugin_ctx import LastModSrcCtx
 from testi_tabsdatak.conn.localfile.backend import (
     scratch,
@@ -36,10 +37,15 @@ pytestmark = pytest.mark.localfile
 CUTOFF = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
 
 
+def read_in(ctx, conn, src) -> list[list[Served]]:
+    slots = plugin.LocalFileSrcPlugin().read_in(ctx, conn, src)
+    return taken(slots, ctx.work_dir / "landed")
+
+
 def _slot_names(slot: list) -> list[str]:
     """The ``name`` column each file in one output slot carries -- the relative name
     :func:`stage_parquet` wrote it under."""
-    return sorted(pl.read_parquet(f.file).select("name").item(0, 0) for f in slot)
+    return sorted(f.frame.select("name").item(0, 0) for f in slot)
 
 
 def _read_csv_with_cfg(
@@ -56,9 +62,9 @@ def _read_csv_with_cfg(
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: cfg},
     )
-    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), src_conn(base), src)
+    out = read_in(PluginSrcCtx(work), src_conn(base), src)
     # Drop the binary's ``$td.opt.*`` provenance columns.
-    df = pl.read_parquet(out[0][0].file)
+    df = out[0][0].frame
     user_cols = [c for c in df.columns if not c.startswith("$td.")]
     return df.select(user_cols)
 
@@ -73,9 +79,9 @@ def test_src_treats_absolute_path_as_relative_to_base_path(
     # The entry is relative to the connection's base_path.
     src = LocalFileSrc(paths=["data.parquet"])
 
-    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), src_conn(base), src)
+    out = read_in(PluginSrcCtx(work), src_conn(base), src)
     assert len(out[0]) >= 1
-    assert pl.read_parquet(out[0][0].file).select("x").to_dicts() == [{"x": 1}]
+    assert out[0][0].frame.select("x").to_dicts() == [{"x": 1}]
 
 
 @fs_domain("fs")
@@ -90,7 +96,7 @@ def test_src_wildcard_in_basename_matches_multiple_files(
 
     src = LocalFileSrc(paths=["*.parquet"])
 
-    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), src_conn(base), src)
+    out = read_in(PluginSrcCtx(work), src_conn(base), src)
 
     assert len(out) == 1
     assert _slot_names(out[0]) == ["a.parquet", "b.parquet", "c.parquet"]
@@ -106,7 +112,7 @@ def test_src_wildcard_with_no_matches_returns_empty_slot(
     src = LocalFileSrc(paths=["*.parquet"])
     ctx = LastModSrcCtx(work)
 
-    out = plugin.LocalFileSrcPlugin().read_in(ctx, src_conn(base), src)
+    out = read_in(ctx, src_conn(base), src)
 
     assert len(out) == 1
     assert out[0] == []
@@ -125,7 +131,7 @@ def test_src_one_slot_per_path_in_path_order(
 
     src = LocalFileSrc(paths=["out/b*.parquet", "in/a*.parquet", "single.parquet"])
 
-    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), src_conn(base), src)
+    out = read_in(PluginSrcCtx(work), src_conn(base), src)
 
     assert [_slot_names(slot) for slot in out] == [
         ["out/b1.parquet"],
@@ -144,7 +150,7 @@ def test_src_overlapping_globs_import_the_same_file_in_every_slot(
     src = LocalFileSrc(paths=["*.parquet", "sh*.parquet"], initial_last_modified=CUTOFF)
     ctx = LastModSrcCtx(work)
 
-    out = plugin.LocalFileSrcPlugin().read_in(ctx, src_conn(base), src)
+    out = read_in(ctx, src_conn(base), src)
 
     # Each slot keeps its own cursor, so a file both patterns match is imported
     # once per slot rather than deduplicated across them.
@@ -155,7 +161,7 @@ def test_src_overlapping_globs_import_the_same_file_in_every_slot(
     assert sorted(ctx.attrs) == ["file-lastmod.slot0", "file-lastmod.slot1"]
 
     resumed = LastModSrcCtx(root / "resumed", ctx.attrs)
-    assert plugin.LocalFileSrcPlugin().read_in(resumed, src_conn(base), src) == [[], []]
+    assert read_in(resumed, src_conn(base), src) == [[], []]
 
 
 @fs_domain("fs")
@@ -169,7 +175,7 @@ def test_src_initial_last_modified_filters_out_older_files(
 
     src = LocalFileSrc(paths=["*.parquet"], initial_last_modified=CUTOFF)
 
-    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), src_conn(base), src)
+    out = read_in(PluginSrcCtx(work), src_conn(base), src)
 
     # The cutoff is inclusive: the file modified exactly at it is imported.
     assert _slot_names(out[0]) == ["boundary.parquet", "newer.parquet"]
@@ -186,7 +192,7 @@ def test_src_initial_last_modified_at_or_before_oldest_returns_all(
 
     src = LocalFileSrc(paths=["*.parquet"], initial_last_modified=floor)
 
-    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), src_conn(base), src)
+    out = read_in(PluginSrcCtx(work), src_conn(base), src)
 
     assert _slot_names(out[0]) == ["a.parquet", "b.parquet"]
 
@@ -203,15 +209,11 @@ def test_src_without_initial_last_modified_keeps_no_cursor(
     src = LocalFileSrc(paths=["*.parquet"])
     ctx = LastModSrcCtx(work)
 
-    assert _slot_names(
-        plugin.LocalFileSrcPlugin().read_in(ctx, src_conn(base), src)[0]
-    ) == ["only.parquet"]
+    assert _slot_names(read_in(ctx, src_conn(base), src)[0]) == ["only.parquet"]
     assert ctx.attrs == {}
 
     again = LastModSrcCtx(root / "again", ctx.attrs)
-    assert _slot_names(
-        plugin.LocalFileSrcPlugin().read_in(again, src_conn(base), src)[0]
-    ) == ["only.parquet"]
+    assert _slot_names(read_in(again, src_conn(base), src)[0]) == ["only.parquet"]
 
 
 @fs_domain("fs")
@@ -224,7 +226,7 @@ def test_src_second_run_resumes_from_the_stored_cursor(
     src = LocalFileSrc(paths=["*.parquet"], initial_last_modified=CUTOFF)
     ctx = LastModSrcCtx(work)
 
-    first = plugin.LocalFileSrcPlugin().read_in(ctx, src_conn(base), src)
+    first = read_in(ctx, src_conn(base), src)
     assert _slot_names(first[0]) == ["first.parquet"]
     assert sorted(ctx.attrs) == ["file-lastmod.slot0"]
 
@@ -233,7 +235,7 @@ def test_src_second_run_resumes_from_the_stored_cursor(
 
     # The cursor, not the baseline, governs once one is stored: the file the first
     # run consumed stays consumed.
-    second = plugin.LocalFileSrcPlugin().read_in(resumed, src_conn(base), src)
+    second = read_in(resumed, src_conn(base), src)
     assert _slot_names(second[0]) == ["second.parquet"]
 
 
@@ -247,16 +249,14 @@ def test_src_first_run_with_no_matches_still_stores_the_baseline(
     src = LocalFileSrc(paths=["*.parquet"], initial_last_modified=CUTOFF)
     ctx = LastModSrcCtx(work)
 
-    assert plugin.LocalFileSrcPlugin().read_in(ctx, src_conn(base), src) == [[]]
+    assert read_in(ctx, src_conn(base), src) == [[]]
     assert sorted(ctx.attrs) == ["file-lastmod.slot0"]
 
     # The stored cursor holds the baseline and no entry yet, so a file appearing
     # at the baseline is still inside the window.
     stage_parquet(base, "late.parquet", CUTOFF)
     resumed = LastModSrcCtx(root / "resumed", ctx.attrs)
-    assert _slot_names(
-        plugin.LocalFileSrcPlugin().read_in(resumed, src_conn(base), src)[0]
-    ) == ["late.parquet"]
+    assert _slot_names(read_in(resumed, src_conn(base), src)[0]) == ["late.parquet"]
 
 
 @fs_domain("fs")
@@ -269,20 +269,16 @@ def test_src_second_run_imports_a_file_tied_at_the_cursor_timestamp(
     src = LocalFileSrc(paths=["*.parquet"], initial_last_modified=CUTOFF)
     ctx = LastModSrcCtx(work)
 
-    assert _slot_names(
-        plugin.LocalFileSrcPlugin().read_in(ctx, src_conn(base), src)[0]
-    ) == ["first.parquet"]
+    assert _slot_names(read_in(ctx, src_conn(base), src)[0]) == ["first.parquet"]
 
     # The cursor is a timestamp plus the names seen at exactly it, so a new file
     # sharing that timestamp is still recognised as new.
     stage_parquet(base, "tied.parquet", CUTOFF)
     tied = LastModSrcCtx(root / "tied", ctx.attrs)
-    assert _slot_names(
-        plugin.LocalFileSrcPlugin().read_in(tied, src_conn(base), src)[0]
-    ) == ["tied.parquet"]
+    assert _slot_names(read_in(tied, src_conn(base), src)[0]) == ["tied.parquet"]
 
     idle = LastModSrcCtx(root / "idle", tied.attrs)
-    assert plugin.LocalFileSrcPlugin().read_in(idle, src_conn(base), src) == [[]]
+    assert read_in(idle, src_conn(base), src) == [[]]
 
 
 @fs_domain("fs")
@@ -301,13 +297,11 @@ def test_src_file_appearing_backdated_below_the_cursor_is_not_imported(
     )
     ctx = LastModSrcCtx(work)
 
-    assert _slot_names(
-        plugin.LocalFileSrcPlugin().read_in(ctx, src_conn(base), src)[0]
-    ) == ["first.parquet"]
+    assert _slot_names(read_in(ctx, src_conn(base), src)[0]) == ["first.parquet"]
 
     stage_parquet(base, "backdated.parquet", CUTOFF - timedelta(hours=1))
     resumed = LastModSrcCtx(root / "resumed", ctx.attrs)
-    assert plugin.LocalFileSrcPlugin().read_in(resumed, src_conn(base), src) == [[]]
+    assert read_in(resumed, src_conn(base), src) == [[]]
 
 
 @fs_domain("fs")
@@ -330,14 +324,14 @@ def test_src_reordering_paths_reimports_because_slots_are_positional(
     )
     ctx = LastModSrcCtx(work)
 
-    first = plugin.LocalFileSrcPlugin().read_in(ctx, src_conn(base), ordered)
+    first = read_in(ctx, src_conn(base), ordered)
     assert [_slot_names(slot) for slot in first] == [
         ["in/a.parquet"],
         ["out/b.parquet"],
     ]
 
     unchanged = LastModSrcCtx(root / "unchanged", ctx.attrs)
-    assert plugin.LocalFileSrcPlugin().read_in(unchanged, src_conn(base), ordered) == [
+    assert read_in(unchanged, src_conn(base), ordered) == [
         [],
         [],
     ]
@@ -349,10 +343,10 @@ def test_src_reordering_paths_reimports_because_slots_are_positional(
         paths=["out/b*.parquet", "in/a*.parquet"], initial_last_modified=CUTOFF
     )
     moved = LastModSrcCtx(root / "swapped", ctx.attrs)
-    assert [
-        _slot_names(slot)
-        for slot in plugin.LocalFileSrcPlugin().read_in(moved, src_conn(base), swapped)
-    ] == [["out/b.parquet"], ["in/a.parquet"]]
+    assert [_slot_names(slot) for slot in read_in(moved, src_conn(base), swapped)] == [
+        ["out/b.parquet"],
+        ["in/a.parquet"],
+    ]
 
 
 @fs_domain("fs")
@@ -365,8 +359,8 @@ def test_src_format_csv_reads_with_default_options(
     )
 
     src = LocalFileSrc(paths=["users.csv"], format=SrcFileFormat.CSV)
-    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), src_conn(base), src)
-    df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
+    out = read_in(PluginSrcCtx(work), src_conn(base), src)
+    df = out[0][0].frame.select("id", "name").sort("id")
     assert df.to_dicts() == [
         {"id": 1, "name": "alice"},
         {"id": 2, "name": "bob"},
@@ -387,8 +381,8 @@ def test_src_format_csv_honours_separator_option(
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: {"separator": ";"}},
     )
-    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), src_conn(base), src)
-    df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
+    out = read_in(PluginSrcCtx(work), src_conn(base), src)
+    df = out[0][0].frame.select("id", "name").sort("id")
     assert df.to_dicts() == [
         {"id": 1, "name": "alice"},
         {"id": 2, "name": "bob"},
@@ -407,8 +401,8 @@ def test_src_format_json_reads_records(
     )
 
     src = LocalFileSrc(paths=["users.json"], format=SrcFileFormat.JSON)
-    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), src_conn(base), src)
-    df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
+    out = read_in(PluginSrcCtx(work), src_conn(base), src)
+    df = out[0][0].frame.select("id", "name").sort("id")
     assert df.to_dicts() == [
         {"id": 1, "name": "alice"},
         {"id": 2, "name": "bob"},
@@ -425,8 +419,8 @@ def test_src_format_avro_reads_records(
     )
 
     src = LocalFileSrc(paths=["users.avro"], format=SrcFileFormat.AVRO)
-    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), src_conn(base), src)
-    df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
+    out = read_in(PluginSrcCtx(work), src_conn(base), src)
+    df = out[0][0].frame.select("id", "name").sort("id")
     assert df.to_dicts() == [
         {"id": 1, "name": "alice"},
         {"id": 2, "name": "bob"},
@@ -443,8 +437,8 @@ def test_src_format_auto_infers_parquet_from_extension(
     )
 
     src = LocalFileSrc(paths=["users.parquet"], format=SrcFileFormat.AUTO)
-    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), src_conn(base), src)
-    df = pl.read_parquet(out[0][0].file).select("id", "name")
+    out = read_in(PluginSrcCtx(work), src_conn(base), src)
+    df = out[0][0].frame.select("id", "name")
     assert df.to_dicts() == [{"id": 1, "name": "alice"}]
 
 
@@ -628,8 +622,8 @@ def test_csv_src_encoding_utf8(domain_fs: FsDomain, request: pytest.FixtureReque
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: {"encoding": "utf8"}},
     )
-    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), src_conn(base), src)
-    df = pl.read_parquet(out[0][0].file).select("id", "name")
+    out = read_in(PluginSrcCtx(work), src_conn(base), src)
+    df = out[0][0].frame.select("id", "name")
     assert df.sort("id").to_dicts() == [
         {"id": 1, "name": "café"},
         {"id": 2, "name": "piñata"},
@@ -661,13 +655,13 @@ _SHEETS = {
 
 
 def _read_in(base, work, src) -> list:
-    return plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), src_conn(base), src)
+    return read_in(PluginSrcCtx(work), src_conn(base), src)
 
 
 def _user_frame(imported) -> pl.DataFrame:
     """One imported file's frame, with the binary's ``$td.opt.*`` provenance
     columns projected away."""
-    df = pl.read_parquet(imported.file)
+    df = imported.frame
     return df.select([c for c in df.columns if not c.startswith("$td.")])
 
 
@@ -976,12 +970,8 @@ def test_src_purge_keeps_files_a_rerun_of_the_same_transaction_needs(
     stage_parquet(base, "a.parquet", CUTOFF + timedelta(hours=1))
     src = LocalFileSrc(paths=["*.parquet"], initial_last_modified=CUTOFF, purge=True)
 
-    first = plugin.LocalFileSrcPlugin().read_in(
-        PluginSrcCtx(work / "attempt1"), src_conn(base), src
-    )
+    first = read_in(PluginSrcCtx(work / "attempt1"), src_conn(base), src)
     assert _slot_names(first[0]) == ["a.parquet"]
 
-    rerun = plugin.LocalFileSrcPlugin().read_in(
-        PluginSrcCtx(work / "attempt2"), src_conn(base), src
-    )
+    rerun = read_in(PluginSrcCtx(work / "attempt2"), src_conn(base), src)
     assert _slot_names(rerun[0]) == ["a.parquet"]

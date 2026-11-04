@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import polars as pl
 import pytest
 
 # noinspection PyProtectedMember
@@ -23,6 +24,7 @@ from tabsdatak.conn.localfile import (
     LocalFileSrcConn,
 )
 from tabsdatak.conn.localfile._explorer import LocalFileExplorer
+from tabsdatak.conn.common.file.constants import FILE_META_PATH
 from tabsdatak.spi import TableFileInput
 
 # noinspection PyProtectedMember
@@ -84,34 +86,27 @@ def _dest_ctx(work: Path):
     return ctx
 
 
-def test_src_plugin_passes_build_location_and_errors(monkeypatch, tmp_path):
-    captured: dict = {}
+def test_src_plugin_reads_each_matched_file_lazily_naming_its_path(tmp_path):
+    folder = tmp_path / "in dir"
+    folder.mkdir()
+    for name in ("a.parquet", "b.parquet"):
+        pl.DataFrame({"name": [name]}).write_parquet(folder / name)
+    src = LocalFileSrc(paths=["in dir/*.parquet"])
 
-    def fake(*, ctx, cfg, build_location, errors, run_env=None):
-        captured.update(
-            ctx=ctx,
-            cfg=cfg,
-            build_location=build_location,
-            errors=errors,
-            run_env=run_env,
-        )
-        # ``import_files`` returns the metadata-carrying inputs itself;
-        # the plugin hands them straight back.
-        return [[TableFileInput(file=Path(tmp_path / "ok.parquet"))]]
-
-    monkeypatch.setattr(_file_plugin, "import_files", fake)
-
-    src = LocalFileSrc(paths=["a/b.csv"])
-    out = plugin.LocalFileSrcPlugin().read_in(
-        _src_ctx(tmp_path), LocalFileSrcConn(), src
+    (slot,) = plugin.LocalFileSrcPlugin().read_in(
+        _src_ctx(tmp_path), LocalFileSrcConn(base_path=str(tmp_path)), src
     )
 
-    assert out == [[TableFileInput(file=Path(tmp_path / "ok.parquet"))]]
-    assert captured["build_location"] is plugin.build_location
-    assert captured["errors"] is plugin.ERRORS
-    # localfile has no creds -> no run_env passed
-    assert captured["run_env"] is None
-    assert captured["cfg"].paths == ["a/b.csv"]
+    assert not isinstance(slot, list)
+    tables = list(slot)
+    assert [table.frame.collect()["name"].item() for table in tables] == [
+        "a.parquet",
+        "b.parquet",
+    ]
+    assert [table.metadata.columns[FILE_META_PATH] for table in tables] == [
+        str(folder / "a.parquet"),
+        str(folder / "b.parquet"),
+    ]
 
 
 def test_dest_plugin_passes_build_location_and_errors(monkeypatch, tmp_path):

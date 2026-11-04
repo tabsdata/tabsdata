@@ -189,3 +189,8 @@ class FileCommonErrorCode(ErrorCode):
         "Source path '{path}' ends in the compression extension '{codec}', so it "
         "names compressed files: set include_compressed=True to read them.",
     )  # validate_src_compressed
+    FILE_COMMON_37 = ErrorDef(
+        ConnException,
+        "Source file '{path}' is compressed ('{codec}'); compressed source files "
+        "cannot be read yet.",
+    )  # read_files

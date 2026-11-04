@@ -127,6 +127,7 @@ class ReaderConf:
     # Delete the source files the lastmod cursor turned down as already
     # consumed, once every file in this run has been copied.
     purge: bool = False
+    include_compressed: bool = False
 
     @classmethod
     def from_src(cls, conn: Any, src: Any) -> "ReaderConf":
@@ -141,6 +142,7 @@ class ReaderConf:
             initial_lastmod=initial_lastmod_to_iso(src.initial_last_modified),
             drop_metadata=bool((src.src_cfg or {}).get(SRC_META_DROP_KEY, False)),
             purge=bool(src.purge),
+            include_compressed=src.include_compressed,
         )
 
     def format_cfg_for(self, index: int) -> dict | None:

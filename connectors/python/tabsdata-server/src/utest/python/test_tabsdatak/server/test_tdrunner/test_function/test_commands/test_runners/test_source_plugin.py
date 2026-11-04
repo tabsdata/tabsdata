@@ -878,11 +878,9 @@ def test_main_end_to_end_happy_path(
     monkeypatch,
     http_ok_url,
 ):
-    """Real LocalFile publisher, real plugin, real td_transporter.
-
-    Mirrors `donotmerge.py`. Requires `td_transporter` on PATH and
-    `tabsdata-conn-localfile` installed (entry-point group
-    `tabsdatak.connectors`).
+    """Real LocalFile publisher and plugin, landing straight from the
+    source file. Requires `tabsdata-conn-localfile` installed (entry-point
+    group `tabsdatak.connectors`).
     """
     request_path = write_request(tmp_path / "request.yaml")
     output_folder = tmp_path / "out"
@@ -910,12 +908,11 @@ def test_main_end_to_end_happy_path(
     status = main()
     assert status == 0, f"main() returned {status} (non-zero)"
 
-    # Exactly one parquet should have been produced.
-    parquets = list(output_folder.rglob("*.parquet"))
-    assert len(parquets) == 1, f"expected one parquet output, got: {parquets}"
+    # Nothing is copied to a local parquet on the way: the source file lands.
+    assert list(output_folder.rglob("*.parquet")) == []
 
-    # The parquet round-trips the input rows.
-    table = pq.read_table(parquets[0])
+    # The landed table holds the input rows.
+    table = pq.read_table(tmp_path / "landing" / "0.0.t")
     assert table.num_rows == 3
     assert "id" in table.column_names
     assert "name" in table.column_names
@@ -929,11 +926,15 @@ def test_main_end_to_end_happy_path(
     assert record.file is None
     assert record.location.uri.endswith("/landing/0.0.t")
     assert record.metadata_location.uri.endswith("/landing/0.0.m")
-    landed = pq.read_table(tmp_path / "landing" / "0.0.t")
-    assert landed.to_pydict() == table.to_pydict()
 
     # Liveness file was created by the context manager.
     assert liveness.exists()
+
+
+def legacy_read_in(self, ctx, conn, src) -> list[list[TableFileInput]]:
+    target = ctx.work_dir / "rows.parquet"
+    pl.DataFrame({"id": [1]}).write_parquet(target)
+    return [[TableFileInput(file=target)]]
 
 
 def test_main_logs_that_a_legacy_plugin_is_deprecated(
@@ -943,6 +944,9 @@ def test_main_logs_that_a_legacy_plugin_is_deprecated(
     http_ok_url,
     capfd,
 ):
+    from tabsdatak.conn.localfile._plugin import LocalFileSrcPlugin
+
+    monkeypatch.setattr(LocalFileSrcPlugin, "read_in", legacy_read_in)
     set_arguments(
         monkeypatch,
         write_request(tmp_path / "request.yaml"),

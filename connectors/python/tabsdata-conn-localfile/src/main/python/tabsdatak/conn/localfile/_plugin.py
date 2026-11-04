@@ -5,10 +5,13 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
+from pathlib import Path
 from typing import Any
 
 from tabsdatak.common._transporter.handler.handler import TransporterHandler
-from tabsdatak.conn.common.file import _plugin as _file_plugin
+from tabsdatak.conn.common.file import _plugin as _file_plugin, _source
+from tabsdatak.conn.common.file._store import FileStore
 from tabsdatak.conn.common.types import local_full_path
 from tabsdatak.conn.localfile import (
     LocalFileDest,
@@ -24,10 +27,10 @@ from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
+    LazyFrameInput,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
-    TableFileInput,
     TableFileSpec,
     TableMode,
 )
@@ -80,11 +83,13 @@ class LocalFileSrcPlugin(SrcPlugin[LocalFileSrcConn, LocalFileSrc]):
         ctx: SrcPluginCtx,
         conn: LocalFileSrcConn,
         src: LocalFileSrc,
-    ) -> list[list[TableFileInput]]:
-        return _file_plugin.import_files(
+    ) -> list[Iterable[LazyFrameInput]]:
+        base = Path(conn._base_path())
+        return _source.read_files(
             ctx=ctx,
             cfg=_file_plugin.ReaderConf.from_src(conn, src),
-            build_location=build_location,
+            store=FileStore(base.as_uri()),
+            origin=lambda _, path: str(base.joinpath(*path.split("/"))),
             errors=ERRORS,
         )
 

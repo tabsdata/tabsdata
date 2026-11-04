@@ -4,10 +4,15 @@
 
 from __future__ import annotations
 
+import io
+import uuid
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import obstore
+import polars as pl
 import pytest
+from tabsdatax.itest.fixture.backends.s3local import S3LocalDomain, s3local_domain
 
 from tabsdatak.api import Secret
 
@@ -20,6 +25,8 @@ from tabsdatak.common._transporter.invoker import transporter1
 from tabsdatak.conn.common.types import AwsAccessSecretKey
 from tabsdatak.conn.s3 import S3Dest, S3DestConn, S3Src, S3SrcConn
 from tabsdatak.conn.s3._explorer import S3ConnectionExplorer
+from tabsdatak.conn.common.file._store import FileStore
+from tabsdatak.conn.common.file.constants import FILE_META_PATH
 from tabsdatak.spi import TableFileInput
 
 # noinspection PyProtectedMember
@@ -118,33 +125,61 @@ def _dest_ctx(work: Path):
     return ctx
 
 
-def test_src_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_path):
-    captured: dict = {}
+def test_a_connection_maps_to_a_store_of_its_bucket_prefix_and_credentials():
+    conn = _src_conn(
+        base_path="/landing/raw",
+        conn_cfg={"obstore.endpoint": "http://127.0.0.1:9000", "obstore.allow_http": True},
+    )
+    store = plugin.file_store(conn)
+    assert store.root == "s3://my-bucket/landing/raw"
+    assert store.options == {
+        "aws_access_key_id": "AKIA0000000000000000",
+        "aws_secret_access_key": "secret-value",
+        "aws_region": "us-east-1",
+        "aws_endpoint": "http://127.0.0.1:9000",
+        "aws_allow_http": "true",
+    }
+    assert plugin.file_store(_src_conn()).root == "s3://my-bucket"
 
-    def fake(*, ctx, cfg, build_location, run_env, errors):
-        captured.update(
-            ctx=ctx,
-            cfg=cfg,
-            build_location=build_location,
-            run_env=run_env,
-            errors=errors,
+
+@s3local_domain("s3local")
+def test_src_plugin_reads_s3local_objects_lazily_naming_their_uri(
+    domain_s3local: S3LocalDomain, tmp_path
+):
+    prefix = f"plugin-{uuid.uuid4().hex}"
+    options = dict(domain_s3local.storage_options)
+    root = f"{domain_s3local.uri.rstrip('/')}/{prefix}"
+    store = FileStore(root, options)
+    for name in ("a.parquet", "b.parquet"):
+        content = io.BytesIO()
+        pl.DataFrame({"name": [name]}).write_parquet(content)
+        obstore.put(store.store(), f"in/{name}", content.getvalue())
+    base = root.removeprefix(f"s3://{domain_s3local.bucket}")
+    conn = S3SrcConn(
+        bucket=domain_s3local.bucket,
+        region=domain_s3local.region,
+        credentials=AwsAccessSecretKey(
+            access_key_id=Secret(domain_s3local.access_key),
+            secret_access_key=Secret(domain_s3local.secret_key),
+        ),
+        base_path=base,
+        conn_cfg={f"obstore.{key}": value for key, value in options.items()},
+    )
+    try:
+        (slot,) = plugin.S3SrcPlugin().read_in(
+            _src_ctx(tmp_path), conn, S3Src(paths=["in/*.parquet"])
         )
-        # ``import_files`` returns the metadata-carrying inputs itself;
-        # the plugin hands them straight back.
-        return [[TableFileInput(file=Path(tmp_path / "ok.parquet"))]]
-
-    monkeypatch.setattr(_file_plugin, "import_files", fake)
-
-    conn = _src_conn()
-    src = S3Src(paths=["a/b.parquet"])
-    out = plugin.S3SrcPlugin().read_in(_src_ctx(tmp_path), conn, src)
-
-    assert out == [[TableFileInput(file=Path(tmp_path / "ok.parquet"))]]
-    assert captured["build_location"] is plugin.build_location
-    assert captured["run_env"] is plugin.run_env
-    assert captured["errors"] is plugin.ERRORS
-    # cfg was assembled from _file_plugin.ReaderConf.from_src(src)
-    assert captured["cfg"].paths == ["a/b.parquet"]
+        tables = list(slot)
+        assert [table.frame.collect()["name"].item() for table in tables] == [
+            "a.parquet",
+            "b.parquet",
+        ]
+        assert [table.metadata.columns[FILE_META_PATH] for table in tables] == [
+            f"{root}/in/a.parquet",
+            f"{root}/in/b.parquet",
+        ]
+    finally:
+        store.delete(["in/a.parquet", "in/b.parquet"])
 
 
 def test_dest_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_path):
