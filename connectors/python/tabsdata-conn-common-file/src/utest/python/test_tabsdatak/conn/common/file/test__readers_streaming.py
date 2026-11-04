@@ -14,7 +14,10 @@ from pathlib import Path
 
 import fastavro
 import pytest
-from tabsdatax.itest.fixture.backends.s3local import S3LocalDomain, s3local_domain
+from tabsdatax.itest.fixture.backends.azurebloblocal import AzureBlobLocalDomain
+from tabsdatax.itest.fixture.backends.gcslocal import GcsLocalDomain
+from tabsdatax.itest.fixture.backends.s3local import S3LocalDomain
+from tabsdatax.itest.fixture.emulators import EMULATORS, emulated
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file._store import FileStore
@@ -113,7 +116,7 @@ FORMATS = {
 }
 
 
-def landed(domain: S3LocalDomain, tmp_path: Path, file_format: str, size: int):
+def landed(domain, tmp_path: Path, file_format: str, size: int):
     extension, write = FORMATS[file_format]
     local = tmp_path / f"in-{size}{extension}"
     rows = write(local, size)
@@ -149,13 +152,20 @@ def landed(domain: S3LocalDomain, tmp_path: Path, file_format: str, size: int):
     return report["peak"]
 
 
-@s3local_domain("s3local")
+@emulated
+@pytest.mark.parametrize("emulator", EMULATORS)
 @pytest.mark.parametrize("file_format", sorted(FORMATS))
 def test_a_large_file_lands_in_bounded_memory_that_does_not_grow_with_it(
-    domain_s3local: S3LocalDomain, tmp_path, file_format
+    domain_azurebloblocal: AzureBlobLocalDomain,
+    domain_gcslocal: GcsLocalDomain,
+    domain_s3local: S3LocalDomain,
+    tmp_path,
+    emulator,
+    file_format,
 ):
-    smaller = landed(domain_s3local, tmp_path, file_format, GIBIBYTE)
-    larger = landed(domain_s3local, tmp_path, file_format, 2 * GIBIBYTE)
+    domain = locals()[f"domain_{emulator}"]
+    smaller = landed(domain, tmp_path, file_format, GIBIBYTE)
+    larger = landed(domain, tmp_path, file_format, 2 * GIBIBYTE)
     report = f"peaks {smaller / MEBIBYTE:.0f} and {larger / MEBIBYTE:.0f} MiB"
     assert max(smaller, larger) < PEAK_LIMIT, report
     assert larger <= smaller * GROWTH_TOLERANCE, report

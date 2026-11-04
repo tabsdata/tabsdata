@@ -11,7 +11,10 @@ from datetime import datetime, timezone
 import obstore
 import polars as pl
 import pytest
-from tabsdatax.itest.fixture.backends.s3local import S3LocalDomain, s3local_domain
+from tabsdatax.itest.fixture.backends.azurebloblocal import AzureBlobLocalDomain
+from tabsdatax.itest.fixture.backends.gcslocal import GcsLocalDomain
+from tabsdatax.itest.fixture.backends.s3local import S3LocalDomain
+from tabsdatax.itest.fixture.emulators import EMULATORS, emulated
 
 from tabsdatak.common._storage.transfer import TransferError
 
@@ -52,12 +55,17 @@ def test_a_local_folder_lists_reads_and_deletes_its_files(tmp_path):
     check(store)
 
 
-@s3local_domain("s3local")
-def test_an_s3local_prefix_lists_reads_and_deletes_its_objects(
+@emulated
+@pytest.mark.parametrize("emulator", EMULATORS)
+def test_an_emulated_prefix_lists_reads_and_deletes_its_objects(
+    domain_azurebloblocal: AzureBlobLocalDomain,
+    domain_gcslocal: GcsLocalDomain,
     domain_s3local: S3LocalDomain,
+    emulator,
 ):
-    root = f"{domain_s3local.uri.rstrip('/')}/store-{uuid.uuid4().hex}"
-    store = FileStore(root, dict(domain_s3local.storage_options))
+    domain = locals()[f"domain_{emulator}"]
+    root = f"{domain.uri.rstrip('/')}/store-{uuid.uuid4().hex}"
+    store = FileStore(root, dict(domain.storage_options))
     stage(store)
     frame = pl.DataFrame({"a": [1, 2]})
     parquet = io.BytesIO()
@@ -149,12 +157,17 @@ def test_a_ranged_reader_reads_any_part_of_a_local_file(tmp_path):
     ranged_reads(FileStore(tmp_path.as_uri()))
 
 
-@s3local_domain("s3local")
-def test_a_ranged_reader_reads_any_part_of_an_s3local_object(
+@emulated
+@pytest.mark.parametrize("emulator", EMULATORS)
+def test_a_ranged_reader_reads_any_part_of_an_emulated_object(
+    domain_azurebloblocal: AzureBlobLocalDomain,
+    domain_gcslocal: GcsLocalDomain,
     domain_s3local: S3LocalDomain,
+    emulator,
 ):
-    root = f"{domain_s3local.uri.rstrip('/')}/ranged-{uuid.uuid4().hex}"
-    store = FileStore(root, dict(domain_s3local.storage_options))
+    domain = locals()[f"domain_{emulator}"]
+    root = f"{domain.uri.rstrip('/')}/ranged-{uuid.uuid4().hex}"
+    store = FileStore(root, dict(domain.storage_options))
     try:
         ranged_reads(store)
     finally:

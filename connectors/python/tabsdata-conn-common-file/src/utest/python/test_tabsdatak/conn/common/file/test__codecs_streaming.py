@@ -17,7 +17,10 @@ from pathlib import Path
 
 import pyarrow as pa
 import pytest
-from tabsdatax.itest.fixture.backends.s3local import S3LocalDomain, s3local_domain
+from tabsdatax.itest.fixture.backends.azurebloblocal import AzureBlobLocalDomain
+from tabsdatax.itest.fixture.backends.gcslocal import GcsLocalDomain
+from tabsdatax.itest.fixture.backends.s3local import S3LocalDomain
+from tabsdatax.itest.fixture.emulators import EMULATORS, emulated
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file._select import CODECS
@@ -89,15 +92,22 @@ def test_every_codec_has_a_streaming_case():
     assert set(WRITERS) == set(CODECS)
 
 
-@s3local_domain("s3local")
+@emulated
+@pytest.mark.parametrize("emulator", EMULATORS)
 @pytest.mark.parametrize("extension", sorted(WRITERS))
 def test_a_large_compressed_object_decompresses_in_bounded_memory(
-    domain_s3local: S3LocalDomain, tmp_path, extension
+    domain_azurebloblocal: AzureBlobLocalDomain,
+    domain_gcslocal: GcsLocalDomain,
+    domain_s3local: S3LocalDomain,
+    tmp_path,
+    emulator,
+    extension,
 ):
+    domain = locals()[f"domain_{emulator}"]
     local = tmp_path / f"plain{extension}"
     WRITERS[extension](local)
-    root = f"{domain_s3local.uri.rstrip('/')}/codecs-{uuid.uuid4().hex}"
-    options = dict(domain_s3local.storage_options)
+    root = f"{domain.uri.rstrip('/')}/codecs-{uuid.uuid4().hex}"
+    options = dict(domain.storage_options)
     store = FileStore(root, options)
     name = local.name
     with open(local, "rb") as content:
