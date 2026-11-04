@@ -159,6 +159,11 @@ def test_format_cfg_accepts_valid_csv_src_keys():
     assert _validation.validate_format_cfg(cfg, side="src") == cfg
 
 
+def test_format_cfg_accepts_skip_lines_for_a_csv_source():
+    cfg = {SrcFileFormat.CSV: {"skip_lines": 2}}
+    assert _validation.validate_format_cfg(cfg, side="src") == cfg
+
+
 def test_format_cfg_accepts_valid_csv_dest_keys():
     cfg = {DestFileFormat.CSV: {"separator": ",", "include_header": True}}
     assert _validation.validate_format_cfg(cfg, side="dest") == cfg

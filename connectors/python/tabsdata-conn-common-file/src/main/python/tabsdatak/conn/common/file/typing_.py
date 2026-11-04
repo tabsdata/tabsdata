@@ -85,6 +85,7 @@ CsvSrcKey: TypeAlias = Literal[
     "try_parse_dates",
     "decimal_comma",
     "has_header",
+    "skip_lines",
     "skip_rows",
     "skip_rows_after_header",
     "raise_if_empty",
