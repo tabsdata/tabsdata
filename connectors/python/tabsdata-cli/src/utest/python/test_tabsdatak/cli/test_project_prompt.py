@@ -53,10 +53,15 @@ def _invoke(argv: list[str], *, client: MagicMock, tmp_path, input: str | None =
 def test_project_is_prompted_before_the_collection(tmp_path):
     client = _client()
     result = _invoke(
-        ["fn", "get", "--name", "f1"], client=client, tmp_path=tmp_path, input="p1\nc1\n"
+        ["fn", "get", "--name", "f1"],
+        client=client,
+        tmp_path=tmp_path,
+        input="p1\nc1\n",
     )
     assert result.exit_code == 0, result.output
-    assert result.output.index(PROJECT_PROMPT) < result.output.index(FUNCTION_COLLECTION_PROMPT)
+    assert result.output.index(PROJECT_PROMPT) < result.output.index(
+        FUNCTION_COLLECTION_PROMPT
+    )
     assert client.connection.project == "p1"
     client.get_function.assert_called_once_with("c1", "f1")
 
@@ -160,7 +165,7 @@ def test_proj_survives_an_interactive_login(tmp_path):
 def test_aborted_tty_prompt_raises_abort(error, monkeypatch):
     import rich_click as click
 
-    monkeypatch.setattr("sys.stdin", MagicMock(isatty=lambda: True))
+    monkeypatch.setattr(cli_utils, "_prompts_in_terminal", lambda: True)
     monkeypatch.setattr(cli_utils, "prompt_with_escape", MagicMock(side_effect=error))
     ctx = click.Context(click.Command("cmd"), obj={"no_prompt": False})
     with pytest.raises(click.Abort):
