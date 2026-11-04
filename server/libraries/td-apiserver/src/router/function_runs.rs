@@ -96,3 +96,28 @@ pub async fn landing_data(
     let stream = state.function_run_landing_data(request).await?.data;
     Ok(DownloadResponse::parquet(stream))
 }
+
+#[apiserver_path(
+    version(v1),
+    scope(project),
+    auth(session, service_token),
+    method(get),
+    path = "/projects/{project}/collections/{collection}/function-runs/{function_run}/inputs/{input_idx}/landing-metadata",
+    tag(FUNCTION_RUNS_TAG),
+    content_type = "application/vnd.apache.parquet",
+    doc = "Download the metadata that says how one landing-data file is served"
+)]
+pub async fn landing_metadata(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+    Path(collection): Path<CollectionParam>,
+    Path(function_run): Path<FunctionRunParam>,
+    Path(input_idx): Path<InputIdxParam>,
+) -> Result<DownloadResponse, ErrorStatus> {
+    let request = context
+        .read((collection, function_run, input_idx))
+        .in_project(project_id);
+    let stream = state.function_run_landing_metadata(request).await?.data;
+    Ok(DownloadResponse::parquet(stream))
+}

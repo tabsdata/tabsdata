@@ -1299,6 +1299,22 @@ class APIServer:
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
+    def function_run_landing_metadata(
+        self,
+        collection_name: str,
+        function_run_id: str,
+        input_idx: int,
+        raise_for_status: bool = True,
+    ):
+        # The metadata that says how the landing-data file at `input_idx` is
+        # served, as parquet bytes. Files landed by 2.2.0 have none.
+        endpoint = self._scoped(
+            f"/collections/{_path_segment(collection_name)}/function-runs/{_path_segment(function_run_id)}"
+            f"/inputs/{_path_segment(input_idx)}/landing-metadata"
+        )
+        response = self.get(endpoint)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
     def logical_function_run_replay(
         self,
         logical_function_run_id: str,

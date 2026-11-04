@@ -38,7 +38,7 @@ pub enum StorageLocation {
     /// * `/LOCATION`
     /// * `/LOCATION/c/COLLECTION`
     /// * `/LOCATION/c/COLLECTION/x/TRANSACTION/f/FUNCTION_VERSION` (physical_function_run contents)
-    /// * `/LOCATION/c/COLLECTION/w/FUNCTION_RUN/r/POSITION.INDEX.t` and `.s` (a publisher run's landing data and its schema)
+    /// * `/LOCATION/c/COLLECTION/w/FUNCTION_RUN/r/POSITION.INDEX.t` and `.m` (a publisher run's landing data and the metadata that says how it is served)
     /// * `/LOCATION/c/COLLECTION/w/FUNCTION_RUN/r/INPUT_IDX.t` (a publisher run's landing data, as landed by 2.2.0)
     /// * `/LOCATION/c/COLLECTION/w/FUNCTION_RUN/s` (a run's scratch area)
     /// * `/LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION.t`

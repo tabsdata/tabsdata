@@ -365,6 +365,7 @@ mod tests {
             (PROJECT, "graph"),
             (PROJECT, "history"),
             (PROJECT, "landing_data"),
+            (PROJECT, "landing_metadata"),
             (PROJECT, "list_data_versions"),
             (PROJECT, "list_functions"),
             (PROJECT, "list_functions_by_collection"),
@@ -470,6 +471,10 @@ mod tests {
             (
                 "GET",
                 "/projects/{project}/collections/{collection}/function-runs/{function_run}/inputs/{input_idx}/landing-data",
+            ),
+            (
+                "GET",
+                "/projects/{project}/collections/{collection}/function-runs/{function_run}/inputs/{input_idx}/landing-metadata",
             ),
             (
                 "GET",
@@ -721,6 +726,7 @@ mod tests {
             "/projects/{project}/collections/{collection}/connection/probes",
             "/projects/{project}/collections/{collection}/function-bundle-upload",
             "/projects/{project}/collections/{collection}/function-runs/{function_run}/inputs/{input_idx}/landing-data",
+            "/projects/{project}/collections/{collection}/function-runs/{function_run}/inputs/{input_idx}/landing-metadata",
             "/projects/{project}/collections/{collection}/functions",
             "/projects/{project}/collections/{collection}/functions/{function}",
             "/projects/{project}/collections/{collection}/functions/{function}/enable",

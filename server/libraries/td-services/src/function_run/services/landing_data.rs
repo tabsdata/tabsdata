@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::function_run::landing::{find_landing_file, read_landing_data};
+use crate::function_run::landing::{find_landing_file, landing_metadata_file, read_landing_data};
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -18,15 +18,51 @@ use td_objects::dxo::physical_function_run::{
 use td_objects::types::basic::{CollectionIdName, Decorator};
 use td_objects::types::stream::BoxedSyncStream;
 use td_queries::Queries;
-use td_storage::Storage;
+use td_storage::{SPath, Storage};
+
+type LandingRequest =
+    WithinProject<ReadRequest<(CollectionParam, FunctionRunParam, InputIdxParam)>>;
 
 #[service_factory]
 async fn function_run_landing_data(
     authz: Ctx<AuthzContext>,
     storage: Ctx<Storage>,
     gated_conn: &mut GatedConnection<RO, InProject>,
-    request: WithinProject<ReadRequest<(CollectionParam, FunctionRunParam, InputIdxParam)>>,
+    request: LandingRequest,
 ) -> Result<BoxedSyncStream, TdError> {
+    let (path, _) = landed(&authz, &storage, gated_conn, request).await?;
+    read_landing_data(&storage, &path).await
+}
+
+#[service_factory]
+async fn function_run_landing_metadata(
+    authz: Ctx<AuthzContext>,
+    storage: Ctx<Storage>,
+    gated_conn: &mut GatedConnection<RO, InProject>,
+    request: LandingRequest,
+) -> Result<BoxedSyncStream, TdError> {
+    let (path, (run_id, input_idx)) = landed(&authz, &storage, gated_conn, request).await?;
+    // Files landed by 2.2.0 have no metadata: they were served as landed.
+    let metadata = match landing_metadata_file(&path)? {
+        Some(metadata) if storage.exists(&metadata).await? => metadata,
+        _ => {
+            return Err(api_error!(
+                ApiError::NotFound,
+                "function run {} has no landing metadata at input index {}",
+                run_id,
+                input_idx
+            ));
+        }
+    };
+    read_landing_data(&storage, &metadata).await
+}
+
+async fn landed(
+    authz: &AuthzContext,
+    storage: &Storage,
+    gated_conn: &mut GatedConnection<RO, InProject>,
+    request: LandingRequest,
+) -> Result<(SPath, (String, String)), TdError> {
     let (project, request) = request.into_parts();
     let (ctx, (collection, function_run, input_idx)) = request.into_parts();
     let grant = authz
@@ -62,7 +98,7 @@ async fn function_run_landing_data(
 
     // The index set lives in the runner, not the database: the only honest
     // existence check is against storage.
-    let Some(path) = find_landing_file(&storage, &run, &input_idx.input_idx).await? else {
+    let Some(path) = find_landing_file(storage, &run, &input_idx.input_idx).await? else {
         return Err(api_error!(
             ApiError::NotFound,
             "function run {} has no landing data at input index {}",
@@ -70,7 +106,7 @@ async fn function_run_landing_data(
             input_idx.input_idx
         ));
     };
-    read_landing_data(&storage, &path).await
+    Ok((path, (run_id.to_string(), input_idx.input_idx.to_string())))
 }
 
 #[cfg(test)]
@@ -195,6 +231,37 @@ mod tests {
         Ok(())
     }
 
+    fn landing_request(
+        p: &ProjectDB,
+        collection: &str,
+        run: &PhysicalFunctionRunDB,
+        input_idx: &InputIdx,
+    ) -> Result<LandingRequest, TdError> {
+        Ok(
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
+                .read((
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(collection)?,
+                    },
+                    FunctionRunParam {
+                        function_run: run.id.clone(),
+                    },
+                    InputIdxParam {
+                        input_idx: *input_idx,
+                    },
+                ))
+                .in_project(p.project_id),
+        )
+    }
+
+    async fn first_bytes(stream: BoxedSyncStream) -> Result<Bytes, TdError> {
+        let mut stream = stream.into_inner();
+        match stream.next().await {
+            Some(bytes) => Ok(bytes?),
+            None => Ok(Bytes::new()),
+        }
+    }
+
     async fn get_landing_data(
         context: &Services,
         p: &ProjectDB,
@@ -202,29 +269,33 @@ mod tests {
         run: &PhysicalFunctionRunDB,
         input_idx: &InputIdx,
     ) -> Result<Bytes, TdError> {
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .read((
-                CollectionParam {
-                    collection: CollectionIdName::from_str(collection)?,
-                },
-                FunctionRunParam {
-                    function_run: run.id.clone(),
-                },
-                InputIdxParam {
-                    input_idx: *input_idx,
-                },
-            ))
-            .in_project(p.project_id);
-        let response = context
-            .clone()
-            .function_run_landing_data(request)
-            .await?
-            .data;
-        let mut stream = response.into_inner();
-        match stream.next().await {
-            Some(bytes) => Ok(bytes?),
-            None => Ok(Bytes::new()),
-        }
+        let request = landing_request(p, collection, run, input_idx)?;
+        first_bytes(
+            context
+                .clone()
+                .function_run_landing_data(request)
+                .await?
+                .data,
+        )
+        .await
+    }
+
+    async fn get_landing_metadata(
+        context: &Services,
+        p: &ProjectDB,
+        collection: &str,
+        run: &PhysicalFunctionRunDB,
+        input_idx: &InputIdx,
+    ) -> Result<Bytes, TdError> {
+        let request = landing_request(p, collection, run, input_idx)?;
+        first_bytes(
+            context
+                .clone()
+                .function_run_landing_metadata(request)
+                .await?
+                .data,
+        )
+        .await
     }
 
     #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
@@ -348,6 +419,78 @@ mod tests {
         let err = get_landing_data(&context, &p, "c0", &run, &InputIdx::try_from(0)?)
             .await
             .expect_err("the run landed nothing");
+        assert_eq!(err.api_error(), ApiError::NotFound);
+        Ok(())
+    }
+
+    /// The metadata of a landed file is its `.m` sibling, numbered like the data.
+    #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
+    async fn test_landing_metadata_is_the_files_m_sibling(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let context = Services::with_defaults(db.clone());
+        let (collection, run) = seed_run(&db, &p, "c0", Decorator::Publisher).await?;
+        for name in ["2.0", "0.0"] {
+            write_landed(&context, &collection, &run, &format!("{name}.t"), b"data").await?;
+            write_landed(
+                &context,
+                &collection,
+                &run,
+                &format!("{name}.m"),
+                name.as_bytes(),
+            )
+            .await?;
+        }
+
+        for (idx, name) in ["0.0", "2.0"].into_iter().enumerate() {
+            let idx = InputIdx::try_from(i32::try_from(idx).unwrap())?;
+            let bytes = get_landing_metadata(&context, &p, "c0", &run, &idx).await?;
+            assert_eq!(bytes, Bytes::from(name.as_bytes().to_vec()));
+        }
+        Ok(())
+    }
+
+    /// A file landed by 2.2.0 was served as landed, so it has no metadata.
+    #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
+    async fn test_landing_metadata_of_a_2_2_0_file_not_found(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let context = Services::with_defaults(db.clone());
+        let (collection, run) = seed_run(&db, &p, "c0", Decorator::Publisher).await?;
+        let idx = InputIdx::try_from(0)?;
+        write_landing(&context, &collection, &run, &idx).await?;
+
+        let err = get_landing_metadata(&context, &p, "c0", &run, &idx)
+            .await
+            .expect_err("2.2.0 landed no metadata");
+        assert_eq!(err.api_error(), ApiError::NotFound);
+        Ok(())
+    }
+
+    #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
+    async fn test_landing_metadata_missing_m_not_found(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let context = Services::with_defaults(db.clone());
+        let (collection, run) = seed_run(&db, &p, "c0", Decorator::Publisher).await?;
+        write_landed(&context, &collection, &run, "0.0.t", b"data").await?;
+
+        let err = get_landing_metadata(&context, &p, "c0", &run, &InputIdx::try_from(0)?)
+            .await
+            .expect_err("no .m was landed");
+        assert_eq!(err.api_error(), ApiError::NotFound);
+        Ok(())
+    }
+
+    /// The metadata is guarded like the data: only a publisher run has any.
+    #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
+    async fn test_landing_metadata_non_publisher_not_found(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let context = Services::with_defaults(db.clone());
+        let (collection, run) = seed_run(&db, &p, "c0", Decorator::Transformer).await?;
+        write_landed(&context, &collection, &run, "0.0.t", b"data").await?;
+        write_landed(&context, &collection, &run, "0.0.m", b"metadata").await?;
+
+        let err = get_landing_metadata(&context, &p, "c0", &run, &InputIdx::try_from(0)?)
+            .await
+            .expect_err("a transformer run ingests nothing");
         assert_eq!(err.api_error(), ApiError::NotFound);
         Ok(())
     }
