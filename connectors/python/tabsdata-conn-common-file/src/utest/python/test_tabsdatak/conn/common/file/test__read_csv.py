@@ -118,6 +118,11 @@ def test_decimal_comma_floats_are_served_as_floats(tmp_path):
         (b"a,b|1,x|2,y|", {"eol_char": "|"}),
         (b"a,b\n1,'x\ny'\n2,'z'\n", {"quote_char": "'"}),
         (b'a,b\n1,"x\n2,y\n', {"quote_char": None}),
+        (
+            "name,city\nJos\u00e9,Montr\u00e9al\n".encode("latin-1"),
+            {"encoding": "latin-1"},
+        ),
+        ("a,b\nx,\u00e9\n".encode("latin-1"), {"encoding": "utf8-lossy"}),
     ],
     ids=[
         "separator",
@@ -130,6 +135,8 @@ def test_decimal_comma_floats_are_served_as_floats(tmp_path):
         "eol char",
         "quote char",
         "no quote char",
+        "latin-1",
+        "utf8 lossy",
     ],
 )
 def test_the_source_options_mean_what_they_mean_to_polars(tmp_path, content, options):
@@ -152,3 +159,8 @@ def test_an_empty_field_is_null_whatever_missing_is_null_says(
 ):
     landed = land(read(b"a,b\n1,\n", {"missing_is_null": missing_is_null}), tmp_path)
     assert landed.served.to_dicts() == [{"a": 1, "b": None}]
+
+
+def test_an_encoding_whose_line_ends_are_not_ascii_is_refused():
+    with pytest.raises(ValueError, match="utf-16"):
+        read("a,b\n1,2\n".encode("utf-16"), {"encoding": "utf-16"})

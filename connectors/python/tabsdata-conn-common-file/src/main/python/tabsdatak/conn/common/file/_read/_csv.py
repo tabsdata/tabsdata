@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import codecs
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -44,6 +45,8 @@ DECIMAL_COMMA = "decimal_comma"
 TRY_PARSE_DATES = "try_parse_dates"
 MISSING_IS_NULL = "missing_is_null"
 TRUNCATE_RAGGED_LINES = "truncate_ragged_lines"
+ENCODING = "encoding"
+NATIVE_ENCODINGS = ("utf8", "utf8-lossy")
 QUOTE_CHAR = "quote_char"
 EOL_CHAR = "eol_char"
 SEPARATOR = "separator"
@@ -80,6 +83,7 @@ class AutoCsv:
         self.try_parse_dates = bool(self.options.pop(TRY_PARSE_DATES, False))
         self.options.pop(MISSING_IS_NULL, None)
         self.truncate = bool(self.options.get(TRUNCATE_RAGGED_LINES, False))
+        self.transcoded = self.transcoding()
         self.later = {
             key: value
             for key, value in self.options.items()
@@ -230,7 +234,31 @@ class AutoCsv:
             self.options.get(EOL_CHAR, DEFAULT_EOL),
             self.options.get(COMMENT_PREFIX),
         )
-        return records(stream, cutter, size=self.block_size)
+        found = records(stream, cutter, size=self.block_size)
+        if self.transcoded is None:
+            return found
+        return (
+            (block.decode(self.transcoded).encode(), widest) for block, widest in found
+        )
+
+    def transcoding(self) -> str | None:
+        encoding = self.options.get(ENCODING, NATIVE_ENCODINGS[0])
+        if encoding in NATIVE_ENCODINGS:
+            return None
+        codecs.lookup(encoding)
+        marks = [
+            self.options.get(SEPARATOR, DEFAULT_SEPARATOR),
+            self.options.get(QUOTE_CHAR, DEFAULT_QUOTE) or "",
+            self.options.get(EOL_CHAR, DEFAULT_EOL),
+            self.options.get(COMMENT_PREFIX) or "",
+        ]
+        if any(mark.encode(encoding) != mark.encode() for mark in marks):
+            raise ValueError(
+                f"The CSV encoding '{encoding}' is not read: its separator, quote, "
+                "end of line or comment prefix are not the bytes they are in UTF-8"
+            )
+        self.options[ENCODING] = NATIVE_ENCODINGS[0]
+        return encoding
 
     def landed(
         self,
