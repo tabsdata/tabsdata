@@ -84,8 +84,8 @@ import pytest
 import yaml
 from pydantic import BeforeValidator, ValidationError
 
-from . import _tdd, operations
-from ._tdd import DOMAIN, SYSTEM, TddError
+from tabsdatax.itest.fixture import _tdd, operations
+from tabsdatax.itest.fixture._tdd import DOMAIN, SYSTEM, TddError
 
 # skip | fail (default: fail) when the store has no such backend, per family.
 ON_MISSING_ENV = {

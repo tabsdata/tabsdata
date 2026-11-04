@@ -14,7 +14,7 @@ from typing import ClassVar
 
 from pydantic.dataclasses import dataclass
 
-from ..backend import Domain, StorageOptions, System, require
+from tabsdatax.itest.fixture.backend import Domain, StorageOptions, System, require
 
 
 @dataclass(frozen=True)

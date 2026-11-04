@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from . import _tdd
+from tabsdatax.itest.fixture import _tdd
 
 
 @dataclass(frozen=True)
