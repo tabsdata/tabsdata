@@ -8,7 +8,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, cast
+from typing import Any, Callable
 
 from tabsdatak._api import path_timestamp
 from tabsdatak._legacy import warn_renamed
@@ -25,9 +25,8 @@ from tabsdatak.common._transporter.invoker.transporter1 import (
     TransporterRunError,
 )
 from tabsdatak.conn.common.constants import SRC_META_DROP_KEY
-from tabsdatak.conn.common.file import _input, _output
+from tabsdatak.conn.common.file import _output
 from tabsdatak.conn.common.file._validation import split_sheet_fragment
-from tabsdatak.conn.common.file.constants import FILE_META_PATH
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.conn.common.file.typing_ import (
     EXEC_PLAN_ID,
@@ -38,8 +37,6 @@ from tabsdatak.conn.common.file.typing_ import (
 from tabsdatak.error import ApiException, ErrorCode
 from tabsdatak.spi import (
     DestContext,
-    SrcPluginCtx,
-    TableFileInput,
     TableFileSpec,
 )
 
@@ -109,11 +106,9 @@ def resolve_dest_tokens(target_path: str, ctx: DestContext) -> str:
 
 @dataclass(frozen=True)
 class ReaderConf:
-    # The Conn instance the orchestrator hands to ``build_location``
-    # / ``run_env``.  Typed Any so this module stays decoupled from
-    # the connector-specific Conn class. ``file_format`` is the raw
-    # (possibly AUTO) format enum; the handler resolves AUTO against
-    # ``paths`` and maps it to its own transporter format object.
+    # The connector-specific Conn instance, typed Any so this module
+    # stays decoupled from it. ``file_format`` is the raw (possibly
+    # AUTO) format enum; the reader resolves AUTO against ``paths``.
     conn: Any
     paths: list[str]
     file_format: SrcFileFormat
@@ -125,7 +120,7 @@ class ReaderConf:
     initial_lastmod: str | None = None
     drop_metadata: bool = False
     # Delete the source files the lastmod cursor turned down as already
-    # consumed, once every file in this run has been copied.
+    # consumed, once every file in this run has been read.
     purge: bool = False
     include_compressed: bool = False
 
@@ -217,126 +212,18 @@ RunEnvBuilder = Callable[[Any, TransporterHandler], dict[str, str]]
 # --- Orchestrators -------------------------------------------------
 
 
-# Per-slot incremental cursor key. The transporter emits an opaque
-# ``lastmod_info`` blob summarizing every file it observed in this
-# slot; we stash it on the trx context so the next trx can resume
-# where this one left off. Slots are addressed positionally
-# (``slot0``, ``slot1``, ...) so a Src whose ``paths`` ordering is
-# stable round-trips cleanly. The key shape (one alphanumeric label
-# per dot-separated segment, no underscores) matches the context-key
-# regex declared on `ContextKeySpec`.
+# Per-slot incremental cursor key: each slot stores its encoded
+# last-modified cursor on the trx context so the next trx resumes where
+# this one left off. Slots are addressed positionally (``slot0``,
+# ``slot1``, ...) so a Src whose ``paths`` ordering is stable
+# round-trips cleanly. The key shape (one alphanumeric label per
+# dot-separated segment, no underscores) matches the context-key regex
+# declared on `ContextKeySpec`.
 #
 # The ``file-lastmod.`` prefix is reserved for this plugin's
 # bookkeeping; see :meth:`tabsdatak.api.TransactionCtx.set_attr` for the
 # reserved-prefix convention.
 _LASTMOD_KEY_PREFIX = "file-lastmod.slot"
-
-
-def import_files(
-    *,
-    ctx: SrcPluginCtx,
-    cfg: ReaderConf,
-    build_location: LocationBuilder,
-    errors: FilePluginErrors,
-    run_env: RunEnvBuilder | None = None,
-) -> list[list[TableFileInput]]:
-    """Import every path in ``cfg.paths``, one output slot per path.
-
-    Each imported file is reported with the location it was read from as
-    its `FILE_META_PATH` metadata, or with no metadata at all when
-    ``cfg.drop_metadata`` is set (the source's
-    ``tabsdata.src_metadata.drop`` config key).
-    """
-    conn = cfg.conn
-    handler = make_handler()
-
-    env: dict[str, str] | None = None
-    if run_env is not None:
-        try:
-            env = run_env(conn, handler)
-        except ApiException as e:
-            raise errors.cred_resolution.exception(cause=e, reason=str(e))
-
-    total = len(cfg.paths)
-    logger.info("file-reader: import_files starting (%d path(s))", total)
-    results: list[list[TableFileInput]] = []
-    for slot_idx, entry in enumerate(cfg.paths):
-        logger.info("file-reader: importing path %d/%d: %r", slot_idx + 1, total, entry)
-        slot_dir = ctx.work_dir / f"slot{slot_idx}"
-        slot_dir.mkdir(parents=True, exist_ok=True)
-        location = build_location(conn, entry, handler)
-        lastmod_key = f"{_LASTMOD_KEY_PREFIX}{slot_idx}"
-        # Resume from the prior trx's cursor if one was stored; otherwise
-        # fall back to the Src's baseline (the first-run seed).
-        prior_lastmod = cast(str | None, ctx.get_attr(lastmod_key))
-        slot_cfg = cfg.format_cfg_for(slot_idx)
-        sheet = sheet_in(slot_cfg)
-        try:
-            report = _input.import_one(
-                handler=handler,
-                source=location,
-                target_dir=slot_dir,
-                file_format=cfg.file_format,
-                paths=cfg.paths,
-                format_cfg=slot_cfg,
-                initial_lastmod=cfg.initial_lastmod,
-                lastmod_info=prior_lastmod,
-                purge=cfg.purge,
-                env=env,
-            )
-        except TransporterBinaryNotFoundError as e:
-            raise errors.binary_not_found.exception(cause=e)
-        except TransporterRunError as e:
-            raise errors.read_failed.exception(cause=e, path=entry)
-        except TransporterReportError as e:
-            raise errors.report_invalid.exception(cause=e, path=entry)
-
-        # ``None`` unless this was a purging find-copy; transporter1 never
-        # sets it.
-        if report.purged is not None:
-            logger.info(
-                "file-reader: slot %d purged %d source file(s)",
-                slot_idx,
-                len(report.purged.deleted),
-            )
-
-        # Stage this slot's fresh cursor for the next trx. The transporter
-        # may return ``None`` (no files observed; nothing to track), in
-        # which case the prior value stays in effect for the next run.
-        if report.lastmod_info is not None:
-            ctx.set_attr(lastmod_key, report.lastmod_info)
-
-        slot_files: list[TableFileInput] = []
-        for f in report.files:
-            target = f.get("to") if isinstance(f, dict) else None
-            if target:
-                # The uri the transporter read, with this slot's worksheet
-                # put back on it: the transporter never saw the fragment,
-                # but provenance has to name the sheet a row came from, and
-                # the value has to be pasteable straight back into ``paths``.
-                #
-                # Appended to each *file's* own ``from`` rather than taken
-                # from the configured path, because one slot can glob many
-                # files: they differ in uri and share the one worksheet.
-                origin = str(f.get("from", ""))
-                if sheet is not None:
-                    origin = f"{origin}#{sheet}"
-                metadata = None if cfg.drop_metadata else {FILE_META_PATH: origin}
-                slot_files.append(
-                    TableFileInput(
-                        file=Path(cast(str, target)),
-                        metadata=metadata,
-                    )
-                )
-        logger.debug(
-            "file-reader: path %d/%d produced %d file(s)",
-            slot_idx + 1,
-            total,
-            len(slot_files),
-        )
-        results.append(slot_files)
-    logger.info("file-reader: import_files finished (%d path(s))", total)
-    return results
 
 
 def copy_out(

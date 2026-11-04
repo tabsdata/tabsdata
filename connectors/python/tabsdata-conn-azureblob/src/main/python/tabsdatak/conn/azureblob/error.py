@@ -64,7 +64,7 @@ class AzureBlobErrorCode(ErrorCode):
     AZURE_BLOB_7 = ErrorDef(
         AzureBlobRuntimeException,
         "AzureBlob read failed (path={path})",
-    )  # _AzureBlobSrcPlugin: import_one failure
+    )  # _AzureBlobSrcPlugin: source read failure
     AZURE_BLOB_8 = ErrorDef(
         AzureBlobRuntimeException,
         "AzureBlob write failed (target={target})",

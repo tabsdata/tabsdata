@@ -64,7 +64,7 @@ class LocalFileErrorCode(ErrorCode):
     LOCALFILE_7 = ErrorDef(
         LocalFileRuntimeException,
         "LocalFile read failed (path={path})",
-    )  # _LocalFileSrcPlugin: import_one failure
+    )  # _LocalFileSrcPlugin: source read failure
     LOCALFILE_8 = ErrorDef(
         LocalFileRuntimeException,
         "LocalFile write failed (target={target})",

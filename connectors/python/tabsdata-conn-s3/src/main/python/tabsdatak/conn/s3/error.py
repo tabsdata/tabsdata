@@ -64,7 +64,7 @@ class S3ErrorCode(ErrorCode):
     S3_7 = ErrorDef(
         S3RuntimeException,
         "S3 read failed (path={path})",
-    )  # _S3SrcPlugin: import_one failure
+    )  # _S3SrcPlugin: source read failure
     S3_8 = ErrorDef(
         S3RuntimeException,
         "S3 write failed (target={target})",

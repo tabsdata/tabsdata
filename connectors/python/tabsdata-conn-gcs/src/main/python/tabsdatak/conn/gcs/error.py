@@ -64,7 +64,7 @@ class GCSErrorCode(ErrorCode):
     GCS_7 = ErrorDef(
         GCSRuntimeException,
         "GCS read failed (path={path})",
-    )  # _GCSSrcPlugin: import_one failure
+    )  # _GCSSrcPlugin: source read failure
     GCS_8 = ErrorDef(
         GCSRuntimeException,
         "GCS write failed (target={target})",
