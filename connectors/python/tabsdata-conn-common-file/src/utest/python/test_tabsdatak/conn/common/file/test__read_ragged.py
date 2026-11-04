@@ -9,12 +9,14 @@ from collections.abc import Callable
 import polars as pl
 import pytest
 
+from tabsdatak.common._storage.landed import OVERFLOW_COLUMN
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file._read._csv import AutoCsv
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file._read._ndjson import AutoNdjson
-from test_tabsdatak.conn.common.file.landed import Source, land
+from test_tabsdatak.conn.common.file.landed import Source, land, strings
 
 pytestmark = [pytest.mark.unit]
 
@@ -69,21 +71,84 @@ def test_csv_rows_land_and_serve_as_polars_reads_the_whole_file(
 ):
     content, options = CSV_CASES[case]
     landed = land(read_csv(content, options, block_size), tmp_path)
-    assert landed.data.equals(pl.read_csv(content, infer_schema=False, **options))
+    assert strings(landed).equals(pl.read_csv(content, infer_schema=False, **options))
     expected = pl.read_csv(content, infer_schema_length=None, **options)
     assert landed.served.equals(expected)
 
 
+WIDE_CASES = {
+    "early": (
+        b"a,b\n1,2\n3,4,5\n",
+        {},
+        {"a": [1, 3], "b": [2, 4], "column_2": [None, 5]},
+    ),
+    "late": (
+        b"a,b\n" + b"1,2\n" * 20 + b"3,4,5,6\n",
+        {},
+        {
+            "a": [1] * 20 + [3],
+            "b": [2] * 20 + [4],
+            "column_2": [None] * 20 + [5],
+            "column_3": [None] * 20 + [6],
+        },
+    ),
+    "typed over the whole file": (
+        b"a,b\n1,2,5\n" + b"1,2\n" * 20 + b"3,4,x\n",
+        {},
+        {
+            "a": [1] * 21 + [3],
+            "b": [2] * 21 + [4],
+            "column_2": ["5"] + [None] * 20 + ["x"],
+        },
+    ),
+    "an empty position before a used one": (
+        b"a,b\n1,2,,4\n",
+        {},
+        {"a": [1], "b": [2], "column_2": [None], "column_3": [4]},
+    ),
+    "a header name taken": (
+        b"a,column_3\n1,2,3,4\n",
+        {},
+        {"a": [1], "column_3": [2], "column_2": [3], "column_4": [4]},
+    ),
+    "no header": (
+        b"1,2\n3,4,5\n",
+        {"has_header": False},
+        {"column_0": [1, 3], "column_1": [2, 4], "column_2": [None, 5]},
+    ),
+    "a wide row skipped before the header": (
+        b"x,y,z,w\na,b\n1,2\n",
+        {"skip_rows": 1},
+        {"a": [1], "b": [2]},
+    ),
+    "quoted fields in the extras": (
+        b'a,b\n1,2,"x,y","p\nq"\n',
+        {},
+        {"a": [1], "b": [2], "column_2": ["x,y"], "column_3": ["p\nq"]},
+    ),
+}
+
+
 @BLOCK_SIZES
-@pytest.mark.parametrize(
-    "content",
-    [b"a,b\n1,2\n3,4,5\n", b"a,b\n" + b"1,2\n" * 20 + b"3,4,5,6\n"],
-    ids=["early", "late"],
-)
-def test_a_csv_row_wider_than_the_header_fails_the_run(tmp_path, content, block_size):
-    # Pins polars' behaviour until the schema widens to fit it (PW3, D-b).
-    with pytest.raises(pl.exceptions.ComputeError, match="found more fields"):
-        land(read_csv(content, {}, block_size), tmp_path)
+@pytest.mark.parametrize("case", list(WIDE_CASES))
+def test_a_csv_row_wider_than_the_header_widens_the_table(tmp_path, case, block_size):
+    content, options, expected = WIDE_CASES[case]
+    landed = land(read_csv(content, options, block_size), tmp_path)
+    assert landed.served.equals(pl.DataFrame(expected, strict=False))
+
+
+def test_the_fields_beyond_the_header_land_in_the_overflow_list(tmp_path):
+    landed = land(read_csv(b"a,b\n1,2\n3,4,5,6\n", {}, 1 << 20), tmp_path)
+    assert landed.data.columns == ["a", "b", OVERFLOW_COLUMN]
+    assert landed.data[OVERFLOW_COLUMN].to_list() == [[None, None], ["5", "6"]]
+    assert list(landed.schema) == ["a", "b", "column_2", "column_3"]
+
+
+def test_without_wide_rows_the_overflow_stays_null_and_adds_no_columns(tmp_path):
+    landed = land(read_csv(b"a,b\n1,2\n3,4\n", {}, 1 << 20), tmp_path)
+    assert landed.data[OVERFLOW_COLUMN].null_count() == 2
+    assert list(landed.schema) == ["a", "b"]
+    assert landed.served.columns == ["a", "b"]
 
 
 @BLOCK_SIZES

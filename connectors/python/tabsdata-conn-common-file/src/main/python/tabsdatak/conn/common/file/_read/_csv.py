@@ -5,7 +5,7 @@
 """CSV read in blocks of whole records, each parsed by polars:
 
 - data: every column a String, as polars reads it with the source's
-  options;
+  options; the fields of rows wider than the header in one list column;
 - metadata: the types polars infers for each block, folded over the whole
   file, parsed with the source's `decimal_comma`.
 """
@@ -13,12 +13,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass
 from typing import Any
 
 import polars as pl
 import pyarrow as pa
 
 from tabsdata.expansions.foundation.readers import CsvCutter  # noqa: TID251
+from tabsdatak.common._storage.landed import OVERFLOW_COLUMN
 from tabsdatak.conn.common.file._read._blocks import (
     BLOCK_SIZE,
     Readable,
@@ -33,10 +35,15 @@ from tabsdatak.spi import (
     SourceFormat,
 )
 
-FIRST_BLOCK_OPTIONS = ("has_header", "skip_rows", "skip_rows_after_header")
+HAS_HEADER = "has_header"
+SKIP_LINES = "skip_lines"
+SKIP_ROWS = "skip_rows"
+SKIP_ROWS_AFTER_HEADER = "skip_rows_after_header"
+FIRST_BLOCK_OPTIONS = (HAS_HEADER, SKIP_LINES, SKIP_ROWS, SKIP_ROWS_AFTER_HEADER)
 DECIMAL_COMMA = "decimal_comma"
 TRY_PARSE_DATES = "try_parse_dates"
 MISSING_IS_NULL = "missing_is_null"
+TRUNCATE_RAGGED_LINES = "truncate_ragged_lines"
 QUOTE_CHAR = "quote_char"
 EOL_CHAR = "eol_char"
 SEPARATOR = "separator"
@@ -45,6 +52,21 @@ DEFAULT_SEPARATOR = ","
 DEFAULT_QUOTE = '"'
 HEADER_LETTERS = "abcd"
 DEFAULT_EOL = "\n"
+CR = b"\r"
+EXTRA_PREFIX = "column_"
+OVERFLOW_TYPE = pl.List(pl.String)
+
+
+@dataclass
+class Overflow:
+    width: int = 0
+
+
+@dataclass(frozen=True)
+class Block:
+    data: bytes
+    width: int
+    skipped: int
 
 
 class AutoCsv:
@@ -57,45 +79,56 @@ class AutoCsv:
         self.options = dict(options or {})
         self.try_parse_dates = bool(self.options.pop(TRY_PARSE_DATES, False))
         self.options.pop(MISSING_IS_NULL, None)
+        self.truncate = bool(self.options.get(TRUNCATE_RAGGED_LINES, False))
+        self.later = {
+            key: value
+            for key, value in self.options.items()
+            if key not in FIRST_BLOCK_OPTIONS
+        }
         self.block_size = block_size
 
     def read(self, open_: Callable[[], Readable]) -> LazyFrameInput:
         fold = Fold()
-        frame, columns = self.data(open_, fold)
-        return LazyFrameInput(frame, metadata=lambda: self.metadata(fold, columns))
+        overflow = Overflow()
+        frame, names = self.data(open_, fold, overflow)
+        return LazyFrameInput(
+            frame, metadata=lambda: self.metadata(fold, names, overflow)
+        )
 
     def data(
         self,
         open_: Callable[[], Readable],
         fold: Fold,
+        overflow: Overflow,
     ) -> tuple[pl.LazyFrame, list[str]]:
         stream = open_()
-        records = self.records(stream)
-        first, strings = self.first(records)
-        columns = strings.columns
-        later = {
-            **{k: v for k, v in self.options.items() if k not in FIRST_BLOCK_OPTIONS},
-            "has_header": True,
-            "new_columns": columns,
-            "raise_if_empty": False,
-        }
-        header = self.header(len(columns))
+        pieces = self.records(stream)
+        names, first, parsed = self.first(pieces)
+        landed = self.landed(first, parsed, names, fold, overflow)
+        schema = landed.to_arrow().schema
 
         def batches() -> Iterator[pa.RecordBatch]:
             try:
-                yield from self.landed(fold, strings, first, self.options)
-                for records_block in records:
-                    block = header + records_block
-                    parsed = pl.read_csv(block, infer_schema=False, **later)
-                    yield from self.landed(fold, parsed, block, later)
+                yield from batches_of(landed)
+                for data, widest in pieces:
+                    block = Block(data, self.width(names, widest), 0)
+                    parsed = self.parsed(block)
+                    yield from batches_of(
+                        self.landed(block, parsed, names, fold, overflow)
+                    )
             finally:
                 close(stream)
 
-        arrow = strings.to_arrow().schema
-        reader = pa.RecordBatchReader.from_batches(arrow, batches())
-        return pl.scan_arrow_c_stream(reader), columns
+        reader = pa.RecordBatchReader.from_batches(schema, batches())
+        return pl.scan_arrow_c_stream(reader), names
 
-    def metadata(self, fold: Fold, columns: list[str]) -> FrameMetadata:
+    def metadata(
+        self,
+        fold: Fold,
+        names: list[str],
+        overflow: Overflow,
+    ) -> FrameMetadata:
+        columns = names + extra_names(names, overflow.width)
         return FrameMetadata(
             schema=fold.schema(columns),
             format=SourceFormat.CSV,
@@ -105,29 +138,79 @@ class AutoCsv:
             ),
         )
 
-    # The first block holds what the first-block options skip and the header;
-    # it grows until polars reads a row from it, or the file ends.
-    def first(self, records: Iterator[bytes]) -> tuple[bytes, pl.DataFrame]:
-        block = b""
-        for record in records:
-            block += record
-            try:
-                strings = pl.read_csv(block, infer_schema=False, **self.options)
-            except pl.exceptions.NoDataError:
+    def first(
+        self,
+        pieces: Iterator[tuple[bytes, int]],
+    ) -> tuple[list[str], Block, pl.DataFrame]:
+        data = b""
+        widest = 0
+        names: list[str] | None = None
+        for piece, wide in pieces:
+            data += piece
+            widest = max(widest, wide)
+            names = self.names(data)
+            if names is None:
                 continue
-            if strings.height:
-                return block, strings
-        return block, pl.read_csv(block, infer_schema=False, **self.options)
+            block = Block(self.body(data), self.width(names, widest), self.skipped())
+            parsed = self.parsed(block)
+            if parsed.height:
+                return names, block, parsed
+        if names is None:
+            names = pl.read_csv(data, infer_schema=False, **self.options).columns
+        block = Block(self.body(data), self.width(names, widest), self.skipped())
+        return names, block, self.parsed(block)
+
+    def names(self, block: bytes) -> list[str] | None:
+        try:
+            return pl.read_csv(
+                block, infer_schema=False, n_rows=0, **self.options
+            ).columns
+        except pl.exceptions.NoDataError:
+            return None
+
+    def width(self, names: list[str], widest: int) -> int:
+        return len(names) if self.truncate else max(len(names), widest)
+
+    def body(self, block: bytes) -> bytes:
+        eol = self.options.get(EOL_CHAR, DEFAULT_EOL).encode()
+        for _ in range(self.options.get(SKIP_LINES, 0)):
+            end = block.find(eol)
+            block = b"" if end < 0 else block[end + len(eol) :]
+        if self.options.get(HAS_HEADER, True):
+            block = block.lstrip(eol + CR)
+        return block
+
+    def skipped(self) -> int:
+        return (
+            self.options.get(SKIP_ROWS, 0)
+            + (1 if self.options.get(HAS_HEADER, True) else 0)
+            + self.options.get(SKIP_ROWS_AFTER_HEADER, 0)
+        )
+
+    def parsed(self, block: Block) -> pl.DataFrame:
+        return pl.read_csv(
+            self.header(block.width) + block.data,
+            infer_schema=False,
+            **self.block_options(block.skipped),
+        )
+
+    def block_options(self, skipped: int) -> dict[str, Any]:
+        return {
+            **self.later,
+            HAS_HEADER: True,
+            SKIP_ROWS_AFTER_HEADER: skipped,
+            "raise_if_empty": False,
+        }
 
     # ToDo(PW2): provisional, until polars can be told a block's width. polars
     # takes a file's width from its header: rows short of it get nulls,
-    # wider ones fail or, with `truncate_ragged_lines`, are cut. A later
-    # block is parsed behind a made-up header line of the columns' width,
-    # renamed to the real names after, so its rows read as in the whole
-    # file. The made-up names are a letter and a number; the letter is the
-    # first of `HEADER_LETTERS` that is not the separator, the quote or the
-    # comment prefix's first character, so the line splits into the width
-    # and is not taken for a comment.
+    # wider ones fail or, with `truncate_ragged_lines`, are cut. A block is
+    # parsed behind a made-up header line as wide as its widest record, so
+    # its rows read as polars reads them; the header's columns are renamed
+    # to the real names after. The made-up names are a letter and a number;
+    # the letter is the first of `HEADER_LETTERS` that is not the separator,
+    # the quote or the comment prefix's first character, so the line splits
+    # into the width and is not taken for a comment.
     def header(self, width: int) -> bytes:
         separator = self.options.get(SEPARATOR, DEFAULT_SEPARATOR)
         taken = {
@@ -140,40 +223,77 @@ class AutoCsv:
         names = separator.join(f"{letter}{position}" for position in range(width))
         return f"{names}{eol}".encode()
 
-    def records(self, stream: Readable) -> Iterator[bytes]:
+    def records(self, stream: Readable) -> Iterator[tuple[bytes, int]]:
         cutter = CsvCutter(
             self.options.get(SEPARATOR, DEFAULT_SEPARATOR),
             self.options.get(QUOTE_CHAR, DEFAULT_QUOTE),
             self.options.get(EOL_CHAR, DEFAULT_EOL),
             self.options.get(COMMENT_PREFIX),
         )
-        return (block for block, _ in records(stream, cutter, size=self.block_size))
+        return records(stream, cutter, size=self.block_size)
 
     def landed(
         self,
+        block: Block,
+        parsed: pl.DataFrame,
+        names: list[str],
         fold: Fold,
-        strings: pl.DataFrame,
-        block: bytes,
-        options: Mapping[str, Any],
-    ) -> Iterator[pa.RecordBatch]:
-        if strings.height:
-            fold.observe(self.types(strings, block, options))
-            yield from strings.to_arrow().to_batches()
+        overflow: Overflow,
+    ) -> pl.DataFrame:
+        made = parsed.columns
+        header = made[: len(names)]
+        extras = made[len(names) :]
+        if parsed.height:
+            fold.observe(self.types(block, parsed, names, overflow))
+        return parsed.select(
+            *(pl.col(old).alias(new) for old, new in zip(header, names, strict=True)),
+            (
+                pl.concat_list(extras)
+                if extras
+                else pl.repeat(None, pl.len(), dtype=OVERFLOW_TYPE)
+            )
+            .cast(OVERFLOW_TYPE)
+            .alias(OVERFLOW_COLUMN),
+        )
 
     def types(
         self,
-        strings: pl.DataFrame,
-        block: bytes,
-        options: Mapping[str, Any],
+        block: Block,
+        parsed: pl.DataFrame,
+        names: list[str],
+        overflow: Overflow,
     ) -> dict[str, pl.DataType]:
         typed = pl.scan_csv(
-            block,
+            self.header(block.width) + block.data,
             infer_schema_length=None,
             try_parse_dates=self.try_parse_dates,
-            **options,
+            **self.block_options(block.skipped),
         ).collect_schema()
-        return {
-            name: dtype
-            for name, dtype in typed.items()
-            if strings[name].null_count() < strings.height
-        }
+        found: dict[str, pl.DataType] = {}
+        extra = extra_names(names, block.width)
+        for position, (made, dtype) in enumerate(typed.items()):
+            if parsed[made].null_count() == parsed.height:
+                continue
+            if position < len(names):
+                found[names[position]] = dtype
+            else:
+                overflow.width = max(overflow.width, position + 1)
+                found[extra[position - len(names)]] = dtype
+        return found
+
+
+def extra_names(names: list[str], width: int) -> list[str]:
+    taken = set(names)
+    extras = []
+    number = len(names)
+    while len(extras) < width - len(names):
+        name = f"{EXTRA_PREFIX}{number}"
+        number += 1
+        if name not in taken:
+            extras.append(name)
+    return extras
+
+
+def batches_of(frame: pl.DataFrame) -> Iterator[pa.RecordBatch]:
+    if frame.height:
+        yield from frame.to_arrow().to_batches()

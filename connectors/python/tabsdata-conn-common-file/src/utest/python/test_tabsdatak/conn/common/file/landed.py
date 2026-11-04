@@ -10,7 +10,7 @@ from pathlib import Path
 
 import polars as pl
 
-from tabsdatak.common._storage.landed import StoredMetadata, serve
+from tabsdatak.common._storage.landed import OVERFLOW_COLUMN, StoredMetadata, serve
 from tabsdatak.spi import FrameMetadata, LazyFrameInput
 
 
@@ -43,3 +43,10 @@ def land(table: LazyFrameInput, folder: Path) -> Landed:
     stored = StoredMetadata.read(StoredMetadata.of(metadata or FrameMetadata()))
     served = serve(pl.scan_parquet(target), stored)
     return Landed(pl.read_parquet(target), stored, served.collect())
+
+
+def strings(landed: Landed) -> pl.DataFrame:
+    if OVERFLOW_COLUMN not in landed.data.columns:
+        return landed.data
+    assert landed.data[OVERFLOW_COLUMN].null_count() == landed.data.height
+    return landed.data.drop(OVERFLOW_COLUMN)

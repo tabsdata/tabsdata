@@ -10,7 +10,7 @@ import pytest
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file._read._csv import AutoCsv
 from tabsdatak.spi import CsvParseOptions, SourceFormat
-from test_tabsdatak.conn.common.file.landed import Source, land
+from test_tabsdatak.conn.common.file.landed import Source, land, strings
 
 pytestmark = [pytest.mark.unit]
 
@@ -34,7 +34,7 @@ def read(content: bytes, options: dict | None = None, *, block_size: int = BLOCK
 )
 def test_blocks_land_the_strings_polars_reads_from_the_whole_file(tmp_path, block_size):
     landed = land(read(ORDERS, block_size=block_size), tmp_path)
-    assert landed.data.equals(pl.read_csv(ORDERS, infer_schema=False))
+    assert strings(landed).equals(pl.read_csv(ORDERS, infer_schema=False))
 
 
 def test_the_types_are_inferred_over_the_whole_file(tmp_path):
@@ -69,7 +69,7 @@ def test_a_column_never_holding_a_value_is_a_string(tmp_path):
 
 def test_a_header_without_rows_lands_no_rows_of_strings(tmp_path):
     landed = land(read(b"a,b\n"), tmp_path)
-    assert landed.data.height == 0
+    assert strings(landed).height == 0
     assert landed.schema == pl.Schema({"a": pl.String, "b": pl.String})
 
 
@@ -80,7 +80,7 @@ def test_an_empty_file_is_refused_as_polars_refuses_it(tmp_path):
 
 def test_an_empty_file_lands_nothing_when_allowed(tmp_path):
     landed = land(read(b"", {"raise_if_empty": False}), tmp_path)
-    assert landed.data.shape == (0, 0)
+    assert strings(landed).shape == (0, 0)
 
 
 def test_dates_are_left_as_strings_unless_asked_for(tmp_path):
@@ -101,7 +101,7 @@ def test_decimal_comma_floats_are_served_as_floats(tmp_path):
     assert landed.metadata.format is SourceFormat.CSV
     assert landed.metadata.parsing == CsvParseOptions(decimal_comma=True)
     assert not landed.metadata.typed
-    assert landed.data["price"].to_list() == ["1,5", "2,25"]
+    assert strings(landed)["price"].to_list() == ["1,5", "2,25"]
     assert landed.served["price"].to_list() == [1.5, 2.25]
 
 
@@ -110,6 +110,7 @@ def test_decimal_comma_floats_are_served_as_floats(tmp_path):
     [
         (b"a;b\n1;x\n2;y\n", {"separator": ";"}),
         (b"noise\nnoise\na,b\n1,x\n2,y\n", {"skip_rows": 2}),
+        (b'"x\ny"\na,b\n1,x\n2,y\n3,z\n', {"skip_lines": 2}),
         (b"a,b\nunit,unit\n1,x\n2,y\n", {"skip_rows_after_header": 1}),
         (b"# note\na,b\n1,x\n# note\n2,y\n", {"comment_prefix": "#"}),
         (b"a,b\n1,NA\nNA,y\n", {"null_values": ["NA"]}),
@@ -121,6 +122,7 @@ def test_decimal_comma_floats_are_served_as_floats(tmp_path):
     ids=[
         "separator",
         "skip rows",
+        "skip lines",
         "skip rows after header",
         "comment prefix",
         "null values",
@@ -132,7 +134,7 @@ def test_decimal_comma_floats_are_served_as_floats(tmp_path):
 )
 def test_the_source_options_mean_what_they_mean_to_polars(tmp_path, content, options):
     landed = land(read(content, options, block_size=3), tmp_path)
-    assert landed.data.equals(pl.read_csv(content, infer_schema=False, **options))
+    assert strings(landed).equals(pl.read_csv(content, infer_schema=False, **options))
     expected = pl.read_csv(content, infer_schema_length=None, **options)
     assert landed.served.equals(expected)
 
@@ -145,6 +147,8 @@ def test_the_file_is_read_once_and_closed(tmp_path):
 
 
 @pytest.mark.parametrize("missing_is_null", [True, False])
-def test_an_empty_field_is_null_whatever_missing_is_null_says(tmp_path, missing_is_null):
+def test_an_empty_field_is_null_whatever_missing_is_null_says(
+    tmp_path, missing_is_null
+):
     landed = land(read(b"a,b\n1,\n", {"missing_is_null": missing_is_null}), tmp_path)
     assert landed.served.to_dicts() == [{"a": 1, "b": None}]

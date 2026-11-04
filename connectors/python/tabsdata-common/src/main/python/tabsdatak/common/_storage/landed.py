@@ -20,9 +20,13 @@ from tabsdatak.spi import (
     ParseOptions,
     SourceFormat,
 )
+from tabsdatak.tableframe._engine.constant.column.prefixes import (
+    TD_VOLATILE_SYSTEM_COLUMN_PREFIX,
+)
 
 LANDING_SUFFIX = ".t"
 METADATA_SUFFIX = ".m"
+OVERFLOW_COLUMN = f"{TD_VOLATILE_SYSTEM_COLUMN_PREFIX}overflow"
 
 KIND_COLUMN = "kind"
 CONTENT_COLUMN = "content"
@@ -203,12 +207,29 @@ def mismatch(actual: pl.Schema, metadata: FrameMetadata) -> str | None:
         return None
     if metadata.schema is None:
         return None
-    if list(actual) != list(metadata.schema):
+    if list(actual) != landed_columns(actual, metadata.schema):
         return (
             f"the schema names columns {list(metadata.schema)} but the data has "
             f"{list(actual)}"
         )
     return None
+
+
+def landed_columns(actual: pl.Schema, schema: pl.Schema) -> list[str]:
+    header, extras = split_overflow(actual, schema)
+    if not extras and OVERFLOW_COLUMN not in actual:
+        return header
+    if list(schema) != header + extras:
+        return list(schema)
+    return [*header, OVERFLOW_COLUMN]
+
+
+def split_overflow(actual: pl.Schema, schema: pl.Schema) -> tuple[list[str], list[str]]:
+    if OVERFLOW_COLUMN not in actual:
+        return list(schema), []
+    header = [name for name in schema if name in actual]
+    extras = [name for name in schema if name not in actual]
+    return header, extras
 
 
 def parse_options(metadata: FrameMetadata) -> ParseOptions | None:
@@ -229,13 +250,25 @@ def serve(frame: pl.LazyFrame, metadata: FrameMetadata) -> pl.LazyFrame:
         )
     options = parse_options(metadata)
     decimal_comma = isinstance(options, CsvParseOptions) and options.decimal_comma
+    header, extras = split_overflow(actual, schema)
     return frame.select(
-        pl.col(name)
-        if actual[name] == dtype
-        else parse(name, dtype, decimal_comma=decimal_comma)
-        if actual[name] == pl.String
-        else pl.col(name).cast(dtype, strict=True)
-        for name, dtype in schema.items()
+        *(
+            pl.col(name)
+            if actual[name] == schema[name]
+            else parse(name, schema[name], decimal_comma=decimal_comma)
+            if actual[name] == pl.String
+            else pl.col(name).cast(schema[name], strict=True)
+            for name in header
+        ),
+        *(
+            parse(
+                name,
+                schema[name],
+                decimal_comma=decimal_comma,
+                text=pl.col(OVERFLOW_COLUMN).list.get(position, null_on_oob=True),
+            )
+            for position, name in enumerate(extras)
+        ),
     )
 
 
@@ -281,10 +314,11 @@ def parse(
     dtype: pl.DataType,
     *,
     decimal_comma: bool = False,
+    text: pl.Expr | None = None,
 ) -> pl.Expr:
-    text = pl.col(name)
+    text = pl.col(name) if text is None else text
     if dtype == pl.String:
-        return text
+        return text.alias(name)
     if dtype == pl.Boolean:
         parsed = text.str.to_lowercase().replace_strict(
             {"true": True, "false": False},
