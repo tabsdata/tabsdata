@@ -9,7 +9,9 @@ import builtins
 import typing
 __all__ = [
     "ArrowStream",
+    "Decompressed",
     "avro",
+    "decompressed",
     "excel",
 ]
 
@@ -17,7 +19,14 @@ __all__ = [
 class ArrowStream:
     def __arrow_c_stream__(self, requested_schema: typing.Optional[typing.Any] = None) -> typing.Any: ...
 
+@typing.final
+class Decompressed:
+    def read(self, size: builtins.int = -1) -> bytes: ...
+    def close(self) -> None: ...
+
 def avro(source: typing.Any, batch_rows: builtins.int) -> ArrowStream: ...
+
+def decompressed(source: typing.Any, extension: builtins.str) -> Decompressed: ...
 
 def excel(source: typing.Any, sheet: builtins.int, has_header: builtins.bool, batch_rows: builtins.int) -> ArrowStream: ...
 

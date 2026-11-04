@@ -116,8 +116,17 @@ version = "60.1.0"
 [workspace.dependencies.base64]
 version = "0.23.1"
 
+[workspace.dependencies.brotli]
+version = "8.0.4"
+
+[workspace.dependencies.brotli-decompressor]
+version = "5.0.3"
+
 [workspace.dependencies.bytes]
 version = "1.12.1"
+
+[workspace.dependencies.bzip2]
+version = "0.6.1"
 
 [workspace.dependencies.calamine]
 version = "0.38.0"
@@ -125,12 +134,22 @@ version = "0.38.0"
 [workspace.dependencies.chrono]
 version = "0.4.45"
 
+[workspace.dependencies.flate2]
+version = "1.1.10"
+
 [workspace.dependencies.image]
 version = "0.25.10"
 default-features = false
 
 [workspace.dependencies.libc]
 version = "0.2.191"
+
+[workspace.dependencies.liblzma]
+version = "0.4.9"
+
+[workspace.dependencies.lz4_flex]
+version = "0.14.0"
+features = ["frame"]
 
 [workspace.dependencies.pyo3]
 version = "0.30.1"
@@ -164,6 +183,9 @@ version = "0.1.44"
 
 [workspace.dependencies.tracing-subscriber]
 version = "0.3.23"
+
+[workspace.dependencies.zstd]
+version = "0.14.3"
 
 [build-dependencies]
 

@@ -2,8 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-pub mod avro;
-pub mod excel;
+pub mod codecs;
+pub mod formats;
 
 use arrow::ffi_stream::FFI_ArrowArrayStream;
 use arrow::record_batch::RecordBatchReader;
