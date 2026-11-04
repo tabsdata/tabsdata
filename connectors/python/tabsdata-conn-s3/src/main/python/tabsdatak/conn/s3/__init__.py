@@ -236,8 +236,7 @@ class S3Src(Src):
             * `.zlib`: zlib.
             * `.zst`, `.zstd`: Zstandard.
 
-            Defaults to `False`. Reading compressed files is not
-            available yet.
+            Defaults to `False`.
     """
 
     paths: SrcPathsSpec

@@ -31,9 +31,6 @@ from tabsdatak.spi import FrameMetadata, LazyFrameInput, SrcPluginCtx
 
 logger = logging.getLogger(__name__)
 
-# ToDo(PW7): on once the streaming matrix passes on every codec.
-CODECS_ENABLED = False
-
 EXTENSIONS = {
     ".avro": SrcFileFormat.AVRO,
     ".csv": SrcFileFormat.CSV,
@@ -154,10 +151,7 @@ def tables(
     purgeable: list[str],
 ) -> Iterator[LazyFrameInput]:
     for path in paths:
-        found = codec(path)
-        if found is not None and not CODECS_ENABLED:
-            raise FileCommonErrorCode.FILE_COMMON_37.exception(path=path, codec=found)
-        table = read(store, file_format, options, path, found)
+        table = read(store, file_format, options, path, codec(path))
         if cfg.drop_metadata:
             yield table
             continue
@@ -177,7 +171,7 @@ def read(
 ) -> LazyFrameInput:
     match file_format:
         case SrcFileFormat.EXCEL | SrcFileFormat.PARQUET if compression is not None:
-            raise FileCommonErrorCode.FILE_COMMON_38.exception(
+            raise FileCommonErrorCode.FILE_COMMON_37.exception(
                 path=path, format=file_format.value
             )
         case SrcFileFormat.PARQUET:

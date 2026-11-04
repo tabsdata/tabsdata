@@ -191,11 +191,6 @@ class FileCommonErrorCode(ErrorCode):
     )  # validate_src_compressed
     FILE_COMMON_37 = ErrorDef(
         ConnException,
-        "Source file '{path}' is compressed ('{codec}'); compressed source files "
-        "cannot be read yet.",
-    )  # read_files
-    FILE_COMMON_38 = ErrorDef(
-        ConnException,
         "Source file '{path}' is a compressed {format} file; {format} files are "
         "read in place and cannot be read compressed yet.",
     )  # read_files

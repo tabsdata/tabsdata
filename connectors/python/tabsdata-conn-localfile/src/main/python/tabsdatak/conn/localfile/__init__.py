@@ -198,8 +198,7 @@ class LocalFileSrc(Src):
             * `.zlib`: zlib.
             * `.zst`, `.zstd`: Zstandard.
 
-            Defaults to `False`. Reading compressed files is not
-            available yet.
+            Defaults to `False`.
 
     Examples:
         Publish one file, selecting the reader `format` explicitly.

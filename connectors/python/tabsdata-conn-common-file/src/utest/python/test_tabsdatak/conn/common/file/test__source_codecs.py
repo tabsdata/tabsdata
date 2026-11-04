@@ -77,11 +77,6 @@ def served(tmp_path, path: str, file_format: SrcFileFormat) -> list[pl.DataFrame
     return [land(table, landing).served for table in slot]
 
 
-@pytest.fixture
-def codecs_on(monkeypatch):
-    monkeypatch.setattr(_source, "CODECS_ENABLED", True)
-
-
 @pytest.mark.parametrize(
     "name, content, file_format, expected",
     [
@@ -102,15 +97,14 @@ def codecs_on(monkeypatch):
     ],
     ids=["csv gzip", "ndjson zstd", "avro xz", "log gzip"],
 )
-def test_a_compressed_file_lands_as_its_plain_form(
-    tmp_path, codecs_on, name, content, file_format, expected
+def test_a_compressed_file_lands_as_its_plain_form(tmp_path, name, content, file_format, expected
 ):
     (tmp_path / name).write_bytes(content)
     (frame,) = served(tmp_path, name, file_format)
     assert frame.equals(expected)
 
 
-def test_auto_takes_the_format_inside_the_compression_extension(tmp_path, codecs_on):
+def test_auto_takes_the_format_inside_the_compression_extension(tmp_path):
     (tmp_path / "in.csv.gz").write_bytes(gzip.compress(FRAME.write_csv().encode()))
     (frame,) = served(tmp_path, "*.csv.gz", SrcFileFormat.AUTO)
     assert frame.equals(FRAME)
@@ -121,15 +115,8 @@ def test_auto_takes_the_format_inside_the_compression_extension(tmp_path, codecs
     [("in.parquet.gz", SrcFileFormat.PARQUET), ("in.xlsx.gz", SrcFileFormat.EXCEL)],
     ids=["parquet", "excel"],
 )
-def test_a_compressed_file_read_in_place_is_refused(
-    tmp_path, codecs_on, name, file_format
+def test_a_compressed_file_read_in_place_is_refused(tmp_path, name, file_format
 ):
     (tmp_path / name).write_bytes(gzip.compress(b"anything"))
     with pytest.raises(ConnException, match="cannot be read compressed yet"):
         served(tmp_path, name, file_format)
-
-
-def test_compressed_files_are_refused_while_codecs_are_off(tmp_path):
-    (tmp_path / "in.csv.gz").write_bytes(gzip.compress(FRAME.write_csv().encode()))
-    with pytest.raises(ConnException, match="cannot be read yet"):
-        served(tmp_path, "in.csv.gz", SrcFileFormat.CSV)
