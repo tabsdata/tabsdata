@@ -1,0 +1,126 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+from __future__ import annotations
+
+import io
+import uuid
+from datetime import datetime, timezone
+
+import obstore
+import polars as pl
+import pytest
+from tabsdatax.itest.fixture.backends.s3local import S3LocalDomain, s3local_domain
+
+from tabsdatak.common._storage.transfer import TransferError
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.file._store import FileStore, Stream, forwarded
+
+pytestmark = [pytest.mark.unit]
+
+NAMES = ["a.csv", "b c.csv", "café.csv", "sub/d.csv"]
+
+
+def content(name: str) -> bytes:
+    return f"name\n{name}\n".encode()
+
+
+def stage(store: FileStore) -> None:
+    for name in NAMES:
+        obstore.put(store.store(), name, content(name))
+
+
+def check(store: FileStore) -> None:
+    listed = store.listed("")
+    assert sorted(file.name for file in listed) == ["a.csv", "b c.csv", "café.csv"]
+    assert all(file.last_modified.tzinfo is not None for file in listed)
+    assert [file.name for file in store.listed("sub")] == ["d.csv"]
+    for name in NAMES:
+        stream = store.open(name)
+        assert stream.read(3) + stream.read() == content(name)
+        stream.close()
+    store.delete(["a.csv", "sub/d.csv"])
+    assert sorted(file.name for file in store.listed("")) == ["b c.csv", "café.csv"]
+    assert store.listed("sub") == []
+
+
+def test_a_local_folder_lists_reads_and_deletes_its_files(tmp_path):
+    store = FileStore(tmp_path.as_uri())
+    stage(store)
+    check(store)
+
+
+@s3local_domain("s3local")
+def test_an_s3local_prefix_lists_reads_and_deletes_its_objects(
+    domain_s3local: S3LocalDomain,
+):
+    root = f"{domain_s3local.uri.rstrip('/')}/store-{uuid.uuid4().hex}"
+    store = FileStore(root, dict(domain_s3local.storage_options))
+    stage(store)
+    frame = pl.DataFrame({"a": [1, 2]})
+    parquet = io.BytesIO()
+    frame.write_parquet(parquet)
+    obstore.put(store.store(), "x.parquet", parquet.getvalue())
+    try:
+        assert store.scan_parquet("x.parquet").collect().equals(frame)
+        store.delete(["x.parquet"])
+        check(store)
+    finally:
+        store.delete(["b c.csv", "café.csv"])
+
+
+def test_parquet_is_scanned_in_place(tmp_path):
+    frame = pl.DataFrame({"a": [1, 2]})
+    frame.write_parquet(tmp_path / "x.parquet")
+    assert (
+        FileStore(tmp_path.as_uri()).scan_parquet("x.parquet").collect().equals(frame)
+    )
+
+
+def test_a_root_ending_in_a_separator_joins_once(tmp_path):
+    assert FileStore("file:///").uri("a/b.csv") == "file:///a/b.csv"
+    assert FileStore("s3://bucket/p").uri("b.csv") == "s3://bucket/p/b.csv"
+
+
+def test_an_empty_listing_is_empty(tmp_path):
+    assert FileStore(tmp_path.as_uri()).listed("missing") == []
+
+
+@pytest.mark.parametrize("sizes", [[1] * 20, [7, 7, 7], [-1], [100]])
+def test_a_stream_reads_any_sizes_across_chunks(sizes):
+    data = bytes(range(20))
+    stream = Stream(iter(memoryview(data[i : i + 6]) for i in range(0, 20, 6)))
+    read = io.BytesIO()
+    for size in sizes:
+        read.write(stream.read(size))
+    read.write(stream.read())
+    assert read.getvalue() == data
+    assert stream.read(5) == b""
+
+
+def test_obstore_keys_in_conn_cfg_are_forwarded_canonical():
+    cfg = {
+        "obstore.endpoint": "http://127.0.0.1:9000",
+        "obstore.allow_http": True,
+        "obstore.aws_virtual_hosted_style_request": False,
+        "sqlalchemy.echo": True,
+    }
+    assert forwarded("s3://bucket", cfg) == {
+        "aws_endpoint": "http://127.0.0.1:9000",
+        "aws_allow_http": "true",
+        "aws_virtual_hosted_style_request": "false",
+    }
+    assert forwarded("s3://bucket", None) == {}
+
+
+def test_an_unknown_obstore_key_is_refused():
+    with pytest.raises(TransferError, match="not a known s3 option"):
+        forwarded("s3://bucket", {"obstore.nonsense": "x"})
+
+
+def test_listed_times_are_instants(tmp_path):
+    (tmp_path / "a.csv").write_text("x", encoding="utf-8")
+    (listed,) = FileStore(tmp_path.as_uri()).listed("")
+    assert abs(listed.last_modified - datetime.now(timezone.utc)).total_seconds() < 60
