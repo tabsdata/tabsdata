@@ -27,7 +27,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.slow]
 MEBIBYTE = 1 << 20
 GIBIBYTE = 1 << 30
 PEAK_LIMIT = 1536 * MEBIBYTE
-GROWTH_TOLERANCE = 1.15
+GROWTH_LIMIT = 256 * MEBIBYTE
 CHILD_SECONDS = 900
 LAND = Path(__file__).parent / "children" / "land.py"
 
@@ -168,4 +168,4 @@ def test_a_large_file_lands_in_bounded_memory_that_does_not_grow_with_it(
     larger = landed(domain, tmp_path, file_format, 2 * GIBIBYTE)
     report = f"peaks {smaller / MEBIBYTE:.0f} and {larger / MEBIBYTE:.0f} MiB"
     assert max(smaller, larger) < PEAK_LIMIT, report
-    assert larger <= smaller * GROWTH_TOLERANCE, report
+    assert larger - smaller < GROWTH_LIMIT, report
