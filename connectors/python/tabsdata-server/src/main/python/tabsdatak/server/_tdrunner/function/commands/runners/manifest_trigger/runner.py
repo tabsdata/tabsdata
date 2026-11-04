@@ -54,6 +54,8 @@ from tabsdatak.server._tdrunner.function.commands.runners.manifest_trigger.optio
 
 logger = logging.getLogger(__name__)
 
+# ToDo(PW5): on, or removed, once the server tells whether a batch's writer
+# is gone.
 SWEEP_ABANDONED_BATCHES = False
 
 

@@ -37,7 +37,11 @@ DECIMAL_COMMA = "decimal_comma"
 TRY_PARSE_DATES = "try_parse_dates"
 QUOTE_CHAR = "quote_char"
 EOL_CHAR = "eol_char"
+SEPARATOR = "separator"
+COMMENT_PREFIX = "comment_prefix"
+DEFAULT_SEPARATOR = ","
 DEFAULT_QUOTE = '"'
+HEADER_LETTERS = "abcd"
 DEFAULT_EOL = "\n"
 
 
@@ -68,15 +72,17 @@ class AutoCsv:
         columns = strings.columns
         later = {
             **{k: v for k, v in self.options.items() if k not in FIRST_BLOCK_OPTIONS},
-            "has_header": False,
+            "has_header": True,
             "new_columns": columns,
             "raise_if_empty": False,
         }
+        header = self.header(len(columns))
 
         def batches() -> Iterator[pa.RecordBatch]:
             try:
                 yield from self.landed(fold, strings, first, self.options)
-                for block in records:
+                for records_block in records:
+                    block = header + records_block
                     parsed = pl.read_csv(block, infer_schema=False, **later)
                     yield from self.landed(fold, parsed, block, later)
             finally:
@@ -109,6 +115,27 @@ class AutoCsv:
             if strings.height:
                 return block, strings
         return block, pl.read_csv(block, infer_schema=False, **self.options)
+
+    # ToDo(PW2): provisional, until polars can be told a block's width. polars
+    # takes a file's width from its header: rows short of it get nulls,
+    # wider ones fail or, with `truncate_ragged_lines`, are cut. A later
+    # block is parsed behind a made-up header line of the columns' width,
+    # renamed to the real names after, so its rows read as in the whole
+    # file. The made-up names are a letter and a number; the letter is the
+    # first of `HEADER_LETTERS` that is not the separator, the quote or the
+    # comment prefix's first character, so the line splits into the width
+    # and is not taken for a comment.
+    def header(self, width: int) -> bytes:
+        separator = self.options.get(SEPARATOR, DEFAULT_SEPARATOR)
+        taken = {
+            separator,
+            self.options.get(QUOTE_CHAR, DEFAULT_QUOTE),
+            (self.options.get(COMMENT_PREFIX) or "")[:1],
+        }
+        letter = next(letter for letter in HEADER_LETTERS if letter not in taken)
+        eol = self.options.get(EOL_CHAR, DEFAULT_EOL)
+        names = separator.join(f"{letter}{position}" for position in range(width))
+        return f"{names}{eol}".encode()
 
     def records(self, stream: Readable) -> Iterator[bytes]:
         quote = self.options.get(QUOTE_CHAR, DEFAULT_QUOTE)

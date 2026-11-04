@@ -28,7 +28,7 @@ def lines(block: bytes) -> pl.Series:
     return pl.scan_lines(block).collect().get_column(LINE_COLUMN)
 
 
-# ToDo: replace by a CSV state machine (csv-core) once it is wired in. Until
+# ToDo(PW1): replace by a CSV state machine (csv-core) once it is wired in. Until
 # then a newline is a record end when the quote characters before it pair up:
 # - exact for fields quoted whole, with quotes escaped by doubling;
 # - wrong for a quote inside an unquoted field, or in a comment line.
