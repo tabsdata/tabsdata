@@ -54,8 +54,6 @@ class TableFile:
     def of(cls, record: InputRecord) -> TableFile | None:
         if record.location is not None:
             return cls.stored(record.location)
-        if record.file is not None:
-            return cls.local(Path(record.file))
         return None
 
     def locator(self) -> FrameLocator:

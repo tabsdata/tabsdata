@@ -151,16 +151,15 @@ def test_main_inputs_manifest_lists_input_tables(monkeypatch, tmp_path, http_ok_
     assert [t["location"] for t in data["inputs"][1]["tables"]] == [
         {"uri": "s3://bucket/b.parquet", "env_prefix": None},
     ]
-    assert [t["file"] for e in data["inputs"] for t in e["tables"]] == [None, None]
 
 
 def test_main_inputs_manifest_empty_files_for_null_location(
     monkeypatch, tmp_path, http_ok_url
 ):
     """A request.input entry with `location is None` produces a manifest
-    entry that is not empty but whose single table record carries neither
-    `file` nor `location` (so downstream materialisation preserves the
-    slot position as a `None` value)."""
+    entry that is not empty but whose single table record carries no
+    `location` (so downstream materialisation preserves the slot position as
+    a `None` value)."""
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         inputs=[{"table": "t_x"}],  # no location
@@ -178,7 +177,7 @@ def test_main_inputs_manifest_empty_files_for_null_location(
     assert [e["name"] for e in data["inputs"]] == ["t_x"]
     entry = data["inputs"][0]
     assert entry["is_empty"] is False
-    assert [(t["file"], t["location"]) for t in entry["tables"]] == [(None, None)]
+    assert [t["location"] for t in entry["tables"]] == [None]
 
 
 # --- error paths ---

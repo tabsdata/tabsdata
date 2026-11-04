@@ -50,19 +50,6 @@ def test_a_record_with_a_location_without_mount_reads_anonymously():
     assert table.declaration == AnonymousMountDeclaration()
 
 
-def test_a_record_with_a_file_reads_it_locally():
-    table = TableFile.of(InputRecord(file="/t.parquet"))
-    assert table.uri == Path("/t.parquet").absolute().as_uri()
-    assert table.declaration == AnonymousMountDeclaration()
-
-
-def test_the_location_wins_over_the_file():
-    table = TableFile.of(
-        InputRecord(file="/local.parquet", location=Location(uri="file:///t.parquet"))
-    )
-    assert table.uri == "file:///t.parquet"
-
-
 def test_a_record_without_data_has_no_table_file():
     assert TableFile.of(InputRecord()) is None
 
@@ -79,8 +66,7 @@ def test_scan_a_stored_table(tmp_path):
 
 
 def test_scan_a_local_file(tmp_path):
-    table = TableFile.of(InputRecord(file=str(written(tmp_path))))
-    assert table.scan().collect().equals(FRAME)
+    assert TableFile.local(written(tmp_path)).scan().collect().equals(FRAME)
 
 
 def test_scan_reads_the_schema_at_once(tmp_path):

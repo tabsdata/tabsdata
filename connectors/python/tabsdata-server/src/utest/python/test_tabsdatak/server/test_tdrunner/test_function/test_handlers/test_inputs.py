@@ -41,7 +41,11 @@ def slot_entry(files: list[str]) -> InputEntry:
         name="in_1",
         table_pos=0,
         tables=tuple(
-            InputRecord(file=file, input_idx=index) for index, file in enumerate(files)
+            InputRecord(
+                location=Location(uri=Path(file).as_uri(), env_prefix="ROOT"),
+                input_idx=index,
+            )
+            for index, file in enumerate(files)
         ),
     )
 
@@ -62,18 +66,13 @@ def inputs(*, publisher: bool = False) -> Inputs:
 # --- scan -------------------------------------------------------------------
 
 
-def test_scan_of_a_file(tmp_path):
-    parquet_path = tmp_path / "x.parquet"
-    write_sample_parquet(parquet_path)
-    frame = inputs().scan(InputRecord(file=str(parquet_path)))
-    assert isinstance(frame, pl.LazyFrame)
-
-
 def test_scan_of_garbage_raises_input_scan(tmp_path):
     parquet_path = tmp_path / "x.parquet"
     parquet_path.write_bytes(b"not a parquet")
     with pytest.raises(InputScanError) as error:
-        inputs().scan(InputRecord(file=str(parquet_path)))
+        inputs().scan(
+            InputRecord(location=Location(uri=parquet_path.as_uri(), env_prefix="ROOT"))
+        )
     assert error.value.path == parquet_path.as_uri()
 
 

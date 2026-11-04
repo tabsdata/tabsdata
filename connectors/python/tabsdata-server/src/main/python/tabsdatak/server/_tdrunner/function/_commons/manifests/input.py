@@ -19,7 +19,6 @@ SINGLE_VERSION_POS = -1
 
 @dataclass(frozen=True)
 class InputRecord:
-    file: str | None = None
     location: Location | None = None
     metadata_location: Location | None = None
     input_idx: int | None = None

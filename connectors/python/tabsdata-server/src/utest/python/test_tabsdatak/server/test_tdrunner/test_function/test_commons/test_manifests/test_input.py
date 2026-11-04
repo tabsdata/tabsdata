@@ -10,6 +10,9 @@ from datetime import datetime, timezone
 import pytest
 import yaml
 
+from tabsdatak.server._tdrunner.function._commons.document.message.request import (
+    Location,
+)
 from tabsdatak.server._tdrunner.function._commons.manifests.input import (
     InputEntry,
     InputManifest,
@@ -20,8 +23,13 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 TRIGGERED_ON = 1780000000100
 
+
+def stored(name: str) -> Location:
+    return Location(uri=f"file:///{name}", env_prefix="ROOT")
+
+
 VERSIONED = InputRecord(
-    file="/a.parquet",
+    location=stored("a.parquet"),
     input_idx=0,
     version_pos=0,
     execution_id="E",
@@ -39,7 +47,7 @@ def test_write_produces_the_inputs_document(tmp_path):
                 name="a",
                 table_pos=0,
                 tables=(
-                    InputRecord(file="/a.parquet", input_idx=3),
+                    InputRecord(location=stored("a.parquet"), input_idx=3),
                     InputRecord(),
                 ),
             ),
@@ -54,8 +62,7 @@ def test_write_produces_the_inputs_document(tmp_path):
                 "is_empty": False,
                 "tables": [
                     {
-                        "file": "/a.parquet",
-                        "location": None,
+                        "location": {"uri": "file:///a.parquet", "env_prefix": "ROOT"},
                         "metadata_location": None,
                         "input_idx": 3,
                         "version_pos": -1,
@@ -65,7 +72,6 @@ def test_write_produces_the_inputs_document(tmp_path):
                         "triggered_on": None,
                     },
                     {
-                        "file": None,
                         "location": None,
                         "metadata_location": None,
                         "input_idx": None,
@@ -89,8 +95,8 @@ def test_load_keeps_several_records_in_order(tmp_path):
                 name="a",
                 table_pos=0,
                 tables=(
-                    InputRecord(file="/b.parquet", version_pos=0),
-                    InputRecord(file="/c.parquet", version_pos=1),
+                    InputRecord(location=stored("b.parquet"), version_pos=0),
+                    InputRecord(location=stored("c.parquet"), version_pos=1),
                 ),
             ),
         )
@@ -102,9 +108,14 @@ def test_load_keeps_several_records_in_order(tmp_path):
 
 def test_load_gives_optional_keys_their_defaults(tmp_path):
     path = tmp_path / "inputs.yaml"
-    path.write_text("inputs: [{name: a, table_pos: 0, tables: [{file: /a.parquet}]}]\n")
+    path.write_text(
+        "inputs: [{name: a, table_pos: 0, tables: "
+        "[{location: {uri: 'file:///a.parquet', env_prefix: ROOT}}]}]\n"
+    )
     assert InputManifest.load(path).inputs == (
-        InputEntry(name="a", table_pos=0, tables=(InputRecord(file="/a.parquet"),)),
+        InputEntry(
+            name="a", table_pos=0, tables=(InputRecord(location=stored("a.parquet")),)
+        ),
     )
 
 

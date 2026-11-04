@@ -711,7 +711,7 @@ def test_the_inputs_manifest_records_each_landed_file(tmp_path):
         uri="file:///r/0.1.m",
         env_prefix="ROOT",
     )
-    assert all(record.file is None for record in orders.tables)
+    assert all(record.location is not None for record in orders.tables)
 
 
 # --- unit: write_in -------------------------------------------------------
@@ -945,7 +945,6 @@ def test_main_end_to_end_happy_path(
     [entry] = InputManifest.load(manifest).inputs
     assert entry.name == "in_1"
     [record] = entry.tables
-    assert record.file is None
     assert record.location.uri.endswith("/landing/0.0.t")
     assert record.metadata_location.uri.endswith("/landing/0.0.m")
 

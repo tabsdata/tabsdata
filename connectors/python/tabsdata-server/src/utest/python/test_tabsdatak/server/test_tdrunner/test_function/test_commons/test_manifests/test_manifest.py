@@ -10,6 +10,9 @@ from dataclasses import dataclass, fields
 import pytest
 import yaml
 
+from tabsdatak.server._tdrunner.function._commons.document.message.request import (
+    Location,
+)
 from tabsdatak.server._tdrunner.function._commons.manifests.input import (
     InputEntry,
     InputManifest,
@@ -52,7 +55,14 @@ SAMPLES = {
                 InputEntry(
                     name="a",
                     table_pos=0,
-                    tables=(InputRecord(file="/a.parquet", input_idx=0),),
+                    tables=(
+                        InputRecord(
+                            location=Location(
+                                uri="file:///a.parquet", env_prefix="ROOT"
+                            ),
+                            input_idx=0,
+                        ),
+                    ),
                 ),
                 InputEntry(name="b", table_pos=1),
             )

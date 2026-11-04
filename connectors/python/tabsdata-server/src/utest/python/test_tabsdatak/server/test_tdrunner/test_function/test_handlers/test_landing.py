@@ -491,4 +491,4 @@ def test_landed_inputs_number_every_file_from_one_sequence(tmp_path):
 def test_a_record_without_landed_data_cannot_be_served(tmp_path):
     inputs = LandedInputs(Info.model_validate(info_payload()))
     with pytest.raises(NotLandedError):
-        inputs.scan(InputRecord(file="/a.parquet"))
+        inputs.scan(InputRecord())

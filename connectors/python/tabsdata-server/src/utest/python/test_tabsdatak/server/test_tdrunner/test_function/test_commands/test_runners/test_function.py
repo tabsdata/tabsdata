@@ -29,6 +29,7 @@ from tabsdatak.server._tdrunner.function._commons.context.function import (
 )
 from tabsdatak.server._tdrunner.function._commons.document.message.request import (
     Info,
+    Location,
     Request,
 )
 from tabsdatak.server._tdrunner.function._commons.document.state.function import (
@@ -128,7 +129,11 @@ def slot_entry(
         name=name,
         table_pos=table_pos,
         tables=tuple(
-            InputRecord(file=file, input_idx=index) for index, file in enumerate(files)
+            InputRecord(
+                location=Location(uri=Path(file).as_uri(), env_prefix="ROOT"),
+                input_idx=index,
+            )
+            for index, file in enumerate(files)
         ),
     )
 
