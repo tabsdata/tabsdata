@@ -15,6 +15,7 @@ import polars as pl
 import pyarrow as pa
 import pytest
 
+from tabsdatak.common._storage.failures import recorded
 from tabsdatak.common._storage.landed import (
     StoredMetadata,
     StoredMetadataError,
@@ -189,6 +190,32 @@ def test_metadata_learnt_while_streaming_must_match_the_data(tmp_path):
             pl.LazyFrame({"id": ["1"]}),
             lambda: FrameMetadata(pl.Schema({"code": pl.Int64})),
         )
+
+
+class SourceError(ValueError):
+    pass
+
+
+def failing_stream(record: bool) -> pl.LazyFrame:
+    schema = pa.schema({"a": pa.int64()})
+
+    def batches():
+        yield pa.record_batch({"a": [1]}, schema=schema)
+        raise SourceError("the source broke")
+
+    items = recorded(batches()) if record else batches()
+    return pl.scan_arrow_c_stream(pa.RecordBatchReader.from_batches(schema, items))
+
+
+def test_a_recorded_source_error_reaches_the_caller_as_itself(tmp_path):
+    with pytest.raises(SourceError, match="the source broke") as raised:
+        land(tmp_path, failing_stream(record=True))
+    assert isinstance(raised.value.__cause__, pl.exceptions.PolarsError)
+
+
+def test_an_unrecorded_source_error_stays_a_polars_error(tmp_path):
+    with pytest.raises(pl.exceptions.PolarsError, match="the source broke"):
+        land(tmp_path, failing_stream(record=False))
 
 
 def test_ndjson_lands_as_lines_and_is_served_as_their_fields(tmp_path):

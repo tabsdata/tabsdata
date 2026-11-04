@@ -10,6 +10,7 @@ from pathlib import Path
 
 import polars as pl
 
+from tabsdatak.common._storage.failures import collected
 from tabsdatak.common._storage.landed import OVERFLOW_COLUMN, StoredMetadata, serve
 from tabsdatak.spi import FrameMetadata, LazyFrameInput
 
@@ -38,7 +39,7 @@ class Source:
 
 def land(table: LazyFrameInput, folder: Path) -> Landed:
     target = folder / "landed.parquet"
-    table.frame.sink_parquet(target)
+    collected(table.frame.sink_parquet(target, lazy=True))
     metadata = table.metadata() if callable(table.metadata) else table.metadata
     stored = StoredMetadata.read(StoredMetadata.of(metadata or FrameMetadata()))
     served = serve(pl.scan_parquet(target), stored)

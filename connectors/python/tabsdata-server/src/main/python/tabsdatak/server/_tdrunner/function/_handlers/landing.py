@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 import polars as pl
 
+from tabsdatak.common._storage.failures import collected
 from tabsdatak.common._storage.landed import (
     LANDING_SUFFIX,
     METADATA_SUFFIX,
@@ -116,7 +117,7 @@ class Landing:
             self.check(position, actual, table.metadata)
         data = self.location(position, index, LANDING_SUFFIX)
         landed = TableFile.stored(data)
-        landed.sink(table.frame).collect(engine="streaming")
+        collected(landed.sink(table.frame), engine="streaming")
         if table.metadata is None:
             metadata = FrameMetadata()
         elif isinstance(table.metadata, FrameMetadata):

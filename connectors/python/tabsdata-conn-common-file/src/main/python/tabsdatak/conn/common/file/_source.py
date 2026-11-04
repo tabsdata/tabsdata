@@ -13,6 +13,7 @@ from typing import cast
 
 from tabsdatak.common._fileformat.error import FileFormatErrorCode
 from tabsdatak.common._fileformat.taxonomy import SrcFileFormat
+from tabsdatak.common._storage.failures import RecordedStream
 from tabsdatak.conn.common._cursor import LastModifiedCursor
 from tabsdatak.conn.common._find import PATH_SEPARATOR, Found, find, split_pattern
 from tabsdatak.conn.common.file._archives import member
@@ -217,10 +218,10 @@ def read(
 
 def opened(store: FileStore, path: str, wrapped: str | None) -> Readable:
     if wrapped is None:
-        return store.open(path)
+        return RecordedStream(store.open(path))
     if archive(path) is not None:
-        return member(store, path)
-    return decompressed(store.open(path), wrapped)
+        return RecordedStream(member(store, path))
+    return RecordedStream(decompressed(store.open(path), wrapped))
 
 
 def described(table: LazyFrameInput, where: str) -> LazyFrameInput:

@@ -21,6 +21,7 @@ import polars as pl
 import pyarrow as pa
 
 from tabsdata.expansions.foundation.readers import CsvCutter  # noqa: TID251
+from tabsdatak.common._storage.failures import recorded
 from tabsdatak.common._storage.landed import OVERFLOW_COLUMN
 from tabsdatak.conn.common.file._read._blocks import (
     BLOCK_SIZE,
@@ -123,7 +124,7 @@ class AutoCsv:
             finally:
                 close(stream)
 
-        reader = pa.RecordBatchReader.from_batches(schema, batches())
+        reader = pa.RecordBatchReader.from_batches(schema, recorded(batches()))
         return pl.scan_arrow_c_stream(reader), names
 
     def metadata(

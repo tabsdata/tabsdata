@@ -8,7 +8,10 @@ import polars as pl
 import pytest
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.file._read._ndjson import AutoNdjson
+from tabsdatak.conn.common.file._read._ndjson import AutoNdjson, NdjsonLineError
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.file._read._types import TypeConflictError
 from tabsdatak.spi import Layout, SourceFormat
 from test_tabsdatak.conn.common.file.landed import Source, land
 
@@ -87,7 +90,7 @@ def test_nested_objects_and_arrays_keep_their_structure(tmp_path):
 
 
 def test_a_field_holding_objects_and_scalars_is_refused(tmp_path):
-    with pytest.raises(pl.exceptions.ComputeError, match="'o' holds both"):
+    with pytest.raises(TypeConflictError, match="'o' holds both"):
         land(read(b'{"o": 1}\n' + b'{"o": {"x": 1}}\n', block_size=1), tmp_path)
 
 
@@ -111,7 +114,7 @@ def test_empty_lines_and_carriage_returns_are_skipped(tmp_path):
 def test_a_line_that_is_not_one_json_object_fails_naming_it(tmp_path, line, reason):
     content = b'{"a": 1}\n\n{"a": 2}\n' + line + b"\n"
     with pytest.raises(
-        pl.exceptions.ComputeError,
+        NdjsonLineError,
         match=f"Line 4 is not a JSON object: {reason}",
     ):
         land(read(content, block_size=1 << 20), tmp_path)

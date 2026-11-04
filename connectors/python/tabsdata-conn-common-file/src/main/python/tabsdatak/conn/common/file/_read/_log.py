@@ -12,6 +12,7 @@ from collections.abc import Callable, Iterator
 import polars as pl
 import pyarrow as pa
 
+from tabsdatak.common._storage.failures import recorded
 from tabsdatak.conn.common.file._read._blocks import (
     BLOCK_SIZE,
     EOL,
@@ -51,5 +52,5 @@ class Log:
             FILE_COLUMN: pa.large_string(),
             MESSAGE_COLUMN: pa.large_string(),
         })
-        reader = pa.RecordBatchReader.from_batches(arrow, batches())
+        reader = pa.RecordBatchReader.from_batches(arrow, recorded(batches()))
         return pl.scan_arrow_c_stream(reader)

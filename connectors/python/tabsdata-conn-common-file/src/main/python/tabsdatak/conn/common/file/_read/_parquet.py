@@ -10,6 +10,7 @@ import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from tabsdatak.common._storage.failures import recorded
 from tabsdatak.conn.common.file._read._blocks import Seekable, close
 from tabsdatak.spi import LazyFrameInput
 
@@ -30,5 +31,7 @@ class Parquet:
                 parquet.close()
                 close(source)
 
-        reader = pa.RecordBatchReader.from_batches(parquet.schema_arrow, batches())
+        reader = pa.RecordBatchReader.from_batches(
+            parquet.schema_arrow, recorded(batches())
+        )
         return LazyFrameInput(pl.scan_arrow_c_stream(reader))

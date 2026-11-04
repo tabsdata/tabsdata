@@ -152,9 +152,7 @@ def test_an_archive_not_holding_exactly_one_file_fails_the_run(
     tmp_path, extension, members, reason
 ):
     stage(tmp_path, f"in.csv{extension}", PACKERS[extension](*members))
-    with pytest.raises(
-        (FileRuntimeException, pl.exceptions.ComputeError), match=reason
-    ):
+    with pytest.raises(FileRuntimeException, match=reason):
         served(tmp_path, f"in.csv{extension}")
 
 
@@ -162,17 +160,23 @@ def test_an_archive_not_holding_exactly_one_file_fails_the_run(
 def test_a_second_member_fails_a_random_access_format_too(tmp_path, extension):
     pair = [("a", parquet_bytes()), ("b", parquet_bytes())]
     stage(tmp_path, f"in.parquet{extension}", PACKERS[extension](*pair))
-    with pytest.raises(
-        (FileRuntimeException, pl.exceptions.ComputeError), match="exactly one file"
-    ):
+    with pytest.raises(FileRuntimeException, match="exactly one file"):
         served(tmp_path, f"in.parquet{extension}")
+
+
+@pytest.mark.parametrize("file_format", [SrcFileFormat.AVRO, SrcFileFormat.CSV])
+def test_a_second_tar_member_fails_with_its_own_error_through_any_reader(
+    tmp_path, file_format
+):
+    name, content = CONTENTS[file_format]
+    stage(tmp_path, f"{name}.tar", tarred(("a", content()), ("b", content())))
+    with pytest.raises(FileRuntimeException, match="more than one entry"):
+        served(tmp_path, f"{name}.tar")
 
 
 def test_an_archive_that_is_not_one_fails_the_run(tmp_path):
     stage(tmp_path, "in.csv.zip", b"not a zip at all")
-    with pytest.raises(
-        (FileRuntimeException, pl.exceptions.ComputeError), match="not a readable zip"
-    ):
+    with pytest.raises(FileRuntimeException, match="not a readable zip"):
         served(tmp_path, "in.csv.zip")
 
 

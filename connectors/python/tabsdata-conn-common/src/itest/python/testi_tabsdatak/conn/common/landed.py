@@ -12,6 +12,7 @@ from typing import Any
 
 import polars as pl
 
+from tabsdatak.common._storage.failures import collected
 from tabsdatak.common._storage.landed import StoredMetadata, serve
 from tabsdatak.spi import FrameMetadata, LazyFrameInput
 
@@ -25,7 +26,7 @@ class Served:
 def served(table: LazyFrameInput, folder: Path) -> Served:
     folder.mkdir(parents=True, exist_ok=True)
     target = folder / f"{uuid.uuid4().hex}.parquet"
-    table.frame.sink_parquet(target)
+    collected(table.frame.sink_parquet(target, lazy=True))
     metadata = table.metadata() if callable(table.metadata) else table.metadata
     stored = StoredMetadata.read(StoredMetadata.of(metadata or FrameMetadata()))
     frame = serve(pl.scan_parquet(target), stored).collect()

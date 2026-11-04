@@ -15,7 +15,7 @@ from tabsdatak.common._storage.landed import OVERFLOW_COLUMN
 from tabsdatak.conn.common.file._read._csv import AutoCsv
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.file._read._ndjson import AutoNdjson
+from tabsdatak.conn.common.file._read._ndjson import AutoNdjson, NdjsonLineError
 from test_tabsdatak.conn.common.file.landed import Source, land, strings
 
 pytestmark = [pytest.mark.unit]
@@ -189,7 +189,7 @@ def test_an_ndjson_file_starting_with_a_bom_is_refused_as_polars_refuses_it(
     content = b'\xef\xbb\xbf{"a": 1}\n{"a": 2}\n'
     with pytest.raises(pl.exceptions.ComputeError):
         pl.read_ndjson(content)
-    with pytest.raises(pl.exceptions.ComputeError, match="Line 1 is not a JSON"):
+    with pytest.raises(NdjsonLineError, match="Line 1 is not a JSON"):
         land(read_ndjson(content, 5), tmp_path)
 
 
