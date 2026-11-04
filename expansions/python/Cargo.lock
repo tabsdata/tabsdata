@@ -6354,6 +6354,7 @@ dependencies = [
  "flate2",
  "image",
  "liblzma",
+ "liblzma-sys",
  "lz4_flex",
  "pyo3",
  "pyo3-log",

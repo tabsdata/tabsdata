@@ -111,12 +111,12 @@ msgpack==1.2.4
 mypy==2.4.1
 mypy-extensions==1.1.0
 mysql-connector-python==26.10.0
-nab==0.0.24
-nab-index==0.0.24
-nab-markersets==0.0.24
-nab-project==0.0.24
-nab-provider==0.0.24
-nab-resolver==0.0.24
+nab==0.0.25
+nab-index==0.0.25
+nab-markersets==0.0.25
+nab-project==0.0.25
+nab-provider==0.0.25
+nab-resolver==0.0.25
 nh3==0.3.7
 numpy==2.5.4
 olefile==0.47
@@ -169,7 +169,7 @@ pytest-reporter-html1==0.9.5
 pytest-timeout==2.4.0
 pytest-xdist==3.8.0
 python-dateutil==2.9.0.post0
-python-discovery==1.9.2
+python-discovery==1.9.4
 python-dotenv==1.2.4
 python-on-whales==0.81.0
 python-slugify==9.1.3
