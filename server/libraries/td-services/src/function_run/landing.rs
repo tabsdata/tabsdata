@@ -8,7 +8,7 @@
 //! cannot drift.
 //!
 //! A run lands one `POSITION.INDEX.t` file per table its source plugin wrote, the
-//! INDEX-th written for the function input at POSITION, next to its `.s` schema.
+//! INDEX-th written for the function input at POSITION, next to its `.m` metadata.
 //! The input index serving gives a file, and that provenance records, numbers
 //! the landed files in (POSITION, INDEX) order. Runs landed by 2.2.0 hold one
 //! stamped `INPUT_IDX.t` file per input index instead.

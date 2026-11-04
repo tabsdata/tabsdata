@@ -13,7 +13,6 @@ from tabsdatak.server._tdrunner.function._commons.document.message.request impor
     Request,
 )
 from tabsdatak.server._tdrunner.function._commons.manifests.manifest import Manifest
-from tabsdatak.spi import MetadataSpec
 
 SINGLE_VERSION_POS = -1
 
@@ -22,8 +21,7 @@ SINGLE_VERSION_POS = -1
 class InputRecord:
     file: str | None = None
     location: Location | None = None
-    schema: Location | None = None
-    metadata: MetadataSpec | None = None
+    metadata_location: Location | None = None
     input_idx: int | None = None
     version_pos: int = SINGLE_VERSION_POS
     execution_id: str | None = None

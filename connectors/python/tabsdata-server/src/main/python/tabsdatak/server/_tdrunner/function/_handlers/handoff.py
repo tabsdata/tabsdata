@@ -31,6 +31,7 @@ from tabsdatak.spi import (
     Dest,
     DestContext,
     DestPlugin,
+    FrameMetadata,
     LazyFrameInput,
     Src,
     SrcPlugin,
@@ -162,9 +163,7 @@ class LandingSlot(Slot):
             self.landing.land(
                 self.position,
                 len(self.landed),
-                table.frame,
-                schema=table.schema,
-                metadata=table.metadata,
+                table,
             ),
         )
 
@@ -225,7 +224,7 @@ class SourceHandoff(Handoff):
             if isinstance(table, TableFileInput):
                 return LazyFrameInput(
                     pl.scan_parquet(local_file(table.file)),
-                    metadata=table.metadata,
+                    metadata=FrameMetadata(columns=table.metadata),
                 )
             raise UnexpectedTableError(
                 plugin,

@@ -136,8 +136,8 @@ class ManifestStageSrcPlugin(SrcPlugin[_StreamStageSrcConn, StreamStageSrc]):
         if not name.endswith(LANDING_SUFFIX):
             return LazyFrameInput(data.scan())
         pair = LandedPair.of(name)
-        schema = FrameLocator(f"{root}/{pair.schema}", location.options)
-        return LandedTable(data, schema).input()
+        metadata = FrameLocator(f"{root}/{pair.metadata}", location.options)
+        return LandedTable(data, metadata).input()
 
 
 STREAM_STAGE_SRC = SrcDef(

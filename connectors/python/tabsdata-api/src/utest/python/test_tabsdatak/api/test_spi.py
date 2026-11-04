@@ -38,13 +38,18 @@ from tabsdatak.api import (
 from tabsdatak.error import ApiErrorCode, ApiException
 from tabsdatak.spi import (
     Conn,
+    CsvParseOptions,
     DestContext,
     DestDef,
     DestPlugin,
     Explorer,
     FilesSpec,
+    FrameMetadata,
+    Layout,
     LazyFrameInput,
+    NdjsonParseOptions,
     PluginCtx,
+    SourceFormat,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
@@ -1070,9 +1075,35 @@ def test_an_unresolved_legacy_annotation_keeps_the_source_file_list():
 def test_a_lazy_frame_input_carries_nothing_by_default():
     frame = pl.LazyFrame({"a": ["1"]})
     table = LazyFrameInput(frame)
-    assert (table.frame, table.schema, table.metadata) == (frame, None, None)
+    assert (table.frame, table.metadata) == (frame, None)
     with pytest.raises(AttributeError):
-        table.metadata = {"@page": 1}  # type: ignore[misc]
+        table.metadata = FrameMetadata()  # type: ignore[misc]
+
+
+@pytest.mark.parametrize("source_format", list(SourceFormat))
+def test_each_source_format_has_its_own_parse_options(source_format):
+    options = source_format.parse_options_class
+    assert options.__name__.lower().startswith(source_format.value)
+    FrameMetadata(format=source_format, typed=False, parsing=options())
+
+
+@pytest.mark.parametrize(
+    "arguments, error, match",
+    [
+        ({"layout": Layout.SERIALIZED}, ValueError, "serialized frame"),
+        ({"typed": False}, ValueError, "untyped frame"),
+        ({"parsing": CsvParseOptions()}, ValueError, "Parse options"),
+        (
+            {"format": SourceFormat.CSV, "parsing": NdjsonParseOptions()},
+            TypeError,
+            "takes CsvParseOptions, not NdjsonParseOptions",
+        ),
+    ],
+    ids=["serialized", "untyped", "parse options", "other format's options"],
+)
+def test_frame_metadata_is_refused_without_its_format(arguments, error, match):
+    with pytest.raises(error, match=match):
+        FrameMetadata(**arguments)
 
 
 def test_bare_frames_wrap_as_lazy_frame_inputs():
@@ -1190,19 +1221,36 @@ def test_a_files_stage_hook_works_on_local_copies_and_is_deprecated(tmp_path):
     assert _ids(tables) == [[2, 1], [3]]
 
 
-def test_a_files_stage_hook_cannot_take_untyped_tables(tmp_path):
-    untyped = [
+def test_a_files_stage_hook_cannot_take_how_a_table_is_served(tmp_path):
+    served = [
         [
             LazyFrameInput(
-                pl.LazyFrame({"id": ["1"]}), schema=pl.Schema({"id": pl.Int64})
+                pl.LazyFrame({"id": ["1"]}),
+                metadata=lambda: FrameMetadata(pl.Schema({"id": pl.Int64})),
             )
         ]
     ]
     with pytest.warns(LegacyStageFilesWarning):
-        with pytest.raises(TypeError, match="untyped"):
+        with pytest.raises(TypeError, match="how table 0 of slot 0 is served"):
             StageContract(_FilesStage).process(
-                _FilesStage(), _StageCtx(tmp_path), untyped
+                _FilesStage(), _StageCtx(tmp_path), served
             )
+
+
+def test_a_files_stage_hook_takes_the_metadata_columns(tmp_path):
+    columns = [
+        [
+            LazyFrameInput(
+                pl.LazyFrame({"id": [1]}),
+                metadata=FrameMetadata(columns={"@page": 1}),
+            )
+        ]
+    ]
+    with pytest.warns(LegacyStageFilesWarning):
+        [[table]] = StageContract(_FilesStage).process(
+            _FilesStage(), _StageCtx(tmp_path), columns
+        )
+    assert table.metadata == FrameMetadata(columns={"@page": 1})
 
 
 def test_a_stage_hook_returning_the_other_form_is_refused(tmp_path):

@@ -152,9 +152,7 @@ class StageBatch:
         landed = Landing(self.storage.locate(manifest.folder)).land(
             position,
             index,
-            table.frame,
-            schema=table.schema,
-            metadata=table.metadata,
+            table,
         )
         name = landed.data.uri.rpartition(PATH_SEPARATOR)[2]
         stats = StageFileStats(name=name, rows=landed.rows, bytes=landed.bytes)

@@ -10,7 +10,6 @@ from typing import Any, Iterable, Iterator
 import polars as pl
 import pytest
 
-from tabsdatak.common._storage.landed import SchemaOrigin
 from tabsdatak.server._tdrunner.function._commons.document.message.request import Info
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputEntry,
@@ -32,6 +31,7 @@ from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.spi import (
     DestContext,
     DestPlugin,
+    FrameMetadata,
     LazyFrameInput,
     SrcPlugin,
     TableFileInput,
@@ -331,7 +331,7 @@ def test_a_frames_source_lands_what_it_returns(tmp_path):
     )
     [[landed]] = chosen.reap()
     assert (landed.position, landed.index, landed.rows) == (0, 0, 2)
-    assert landed.origin is SchemaOrigin.DECLARED
+    assert landed.table.read_metadata() == FrameMetadata()
     assert landed.data.uri.endswith("/landing/0.0.t")
     assert landed_values(landed.data) == {"id": [1, 2]}
 
@@ -341,7 +341,7 @@ def test_a_legacy_source_lands_its_files_with_their_metadata(tmp_path):
     ORDERS.write_parquet(file)
     plugin = LegacySource([TableFileInput(file=file, metadata={"@page": 1})])
     [[landed]] = run_source(tmp_path, plugin, ["orders"]).reap()
-    assert landed.metadata == {"@page": 1}
+    assert landed.table.read_metadata().columns == {"@page": 1}
     assert landed_values(landed.data) == {"id": [1, 2]}
 
 
@@ -380,19 +380,16 @@ def test_a_generator_lands_each_table_as_it_yields_it(tmp_path):
     ]
 
 
-def test_a_lazy_frame_input_lands_its_schema_and_metadata(tmp_path):
+def test_a_lazy_frame_input_lands_its_metadata(tmp_path):
+    metadata = FrameMetadata(
+        pl.Schema({"id": pl.Int64}),
+        columns={"@path": "/data/a.csv"},
+    )
     plugin = LazyFrameSource(
-        [
-            LazyFrameInput(
-                pl.LazyFrame({"id": ["7"]}),
-                schema=pl.Schema({"id": pl.Int64}),
-                metadata={"@path": "/data/a.csv"},
-            ),
-        ],
+        [LazyFrameInput(pl.LazyFrame({"id": ["7"]}), metadata=metadata)],
     )
     [[landed]] = run_source(tmp_path, plugin, ["orders"]).reap()
-    assert landed.origin is SchemaOrigin.INFERRED
-    assert landed.metadata == {"@path": "/data/a.csv"}
+    assert landed.table.read_metadata() == metadata
 
 
 @pytest.mark.parametrize(

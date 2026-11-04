@@ -12,11 +12,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from tabsdatak.common._storage.landed import (
-    TABSDATA_LANDING_FACTS_KEY,
-    LandingFacts,
-    SchemaOrigin,
-)
+from tabsdatak.common._storage.landed import StoredMetadata
 from tabsdatak.common._storage.transfer import StorageLocation
 from tabsdatak.conn.common._cursor import LastModifiedCursor
 from tabsdatak.conn.stream.stage import (
@@ -26,7 +22,7 @@ from tabsdatak.conn.stream.stage import (
     ManifestStageSrcPlugin,
 )
 from tabsdatak.conn.stream.stage.error import ManifestStageException
-from tabsdatak.spi import StreamStageSrc, StreamStageSrcPlugin
+from tabsdatak.spi import FrameMetadata, StreamStageSrc, StreamStageSrcPlugin
 
 NOON = datetime(2026, 6, 16, 12, 0, 0, tzinfo=timezone.utc).timestamp()
 
@@ -72,22 +68,12 @@ def landed(
     stage: Path,
     stem: str,
     frame: pl.DataFrame,
-    *,
-    schema: pl.Schema | None = None,
-    metadata: dict | None = None,
+    metadata: FrameMetadata | None = None,
 ) -> str:
     folder = stage / "files" / "b1"
     folder.mkdir(parents=True, exist_ok=True)
     frame.write_parquet(folder / f"{stem}.t")
-    if schema is None:
-        origin, target = SchemaOrigin.DECLARED, frame.schema
-    else:
-        origin, target = SchemaOrigin.INFERRED, schema
-    facts = LandingFacts(rows=frame.height, origin=origin, metadata=metadata)
-    pl.DataFrame(schema=target).write_parquet(
-        folder / f"{stem}.s",
-        metadata={TABSDATA_LANDING_FACTS_KEY: facts.model_dump_json()},
-    )
+    StoredMetadata.of(metadata or FrameMetadata()).write_parquet(folder / f"{stem}.m")
     return f"files/b1/{stem}.t"
 
 
@@ -163,21 +149,12 @@ def test_every_slot_reads_its_tables_in_order(stage, tmp_path):
 
 
 def test_a_landed_table_is_read_with_its_metadata(stage, tmp_path):
-    name = landed(stage, "0.0", pl.DataFrame({"id": [7]}), metadata={"@src": "k"})
-    manifest(stage, "a", [[name]], NOON)
-    ((table,),) = read(stage, Ctx(tmp_path))
-    assert table.frame.collect()["id"].to_list() == [7]
-    assert table.schema is None
-    assert table.metadata == {"@src": "k"}
-
-
-def test_an_untyped_landed_table_carries_its_inferred_schema(stage, tmp_path):
-    inferred = pl.Schema({"id": pl.Int64})
-    name = landed(stage, "0.0", pl.DataFrame({"id": ["7"]}), schema=inferred)
+    metadata = FrameMetadata(pl.Schema({"id": pl.Int64}), columns={"@src": "k"})
+    name = landed(stage, "0.0", pl.DataFrame({"id": ["7"]}), metadata)
     manifest(stage, "a", [[name]], NOON)
     ((table,),) = read(stage, Ctx(tmp_path))
     assert table.frame.collect()["id"].to_list() == ["7"]
-    assert table.schema == inferred
+    assert table.metadata == metadata
 
 
 def test_files_and_landed_tables_mix_in_one_manifest(stage, tmp_path):

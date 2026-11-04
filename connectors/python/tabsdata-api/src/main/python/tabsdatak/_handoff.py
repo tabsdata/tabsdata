@@ -7,6 +7,7 @@ from __future__ import annotations
 import inspect
 import sys
 from collections.abc import Iterable
+from dataclasses import replace
 from typing import (
     Any,
     ForwardRef,
@@ -19,6 +20,7 @@ from typing import (
 import tabsdatak._api as _api
 from tabsdatak.spi import (
     DestPlugin,
+    FrameMetadata,
     LazyFrameInput,
     SrcPlugin,
     SrcPluginCtx,
@@ -177,7 +179,10 @@ class StageContract(PluginContract[StreamStageSrcPlugin]):
         processed = plugin.process_files(ctx, files)  # type: ignore[arg-type]
         return [
             [
-                LazyFrameInput(scan_parquet(file.file), metadata=file.metadata)
+                LazyFrameInput(
+                    scan_parquet(file.file),
+                    metadata=FrameMetadata(columns=file.metadata),
+                )
                 for file in self.checked(position, slot, TableFileInput)
             ]
             for position, slot in enumerate(processed)
@@ -210,16 +215,21 @@ class StageContract(PluginContract[StreamStageSrcPlugin]):
             folder.mkdir(parents=True, exist_ok=True)
             copied: list[TableFileInput] = []
             for index, table in enumerate(slot):
-                if table.schema is not None:
+                file = folder / f"{index:04d}.parquet"
+                table.frame.sink_parquet(file)
+                metadata = table.metadata
+                if callable(metadata):
+                    metadata = metadata()
+                if metadata is None:
+                    metadata = FrameMetadata()
+                if replace(metadata, columns=None) != FrameMetadata():
                     raise TypeError(
                         f"{self.plugin.__qualname__}.process_files takes the "
                         f"legacy list[list[TableFileInput]], which cannot carry "
-                        f"the untyped table {index} of slot {position}; take "
+                        f"how table {index} of slot {position} is served; take "
                         f"list[Iterable[LazyFrameInput]]",
                     )
-                file = folder / f"{index:04d}.parquet"
-                table.frame.sink_parquet(file)
-                copied.append(TableFileInput(file=file, metadata=table.metadata))
+                copied.append(TableFileInput(file=file, metadata=metadata.columns))
             files.append(copied)
         return files
 

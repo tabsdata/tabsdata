@@ -39,7 +39,7 @@ def test_write_produces_the_inputs_document(tmp_path):
                 name="a",
                 table_pos=0,
                 tables=(
-                    InputRecord(file="/a.parquet", metadata={"k": "v"}, input_idx=3),
+                    InputRecord(file="/a.parquet", input_idx=3),
                     InputRecord(),
                 ),
             ),
@@ -56,8 +56,7 @@ def test_write_produces_the_inputs_document(tmp_path):
                     {
                         "file": "/a.parquet",
                         "location": None,
-                        "schema": None,
-                        "metadata": {"k": "v"},
+                        "metadata_location": None,
                         "input_idx": 3,
                         "version_pos": -1,
                         "execution_id": None,
@@ -68,8 +67,7 @@ def test_write_produces_the_inputs_document(tmp_path):
                     {
                         "file": None,
                         "location": None,
-                        "schema": None,
-                        "metadata": None,
+                        "metadata_location": None,
                         "input_idx": None,
                         "version_pos": -1,
                         "execution_id": None,

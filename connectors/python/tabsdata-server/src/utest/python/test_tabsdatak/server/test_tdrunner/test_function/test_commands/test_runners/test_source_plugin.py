@@ -24,7 +24,6 @@ from tabsdatak._info import PublisherInfo
 # @stream_publisher fixtures resolve via ``get_type_hints``.
 from tabsdatak.api import TableFrameSpec, TableFramesSpec  # noqa: F401
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
-from tabsdatak.common._storage.landed import SchemaOrigin
 from tabsdatak.server._tdrunner.function._commons.context.source import SourceContext
 from tabsdatak.server._tdrunner.function._commons.document.message.request import (
     Info,
@@ -665,10 +664,12 @@ def test_the_inputs_manifest_records_each_landed_file(tmp_path):
             position=position,
             index=index,
             data=Location(uri=f"file:///r/{position}.{index}.t", env_prefix="ROOT"),
-            schema=Location(uri=f"file:///r/{position}.{index}.s", env_prefix="ROOT"),
+            metadata=Location(
+                uri=f"file:///r/{position}.{index}.m",
+                env_prefix="ROOT",
+            ),
             rows=1,
             bytes=1,
-            origin=SchemaOrigin.DECLARED,
         )
 
     path = tmp_path / "manifest.yaml"
@@ -684,8 +685,8 @@ def test_the_inputs_manifest_records_each_landed_file(tmp_path):
         "file:///r/0.0.t",
         "file:///r/0.1.t",
     ]
-    assert orders.tables[1].schema == Location(
-        uri="file:///r/0.1.s",
+    assert orders.tables[1].metadata_location == Location(
+        uri="file:///r/0.1.m",
         env_prefix="ROOT",
     )
     assert all(record.file is None for record in orders.tables)
@@ -763,8 +764,10 @@ def test_write_in_lands_the_files_a_legacy_plugin_returns(tmp_path):
         ],
         ["in_1"],
     )
-    assert (first.index, first.rows, first.metadata) == (0, 2, metadata)
-    assert (second.index, second.rows, second.metadata) == (1, 1, None)
+    assert (first.index, first.rows) == (0, 2)
+    assert first.table.read_metadata().columns == metadata
+    assert (second.index, second.rows) == (1, 1)
+    assert second.table.read_metadata().columns is None
     assert first.data.uri.endswith("/landing/0.0.t")
 
 
@@ -919,13 +922,13 @@ def test_main_end_to_end_happy_path(
     assert table.to_pydict()["id"] == [1, 2, 3]
     assert table.to_pydict()["name"] == ["alice", "bob", "carol"]
 
-    # The inputs manifest records the file landed from it, and its schema.
+    # The inputs manifest records the file landed from it, and its metadata.
     [entry] = InputManifest.load(manifest).inputs
     assert entry.name == "in_1"
     [record] = entry.tables
     assert record.file is None
     assert record.location.uri.endswith("/landing/0.0.t")
-    assert record.schema.uri.endswith("/landing/0.0.s")
+    assert record.metadata_location.uri.endswith("/landing/0.0.m")
     landed = pq.read_table(tmp_path / "landing" / "0.0.t")
     assert landed.to_pydict() == table.to_pydict()
 

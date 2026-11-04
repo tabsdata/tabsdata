@@ -174,7 +174,7 @@ mod tests {
     }
 
     /// Writes `data` under the run's landing directory as `name`, the way the
-    /// source runner lands a `POSITION.INDEX.t` file and its `.s` schema.
+    /// source runner lands a `POSITION.INDEX.t` file and its `.m` metadata.
     async fn write_landed(
         context: &Services,
         collection: &CollectionDB,
@@ -317,7 +317,14 @@ mod tests {
                 name.as_bytes(),
             )
             .await?;
-            write_landed(&context, &collection, &run, &format!("{name}.s"), b"schema").await?;
+            write_landed(
+                &context,
+                &collection,
+                &run,
+                &format!("{name}.m"),
+                b"metadata",
+            )
+            .await?;
         }
 
         for (idx, name) in ["0.0", "0.1", "2.0", "10.0"].into_iter().enumerate() {

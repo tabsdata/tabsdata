@@ -175,17 +175,37 @@ its data to the runtime:
   publisher input, by position: position `i` is the plugin's `i`-th
   configured entry and feeds the function's `i`-th parameter. Each
   entry holds the tables produced for that input, each a
-  `LazyFrameInput`: a `pl.LazyFrame` plus optional `metadata=` (each
-  entry becomes a column, by convention named with a leading `@`) and
-  `schema=`; `to_lazy_frame_inputs` wraps bare frames, as
-  `to_table_file_inputs` wraps bare paths. An entry is a list, or any
-  iterable: a generator yielding one page or chunk at a time keeps a
-  single one in memory, since the runtime takes the entries in order
-  and lands each table as it takes it. Untyped data (CSV, JSON lines,
-  Excel) is returned with every column a `String` plus `schema=`, the
-  types polars infers reading the whole source (e.g.
-  `pl.scan_csv(source, infer_schema_length=None).collect_schema()`):
-  the strings land as they are and the schema is applied when served;
+  `LazyFrameInput`: its data, a `pl.LazyFrame`, and optional
+  `metadata=`, a `FrameMetadata` that says how the data is served;
+  `to_lazy_frame_inputs` wraps bare frames, as `to_table_file_inputs`
+  wraps bare paths. An entry is a list, or any iterable: a generator
+  yielding one page or chunk at a time keeps a single one in memory,
+  since the runtime takes the entries in order and lands each table as
+  it takes it. The runtime lands the data as it is, and the metadata
+  next to it, then serves the data as the metadata says:
+  - `schema`: the types each column is served with. A `String` column
+    is parsed into its type, a column already of it is served as it
+    is, any other is cast to it. A value that cannot be parsed or cast
+    fails the function. No schema serves the
+    data with its own types;
+  - `layout`: `Layout.COLUMNAR`, one column per source column, or
+    `Layout.SERIALIZED`, one `String` column with one value per source
+    row, served as the schema's fields;
+  - `format`: the `SourceFormat` the `String` values come from, e.g.
+    `SourceFormat.CSV`. Required by `Layout.SERIALIZED` and by untyped
+    data;
+  - `typed`: whether each column holds values of its real type; `False`
+    when other types are stored as text, as in a CSV file;
+  - `parsing`: how the format's values are split and typed, an
+    instance of its `SourceFormat.parse_options_class`, e.g.
+    `CsvParseOptions(decimal_comma=True)`. `None` takes the format's
+    defaults. These are not the user's `format_cfg`: a plugin derives
+    them from it, adding its own rules;
+  - `columns`: each entry becomes a column holding its value, by
+    convention named with a leading `@`;
+  - `metadata=` may be a function returning the `FrameMetadata`,
+    called once the frame has landed, for metadata learnt while the
+    frame streams (e.g. the types of a CSV file, in the same pass);
 - `list[list[TableFileInput]]`, or no annotation: the legacy form,
   local parquet files. Deprecated since 2.3.0: registering such a plugin
   raises a `TabsdataDeprecatedWarning` (ignored by default like every
@@ -204,7 +224,12 @@ from collections.abc import Iterable, Iterator
 
 import polars as pl
 
-from tabsdatak.spi import LazyFrameInput, SrcPlugin, to_lazy_frame_inputs
+from tabsdatak.spi import (
+    FrameMetadata,
+    LazyFrameInput,
+    SrcPlugin,
+    to_lazy_frame_inputs,
+)
 
 class _<Name>SrcPlugin(SrcPlugin[<Name>Conn, <Name>Src]):
     def read_in(self, ctx, conn, src) -> list[Iterable[LazyFrameInput]]:
@@ -218,7 +243,10 @@ class _<Name>PagedSrcPlugin(SrcPlugin[<Name>Conn, <Name>Src]):
 
     def pages(self, entry) -> Iterator[LazyFrameInput]:
         for number, page in enumerate(...):  # pages read from entry
-            yield LazyFrameInput(page.lazy(), metadata={"@page": number})
+            yield LazyFrameInput(
+                page.lazy(),
+                metadata=FrameMetadata(columns={"@page": number}),
+            )
 ```
 
 The annotation is `list[Iterable[LazyFrameInput]]` exactly, whether

@@ -133,14 +133,14 @@ class Inputs:
         return pl.when(column.is_null()).then(None).otherwise(encoded).alias(name)
 
     def scan(self, record: InputRecord) -> pl.LazyFrame | None:
-        if record.schema is not None:
+        if record.metadata_location is not None:
             try:
                 return self.landed.scan(record)
             except Exception as error:
                 if record.location is not None:
                     path = record.location.uri
                 else:
-                    path = record.schema.uri
+                    path = record.metadata_location.uri
                 raise InputScanError(path, str(error)) from error
         source = TableFile.of(record)
         if source is None:

@@ -10,11 +10,11 @@ import polars as pl
 
 from tabsdatak.common._storage.landed import (
     LANDING_SUFFIX,
-    SCHEMA_SUFFIX,
-    TABSDATA_LANDING_FACTS_KEY,
+    METADATA_SUFFIX,
     LandedTable,
-    LandingFacts,
-    SchemaOrigin,
+    StoredMetadata,
+    StoredMetadataError,
+    mismatch,
 )
 from tabsdatak.server._tdrunner.function._commons.document.message.request import (
     Info,
@@ -22,7 +22,7 @@ from tabsdatak.server._tdrunner.function._commons.document.message.request impor
 )
 from tabsdatak.server._tdrunner.function._commons.manifests.input import InputRecord
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
-from tabsdatak.spi import MetadataSpec
+from tabsdatak.spi import FrameMetadata, LazyFrameInput, MetadataSpec
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe._engine.column.connector import add_connector_columns
 from tabsdatak.tableframe._engine.column.generator import IdxGenerator
@@ -36,21 +36,19 @@ class LandedFile:
     position: int
     index: int
     data: Location
-    schema: Location
+    metadata: Location
     rows: int
     bytes: int
-    origin: SchemaOrigin
-    metadata: MetadataSpec | None = None
 
     @property
     def table(self) -> LandedTable:
         return LandedTable(
             TableFile.stored(self.data).locator(),
-            TableFile.stored(self.schema).locator(),
+            TableFile.stored(self.metadata).locator(),
         )
 
     def record(self) -> InputRecord:
-        return InputRecord(location=self.data, schema=self.schema)
+        return InputRecord(location=self.data, metadata_location=self.metadata)
 
 
 class LandingError(Exception):
@@ -61,11 +59,11 @@ class NotLandedError(LandingError):
     record: InputRecord
 
     def __init__(self, record: InputRecord) -> None:
-        super().__init__(f"Input record {record} has no landed data and schema")
+        super().__init__(f"Input record {record} has no landed data and metadata")
         self.record = record
 
 
-class SchemaMismatchError(LandingError):
+class MetadataMismatchError(LandingError):
     position: int
     detail: str
 
@@ -98,62 +96,48 @@ class Landing:
         )
 
     @staticmethod
-    def check_inferred(
+    def check(
         position: int,
         actual: pl.Schema,
-        inferred: pl.Schema,
+        metadata: FrameMetadata,
     ) -> None:
-        if list(actual) != list(inferred):
-            raise SchemaMismatchError(
-                position,
-                f"the schema names columns {list(inferred)} but the data has "
-                f"{list(actual)}",
-            )
-        typed = [name for name, dtype in actual.items() if dtype != pl.String]
-        if typed:
-            raise SchemaMismatchError(
-                position,
-                f"a schema is only for untyped data, every column a String, but "
-                f"{typed} are typed",
-            )
+        detail = mismatch(actual, metadata)
+        if detail is not None:
+            raise MetadataMismatchError(position, detail)
 
     def land(
         self,
         position: int,
         index: int,
-        frame: pl.LazyFrame,
-        *,
-        schema: pl.Schema | None = None,
-        metadata: MetadataSpec | None = None,
+        table: LazyFrameInput,
     ) -> LandedFile:
-        actual = frame.collect_schema()
-        if schema is None:
-            target = actual
-            origin = SchemaOrigin.DECLARED
-        else:
-            self.check_inferred(position, actual, schema)
-            target = schema
-            origin = SchemaOrigin.INFERRED
+        actual = table.frame.collect_schema()
+        if isinstance(table.metadata, FrameMetadata):
+            self.check(position, actual, table.metadata)
         data = self.location(position, index, LANDING_SUFFIX)
         landed = TableFile.stored(data)
-        landed.sink(frame).collect(engine="streaming")
+        landed.sink(table.frame).collect(engine="streaming")
+        if table.metadata is None:
+            metadata = FrameMetadata()
+        elif isinstance(table.metadata, FrameMetadata):
+            metadata = table.metadata
+        else:
+            metadata = table.metadata()
+            self.check(position, actual, metadata)
+        try:
+            stored = StoredMetadata.of(metadata)
+        except StoredMetadataError as error:
+            raise MetadataMismatchError(position, str(error)) from error
+        description = self.location(position, index, METADATA_SUFFIX)
+        TableFile.stored(description).sink(stored.lazy()).collect()
         stats = landed.stats()
-        rows = stats.row_count
-        facts = LandingFacts(rows=rows, origin=origin, metadata=metadata)
-        description = self.location(position, index, SCHEMA_SUFFIX)
-        TableFile.stored(description).sink(
-            pl.LazyFrame(schema=target),
-            metadata={TABSDATA_LANDING_FACTS_KEY: facts.model_dump_json()},
-        ).collect()
         return LandedFile(
             position=position,
             index=index,
             data=data,
-            schema=description,
-            rows=rows,
+            metadata=description,
+            rows=stats.row_count,
             bytes=stats.data_bytes,
-            origin=origin,
-            metadata=metadata,
         )
 
 
@@ -174,13 +158,13 @@ class LandedInputs:
         self.idx = IdxGenerator()
 
     def scan(self, record: InputRecord) -> pl.LazyFrame:
-        if record.location is None or record.schema is None:
+        if record.location is None or record.metadata_location is None:
             raise NotLandedError(record)
-        frame, facts = LandedTable(
+        frame, metadata = LandedTable(
             TableFile.stored(record.location).locator(),
-            TableFile.stored(record.schema).locator(),
+            TableFile.stored(record.metadata_location).locator(),
         ).scan()
-        return self.stamp(frame, facts.metadata)
+        return self.stamp(frame, metadata.columns)
 
     def stamp(
         self,

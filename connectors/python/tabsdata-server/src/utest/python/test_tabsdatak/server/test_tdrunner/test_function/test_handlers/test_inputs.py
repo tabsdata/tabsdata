@@ -24,7 +24,7 @@ from tabsdatak.server._tdrunner.function._handlers.inputs import (
     SingleSlotError,
 )
 from tabsdatak.server._tdrunner.function._handlers.landing import Landing
-from tabsdatak.spi import TableMode
+from tabsdatak.spi import LazyFrameInput, TableMode
 from tabsdatak.tableframe import TableFrame
 from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payload
 
@@ -50,8 +50,8 @@ def landed_entry(root: Path, chunks: list[list[int]]) -> InputEntry:
     landing = Landing(Location(uri=(root / "landing").as_uri(), env_prefix="ROOT"))
     records = []
     for index, values in enumerate(chunks):
-        landed = landing.land(0, index, pl.LazyFrame({"id": values}))
-        records.append(InputRecord(location=landed.data, schema=landed.schema))
+        landed = landing.land(0, index, LazyFrameInput(pl.LazyFrame({"id": values})))
+        records.append(landed.record())
     return InputEntry(name="in_1", table_pos=0, tables=tuple(records))
 
 
@@ -98,7 +98,9 @@ def test_scan_with_an_unusable_mount_raises_input_scan(monkeypatch):
 def test_scan_of_a_missing_landed_file_raises_input_scan(tmp_path):
     missing = Location(uri=(tmp_path / "missing.s").as_uri(), env_prefix="ROOT")
     with pytest.raises(InputScanError) as error:
-        inputs(publisher=True).scan(InputRecord(location=missing, schema=missing))
+        inputs(publisher=True).scan(
+            InputRecord(location=missing, metadata_location=missing)
+        )
     assert error.value.path == missing.uri
 
 
@@ -208,7 +210,7 @@ def test_slot_of_a_missing_landed_file_raises_input_scan(tmp_path):
     entry = InputEntry(
         name="in_1",
         table_pos=0,
-        tables=(InputRecord(location=missing, schema=missing),),
+        tables=(InputRecord(location=missing, metadata_location=missing),),
     )
     with pytest.raises(InputScanError):
         inputs(publisher=True).slot(entry, TableMode.SINGLE)

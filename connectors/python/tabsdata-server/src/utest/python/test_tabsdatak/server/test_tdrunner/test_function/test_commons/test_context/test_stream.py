@@ -375,12 +375,12 @@ def test_sending_tables_writes_them_without_publishing(tmp_path):
     assert not (tmp_path / "stage" / STREAM_STATE_FILE).exists()
 
 
-def test_a_sent_table_lands_with_its_schema(tmp_path):
+def test_a_sent_table_lands_with_its_metadata(tmp_path):
     context = make_context(tmp_path)
     context.stage([[frame(1)]])
-    (schema, data) = staged_files(tmp_path)
+    (metadata, data) = staged_files(tmp_path)
     assert data.endswith("/0.0.t")
-    assert schema.endswith("/0.0.s")
+    assert metadata.endswith("/0.0.m")
 
 
 def test_publishing_without_tables_publishes_what_was_sent(tmp_path):
@@ -453,7 +453,7 @@ def test_unstaging_deletes_what_was_sent_and_keeps_the_state(tmp_path):
     assert context.pending == [[]]
     (manifest,) = manifests(tmp_path)
     assert staged_files(tmp_path) == [
-        f"{batch(manifest)}/0.0.s",
+        f"{batch(manifest)}/0.0.m",
         f"{batch(manifest)}/0.0.t",
     ]
     assert context.stream_state == {"offset": 1}
@@ -527,7 +527,7 @@ def test_unstaging_some_tables_keeps_the_others_pending(tmp_path):
     folder = f"{FILES_FOLDER}/{batch(manifest)}"
     assert published(manifest) == [[f"{folder}/0.1.t"], []]
     assert staged_files(tmp_path) == [
-        f"{batch(manifest)}/0.1.s",
+        f"{batch(manifest)}/0.1.m",
         f"{batch(manifest)}/0.1.t",
     ]
 

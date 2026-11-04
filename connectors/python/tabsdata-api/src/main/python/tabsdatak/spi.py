@@ -153,39 +153,153 @@ class TableMode(Enum):
     ARRAY = "array"
 
 
+class Layout(Enum):
+    """How the columns of a `LazyFrameInput` frame hold its table.
+
+    :categories: spi
+
+    * `COLUMNAR` -- One column per source column.
+    * `SERIALIZED` -- One `String` column with one value per source row.
+    """
+
+    COLUMNAR = "columnar"
+    SERIALIZED = "serialized"
+
+
+@dataclass(frozen=True)
+class ParseOptions:
+    """How the `String` values of a `SourceFormat` are split and typed
+    when served. Each format has its own subclass.
+
+    :categories: spi
+    """
+
+
+@dataclass(frozen=True)
+class CsvParseOptions(ParseOptions):
+    """How the `String` values of a CSV source are typed.
+
+    :categories: spi
+
+    Args:
+        decimal_comma: Floats use `,` as their decimal separator.
+    """
+
+    decimal_comma: bool = False
+
+
+@dataclass(frozen=True)
+class NdjsonParseOptions(ParseOptions):
+    """How the rows of an NDJSON source are split and typed.
+
+    :categories: spi
+    """
+
+
+class SourceFormat(Enum):
+    """The format the `String` values of a frame come from.
+
+    :categories: spi
+
+    * `CSV` -- Each value is a CSV cell.
+    * `NDJSON` -- Each value is a JSON object.
+    """
+
+    CSV = "csv"
+    NDJSON = "ndjson"
+
+    @property
+    def parse_options_class(self) -> type[ParseOptions]:
+        """The `ParseOptions` subclass of the format."""
+        return {
+            SourceFormat.CSV: CsvParseOptions,
+            SourceFormat.NDJSON: NdjsonParseOptions,
+        }[self]
+
+
+@dataclass(frozen=True)
+class FrameMetadata:
+    """How the frame of a `LazyFrameInput` is served to the function.
+
+    :categories: spi
+
+    Args:
+        schema: The types each column is served with, in order. `None`
+            serves the frame with its own types. With a schema:
+
+            * a column already of its type is served as it is;
+            * a `String` column is parsed into its type;
+            * any other column is cast to its type.
+
+            A value that cannot be parsed or cast fails the function.
+        layout: How the frame's columns hold the table.
+        format: The format the frame's `String` values come from.
+            Required by `Layout.SERIALIZED` and by untyped frames.
+        typed: Whether each column holds values of its real type.
+            `False` when other types are stored as text, such as the
+            cells of a CSV file or the rows of an NDJSON file.
+        parsing: How the format's values are split and typed, an
+            instance of its `SourceFormat.parse_options_class`. `None` takes
+            the format's defaults.
+        columns: Each entry is added as a column holding its value on
+            every row, by convention named with a leading `@`.
+
+    Raises:
+        ValueError: A serialized or untyped frame has no format, or
+            parse options are given without one.
+        TypeError: The parse options are not the format's.
+    """
+
+    schema: pl.Schema | None = None
+    layout: Layout = Layout.COLUMNAR
+    format: SourceFormat | None = None
+    typed: bool = True
+    parsing: ParseOptions | None = None
+    columns: MetadataSpec | None = None
+
+    def __post_init__(self) -> None:
+        if self.format is None:
+            if self.layout is Layout.SERIALIZED:
+                raise ValueError("A serialized frame needs the format of its rows")
+            if not self.typed:
+                raise ValueError(
+                    "An untyped frame needs the format its values come from"
+                )
+            if self.parsing is not None:
+                raise ValueError("Parse options need the format their values come from")
+            return
+        expected = self.format.parse_options_class
+        if self.parsing is not None and type(self.parsing) is not expected:
+            raise TypeError(
+                f"A {self.format.name} frame takes {expected.__name__}, not "
+                f"{type(self.parsing).__name__}"
+            )
+
+
 @dataclass(frozen=True)
 class LazyFrameInput:
-    """One table `SrcPlugin.read_in` produces for a publisher input, as
-    a polars `LazyFrame`, with what the runtime cannot learn from the
-    frame itself.
+    """One table `SrcPlugin.read_in` produces for a publisher input: its
+    data, as a polars `LazyFrame`, and the metadata that says how to
+    serve it.
 
     :categories: spi
 
     Args:
         frame: The table, or one chunk of it.
-        schema: For untyped data only, every column a `String` as read
-            from text (CSV, JSON lines, Excel cells): the types polars
-            infers for it, from the same reader over the whole source
-            (e.g. `pl.scan_csv(source, infer_schema_length=None)
-            .collect_schema()` for data read with
-            `infer_schema=False`). The strings land as they are, and the
-            schema is applied when the table is served. Leave it out for
-            typed data, which lands with its own types.
-        metadata: Optional `MetadataSpec`. Each entry is added as a
-            metadata column on the frame's rows, by convention named
-            with a leading `@`.
+        metadata: Optional `FrameMetadata`, or a function returning it.
+            A function is called once the frame has landed, for
+            metadata learnt while the frame streams.
     """
 
     frame: pl.LazyFrame
-    schema: pl.Schema | None = None
-    metadata: MetadataSpec | None = None
+    metadata: FrameMetadata | Callable[[], FrameMetadata] | None = None
 
 
 def to_lazy_frame_inputs(
     frames: list[list[pl.LazyFrame]],
 ) -> list[Iterable[LazyFrameInput]]:
     """Wrap per-input `LazyFrame`\\ s as `LazyFrameInput`\\ s with no
-    schema or metadata -- the shape `SrcPlugin.read_in` returns.
+    metadata -- the shape `SrcPlugin.read_in` returns.
 
     :categories: spi
     """
