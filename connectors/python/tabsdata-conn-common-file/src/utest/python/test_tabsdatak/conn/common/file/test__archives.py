@@ -12,6 +12,7 @@ import zipfile
 import polars as pl
 import pytest
 
+from tabsdatak.common._error import CommonInitException
 from tabsdatak.common._fileformat.taxonomy import SrcFileFormat
 from tabsdatak.common._storage.scratch import ScratchFiles
 
@@ -196,6 +197,48 @@ def test_archives_are_selected_like_compressed_files(tmp_path):
     stage(tmp_path, "c.csv.tar", tarred(("c", FRAME.write_csv().encode())))
     assert len(served(tmp_path, "*.csv", include_compressed=False)) == 1
     assert len(served(tmp_path, "*.csv", include_compressed=True)) == 3
+
+
+def test_auto_reads_each_archive_by_the_format_its_name_holds(tmp_path):
+    for name in ["a.json.zip", "b.ndjson.zip"]:
+        stage(tmp_path, name, zipped(("x", ndjson_bytes())))
+    frames = served(tmp_path, "*.zip")
+    assert len(frames) == 2
+    assert all(frame.equals(FRAME) for frame in frames)
+
+
+def test_a_pattern_naming_an_archive_takes_only_archives(tmp_path):
+    stage(tmp_path, "a.json", ndjson_bytes())
+    stage(tmp_path, "b.json.gz", gzip.compress(ndjson_bytes()))
+    stage(tmp_path, "c.json.zip", zipped(("x", ndjson_bytes())))
+    (frame,) = served(tmp_path, "*.zip")
+    assert frame.equals(FRAME)
+
+
+def test_auto_refuses_archives_of_different_formats(tmp_path):
+    stage(tmp_path, "a.json.zip", zipped(("x", ndjson_bytes())))
+    stage(tmp_path, "b.csv.zip", zipped(("x", FRAME.write_csv().encode())))
+    with pytest.raises(CommonInitException, match="mixed formats"):
+        served(tmp_path, "*.zip")
+
+
+@pytest.mark.parametrize("name", ["a.b.zip", "a.zip", "a.b.tar"])
+def test_auto_refuses_an_archive_whose_name_holds_no_known_format(tmp_path, name):
+    stage(tmp_path, name, PACKERS[name[-4:]](("x", b"x\n1\n")))
+    with pytest.raises(CommonInitException, match="no recognised format extension"):
+        served(tmp_path, "*" + name[-4:])
+
+
+@pytest.mark.parametrize("name", ["a.b.zip", "a.zip", "a.json.zip"])
+def test_an_explicit_format_reads_any_archive_as_that_format(tmp_path, name):
+    stage(tmp_path, name, zipped(("x", FRAME.write_csv().encode())))
+    (frame,) = served(tmp_path, "*.zip", SrcFileFormat.CSV)
+    assert frame.equals(FRAME)
+
+
+def test_auto_with_nothing_selected_reads_nothing(tmp_path):
+    stage(tmp_path, "a.csv", FRAME.write_csv().encode())
+    assert served(tmp_path, "*.zip") == []
 
 
 @pytest.mark.parametrize(

@@ -63,22 +63,33 @@ def extension(path: str) -> str:
     return f".{suffix.lower()}" if dot and stem else ""
 
 
-def resolved(file_format: SrcFileFormat, paths: list[str]) -> SrcFileFormat:
+def format_of(file_format: SrcFileFormat, path: str) -> SrcFileFormat:
     if file_format is not SrcFileFormat.AUTO:
         return file_format
-    found = {path: EXTENSIONS.get(extension(path)) for path in paths}
-    unknown = [path for path, detected in found.items() if detected is None]
-    if unknown:
+    found = EXTENSIONS.get(extension(path))
+    if found is None:
         raise FileFormatErrorCode.FILE_FORMAT_3.exception(
-            paths=paths, reason=f"no recognised extension on {unknown!r}"
+            paths=[path], reason=f"no recognised format extension on {path!r}"
         )
-    formats = set(found.values())
+    return found
+
+
+def checked(cfg: ReaderConf, taken: list[list[str]]) -> None:
+    formats = set()
+    for slot, paths in enumerate(taken):
+        sheet = sheet_in(cfg.format_cfg_for(slot))
+        for path in paths:
+            file_format = format_of(cfg.file_format, path)
+            if sheet is not None and file_format is not SrcFileFormat.EXCEL:
+                raise FileFormatErrorCode.FILE_FORMAT_5.exception(
+                    sheet=sheet, format=file_format.value
+                )
+            formats.add(file_format)
     if len(formats) > 1:
         raise FileFormatErrorCode.FILE_FORMAT_3.exception(
-            paths=paths,
+            paths=[path for paths in taken for path in paths],
             reason=f"mixed formats inferred ({sorted(f.value for f in formats)})",
         )
-    return formats.pop()
 
 
 def read_files(
@@ -89,17 +100,10 @@ def read_files(
     origin: Origin,
     errors: FilePluginErrors,
 ) -> list[Iterable[LazyFrameInput]]:
-    file_format = resolved(cfg.file_format, cfg.paths)
-    slots: list[Iterable[LazyFrameInput]] = []
+    taken: list[list[str]] = []
+    purgeables: list[list[str]] = []
     for slot, entry in enumerate(cfg.paths):
         directory, pattern = split_pattern(entry.replace("\\", PATH_SEPARATOR))
-        slot_cfg = cfg.format_cfg_for(slot)
-        options = (slot_cfg or {}).get(file_format)
-        sheet = sheet_in(slot_cfg)
-        if sheet is not None and file_format is not SrcFileFormat.EXCEL:
-            raise FileFormatErrorCode.FILE_FORMAT_5.exception(
-                sheet=sheet, format=file_format.value
-            )
         found = selected(ctx, cfg, store, slot, directory, pattern, entry, errors)
         logger.info(
             "file-reader: path %d/%d %r took %d file(s)",
@@ -108,14 +112,13 @@ def read_files(
             entry,
             len(found.selected),
         )
-        paths = [joined(directory, file.name) for file in found.selected]
-        purgeable = [joined(directory, file.name) for file in found.purgeable]
-        slots.append(
-            tables(
-                ctx, cfg, store, origin, file_format, options, sheet, paths, purgeable
-            )
-        )
-    return slots
+        taken.append([joined(directory, file.name) for file in found.selected])
+        purgeables.append([joined(directory, file.name) for file in found.purgeable])
+    checked(cfg, taken)
+    return [
+        tables(ctx, cfg, store, origin, slot, paths, purgeable)
+        for slot, (paths, purgeable) in enumerate(zip(taken, purgeables, strict=True))
+    ]
 
 
 def selected(
@@ -150,13 +153,15 @@ def tables(
     cfg: ReaderConf,
     store: FileStore,
     origin: Origin,
-    file_format: SrcFileFormat,
-    options: dict | None,
-    sheet: int | None,
+    slot: int,
     paths: list[str],
     purgeable: list[str],
 ) -> Iterator[LazyFrameInput]:
+    slot_cfg = cfg.format_cfg_for(slot)
+    sheet = sheet_in(slot_cfg)
     for path in paths:
+        file_format = format_of(cfg.file_format, path)
+        options = (slot_cfg or {}).get(file_format)
         table = read(ctx, store, file_format, options, path, wrapper(path))
         if cfg.drop_metadata:
             yield table

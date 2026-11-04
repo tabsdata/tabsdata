@@ -193,9 +193,13 @@ class S3Src(Src):
             sheets of one workbook, giving a slot each.
         format: File format, by extension:
 
-            * `AUTO` (the default): taken from the path's extension, the
-              one before a compression extension if it ends in one
-              (`*.json.gz` is `JSON`).
+            * `AUTO` (the default): taken from each file's extension, the
+              one before a compression or archive extension if it ends in
+              one (`a.json.gz` and `a.json.zip` are `JSON`). Every file a
+              source takes must resolve to the same format, and a file
+              whose extension names none (`a.b.zip`) fails the run. Any
+              other format reads every file as that format, whatever its
+              name.
             * `AVRO`: `.avro`.
             * `CSV`: `.csv`.
             * `EXCEL`: `.xlsx`; one worksheet, named by the path's `#<n>`
