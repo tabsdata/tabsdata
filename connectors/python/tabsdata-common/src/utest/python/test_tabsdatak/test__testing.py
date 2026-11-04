@@ -22,38 +22,40 @@ def _make_record(msg: str, level: int = logging.ERROR) -> logging.LogRecord:
     )
 
 
-def test_newline_on_first_log_prepends_newline_on_first_record():
-    f = NewlineOnFirstLog()
-    r = _make_record("hello")
-    f.filter(r)
-    assert r.msg == "\nhello"
-
-
-def test_newline_on_first_log_does_not_prepend_on_subsequent_records():
-    f = NewlineOnFirstLog()
-    r1 = _make_record("first")
-    r2 = _make_record("second")
-    f.filter(r1)
-    f.filter(r2)
-    assert r1.msg == "\nfirst"
-    assert r2.msg == "second"
-
-
-def test_newline_on_first_log_filter_returns_critical_or_above_on_unix(monkeypatch):
+def test_newline_on_first_log_emits_the_first_record_after_a_newline(monkeypatch):
     monkeypatch.setattr("platform.system", lambda: "Linux")
     f = NewlineOnFirstLog()
-    # The first record always passes through the mutation, so use a
-    # second record to test the level gate without the mutation noise.
-    f.filter(_make_record("seed"))
-    assert f.filter(_make_record("low", level=logging.INFO)) is False
-    assert f.filter(_make_record("high", level=logging.CRITICAL)) is True
+    r = _make_record("hello", level=logging.CRITICAL)
+    emitted = f.filter(r)
+    assert isinstance(emitted, logging.LogRecord)
+    assert emitted.msg == "\nhello"
+    assert r.msg == "hello"
+
+
+def test_newline_on_first_log_emits_later_records_as_they_are(monkeypatch):
+    monkeypatch.setattr("platform.system", lambda: "Linux")
+    f = NewlineOnFirstLog()
+    f.filter(_make_record("first", level=logging.CRITICAL))
+    r = _make_record("second", level=logging.CRITICAL)
+    assert f.filter(r) is True
+    assert r.msg == "second"
+
+
+def test_newline_on_first_log_keeps_the_newline_for_a_record_it_emits(monkeypatch):
+    monkeypatch.setattr("platform.system", lambda: "Linux")
+    f = NewlineOnFirstLog()
+    low = _make_record("low", level=logging.INFO)
+    assert f.filter(low) is False
+    assert low.msg == "low"
+    assert f.filter(_make_record("high", level=logging.CRITICAL)).msg == "\nhigh"
 
 
 def test_newline_on_first_log_filter_drops_everything_on_windows(monkeypatch):
     monkeypatch.setattr("platform.system", lambda: "Windows")
     f = NewlineOnFirstLog()
-    f.filter(_make_record("seed"))
-    assert f.filter(_make_record("any", level=logging.CRITICAL)) is False
+    r = _make_record("any", level=logging.CRITICAL)
+    assert f.filter(r) is False
+    assert r.msg == "any"
 
 
 @pytest.fixture
