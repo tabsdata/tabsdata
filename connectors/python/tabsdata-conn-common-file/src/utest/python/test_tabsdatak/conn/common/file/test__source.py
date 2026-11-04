@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 import openpyxl
 import polars as pl
 import pytest
+from tabsdatax.itest.fixture.transporter import no_transporter  # noqa: F401
 
 from tabsdatak.common._fileformat.taxonomy import SrcFileFormat
 from tabsdatak.conn.common.constants import SRC_META_DROP_KEY
@@ -27,7 +28,7 @@ from tabsdatak.conn.common.file.constants import FILE_META_PATH
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.spi import LazyFrameInput
 
-pytestmark = [pytest.mark.unit]
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("no_transporter")]
 
 ERRORS = FilePluginErrors(
     binary_not_found=FileCommonErrorCode.FILE_COMMON_1,

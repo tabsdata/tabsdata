@@ -17,6 +17,7 @@ from tabsdatax.itest.fixture.backends.azurebloblocal import AzureBlobLocalDomain
 from tabsdatax.itest.fixture.backends.gcslocal import GcsLocalDomain
 from tabsdatax.itest.fixture.backends.s3local import S3LocalDomain
 from tabsdatax.itest.fixture.emulators import EMULATORS, emulated
+from tabsdatax.itest.fixture.transporter import no_transporter  # noqa: F401
 
 from tabsdatak.common._fileformat.taxonomy import SrcFileFormat
 from tabsdatak.common._storage.scratch import ScratchFiles
@@ -32,7 +33,7 @@ from tabsdatak.conn.common.file._store import FileStore
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from test_tabsdatak.conn.common.file.landed import land
 
-pytestmark = [pytest.mark.unit]
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("no_transporter")]
 
 ERRORS = FilePluginErrors(
     binary_not_found=FileCommonErrorCode.FILE_COMMON_1,

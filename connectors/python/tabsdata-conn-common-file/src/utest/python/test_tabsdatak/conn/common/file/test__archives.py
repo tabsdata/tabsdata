@@ -11,6 +11,7 @@ import zipfile
 
 import polars as pl
 import pytest
+from tabsdatax.itest.fixture.transporter import no_transporter  # noqa: F401
 
 from tabsdatak.common._error import CommonInitException
 from tabsdatak.common._fileformat.taxonomy import SrcFileFormat
@@ -39,7 +40,7 @@ from test_tabsdatak.conn.common.file.test__source_codecs import (
     xlsx_bytes,
 )
 
-pytestmark = [pytest.mark.unit]
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("no_transporter")]
 
 
 def zipped(*members: tuple[str, bytes]) -> bytes:

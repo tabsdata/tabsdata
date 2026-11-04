@@ -9,12 +9,19 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+from tabsdatax.itest.fixture.transporter import transporter_forbidden
 
 from test_tabsdatak.server.conftest import TESTING_RESOURCES_FOLDER
 
 from .driver import Driver
 
 RESOURCES = Path(TESTING_RESOURCES_FOLDER) / "function_api"
+
+
+@pytest.fixture(autouse=True)
+def runs_without_transporter():
+    with transporter_forbidden():
+        yield
 
 
 @pytest.fixture
