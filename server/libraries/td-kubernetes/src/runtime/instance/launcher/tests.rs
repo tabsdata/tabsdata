@@ -679,3 +679,126 @@ fn every_shipped_tdmanager_pod_sets_the_environment_of_its_pod_context() {
         }
     }
 }
+
+fn shipped_pod_templates() -> Vec<PathBuf> {
+    let folder = PathBuf::from(workspace_root!()).join("variant/resources/kprofile/pods");
+    let mut templates: Vec<PathBuf> = std::fs::read_dir(&folder)
+        .unwrap_or_else(|error| panic!("{} is listable: {error}", folder.display()))
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "yaml")
+        })
+        .collect();
+    templates.sort();
+    templates
+}
+
+fn system_values_for_every_placeholder() -> SystemValues {
+    let text = || Some("x".to_owned());
+    let port = || Some("1".to_owned());
+    SystemValues {
+        repository_url: text(),
+        repository_path: text(),
+        database_path: text(),
+        storage_url: text(),
+        storage_path: text(),
+        runtimes_root: text(),
+        pyenv_base_root: text(),
+        pyenv_td_root: text(),
+        pyenv_ag_root: text(),
+        pyenv_fn_root: text(),
+        pyenv_scripts_folder: text(),
+        pyenv_libexec_folder: text(),
+        exe_suffix: text(),
+        instance_name: text(),
+        namespace_name: text(),
+        cluster_name: text(),
+        tabsdata_version: text(),
+        apiserver_public_port: port(),
+        apiserver_private_port: port(),
+        #[cfg(feature = "enterprise")]
+        aiagent_private_port: port(),
+        #[cfg(feature = "enterprise")]
+        aitdk_private_port: port(),
+        #[cfg(feature = "enterprise")]
+        embedder_private_port: port(),
+        database_host: text(),
+        database_port: port(),
+        database_name: text(),
+        database_ssl_mode: text(),
+        database_ssl_root_cert: text(),
+        kminus_api_port: port(),
+        kminus_prconfig_path: text(),
+        project_secret_name: text(),
+        connection_configmap_name: text(),
+        connection_secret_name: text(),
+        probe_request_configmap_name: text(),
+        cron_schedule: text(),
+        dbmanager_mode: text(),
+        tdmanager_rules: text(),
+        uv_default_index: text(),
+        uv_index: text(),
+        uv_index_strategy: text(),
+    }
+}
+
+async fn deserialize_as_its_kind(
+    key: &str,
+    yaml: &str,
+    system: &SystemValues,
+) -> Result<(), LauncherError> {
+    let tier = Tier::Regular;
+    match kind_of_entry(key, yaml)? {
+        TemplateKind::Pod => deserialize_pod_entry::<Pod>(key, yaml, tier, system)
+            .await
+            .map(drop),
+        TemplateKind::Deployment => deserialize_pod_entry::<Deployment>(key, yaml, tier, system)
+            .await
+            .map(drop),
+        TemplateKind::Job => deserialize_pod_entry::<Job>(key, yaml, tier, system)
+            .await
+            .map(drop),
+        TemplateKind::CronJob => deserialize_pod_entry::<CronJob>(key, yaml, tier, system)
+            .await
+            .map(drop),
+        TemplateKind::Service => deserialize_pod_entry::<Service>(key, yaml, tier, system)
+            .await
+            .map(drop),
+        TemplateKind::ServiceAccount => {
+            deserialize_pod_entry::<ServiceAccount>(key, yaml, tier, system)
+                .await
+                .map(drop)
+        }
+        TemplateKind::Role => deserialize_pod_entry::<Role>(key, yaml, tier, system)
+            .await
+            .map(drop),
+        TemplateKind::RoleBinding => deserialize_pod_entry::<RoleBinding>(key, yaml, tier, system)
+            .await
+            .map(drop),
+        TemplateKind::PodDisruptionBudget => {
+            deserialize_pod_entry::<PodDisruptionBudget>(key, yaml, tier, system)
+                .await
+                .map(drop)
+        }
+    }
+}
+
+#[tokio::test]
+async fn every_shipped_pod_template_deserializes_as_its_kind() {
+    let system = system_values_for_every_placeholder();
+    let templates = shipped_pod_templates();
+    assert!(!templates.is_empty(), "no pod template was found");
+    let mut failures = Vec::new();
+    for path in templates {
+        let yaml = std::fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("{} is readable: {error}", path.display()));
+        if let Err(error) =
+            deserialize_as_its_kind(&path.display().to_string(), &yaml, &system).await
+        {
+            failures.push(error.to_string());
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
