@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import replace
 from datetime import datetime
@@ -21,12 +22,11 @@ from tabsdatak.conn.common.file._plugin import (
     ReaderConf,
     sheet_in,
 )
-from tabsdatak.conn.common.file._read._blocks import Readable
+from tabsdatak.conn.common.file._read._blocks import Readable, close
 from tabsdatak.conn.common.file._read._policy import Format, policy
 from tabsdatak.conn.common.file._select import accepts, codec, plain
 from tabsdatak.conn.common.file._store import FileStore
 from tabsdatak.conn.common.file.constants import FILE_META_PATH
-from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.spi import FrameMetadata, LazyFrameInput, SrcPluginCtx
 
 logger = logging.getLogger(__name__)
@@ -49,6 +49,7 @@ READERS = {
     SrcFileFormat.EXCEL: Format.EXCEL,
     SrcFileFormat.JSON: Format.NDJSON,
     SrcFileFormat.LOG: Format.LOG,
+    SrcFileFormat.PARQUET: Format.PARQUET,
 }
 
 Origin = Callable[[FileStore, str], str]
@@ -108,7 +109,9 @@ def read_files(
         paths = [joined(directory, file.name) for file in found.selected]
         purgeable = [joined(directory, file.name) for file in found.purgeable]
         slots.append(
-            tables(cfg, store, origin, file_format, options, sheet, paths, purgeable)
+            tables(
+                ctx, cfg, store, origin, file_format, options, sheet, paths, purgeable
+            )
         )
     return slots
 
@@ -141,6 +144,7 @@ def selected(
 
 
 def tables(
+    ctx: SrcPluginCtx,
     cfg: ReaderConf,
     store: FileStore,
     origin: Origin,
@@ -151,7 +155,7 @@ def tables(
     purgeable: list[str],
 ) -> Iterator[LazyFrameInput]:
     for path in paths:
-        table = read(store, file_format, options, path, codec(path))
+        table = read(ctx, store, file_format, options, path, codec(path))
         if cfg.drop_metadata:
             yield table
             continue
@@ -163,6 +167,7 @@ def tables(
 
 
 def read(
+    ctx: SrcPluginCtx,
     store: FileStore,
     file_format: SrcFileFormat,
     options: dict | None,
@@ -171,13 +176,20 @@ def read(
 ) -> LazyFrameInput:
     match file_format:
         case SrcFileFormat.EXCEL | SrcFileFormat.PARQUET if compression is not None:
-            raise FileCommonErrorCode.FILE_COMMON_37.exception(
-                path=path, format=file_format.value
-            )
+            scratch = ctx._scratch
+            staged = f"{uuid.uuid4().hex}-{plain(path.rpartition(PATH_SEPARATOR)[2])}"
+            stream = opened(store, path, compression)
+            try:
+                scratch.write(staged, stream)
+            finally:
+                close(stream)
+            reader = policy(READERS[file_format], path, options)
+            return reader.read(lambda: scratch.read(staged))
         case SrcFileFormat.PARQUET:
             return LazyFrameInput(store.scan_parquet(path))
         case SrcFileFormat.EXCEL:
-            return policy(Format.EXCEL, path, options).read(lambda: store.ranged(path))
+            reader = policy(READERS[file_format], path, options)
+            return reader.read(lambda: store.ranged(path))
         case (
             SrcFileFormat.AVRO
             | SrcFileFormat.CSV

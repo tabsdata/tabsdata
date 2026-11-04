@@ -22,7 +22,7 @@ from tabsdatak.conn.common.file._plugin import FilePluginErrors, ReaderConf
 from tabsdatak.conn.common.file._store import FileStore
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 
-ERROR = FileCommonErrorCode.FILE_COMMON_37
+ERROR = FileCommonErrorCode.FILE_COMMON_1
 
 
 class Context:

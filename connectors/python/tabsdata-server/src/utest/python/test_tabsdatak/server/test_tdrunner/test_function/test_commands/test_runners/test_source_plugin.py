@@ -5,17 +5,24 @@
 from __future__ import annotations
 
 import importlib
+import io
 import json
 import sys
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+import obstore
 import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 import yaml
+from tabsdatax.itest.fixture.backends.azurebloblocal import AzureBlobLocalDomain
+from tabsdatax.itest.fixture.backends.gcslocal import GcsLocalDomain
+from tabsdatax.itest.fixture.backends.s3local import S3LocalDomain
+from tabsdatax.itest.fixture.emulators import EMULATORS, emulated
 
 from tabsdatak._info import PublisherInfo
 
@@ -24,6 +31,7 @@ from tabsdatak._info import PublisherInfo
 # @stream_publisher fixtures resolve via ``get_type_hints``.
 from tabsdatak.api import TableFrameSpec, TableFramesSpec  # noqa: F401
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
+from tabsdatak.common._storage.transfer import OBJECT_STORES
 from tabsdatak.server._tdrunner.function._commons.context.source import SourceContext
 from tabsdatak.server._tdrunner.function._commons.document.message.request import (
     Info,
@@ -72,8 +80,13 @@ from tabsdatak.server._tdrunner.function.commands.runners.source_plugin.runner i
     KINDS,
     SourcePlugin,
 )
-from tabsdatak.spi import SrcPlugin, TableFileInput
-from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payload
+from tabsdatak.spi import LazyFrameInput, SrcPlugin, TableFileInput
+from test_tabsdatak.server.test_tdrunner.test_function.conftest import (
+    emulated_run,
+    info_payload,
+    run_location,
+    stored,
+)
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -252,12 +265,21 @@ def output_table_payload(name: str, *, location: dict) -> dict:
 def write_request(
     path: Path,
     bundle_uri: str = "file:///bundle.tar.zst",
+    scratch: dict[str, str] | None = None,
+    landing: dict[str, str] | None = None,
 ) -> Path:
-    landing = {"uri": (path.parent / "landing").as_uri(), "env_prefix": "ROOT"}
+    if landing is None:
+        landing = {"uri": (path.parent / "landing").as_uri(), "env_prefix": "ROOT"}
+    if scratch is None:
+        scratch = {"uri": (path.parent / "scratch").as_uri(), "env_prefix": "ROOT"}
     path.write_text(
         yaml.safe_dump({
             "Function": {
-                "info": info_payload(bundle_uri=bundle_uri, function_landing=landing),
+                "info": info_payload(
+                    bundle_uri=bundle_uri,
+                    function_landing=landing,
+                    function_scratch=scratch,
+                ),
                 "output": [
                     output_table_payload(
                         "my_table",
@@ -929,6 +951,54 @@ def test_main_end_to_end_happy_path(
 
     # Liveness file was created by the context manager.
     assert liveness.exists()
+
+
+def scratch_read_in(self, ctx, conn, src) -> list[Iterable[LazyFrameInput]]:
+    ctx._scratch.write("staged.bin", io.BytesIO(b"staged"))
+    return [[LazyFrameInput(pl.LazyFrame({"id": [1]}))]]
+
+
+@emulated
+@pytest.mark.parametrize("emulator", EMULATORS)
+def test_main_clears_what_the_plugin_left_in_the_scratch(
+    domain_azurebloblocal: AzureBlobLocalDomain,
+    domain_gcslocal: GcsLocalDomain,
+    domain_s3local: S3LocalDomain,
+    tmp_path,
+    built_bundle,
+    monkeypatch,
+    http_ok_url,
+    emulator,
+):
+    from tabsdatak.conn.localfile._plugin import LocalFileSrcPlugin
+
+    domain = locals()[f"domain_{emulator}"]
+    monkeypatch.setattr(LocalFileSrcPlugin, "read_in", scratch_read_in)
+    run = emulated_run(domain, monkeypatch)
+    landing, scratch = run_location(run, "r"), run_location(run, "s")
+    set_arguments(
+        monkeypatch,
+        write_request(tmp_path / "request.yaml", scratch=scratch, landing=landing),
+        built_bundle,
+        tmp_path / "out",
+        tmp_path / "manifest.yaml",
+        tmp_path / "live",
+        connection_file=write_connection_file(
+            tmp_path / "connection.yaml",
+            tmp_path / "srcdata",
+        ),
+        responder_url=http_ok_url,
+    )
+    try:
+        assert main() == 0
+        assert stored(scratch, domain) == []
+        assert sorted(stored(landing, domain)) == ["0.0.m", "0.0.t"]
+    finally:
+        names = stored({"uri": run}, domain)
+        if names:
+            obstore.delete(
+                OBJECT_STORES.store(run, dict(domain.storage_options)), names
+            )
 
 
 def legacy_read_in(self, ctx, conn, src) -> list[list[TableFileInput]]:

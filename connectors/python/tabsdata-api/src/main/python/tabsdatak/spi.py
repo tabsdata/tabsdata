@@ -40,6 +40,7 @@ from typing import (
     ClassVar,
     Generic,
     Iterable,
+    Protocol,
     Type,
     TypeAlias,
     Union,
@@ -333,6 +334,16 @@ class PluginCtx(_FlowCtx, ABC):
         Cleaned up by the runtime after the trx completes."""
 
 
+class _Scratch(Protocol):
+    def write(self, name: str, source: Any) -> None: ...
+
+    def replace(self, name: str, source: Any) -> None: ...
+
+    def read(self, name: str) -> Any: ...
+
+    def delete(self, name: str) -> None: ...
+
+
 class SrcPluginCtx(TransactionCtx, PluginCtx, ABC):
     """Context handed to `SrcPlugin.read_in` -- combines `TransactionCtx`
     (trx identifiers + per-flow attributes) with `PluginCtx` (flow
@@ -340,6 +351,10 @@ class SrcPluginCtx(TransactionCtx, PluginCtx, ABC):
 
     :categories: spi
     """
+
+    @property
+    def _scratch(self) -> _Scratch:
+        raise NotImplementedError("This context has no storage scratch")
 
 
 class SrcPlugin[C: Conn, S: Src](ABC):

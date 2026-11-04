@@ -5,11 +5,15 @@
 from __future__ import annotations
 
 import threading
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Iterator
 
+import obstore
 import pytest
 
+from tabsdatak.common._storage import mounts
+from tabsdatak.common._storage.transfer import OBJECT_STORES
 from tabsdatak.server._tdrunner.function._commons.http import retry
 
 # --- Shared synthetic Request.info builder --------------------------------
@@ -137,3 +141,30 @@ def output_table(entry: dict, index: int) -> dict:
         **entry,
     }
     return {"Table": table}
+
+
+RUN_MOUNT = "ROOT"
+
+
+def emulated_run(domain: Any, monkeypatch: pytest.MonkeyPatch) -> str:
+    for key, value in domain.storage_options.items():
+        monkeypatch.setenv(
+            mounts.secret_variable(
+                mounts.STORAGE_KEY,
+                mounts.MOUNTS_KEY,
+                RUN_MOUNT,
+                mounts.OPTIONS_KEY,
+                key,
+            ),
+            value,
+        )
+    return f"{domain.uri.rstrip('/')}/run-{uuid.uuid4().hex}"
+
+
+def run_location(run: str, folder: str) -> dict[str, str]:
+    return {"uri": f"{run}/{folder}", "env_prefix": RUN_MOUNT}
+
+
+def stored(location: dict[str, str], domain: Any) -> list[str]:
+    store = OBJECT_STORES.store(location["uri"], dict(domain.storage_options))
+    return [item["path"] for batch in obstore.list(store) for item in batch]

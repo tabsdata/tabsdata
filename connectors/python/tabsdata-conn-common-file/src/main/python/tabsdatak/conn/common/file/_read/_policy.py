@@ -21,6 +21,7 @@ from tabsdatak.conn.common.file._read._csv import AutoCsv
 from tabsdatak.conn.common.file._read._excel import Excel
 from tabsdatak.conn.common.file._read._log import Log
 from tabsdatak.conn.common.file._read._ndjson import AutoNdjson
+from tabsdatak.conn.common.file._read._parquet import Parquet
 from tabsdatak.spi import LazyFrameInput
 
 
@@ -34,6 +35,7 @@ class Format(Enum):
     EXCEL = "excel"
     LOG = "log"
     NDJSON = "ndjson"
+    PARQUET = "parquet"
 
 
 class Policy(Protocol):
@@ -61,5 +63,7 @@ def policy(
             return Log(name, block_size=block_size)
         case Format.NDJSON:
             return AutoNdjson(block_size=block_size)
+        case Format.PARQUET:
+            return Parquet()
         case _:
             raise ValueError(f"The format '{file_format}' has no policy")

@@ -167,10 +167,19 @@ class SourcePlugin(Command[RunSourcePluginArguments]):
             variable=self.binding.variable,
         )
         logger.info(f"Landing {len(slots)} input(s)")
-        self.landed = self.write_in()
+        try:
+            self.landed = self.write_in()
+        finally:
+            self.clear_scratch()
         logger.info(
             f"Source plugin landed {sum(len(files) for files in self.landed)} file(s)"
         )
+
+    def clear_scratch(self) -> None:
+        try:
+            self.context._scratch.clear()
+        except Exception as error:
+            logger.warning(f"The source plugin's scratch files remain: {error}")
 
     def write_in(self) -> list[list[LandedFile]]:
         try:
