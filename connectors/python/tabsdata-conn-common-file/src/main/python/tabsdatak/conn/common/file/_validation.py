@@ -294,6 +294,17 @@ def validate_src_format(fmt: Any, paths: Any, value: dict | None) -> None:
     #     )
 
 
+def validate_src_compressed(include_compressed: Any, paths: Any) -> None:
+    from tabsdatak.conn.common.file._select import codec
+
+    if include_compressed:
+        return
+    for path in paths or []:
+        found = codec(str(path).partition("#")[0])
+        if found is not None:
+            raise FileCommonErrorCode.FILE_COMMON_36.exception(path=path, codec=found)
+
+
 def validate_src_purge(purge: Any, initial_last_modified: Any) -> None:
     """Raise an exception if `purge` is True but `initial_last_modified` is None."""
     if purge and initial_last_modified is None:

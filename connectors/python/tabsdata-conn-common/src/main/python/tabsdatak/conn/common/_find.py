@@ -25,7 +25,7 @@ Without a cursor:
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -65,15 +65,23 @@ def wildcard(pattern: str) -> re.Pattern[str]:
     return re.compile(translated, re.DOTALL)
 
 
+def matches(pattern: str) -> Callable[[str], bool]:
+    matcher = wildcard(pattern)
+    return lambda name: matcher.fullmatch(name) is not None
+
+
 def find(
     listed: Iterable[Listed],
     pattern: str,
     cursor: LastModifiedCursor | None,
     max_files: int | None = None,
+    *,
+    accepts: Callable[[str], bool] | None = None,
 ) -> Found:
-    matcher = wildcard(pattern)
+    if accepts is None:
+        accepts = matches(pattern)
     matched = sorted(
-        (file for file in listed if matcher.fullmatch(file.name)),
+        (file for file in listed if accepts(file.name)),
         key=lambda file: (file.last_modified, file.name),
     )
     if cursor is None:

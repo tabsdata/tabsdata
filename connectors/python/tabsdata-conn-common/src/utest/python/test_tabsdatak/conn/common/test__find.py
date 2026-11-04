@@ -167,7 +167,9 @@ def test_without_a_cursor_nothing_is_purgeable():
 def test_a_file_behind_the_watermark_but_not_below_the_baseline_is_purgeable():
     cursor = LastModifiedCursor(at(0))
     find([Listed("b.csv", at(2000))], "*.csv", cursor)
-    found = find([Listed("a.csv", at(1000)), Listed("b.csv", at(2000))], "*.csv", cursor)
+    found = find(
+        [Listed("a.csv", at(1000)), Listed("b.csv", at(2000))], "*.csv", cursor
+    )
     assert found.selected == []
     assert names(found.purgeable) == ["a.csv", "b.csv"]
 
@@ -179,3 +181,11 @@ def test_files_past_max_files_are_neither_taken_nor_purgeable():
     assert names(found.selected) == ["file1.csv"]
     assert found.purgeable == []
     assert cursor.entries["file*.csv"] == Taken(at(1), ["file1.csv"])
+
+
+def test_a_test_on_names_replaces_the_pattern_and_the_cursor_keys_the_pattern():
+    listed = [Listed("a.csv", at(1)), Listed("a.csv.gz", at(2)), Listed("b.txt", at(3))]
+    cursor = LastModifiedCursor(at(0))
+    found = find(listed, "*.csv", cursor, accepts=lambda name: name.startswith("a"))
+    assert names(found.selected) == ["a.csv", "a.csv.gz"]
+    assert cursor.entries["*.csv"] == Taken(at(2), ["a.csv.gz"])

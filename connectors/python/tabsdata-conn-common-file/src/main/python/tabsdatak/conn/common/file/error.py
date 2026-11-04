@@ -184,3 +184,8 @@ class FileCommonErrorCode(ErrorCode):
         "initial_last_modified is required when purge=True: purge deletes source files "
         "older than the incremental initial_last_modified cursor.",
     )  # validate_src_purge
+    FILE_COMMON_36 = ErrorDef(
+        ConnInitException,
+        "Source path '{path}' ends in the compression extension '{codec}', so it "
+        "names compressed files: set include_compressed=True to read them.",
+    )  # validate_src_compressed
