@@ -5,11 +5,13 @@
 from __future__ import annotations
 
 import logging
+import random
 import urllib.error
 from http import HTTPStatus
 from typing import Any, Callable, TypeVar
 
 from tenacity import (
+    Future,
     RetryCallState,
     Retrying,
     retry_any,
@@ -17,7 +19,6 @@ from tenacity import (
     retry_if_result,
     stop_after_delay,
     stop_any,
-    wait_fixed,
 )
 
 from tabsdatak.server._tdrunner.function._commons.http.request import HttpResponse
@@ -26,6 +27,7 @@ from tabsdatak.server._tdrunner.function._commons.run.shutdown import (
 )
 
 WAIT_SECONDS = 2
+JITTER_SECONDS = 1
 TOTAL_SECONDS = 120
 
 RETRIABLE_CLIENT_STATUSES = frozenset({
@@ -55,6 +57,35 @@ def is_retriable_response(result: Any) -> bool:
     return isinstance(result, HttpResponse) and is_retriable_status(result.status)
 
 
+def is_unavailable(outcome: Future) -> bool:
+    if outcome.failed:
+        error = outcome.exception()
+        return (
+            isinstance(error, urllib.error.HTTPError)
+            and error.code == HTTPStatus.SERVICE_UNAVAILABLE
+        )
+    result = outcome.result()
+    return (
+        isinstance(result, HttpResponse)
+        and result.status == HTTPStatus.SERVICE_UNAVAILABLE
+    )
+
+
+class Backoff:
+    def __init__(
+        self, jitter: Callable[[float, float], float] = random.uniform
+    ) -> None:
+        self.unavailable = 0
+        self.jitter = jitter
+
+    def __call__(self, state: RetryCallState) -> float:
+        if state.outcome is None or not is_unavailable(state.outcome):
+            return WAIT_SECONDS
+        self.unavailable += 1
+        wait = WAIT_SECONDS * self.unavailable
+        return max(0.0, wait + self.jitter(-JITTER_SECONDS, JITTER_SECONDS))
+
+
 def stop_on_shutdown(state: RetryCallState) -> bool:
     if is_shutdown_requested():
         logger.info("Shutdown requested; not retrying the failed request")
@@ -79,7 +110,7 @@ def call_with_retry(call: Callable[..., T], *args: Any, **kwargs: Any) -> T:
             stop_on_shutdown,
             type.__call__(stop_after_delay, max_delay=TOTAL_SECONDS),
         ),
-        wait=type.__call__(wait_fixed, wait=WAIT_SECONDS),
+        wait=Backoff(),
         retry_error_callback=last_outcome,
     )
     return retrying(call, *args, **kwargs)

@@ -6,12 +6,15 @@ from __future__ import annotations
 
 import urllib.error
 from http import HTTPStatus
+from types import SimpleNamespace
 
 import pytest
+from tenacity import Future
 
 from tabsdatak.server._tdrunner.function._commons.http import retry
 from tabsdatak.server._tdrunner.function._commons.http.request import HttpResponse
 from tabsdatak.server._tdrunner.function._commons.http.retry import (
+    Backoff,
     call_with_retry,
     is_retriable,
     is_retriable_response,
@@ -28,6 +31,7 @@ def http_error(status: HTTPStatus) -> urllib.error.HTTPError:
 @pytest.fixture
 def short_budget(monkeypatch):
     monkeypatch.setattr(retry, "WAIT_SECONDS", 0)
+    monkeypatch.setattr(retry, "JITTER_SECONDS", 0)
     monkeypatch.setattr(retry, "TOTAL_SECONDS", 0.2)
 
 
@@ -191,3 +195,73 @@ def test_shutdown_during_retries_stops_them(monkeypatch):
 
 def test_shutdown_keeps_successful_calls(shutdown_requested):
     assert call_with_retry(lambda: "done") == "done"
+
+
+def failed(error: BaseException) -> SimpleNamespace:
+    return SimpleNamespace(outcome=Future.construct(1, error, True))
+
+
+def answered(status: HTTPStatus) -> SimpleNamespace:
+    response = HttpResponse(status=status, body=b"")
+    return SimpleNamespace(outcome=Future.construct(1, response, False))
+
+
+def unavailable() -> SimpleNamespace:
+    return failed(http_error(HTTPStatus.SERVICE_UNAVAILABLE))
+
+
+def no_jitter(low: float, high: float) -> float:
+    return 0.0
+
+
+def test_each_unavailable_adds_one_step():
+    wait = Backoff(jitter=no_jitter)
+    waits = [wait(unavailable()) for _ in range(4)]
+    assert waits == [2, 4, 6, 8]
+
+
+def test_an_unavailable_response_counts_like_an_unavailable_error():
+    wait = Backoff(jitter=no_jitter)
+    assert [wait(answered(HTTPStatus.SERVICE_UNAVAILABLE)) for _ in range(2)] == [2, 4]
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        failed(http_error(HTTPStatus.BAD_GATEWAY)),
+        failed(urllib.error.URLError("connection refused")),
+        answered(HTTPStatus.TOO_MANY_REQUESTS),
+    ],
+    ids=["502", "connection refused", "429 response"],
+)
+def test_other_failures_wait_the_constant(state):
+    wait = Backoff(jitter=no_jitter)
+    assert [wait(state), wait(state)] == [2, 2]
+
+
+def test_other_failures_neither_add_a_step_nor_reset_the_count():
+    wait = Backoff(jitter=no_jitter)
+    waits = [
+        wait(unavailable()),
+        wait(failed(http_error(HTTPStatus.INTERNAL_SERVER_ERROR))),
+        wait(unavailable()),
+    ]
+    assert waits == [2, 2, 4]
+
+
+def test_the_jitter_stays_within_a_second_of_the_step():
+    wait = Backoff()
+    for step in range(1, 51):
+        assert step * 2 - 1 <= wait(unavailable()) <= step * 2 + 1
+
+
+def test_only_unavailable_waits_get_jitter():
+    wait = Backoff(jitter=lambda low, high: high)
+    assert wait(failed(http_error(HTTPStatus.BAD_GATEWAY))) == 2
+    assert wait(unavailable()) == 3
+
+
+def test_a_wait_is_never_negative(monkeypatch):
+    monkeypatch.setattr(retry, "WAIT_SECONDS", 0)
+    wait = Backoff(jitter=lambda low, high: low)
+    assert wait(unavailable()) == 0
