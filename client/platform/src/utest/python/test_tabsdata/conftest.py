@@ -4,9 +4,14 @@
 
 from __future__ import annotations
 
-#import inspect
+# import inspect
 import logging
 import os
+import shutil
+import tempfile
+import time
+from pathlib import Path
+
 # import pathlib
 # import re
 # import sys
@@ -16,8 +21,8 @@ import os
 #
 # from tenacity import retry, stop_after_delay, wait_fixed
 # from typing import Any
-
 import pytest
+
 # import yaml
 from xdist.workermanage import WorkerController
 
@@ -65,6 +70,7 @@ except ImportError:
 # from tabsdata._utils.tableframe._generators import _id
 # from tabsdata._utils.tdlogging import setup_tests_logging
 from tabsdata._utils.temps import tabsdata_temp_folder
+
 # from tabsdata.api.apiserver import APIServer, obtain_connection
 # from tabsdata.api.status_utils.data_version import (
 #     DataVersionStatus,
@@ -98,12 +104,18 @@ from tabsdata._utils.temps import tabsdata_temp_folder
 # from test_tabsdata.common.docker import clean_docker_containers
 # from test_tabsdata.common.venv import clean_python_virtual_environments
 
+
 def clean_python_virtual_environments(): ...
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# from test_tabsdata.bootest import TESTING_RESOURCES_PATH, check_assets, enrich_sys_path
+# from test_tabsdata.bootest import (
+#     TESTING_RESOURCES_PATH,
+#     check_assets,
+#     enrich_sys_path,
+# )
 
 # TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 # enrich_sys_path()
@@ -116,7 +128,11 @@ logger.setLevel(logging.INFO)
 #
 #
 # def get_function_registration_path(fn: TabsdataFunction):
-#     return inspect.getfile(fn.original_function) + "::" + fn.original_function.__name__
+#     return (
+#         inspect.getfile(fn.original_function)
+#         + "::"
+#         + fn.original_function.__name__
+#     )
 #
 #
 # def pytest_configure(config: pytest.Config):
@@ -130,10 +146,22 @@ logger.setLevel(logging.INFO)
 #     setup_temp_folder_node(node)
 
 
+SESSION_PREFIX = "ps_"
+STALE_SESSION_SECONDS = 60 * 60
+
+
+def session_temp_folder(root: str) -> str:
+    cutoff = time.time() - STALE_SESSION_SECONDS
+    for stale in Path(root).glob(f"{SESSION_PREFIX}*"):
+        if stale.is_dir() and stale.stat().st_mtime < cutoff:
+            shutil.rmtree(stale, ignore_errors=True)
+    return tempfile.mkdtemp(prefix=SESSION_PREFIX, dir=root)
+
+
 def setup_temp_folder(config: pytest.Config) -> None:
     if getattr(config.option, "basetemp", None):
         return
-    config.option.basetemp = tabsdata_temp_folder()
+    config.option.basetemp = session_temp_folder(tabsdata_temp_folder())
 
 
 def setup_temp_folder_node(node: WorkerController) -> None:
@@ -141,6 +169,7 @@ def setup_temp_folder_node(node: WorkerController) -> None:
         base_temp = tabsdata_temp_folder()
         worker_temp = os.path.join(base_temp, f"pyw_{node.workerinput['workerid']}")
         node.config.option.basetemp = worker_temp
+
 
 #
 # TESTS_ROOT_FOLDER = os.path.dirname(__file__)
@@ -236,7 +265,8 @@ def setup_temp_folder_node(node: WorkerController) -> None:
 #
 #     if not isinstance(testing_instances_config, dict):
 #         logger.warning(
-#             f"Testing instances configuration '{testing_instances_config_path}' is not"
+#             "Testing instances configuration "
+#             f"'{testing_instances_config_path}' is not"
 #             " a mapping; continuing with empty instances."
 #         )
 #         return TestInstances()
@@ -405,11 +435,15 @@ def pytest_addoption(parser):
         )
     except ValueError:
         pass
+
+
 #
 #
 def pytest_generate_tests(metafunc):
     if "size" in metafunc.fixturenames:
         metafunc.parametrize("size", [metafunc.config.getoption("performance_size")])
+
+
 #
 #
 # def read_json_and_clean(path, sort=True):
@@ -464,9 +498,11 @@ def pytest_generate_tests(metafunc):
 #     return server
 
 
-def clean_everything(): ...
+def clean_everything():
+    ...
     # clean_python_virtual_environments()
     # clean_docker_containers()
+
 
 #
 # # noinspection PyUnusedLocal
@@ -511,7 +547,9 @@ def clean_everything(): ...
 #     """Represent a V2_YAML instance as a YAML mapping node."""
 #     dumper.add_representer(MockTable, v1_mock_table_representer)
 #     dumper.add_representer(MockTableVersions, v1_mock_table_versions_representer)
-#     return dumper.represent_mapping("!FunctionV2", v1_execution_context_format.content)
+#     return dumper.represent_mapping(
+#         "!FunctionV2", v1_execution_context_format.content
+#     )
 #
 #
 # def v1_mock_table_representer(
@@ -605,7 +643,9 @@ def clean_everything(): ...
 #                     "execution_id": f"mocked_execution_id_{position}",
 #                     "transaction_id": f"mocked_transaction_id_{position}",
 #                     "triggered_on": datetime.now(tz=timezone.utc),
-#                     "table_data_version_id": f"mocked_table_data_version_id_{position}",
+#                     "table_data_version_id": (
+#                         f"mocked_table_data_version_id_{position}"
+#                     ),
 #                     "location": {
 #                         "uri": uri,
 #                         "env_prefix": None,
@@ -649,7 +689,8 @@ def clean_everything(): ...
 #                 content["input"].append(MockTableVersions(full_content))
 #             else:
 #                 raise ValueError(
-#                     f"Unexpected type {type(mocked_table)} for mock_dependency_location"
+#                     f"Unexpected type {type(mocked_table)} "
+#                     "for mock_dependency_location"
 #                 )
 #     location = None
 #     if input_initial_values_path:
@@ -729,7 +770,9 @@ def clean_everything(): ...
 #     for position, mocked_table in enumerate(mock_table_location):
 #         if isinstance(mocked_table, str):
 #             uri = (
-#                 pathlib.Path(mocked_table).as_uri() if mocked_table != "null" else None
+#                 pathlib.Path(mocked_table).as_uri()
+#                 if mocked_table != "null"
+#                 else None
 #             )
 #             table_content = {
 #                 "name": f"mocked_table_{position}",
@@ -797,7 +840,9 @@ def clean_everything(): ...
 #         "example.py",
 #     )
 #     function_path = file_path + "::input_file_csv_string_format"
-#     tabsserver_connection.create_collection(collection_name, description="description")
+#     tabsserver_connection.create_collection(
+#         collection_name, description="description"
+#     )
 #     tabsserver_connection.register_function(
 #         collection_name, function_path, local_packages=LOCAL_PACKAGES_LIST
 #     )
@@ -829,7 +874,9 @@ def clean_everything(): ...
 #                 "ready to be consumed yet."
 #             )
 #         else:
-#             logger.debug(f"No dataversions found for table yet: '{table.dataversions}'")
+#             logger.debug(
+#                 f"No dataversions found for table yet: '{table.dataversions}'"
+#             )
 #         logger.debug(f"Table '{random_id}' - '{file_path}' does not have data yet")
 #         raise ValueError(
 #             f"Data from the table is not yet available for"

@@ -6,7 +6,11 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import sys
+import tempfile
+import time
+from pathlib import Path
 
 import pytest
 from xdist.workermanage import WorkerController
@@ -50,12 +54,24 @@ def pytest_generate_tests(metafunc):
 def clean_python_virtual_environments(): ...
 
 
+SESSION_PREFIX = "ps_"
+STALE_SESSION_SECONDS = 60 * 60
+
+
+def session_temp_folder(root: str) -> str:
+    cutoff = time.time() - STALE_SESSION_SECONDS
+    for stale in Path(root).glob(f"{SESSION_PREFIX}*"):
+        if stale.is_dir() and stale.stat().st_mtime < cutoff:
+            shutil.rmtree(stale, ignore_errors=True)
+    return tempfile.mkdtemp(prefix=SESSION_PREFIX, dir=root)
+
+
 def setup_temp_folder(config: pytest.Config) -> None:
     from tabsdatak.common._temps import tabsdata_temp_folder
 
     if getattr(config.option, "basetemp", None):
         return
-    config.option.basetemp = tabsdata_temp_folder()
+    config.option.basetemp = session_temp_folder(tabsdata_temp_folder())
 
 
 def setup_temp_folder_node(node: WorkerController) -> None:
