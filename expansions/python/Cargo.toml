@@ -147,6 +147,10 @@ version = "0.2.191"
 [workspace.dependencies.liblzma]
 version = "0.4.9"
 
+[workspace.dependencies.liblzma-sys]
+version = "0.4.9"
+features = ["static"]
+
 [workspace.dependencies.lz4_flex]
 version = "0.14.0"
 features = ["frame"]

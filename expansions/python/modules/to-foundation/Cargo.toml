@@ -43,7 +43,7 @@ dummy = []
 extension-module = ["pyo3/extension-module"]
 
 [package.metadata.cargo-machete]
-ignored = ["td-build", "td-error", "td-common", "toml"]
+ignored = ["liblzma-sys", "td-build", "td-error", "td-common", "toml"]
 
 # Build dependencies
 
@@ -78,6 +78,7 @@ chrono = { workspace = true }
 flate2 = { workspace = true }
 image = { workspace = true, features = ["png"] }
 liblzma = { workspace = true }
+liblzma-sys = { workspace = true }
 lz4_flex = { workspace = true }
 pyo3 = { workspace = true, features = ["abi3-py312", "anyhow", "macros", "multiple-pymethods", "num-bigint", "num-complex", "num-rational", "rust_decimal", "serde", "smallvec"] }
 pyo3-log = { workspace = true }
