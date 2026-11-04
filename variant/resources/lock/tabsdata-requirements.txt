@@ -45,7 +45,7 @@ croniter==6.2.4
 cryptography==50.0.2
 databricks-sdk==0.158.0
 databricks-sql-connector==4.8.0
-dnspython==2.9.1
+dnspython==2.9.2
 durationpy==0.11
 et-xmlfile==2.0.0
 fastavro==1.13.1
