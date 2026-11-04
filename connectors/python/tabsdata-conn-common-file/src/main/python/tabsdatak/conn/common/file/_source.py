@@ -15,6 +15,7 @@ from tabsdatak.common._fileformat.error import FileFormatErrorCode
 from tabsdatak.common._fileformat.taxonomy import SrcFileFormat
 from tabsdatak.conn.common._cursor import LastModifiedCursor
 from tabsdatak.conn.common._find import PATH_SEPARATOR, Found, find, split_pattern
+from tabsdatak.conn.common.file._archives import member
 from tabsdatak.conn.common.file._codecs import decompressed
 from tabsdatak.conn.common.file._plugin import (
     _LASTMOD_KEY_PREFIX,
@@ -24,9 +25,10 @@ from tabsdatak.conn.common.file._plugin import (
 )
 from tabsdatak.conn.common.file._read._blocks import Readable, close
 from tabsdatak.conn.common.file._read._policy import Format, policy
-from tabsdatak.conn.common.file._select import accepts, codec, plain
+from tabsdatak.conn.common.file._select import accepts, archive, plain, wrapper
 from tabsdatak.conn.common.file._store import FileStore
 from tabsdatak.conn.common.file.constants import FILE_META_PATH
+from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.spi import FrameMetadata, LazyFrameInput, SrcPluginCtx
 
 logger = logging.getLogger(__name__)
@@ -155,7 +157,7 @@ def tables(
     purgeable: list[str],
 ) -> Iterator[LazyFrameInput]:
     for path in paths:
-        table = read(ctx, store, file_format, options, path, codec(path))
+        table = read(ctx, store, file_format, options, path, wrapper(path))
         if cfg.drop_metadata:
             yield table
             continue
@@ -172,13 +174,18 @@ def read(
     file_format: SrcFileFormat,
     options: dict | None,
     path: str,
-    compression: str | None,
+    wrapped: str | None,
 ) -> LazyFrameInput:
+    inner = wrapper(plain(path))
+    if wrapped is not None and inner is not None:
+        raise FileCommonErrorCode.FILE_COMMON_38.exception(
+            path=path, inner=inner, outer=wrapped
+        )
     match file_format:
-        case SrcFileFormat.EXCEL | SrcFileFormat.PARQUET if compression is not None:
+        case SrcFileFormat.EXCEL | SrcFileFormat.PARQUET if wrapped is not None:
             scratch = ctx._scratch
             staged = f"{uuid.uuid4().hex}-{plain(path.rpartition(PATH_SEPARATOR)[2])}"
-            stream = opened(store, path, compression)
+            stream = opened(store, path, wrapped)
             try:
                 scratch.write(staged, stream)
             finally:
@@ -198,14 +205,17 @@ def read(
         ):
             name = path.rpartition(PATH_SEPARATOR)[2]
             reader = policy(READERS[file_format], name, options)
-            return reader.read(lambda: opened(store, path, compression))
+            return reader.read(lambda: opened(store, path, wrapped))
         case _:
             raise ValueError(f"The format '{file_format}' cannot be read")
 
 
-def opened(store: FileStore, path: str, compression: str | None) -> Readable:
-    stream = store.open(path)
-    return stream if compression is None else decompressed(stream, compression)
+def opened(store: FileStore, path: str, wrapped: str | None) -> Readable:
+    if wrapped is None:
+        return store.open(path)
+    if archive(path) is not None:
+        return member(store, path)
+    return decompressed(store.open(path), wrapped)
 
 
 def described(table: LazyFrameInput, where: str) -> LazyFrameInput:

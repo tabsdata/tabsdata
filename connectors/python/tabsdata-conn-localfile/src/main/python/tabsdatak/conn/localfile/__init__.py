@@ -183,22 +183,27 @@ class LocalFileSrc(Src):
             registration time are never deleted -- they
             were never read. Only valid when `initial_last_modified` is set; the default
             is `False`.
-        include_compressed: Also take compressed files. A path takes
-            a file whose name matches it plus one compression extension
-            (`data/*.json` takes `a.json.gz`, not `a.json.csv`), and a
-            file whose name ends in a compression extension only when
-            this is `True`; a path that itself ends in one requires it.
-            The extension alone names the codec:
+        include_compressed: Also take compressed files and archives. A
+            path takes a file whose name matches it plus one compression or
+            archive extension (`data/*.json` takes `a.json.gz`, not
+            `a.json.csv`), and a file whose name ends in one only when this
+            is `True`; a path that itself ends in one requires it. The
+            extension alone names the codec or the archive, and the name
+            before it the format:
 
             * `.br`: Brotli.
             * `.bz2`: bzip2.
             * `.gz`: gzip.
             * `.lz4`: LZ4 frame.
+            * `.tar`: a tar archive holding exactly one file.
             * `.xz`: XZ.
+            * `.zip`: a zip archive holding exactly one file.
             * `.zlib`: zlib.
             * `.zst`, `.zstd`: Zstandard.
 
-            Defaults to `False`.
+            A file has at most one of these extensions: an archive inside a
+            compressed file (`a.csv.tar.gz`) is not read. Defaults to
+            `False`.
 
     Examples:
         Publish one file, selecting the reader `format` explicitly.

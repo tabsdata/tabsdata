@@ -8,17 +8,16 @@ import re
 
 import pytest
 
-from tabsdatak.conn.gcs import GCSSrc
-
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.file._select import CODECS
+from tabsdatak.conn.common.file._select import WRAPPERS
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file._source import EXTENSIONS
+from tabsdatak.conn.gcs import GCSSrc
 
 pytestmark = [pytest.mark.unit]
 
 
-def test_the_help_names_every_format_and_codec_extension():
+def test_the_help_names_every_format_codec_and_archive_extension():
     named = set(re.findall(r"`(\.[a-z0-9]+)`", GCSSrc.__doc__ or ""))
-    assert named == set(EXTENSIONS) | set(CODECS)
+    assert named == set(EXTENSIONS) | set(WRAPPERS)

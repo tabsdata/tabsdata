@@ -148,7 +148,7 @@ def ranged_reads(store: FileStore) -> None:
     assert ranged.seek(-1005, io.SEEK_CUR) == 1000
     assert ranged.tell() == 1000
     assert ranged.read(-1) == data[1000:]
-    with pytest.raises(ValueError, match="before the start"):
+    with pytest.raises(OSError, match="before the start"):
         ranged.seek(-1)
     ranged.close()
 

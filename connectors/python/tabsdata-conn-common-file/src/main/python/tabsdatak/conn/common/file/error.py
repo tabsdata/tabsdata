@@ -186,6 +186,16 @@ class FileCommonErrorCode(ErrorCode):
     )  # validate_src_purge
     FILE_COMMON_36 = ErrorDef(
         ConnInitException,
-        "Source path '{path}' ends in the compression extension '{codec}', so it "
-        "names compressed files: set include_compressed=True to read them.",
+        "Source path '{path}' ends in the compression or archive extension "
+        "'{codec}', so it names compressed files: set include_compressed=True to "
+        "read them.",
     )  # validate_src_compressed
+    FILE_COMMON_37 = ErrorDef(
+        FileRuntimeException,
+        "The archive '{path}' must hold exactly one file, but {reason}.",
+    )  # _archives
+    FILE_COMMON_38 = ErrorDef(
+        FileRuntimeException,
+        "The file '{path}' has the extension '{inner}' inside '{outer}': only one "
+        "compression or archive extension is read.",
+    )  # _source.read

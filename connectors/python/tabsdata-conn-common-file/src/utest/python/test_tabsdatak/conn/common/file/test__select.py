@@ -77,7 +77,10 @@ def test_compressed_files_are_taken_only_when_asked_for(
     assert sorted(name for name in NAMES if accept(name)) == sorted(taken)
 
 
-@pytest.mark.parametrize("path", ["data/*.json.gz", "data/a.csv.zst", "b.xz#2"])
+@pytest.mark.parametrize(
+    "path",
+    ["data/*.json.gz", "data/a.csv.zst", "b.xz#2", "data/*.csv.zip", "a.csv.tar"],
+)
 def test_a_path_naming_a_codec_needs_compressed_files_asked_for(path):
     with pytest.raises(ConnInitException, match="include_compressed=True"):
         _validation.validate_src_compressed(False, [path])

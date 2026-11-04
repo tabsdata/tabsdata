@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import errno
 import io
 
 from tabsdatak.common._storage.transfer import StorageLocation
@@ -48,12 +49,17 @@ class Ranged:
             case _:
                 raise ValueError(f"The seek origin {whence} is unknown")
         if position < 0:
-            raise ValueError(f"The seek position {position} is before the start")
+            raise OSError(
+                errno.EINVAL, f"The seek position {position} is before the start"
+            )
         self.position = position
         return position
 
     def tell(self) -> int:
         return self.position
+
+    def seekable(self) -> bool:
+        return True
 
     def close(self) -> None:
         self.cached = b""

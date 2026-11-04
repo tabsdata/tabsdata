@@ -295,12 +295,12 @@ def validate_src_format(fmt: Any, paths: Any, value: dict | None) -> None:
 
 
 def validate_src_compressed(include_compressed: Any, paths: Any) -> None:
-    from tabsdatak.conn.common.file._select import codec
+    from tabsdatak.conn.common.file._select import wrapper
 
     if include_compressed:
         return
     for path in paths or []:
-        found = codec(str(path).partition("#")[0])
+        found = wrapper(str(path).partition("#")[0])
         if found is not None:
             raise FileCommonErrorCode.FILE_COMMON_36.exception(path=path, codec=found)
 
