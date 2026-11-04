@@ -54,8 +54,11 @@ from tabsdatak.server._tdrunner.function.commands.runners.manifest_trigger.optio
 
 logger = logging.getLogger(__name__)
 
-# ToDo(PW5): on, or removed, once the server tells whether a batch's writer
-# is gone.
+# ToDo: the sweep of abandoned batch folders stays off: while two instances of
+# one stream can run at once, one's open batch looks abandoned to the other's
+# trigger. Turn it on once batch folders are keyed by their writer and the
+# server tells, from an observed ended or absent workload, that the writer is
+# gone.
 SWEEP_ABANDONED_BATCHES = False
 
 
