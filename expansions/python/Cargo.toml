@@ -116,6 +116,12 @@ version = "60.1.0"
 [workspace.dependencies.base64]
 version = "0.23.1"
 
+[workspace.dependencies.bytes]
+version = "1.12.1"
+
+[workspace.dependencies.calamine]
+version = "0.38.0"
+
 [workspace.dependencies.chrono]
 version = "0.4.45"
 
@@ -146,6 +152,9 @@ default-features = false
 [workspace.dependencies.ratatui-image]
 version = "11.1.0"
 default-features = false
+
+[workspace.dependencies.thiserror]
+version = "2.0.21"
 
 [workspace.dependencies.toml]
 version = "1.1.8"

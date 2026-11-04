@@ -3,6 +3,7 @@
 //
 
 pub mod avro;
+pub mod excel;
 
 use arrow::ffi_stream::FFI_ArrowArrayStream;
 use arrow::record_batch::RecordBatchReader;
@@ -11,13 +12,15 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyCapsule};
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 use std::ffi::CStr;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::sync::Mutex;
 
 const ARROW_STREAM_CAPSULE: &CStr = c"arrow_array_stream";
 const READ_METHOD: &str = "read";
 const CLOSE_METHOD: &str = "close";
+const SEEK_METHOD: &str = "seek";
 const BUFFER_SIZE: usize = 8 * 1024 * 1024;
+const SEEKABLE_BUFFER_SIZE: usize = 64 * 1024;
 
 pub struct PyReadable {
     source: Py<PyAny>,
@@ -26,6 +29,10 @@ pub struct PyReadable {
 impl PyReadable {
     pub fn buffered(source: Py<PyAny>) -> BufReader<Self> {
         BufReader::with_capacity(BUFFER_SIZE, Self { source })
+    }
+
+    pub fn seekable(source: Py<PyAny>) -> BufReader<Self> {
+        BufReader::with_capacity(SEEKABLE_BUFFER_SIZE, Self { source })
     }
 }
 
@@ -43,6 +50,22 @@ impl Read for PyReadable {
             let length = bytes.len().min(buffer.len());
             buffer[..length].copy_from_slice(&bytes[..length]);
             Ok(length)
+        })
+    }
+}
+
+impl Seek for PyReadable {
+    fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
+        let (offset, whence) = match position {
+            SeekFrom::Start(offset) => (i64::try_from(offset).map_err(std::io::Error::other)?, 0),
+            SeekFrom::Current(offset) => (offset, 1),
+            SeekFrom::End(offset) => (offset, 2),
+        };
+        Python::attach(|py| {
+            self.source
+                .call_method1(py, SEEK_METHOD, (offset, whence))
+                .and_then(|position| position.extract::<u64>(py))
+                .map_err(std::io::Error::other)
         })
     }
 }

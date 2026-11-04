@@ -124,3 +124,38 @@ def test_listed_times_are_instants(tmp_path):
     (tmp_path / "a.csv").write_text("x", encoding="utf-8")
     (listed,) = FileStore(tmp_path.as_uri()).listed("")
     assert abs(listed.last_modified - datetime.now(timezone.utc)).total_seconds() < 60
+
+
+def ranged_reads(store: FileStore) -> None:
+    data = bytes(range(256)) * 40
+    obstore.put(store.store(), "r.bin", data)
+    ranged = store.ranged("r.bin")
+    ranged.block = 1000
+    assert ranged.read(10) == data[:10]
+    assert ranged.seek(-5, io.SEEK_END) == len(data) - 5
+    assert ranged.read() == data[-5:]
+    assert ranged.read(3) == b""
+    assert ranged.seek(995) == 995
+    assert ranged.read(1010) == data[995:2005]
+    assert ranged.seek(-1005, io.SEEK_CUR) == 1000
+    assert ranged.tell() == 1000
+    assert ranged.read(-1) == data[1000:]
+    with pytest.raises(ValueError, match="before the start"):
+        ranged.seek(-1)
+    ranged.close()
+
+
+def test_a_ranged_reader_reads_any_part_of_a_local_file(tmp_path):
+    ranged_reads(FileStore(tmp_path.as_uri()))
+
+
+@s3local_domain("s3local")
+def test_a_ranged_reader_reads_any_part_of_an_s3local_object(
+    domain_s3local: S3LocalDomain,
+):
+    root = f"{domain_s3local.uri.rstrip('/')}/ranged-{uuid.uuid4().hex}"
+    store = FileStore(root, dict(domain_s3local.storage_options))
+    try:
+        ranged_reads(store)
+    finally:
+        store.delete(["r.bin"])

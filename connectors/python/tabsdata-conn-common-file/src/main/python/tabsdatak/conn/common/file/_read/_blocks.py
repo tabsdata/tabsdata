@@ -18,6 +18,10 @@ class Readable(Protocol):
     def read(self, size: int = ..., /) -> bytes: ...
 
 
+class Seekable(Readable, Protocol):
+    def seek(self, offset: int, whence: int = ..., /) -> int: ...
+
+
 def close(stream: Readable) -> None:
     closer = getattr(stream, "close", None)
     if closer is not None:

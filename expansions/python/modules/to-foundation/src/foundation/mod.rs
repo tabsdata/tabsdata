@@ -69,6 +69,7 @@ fn _foundation(module: &Bound<'_, PyModule>) -> PyResult<()> {
     let readers_module = register_py_module(READERS_MODULE_NAME, &root_module, py)?;
 
     readers_module.add_function(wrap_pyfunction!(readers::avro::avro, &readers_module)?)?;
+    readers_module.add_function(wrap_pyfunction!(readers::excel::excel, &readers_module)?)?;
 
     readers_module.add_class::<readers::ArrowStream>()?;
 

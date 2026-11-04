@@ -18,6 +18,7 @@ from typing import Any, Protocol
 from tabsdatak.conn.common.file._read._avro import Avro
 from tabsdatak.conn.common.file._read._blocks import BLOCK_SIZE, Readable
 from tabsdatak.conn.common.file._read._csv import AutoCsv
+from tabsdatak.conn.common.file._read._excel import Excel
 from tabsdatak.conn.common.file._read._log import Log
 from tabsdatak.conn.common.file._read._ndjson import AutoNdjson
 from tabsdatak.spi import LazyFrameInput
@@ -30,6 +31,7 @@ class Inference(Enum):
 class Format(Enum):
     AVRO = "avro"
     CSV = "csv"
+    EXCEL = "excel"
     LOG = "log"
     NDJSON = "ndjson"
 
@@ -53,6 +55,8 @@ def policy(
             return Avro()
         case Format.CSV:
             return AutoCsv(options, block_size=block_size)
+        case Format.EXCEL:
+            return Excel(options)
         case Format.LOG:
             return Log(name, block_size=block_size)
         case Format.NDJSON:

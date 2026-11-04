@@ -10,6 +10,7 @@ import typing
 __all__ = [
     "ArrowStream",
     "avro",
+    "excel",
 ]
 
 @typing.final
@@ -17,4 +18,6 @@ class ArrowStream:
     def __arrow_c_stream__(self, requested_schema: typing.Optional[typing.Any] = None) -> typing.Any: ...
 
 def avro(source: typing.Any, batch_rows: builtins.int) -> ArrowStream: ...
+
+def excel(source: typing.Any, sheet: builtins.int, has_header: builtins.bool, batch_rows: builtins.int) -> ArrowStream: ...
 
