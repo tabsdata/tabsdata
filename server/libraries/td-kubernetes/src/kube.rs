@@ -5,5 +5,6 @@
 pub mod api;
 pub mod context;
 pub mod kubeconfig;
+pub mod platform;
 
 pub use context::KubeContext;

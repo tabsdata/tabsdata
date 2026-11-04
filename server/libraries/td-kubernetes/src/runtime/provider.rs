@@ -393,6 +393,9 @@ pub trait Provider: Send + Sync {
         let client = build_kube_client(&config)?;
         Ok(KubeContext::new(Arc::new(client), namespace))
     }
+    async fn ensure_platform(&self) -> CommandResult {
+        Ok(())
+    }
 
     fn system_values(&self) -> CommandResult<SystemValues>;
     fn ensure_executable_paths_fit(

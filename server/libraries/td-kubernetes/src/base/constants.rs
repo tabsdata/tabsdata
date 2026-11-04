@@ -536,6 +536,7 @@ pub const KUBE_SPEC_FIELD: &str = "spec";
 pub const KUBE_SPEC_FIELD_SUSPEND: &str = "suspend";
 pub const KUBE_SPEC_FIELD_PAUSED: &str = "paused";
 
+pub const HTTP_STATUS_UNAUTHORIZED: u16 = 401;
 pub const HTTP_STATUS_FORBIDDEN: u16 = 403;
 pub const HTTP_STATUS_NOT_FOUND: u16 = 404;
 pub const HTTP_STATUS_CONFLICT: u16 = 409;

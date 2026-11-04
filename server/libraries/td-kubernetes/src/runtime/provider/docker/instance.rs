@@ -2,8 +2,6 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use std::sync::Arc;
-
 use indicatif::MultiProgress;
 use std::path::PathBuf;
 
@@ -13,12 +11,12 @@ use crate::client::registry::InstanceSettings;
 use crate::core::system::exit::CommandResult;
 use crate::kube::api::entity::pod::list_pods;
 use crate::kube::context::KubeContext;
+use crate::kube::platform::PlatformGate;
 use crate::runtime::instance::launcher::{start_workload, stop_workload};
 use crate::runtime::instance::ports::apply_ports;
 use crate::runtime::instance::profile::{parse_from_configmaps, read_family_configmaps};
 use crate::runtime::provider::docker::system_values_for;
 use crate::runtime::provider::{ClusterProvider, Instance};
-use crate::runtime::reporting::build_kube_client;
 
 use crate::base::constants::{
     CONFIGMAP_TABSDATA_MANIFEST, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY,
@@ -30,21 +28,21 @@ use crate::runtime::instance::manifest::MANIFEST_FILE;
 
 pub struct DockerInstance {
     config: Config,
+    gate: PlatformGate,
     folder: PathBuf,
 }
 
 impl DockerInstance {
-    pub fn new(config: Config, folder: impl Into<PathBuf>) -> Self {
+    pub fn new(config: Config, gate: PlatformGate, folder: impl Into<PathBuf>) -> Self {
         Self {
             config,
+            gate,
             folder: folder.into(),
         }
     }
 
     async fn kube_context(&self) -> CommandResult<KubeContext> {
-        let namespace = self.config.default_namespace.clone();
-        let client = build_kube_client(&self.config)?;
-        Ok(KubeContext::new(Arc::new(client), namespace))
+        Ok(self.gate.kube_context(&self.config).await?)
     }
 }
 

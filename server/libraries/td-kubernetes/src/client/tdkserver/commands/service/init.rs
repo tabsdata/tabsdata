@@ -243,6 +243,7 @@ pub async fn init_instance(
             preview::init_cluster_service(&built.view());
         }
     }
+    built.ensure_platform().await?;
     if !confirm(yes.value, "Proceed with the initialization?")? {
         info!("Operation cancelled.");
         return abort(Cancelled);

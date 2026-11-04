@@ -34,9 +34,11 @@ use crate::core::system::exit::{CommandResult, abort_with};
 use crate::kube::api::entity::configmap::exists_configmap;
 use crate::kube::api::entity::namespace::ensure_namespace_exists;
 use crate::kube::api::support::cluster::ensure_cluster_reachable;
+use crate::kube::context::KubeContext;
 use crate::kube::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_current_context, resolve_kubefile,
 };
+use crate::kube::platform::PlatformGate;
 use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
 use crate::runtime::instance::staging::promote_staged_profile;
@@ -56,6 +58,7 @@ pub struct CloudKubernetes {
     context: String,
     cluster_name: String,
     config: Config,
+    gate: PlatformGate,
     cluster: CloudCluster,
     instance: CloudInstance,
     name: String,
@@ -156,10 +159,12 @@ impl CloudKubernetes {
             .into());
         }
 
+        let gate = PlatformGate::new(provider, context.clone());
         let cluster = CloudCluster::new(config.clone());
         let cloud_instance = CloudInstance::new(
             provider,
             config.clone(),
+            gate.clone(),
             folder.clone(),
             cluster_name.clone(),
         );
@@ -170,6 +175,7 @@ impl CloudKubernetes {
             context,
             cluster_name,
             config,
+            gate,
             cluster,
             instance: cloud_instance,
             name,
@@ -224,6 +230,15 @@ impl Provider for CloudKubernetes {
 
     async fn kube_config(&self) -> CommandResult<Config> {
         Ok(self.config.clone())
+    }
+
+    async fn kube_context(&self) -> CommandResult<KubeContext> {
+        Ok(self.gate.kube_context(&self.config).await?)
+    }
+
+    async fn ensure_platform(&self) -> CommandResult {
+        self.gate.client(&self.config).await?;
+        Ok(())
     }
 
     fn system_values(&self) -> CommandResult<SystemValues> {

@@ -12,4 +12,6 @@ pub enum KubeClientError {
     ContextSerializeFailed(String) = 5001,
     #[error("Could not load in-cluster Kubernetes config: {0}.")]
     InclusterConfigFailed(String) = 5002,
+    #[error("Could not authenticate with the Kubernetes cluster. {0}")]
+    AuthFailed(String) = 4000,
 }

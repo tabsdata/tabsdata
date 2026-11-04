@@ -257,7 +257,9 @@ pub struct ClusterArguments {
         required = false,
         display_order = 40,
         long_help = "Name of the kubeconfig context to use. \
-                     Valid only for the 'docker' provider. \
+                     Valid for every provider except 'kminus'. \
+                     The context must reach a cluster run by the platform of --provider, \
+                     as told by the provider ID of its nodes; a context of another platform is rejected. \
                      Mutually exclusive with --current. \
                      Composes with --kubeconfig."
     )]
@@ -270,7 +272,7 @@ pub struct ClusterArguments {
         value_parser = clap::value_parser!(PathBuf),
         display_order = 30,
         long_help = "Path to a kubeconfig file. \
-                     Valid only for the 'docker' provider. \
+                     Valid for every provider except 'kminus'. \
                      When unspecified, the file pointed to by the KUBECONFIG environment variable, or ~/.kube/config, is used. \
                      Composes with --context and --current."
     )]
@@ -283,7 +285,8 @@ pub struct ClusterArguments {
         default_value_t = false,
         display_order = 60,
         long_help = "Use the current-context entry of the kubeconfig file. \
-                     Valid only for the 'docker' provider. \
+                     Valid for every provider except 'kminus'. \
+                     As with --context, it must reach a cluster run by the platform of --provider. \
                      Mutually exclusive with --context. \
                      Composes with --kubeconfig."
     )]
@@ -295,7 +298,7 @@ pub struct ClusterArguments {
         required = false,
         display_order = 50,
         long_help = "Namespace for the instance. \
-                     Valid only for the 'docker' provider. \
+                     Valid for every provider except 'kminus'. \
                      Overrides the namespace defined in the kubeconfig context. \
                      When neither is set, the kubernetes default namespace is used."
     )]

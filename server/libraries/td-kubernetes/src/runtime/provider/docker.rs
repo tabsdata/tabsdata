@@ -35,9 +35,11 @@ use crate::core::system::exit::{CommandResult, abort_with};
 use crate::kube::api::entity::configmap::exists_configmap;
 use crate::kube::api::entity::namespace::ensure_namespace_exists;
 use crate::kube::api::support::cluster::ensure_cluster_reachable;
+use crate::kube::context::KubeContext;
 use crate::kube::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_current_context, resolve_kubefile,
 };
+use crate::kube::platform::PlatformGate;
 use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
 use crate::runtime::instance::ports::{
@@ -59,6 +61,7 @@ pub struct DockerProvider {
     context: String,
     cluster_name: String,
     config: Config,
+    gate: PlatformGate,
     cluster: DockerCluster,
     instance: DockerInstance,
     inputs: DockerInputs,
@@ -168,14 +171,16 @@ impl DockerProvider {
             .into());
         }
 
+        let gate = PlatformGate::new(ClusterProvider::Docker, context.clone());
         let cluster = DockerCluster::new(config.clone());
-        let docker_instance = DockerInstance::new(config.clone(), folder.clone());
+        let docker_instance = DockerInstance::new(config.clone(), gate.clone(), folder.clone());
 
         Ok(Self {
             kubefile,
             context,
             cluster_name,
             config,
+            gate,
             cluster,
             instance: docker_instance,
             inputs,
@@ -217,6 +222,15 @@ impl Provider for DockerProvider {
 
     async fn kube_config(&self) -> CommandResult<kube::Config> {
         Ok(self.config.clone())
+    }
+
+    async fn kube_context(&self) -> CommandResult<KubeContext> {
+        Ok(self.gate.kube_context(&self.config).await?)
+    }
+
+    async fn ensure_platform(&self) -> CommandResult {
+        self.gate.client(&self.config).await?;
+        Ok(())
     }
 
     fn system_values(&self) -> CommandResult<SystemValues> {
