@@ -16,6 +16,9 @@ import polars as pl
 import yaml
 
 from tabsdatak.common._archive.bundle import build_bundle
+from tabsdatak.server._tdrunner.function._commons.manifests.input import (
+    SINGLE_VERSION_POS,
+)
 from tabsdatak.server._tdrunner.function.commands.gathering import (
     fetch_bundle,
     plan_input,
@@ -161,7 +164,7 @@ class Driver:
             "table_version_id": f"TV-{name}",
             "input_idx": index,
             "table_pos": position,
-            "version_pos": 0 if version is None else version,
+            "version_pos": SINGLE_VERSION_POS if version is None else version,
             "execution_id": 2,
             "transaction_id": 3,
             "triggered_on": 1780000000100,
@@ -183,7 +186,7 @@ class Driver:
                 "table_version_id": f"TV-{state.table}",
                 "input_idx": 0,
                 "table_pos": 0,
-                "version_pos": 0,
+                "version_pos": SINGLE_VERSION_POS,
                 "location": location,
             }
         }
