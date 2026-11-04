@@ -4,10 +4,15 @@
 
 from __future__ import annotations
 
+import io
+import uuid
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import obstore
+import polars as pl
 import pytest
+from tabsdatax.itest.fixture.backends.gcslocal import GcsLocalDomain, gcslocal_domain
 
 from tabsdatak.api import Secret
 
@@ -20,6 +25,8 @@ from tabsdatak.common._transporter.invoker import transporter1
 from tabsdatak.conn.common.types import GCPJson
 from tabsdatak.conn.gcs import GCSDestConn, GCSSrcConn, GCSDest, GCSSrc
 from tabsdatak.conn.gcs._explorer import GCSConnectionExplorer
+from tabsdatak.conn.common.file._store import FileStore
+from tabsdatak.conn.common.file.constants import FILE_META_PATH
 from tabsdatak.spi import TableFileInput
 
 # noinspection PyProtectedMember
@@ -115,32 +122,53 @@ def _dest_ctx(work: Path):
     return ctx
 
 
-def test_src_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_path):
-    captured: dict = {}
+def test_a_connection_maps_to_a_store_of_its_bucket_prefix_and_key():
+    conn = _src_conn(
+        base_path="/landing/raw",
+        conn_cfg={"obstore.allow_http": True},
+    )
+    store = plugin.file_store(conn)
+    assert store.root == "gs://my-bucket/landing/raw"
+    assert store.options == {
+        "google_service_account_key": '{"type":"service_account"}',
+        "google_allow_http": "true",
+    }
+    assert plugin.file_store(_src_conn()).root == "gs://my-bucket"
 
-    def fake(*, ctx, cfg, build_location, run_env, errors):
-        captured.update(
-            ctx=ctx,
-            cfg=cfg,
-            build_location=build_location,
-            run_env=run_env,
-            errors=errors,
+
+@gcslocal_domain("gcslocal")
+def test_src_plugin_reads_gcslocal_objects_lazily_naming_their_uri(
+    domain_gcslocal: GcsLocalDomain, tmp_path
+):
+    prefix = f"plugin-{uuid.uuid4().hex}"
+    options = dict(domain_gcslocal.storage_options)
+    root = f"{domain_gcslocal.uri.rstrip('/')}/{prefix}"
+    store = FileStore(root, options)
+    for name in ("a.parquet", "b.parquet"):
+        content = io.BytesIO()
+        pl.DataFrame({"name": [name]}).write_parquet(content)
+        obstore.put(store.store(), f"in/{name}", content.getvalue())
+    conn = GCSSrcConn(
+        bucket=root.removeprefix("gs://").partition("/")[0],
+        credentials=GCPJson(json=Secret(options["google_service_account_key"])),
+        base_path="/" + root.removeprefix("gs://").partition("/")[2],
+        conn_cfg={f"obstore.{key}": value for key, value in options.items()},
+    )
+    try:
+        (slot,) = plugin.GCSSrcPlugin().read_in(
+            _src_ctx(tmp_path), conn, GCSSrc(paths=["in/*.parquet"])
         )
-        # ``import_files`` returns the metadata-carrying inputs itself;
-        # the plugin hands them straight back.
-        return [[TableFileInput(file=Path(tmp_path / "ok.parquet"))]]
-
-    monkeypatch.setattr(_file_plugin, "import_files", fake)
-
-    conn = _src_conn()
-    src = GCSSrc(paths=["a/b.parquet"])
-    out = plugin.GCSSrcPlugin().read_in(_src_ctx(tmp_path), conn, src)
-
-    assert out == [[TableFileInput(file=Path(tmp_path / "ok.parquet"))]]
-    assert captured["build_location"] is plugin.build_location
-    assert captured["run_env"] is plugin.run_env
-    assert captured["errors"] is plugin.ERRORS
-    assert captured["cfg"].paths == ["a/b.parquet"]
+        tables = list(slot)
+        assert [table.frame.collect()["name"].item() for table in tables] == [
+            "a.parquet",
+            "b.parquet",
+        ]
+        assert [table.metadata.columns[FILE_META_PATH] for table in tables] == [
+            f"{root}/in/a.parquet",
+            f"{root}/in/b.parquet",
+        ]
+    finally:
+        store.delete(["in/a.parquet", "in/b.parquet"])
 
 
 def test_dest_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_path):

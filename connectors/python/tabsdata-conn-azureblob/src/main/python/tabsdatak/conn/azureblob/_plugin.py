@@ -4,8 +4,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
+from tabsdatak.common._storage.transfer import (
+    AZURE_STORAGE_ACCOUNT_KEY_OPTION,
+    AZURE_STORAGE_ACCOUNT_NAME_OPTION,
+)
 from tabsdatak.common._transporter.handler.handler import TransporterHandler
 from tabsdatak.conn.azureblob import (
     AzureBlobDest,
@@ -15,18 +20,20 @@ from tabsdatak.conn.azureblob import (
 )
 from tabsdatak.conn.azureblob._explorer import AzureBlobConnectionExplorer
 from tabsdatak.conn.azureblob.error import AzureBlobErrorCode
-from tabsdatak.conn.common.file import _plugin
+from tabsdatak.conn.common.file import _plugin, _source
+from tabsdatak.conn.common.file._store import FileStore, forwarded
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import AzureAccountKey, _convert, cloud_full_path
+from tabsdatak.error import ApiException
 from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
+    LazyFrameInput,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
-    TableFileInput,
     TableFileSpec,
     TableMode,
 )
@@ -76,6 +83,21 @@ def run_env(conn: _AnyAzureBlobConn, handler: TransporterHandler) -> dict[str, s
     }
 
 
+def file_store(conn: AzureBlobSrcConn) -> FileStore:
+    container = conn._container()
+    prefix = conn._base_path().strip("/")
+    root = f"az://{container}/{prefix}" if prefix else f"az://{container}"
+    try:
+        account = credentials(conn)
+        options = {
+            AZURE_STORAGE_ACCOUNT_NAME_OPTION: _convert(account.account_name, str),
+            AZURE_STORAGE_ACCOUNT_KEY_OPTION: _convert(account.account_key, str),
+        }
+    except ApiException as e:
+        raise ERRORS.cred_resolution.exception(cause=e, reason=str(e))
+    return FileStore(root, {**options, **forwarded(root, conn.conn_cfg)})
+
+
 # --- Error-code bundle --------------------------------------------
 
 
@@ -97,12 +119,12 @@ class AzureBlobSrcPlugin(SrcPlugin[AzureBlobSrcConn, AzureBlobSrc]):
         ctx: SrcPluginCtx,
         conn: AzureBlobSrcConn,
         src: AzureBlobSrc,
-    ) -> list[list[TableFileInput]]:
-        return _plugin.import_files(
+    ) -> list[Iterable[LazyFrameInput]]:
+        return _source.read_files(
             ctx=ctx,
             cfg=_plugin.ReaderConf.from_src(conn, src),
-            build_location=build_location,
-            run_env=run_env,
+            store=file_store(conn),
+            origin=lambda store, path: store.uri(path),
             errors=ERRORS,
         )
 

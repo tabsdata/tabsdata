@@ -4,24 +4,28 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
+from tabsdatak.common._storage.transfer import GOOGLE_SERVICE_ACCOUNT_KEY_OPTION
 from tabsdatak.common._transporter.handler.handler import TransporterHandler
-from tabsdatak.conn.common.file import _plugin
+from tabsdatak.conn.common.file import _plugin, _source
+from tabsdatak.conn.common.file._store import FileStore, forwarded
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import GCPJson, _convert, cloud_full_path
 from tabsdatak.conn.gcs import GCSDest, GCSDestConn, GCSSrc, GCSSrcConn
 from tabsdatak.conn.gcs._explorer import GCSConnectionExplorer
 from tabsdatak.conn.gcs.error import GCSErrorCode
+from tabsdatak.error import ApiException
 from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
+    LazyFrameInput,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
-    TableFileInput,
     TableFileSpec,
     TableMode,
 )
@@ -68,6 +72,17 @@ def run_env(conn: _AnyGCSConn, handler: TransporterHandler) -> dict[str, str]:
     }
 
 
+def file_store(conn: GCSSrcConn) -> FileStore:
+    prefix = conn._base_path().strip("/")
+    root = f"gs://{conn._bucket()}/{prefix}" if prefix else f"gs://{conn._bucket()}"
+    try:
+        key = _convert(credentials(conn).json, str)
+    except ApiException as e:
+        raise ERRORS.cred_resolution.exception(cause=e, reason=str(e))
+    options = {GOOGLE_SERVICE_ACCOUNT_KEY_OPTION: key}
+    return FileStore(root, {**options, **forwarded(root, conn.conn_cfg)})
+
+
 # --- Error-code bundle --------------------------------------------
 
 
@@ -89,12 +104,12 @@ class GCSSrcPlugin(SrcPlugin[GCSSrcConn, GCSSrc]):
         ctx: SrcPluginCtx,
         conn: GCSSrcConn,
         src: GCSSrc,
-    ) -> list[list[TableFileInput]]:
-        return _plugin.import_files(
+    ) -> list[Iterable[LazyFrameInput]]:
+        return _source.read_files(
             ctx=ctx,
             cfg=_plugin.ReaderConf.from_src(conn, src),
-            build_location=build_location,
-            run_env=run_env,
+            store=file_store(conn),
+            origin=lambda store, path: store.uri(path),
             errors=ERRORS,
         )
 

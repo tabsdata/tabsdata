@@ -30,7 +30,8 @@ Examples:
                     input_tables=["mycoll/cities"])
         def publish(cities: TableFrameSpec) -> TableFrameSpec:
             return cities
-File transport goes through the shared `td_transporter` binary.
+Sources read their files straight from storage; destinations write them through
+the shared `td_transporter` binary.
 """
 
 from __future__ import annotations
@@ -232,8 +233,7 @@ class AzureBlobSrc(Src):
             * `.zlib`: zlib.
             * `.zst`, `.zstd`: Zstandard.
 
-            Defaults to `False`. Reading compressed files is not
-            available yet.
+            Defaults to `False`.
     """
 
     paths: SrcPathsSpec
