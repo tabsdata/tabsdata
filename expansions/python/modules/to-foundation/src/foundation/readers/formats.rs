@@ -3,4 +3,5 @@
 //
 
 pub mod avro;
+pub mod csv;
 pub mod excel;

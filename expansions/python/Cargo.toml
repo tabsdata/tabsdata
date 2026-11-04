@@ -137,6 +137,9 @@ version = "0.4.45"
 [workspace.dependencies.flate2]
 version = "1.1.10"
 
+[workspace.dependencies.csv-core]
+version = "0.1.13"
+
 [workspace.dependencies.image]
 version = "0.25.10"
 default-features = false

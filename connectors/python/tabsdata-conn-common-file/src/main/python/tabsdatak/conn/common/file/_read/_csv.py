@@ -18,11 +18,12 @@ from typing import Any
 import polars as pl
 import pyarrow as pa
 
+from tabsdata.expansions.foundation.readers import CsvCutter  # noqa: TID251
 from tabsdatak.conn.common.file._read._blocks import (
     BLOCK_SIZE,
     Readable,
-    blocks,
     close,
+    records,
 )
 from tabsdatak.conn.common.file._read._types import Fold
 from tabsdatak.spi import (
@@ -140,14 +141,13 @@ class AutoCsv:
         return f"{names}{eol}".encode()
 
     def records(self, stream: Readable) -> Iterator[bytes]:
-        quote = self.options.get(QUOTE_CHAR, DEFAULT_QUOTE)
-        eol = self.options.get(EOL_CHAR, DEFAULT_EOL)
-        return blocks(
-            stream,
-            size=self.block_size,
-            eol=eol.encode(),
-            quote=None if quote is None else quote.encode(),
+        cutter = CsvCutter(
+            self.options.get(SEPARATOR, DEFAULT_SEPARATOR),
+            self.options.get(QUOTE_CHAR, DEFAULT_QUOTE),
+            self.options.get(EOL_CHAR, DEFAULT_EOL),
+            self.options.get(COMMENT_PREFIX),
         )
+        return (block for block, _ in records(stream, cutter, size=self.block_size))
 
     def landed(
         self,

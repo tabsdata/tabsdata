@@ -9,6 +9,7 @@ import builtins
 import typing
 __all__ = [
     "ArrowStream",
+    "CsvCutter",
     "Decompressed",
     "avro",
     "decompressed",
@@ -18,6 +19,11 @@ __all__ = [
 @typing.final
 class ArrowStream:
     def __arrow_c_stream__(self, requested_schema: typing.Optional[typing.Any] = None) -> typing.Any: ...
+
+@typing.final
+class CsvCutter:
+    def __new__(cls, separator: builtins.str, quote: typing.Optional[builtins.str], terminator: builtins.str, comment: typing.Optional[builtins.str] = None) -> CsvCutter: ...
+    def cut(self, data: bytes, last: builtins.bool) -> tuple[builtins.int, builtins.int]: ...
 
 @typing.final
 class Decompressed:

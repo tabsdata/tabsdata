@@ -75,6 +75,7 @@ bytes = { workspace = true }
 bzip2 = { workspace = true }
 calamine = { workspace = true }
 chrono = { workspace = true }
+csv-core = { workspace = true }
 flate2 = { workspace = true }
 image = { workspace = true, features = ["png"] }
 liblzma = { workspace = true }

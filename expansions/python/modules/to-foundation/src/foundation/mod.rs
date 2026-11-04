@@ -84,6 +84,7 @@ fn _foundation(module: &Bound<'_, PyModule>) -> PyResult<()> {
     readers_module.add_class::<readers::codecs::Decompressed>()?;
 
     readers_module.add_class::<readers::ArrowStream>()?;
+    readers_module.add_class::<readers::formats::csv::CsvCutter>()?;
 
     Ok(())
 }

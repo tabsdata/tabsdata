@@ -45,6 +45,16 @@ CSV_CASES = {
     "null values": (b"a,b\n1,NA\nNA,y\n", {"null_values": ["NA"]}),
     "no header": (b"1,x\n2,y\n3\n", {"has_header": False}),
     "header only": (b"a,b\n", {}),
+    "comment lines holding quotes": (
+        b'# it\'s "odd\na,b\n1,x\n# "\n2,"y\nz"\n',
+        {"comment_prefix": "#"},
+    ),
+    "comment prefix of several bytes": (
+        b"// head\na,b\n1,x\n/2,y\n",
+        {"comment_prefix": "//"},
+    ),
+    "custom end of line": (b"a,b|1,x|2,y|", {"eol_char": "|"}),
+    "quoting off": (b'a,b\n"1,x\n2,"y\n', {"quote_char": None}),
 }
 
 
@@ -73,6 +83,15 @@ def test_csv_rows_land_and_serve_as_polars_reads_the_whole_file(
 def test_a_csv_row_wider_than_the_header_fails_the_run(tmp_path, content, block_size):
     # Pins polars' behaviour until the schema widens to fit it (PW3, D-b).
     with pytest.raises(pl.exceptions.ComputeError, match="found more fields"):
+        land(read_csv(content, {}, block_size), tmp_path)
+
+
+@BLOCK_SIZES
+def test_a_quote_inside_an_unquoted_field_fails_as_polars_fails(tmp_path, block_size):
+    content = b'a,b\n5" pipe,10\n6,x\n'
+    with pytest.raises(pl.exceptions.ComputeError):
+        pl.read_csv(content, infer_schema=False)
+    with pytest.raises(pl.exceptions.ComputeError):
         land(read_csv(content, {}, block_size), tmp_path)
 
 
