@@ -192,6 +192,31 @@ def prompt_with_escape(message, default=None, hide_input=False):
     return result if result else default
 
 
+def _is_console(stream) -> bool:
+    """On Windows, ``isatty`` is also true of the ``NUL`` device, which only a
+    console mode check tells apart."""
+    try:
+        if stream is None or not stream.isatty():
+            return False
+        if sys.platform != "win32":
+            return True
+        import ctypes
+        import msvcrt
+
+        mode = ctypes.c_ulong()
+        handle = msvcrt.get_osfhandle(stream.fileno())
+        return bool(ctypes.windll.kernel32.GetConsoleMode(handle, ctypes.byref(mode)))
+    except (AttributeError, OSError, ValueError):
+        return False
+
+
+def _prompts_in_terminal() -> bool:
+    """On Windows, prompt_toolkit writes only to a console."""
+    return _is_console(sys.stdin) and (
+        sys.platform != "win32" or _is_console(sys.stdout)
+    )
+
+
 def _prompting_disabled_message(ctx: click.Context) -> str:
     """Why prompting is off, and how to turn it back on: the persisted
     ``tdk set --prompt false`` outlives the invocation, so it is named ahead of
@@ -252,9 +277,7 @@ def logical_prompt(
             hint = f"Pass {option}."
         raise TdkException("missing_argument", missing, hint=hint)
     try:
-        import sys
-
-        if sys.stdin.isatty():
+        if _prompts_in_terminal():
             return prompt_with_escape(
                 message, default=default_value, hide_input=hide_input
             )
