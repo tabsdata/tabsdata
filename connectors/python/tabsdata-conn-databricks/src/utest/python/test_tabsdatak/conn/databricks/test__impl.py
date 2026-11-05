@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pyarrow as pa
 import pytest
@@ -242,12 +242,7 @@ class TestExecuteQueryParameterBinding:
         response = MagicMock()
         response.status.state = StatementState.SUCCEEDED
         ws_client.statement_execution.execute_statement.return_value = response
-        with (
-            patch.object(_impl, "_chunk_links_iterator"),
-            patch.object(_impl, "_process_chunks"),
-            patch.object(_impl, "_ChunkWriter"),
-        ):
-            _impl.execute_query(ws_client, cfg, statement, tmp_path, 0)
+        _impl._statement(ws_client, cfg, statement)
         return ws_client.statement_execution.execute_statement.call_args.kwargs
 
     def test_binds_named_parameters_and_keeps_sql(self, tmp_path):
@@ -291,14 +286,7 @@ class TestExecuteQueryScoping:
         response = MagicMock()
         response.status.state = StatementState.SUCCEEDED
         ws_client.statement_execution.execute_statement.return_value = response
-        # Stub out the result-download machinery: this test only cares about
-        # the arguments handed to execute_statement.
-        with (
-            patch.object(_impl, "_chunk_links_iterator"),
-            patch.object(_impl, "_process_chunks"),
-            patch.object(_impl, "_ChunkWriter"),
-        ):
-            _impl.execute_query(ws_client, cfg, statement, tmp_path, 0)
+        _impl._statement(ws_client, cfg, statement)
         return ws_client.statement_execution.execute_statement.call_args.kwargs
 
     def test_passes_connection_catalog_and_schema(self, tmp_path):
@@ -373,7 +361,7 @@ class TestDatabricksTypeToArrow:
 
 
 # ---------------------------------------------------------------------------
-# execute_query -- zero-row result still materializes a typed parquet
+# execute_query -- a zero-row result is still a typed table
 # ---------------------------------------------------------------------------
 
 
@@ -401,19 +389,15 @@ class TestExecuteQueryEmptyResult:
         response.result = None
         response.manifest.schema.columns = columns
         ws_client.statement_execution.execute_statement.return_value = response
-        return _impl.execute_query(
-            ws_client, cfg, "SELECT id, name FROM t WHERE 1=0", tmp_path, 0
+        return list(
+            _impl.execute_query(ws_client, cfg, "SELECT id, name FROM t WHERE 1=0", 0)
         )
 
-    def test_zero_rows_writes_typed_empty_parquet(self, tmp_path):
-        import pyarrow.parquet as pq
-
-        out = self._run(
+    def test_zero_rows_yield_one_typed_empty_table(self, tmp_path):
+        [table] = self._run(
             tmp_path,
             [_col("LONG", name="id"), _col("STRING", name="name")],
         )
-        assert out.exists()
-        table = pq.read_table(out)
         assert table.num_rows == 0
         assert table.column_names == ["id", "name"]
         assert table.schema.field("id").type == pa.int64()
@@ -1103,3 +1087,119 @@ def test_append_narrows_even_with_no_watermark_to_ride(monkeypatch, tmp_path):
     schemas = _staged_schemas(monkeypatch)
     _impl.write_all_tables(_wm_cfg(watermark_column=None), [_ns_parquet(tmp_path)])
     assert schemas[0]["ts"] == pl.Datetime("us")
+
+
+# ---------------------------------------------------------------------------
+# _downloaded -- chunks in order, a bounded number ahead
+# ---------------------------------------------------------------------------
+
+
+def _link(index: int, url: str | None = None):
+    return SimpleNamespace(
+        chunk_index=index,
+        external_link=url or f"https://chunks/{index}",
+        next_chunk_index=None,
+    )
+
+
+def _finished(count: int):
+    return SimpleNamespace(
+        statement_id="stmt-1",
+        result=SimpleNamespace(external_links=[_link(i) for i in range(count)]),
+    )
+
+
+@pytest.mark.parametrize("threads", [1, 3])
+def test_chunks_come_in_order_whatever_finishes_first(monkeypatch, threads):
+    import time
+
+    def download(link, refresh):
+        time.sleep(0.01 * (5 - link.chunk_index))
+        return pa.table({"chunk": [link.chunk_index]})
+
+    monkeypatch.setattr(_impl, "_download_chunk", download)
+    tables = _impl._downloaded(MagicMock(), _finished(5), threads)
+    assert [table["chunk"][0].as_py() for table in tables] == [0, 1, 2, 3, 4]
+
+
+def test_downloads_run_at_most_the_thread_count_ahead(monkeypatch):
+    import threading
+
+    started: list[int] = []
+    lock = threading.Lock()
+
+    def download(link, refresh):
+        with lock:
+            started.append(link.chunk_index)
+        return pa.table({"chunk": [link.chunk_index]})
+
+    monkeypatch.setattr(_impl, "_download_chunk", download)
+    tables = _impl._downloaded(MagicMock(), _finished(10), 2)
+    for taken, _table in enumerate(tables, start=1):
+        assert len(started) <= taken + 2
+
+
+def test_a_failed_download_retries_with_a_fresh_link(monkeypatch):
+    import io
+
+    import pyarrow.ipc as ipc
+    import requests
+
+    sink = io.BytesIO()
+    with ipc.new_stream(sink, pa.schema([("id", pa.int64())])) as writer:
+        writer.write_table(pa.table({"id": [7]}))
+    payload = sink.getvalue()
+    asked: list[str] = []
+
+    class Response:
+        def __init__(self, url: str) -> None:
+            self.url = url
+            self.content = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc) -> None:
+            return None
+
+        def raise_for_status(self) -> None:
+            if self.url.endswith("expired"):
+                raise requests.HTTPError("403 Forbidden")
+
+    def get(url, **options):
+        asked.append(url)
+        return Response(url)
+
+    monkeypatch.setattr(requests, "get", get)
+    monkeypatch.setattr(_impl.time, "sleep", lambda seconds: None)
+    table = _impl._download_chunk(
+        _link(0, "https://chunks/expired"),
+        lambda link: _link(0, "https://chunks/fresh"),
+    )
+    assert table["id"].to_pylist() == [7]
+    assert asked == ["https://chunks/expired", "https://chunks/fresh"]
+
+
+def test_a_refreshed_link_is_the_one_for_the_same_chunk():
+    ws_client = MagicMock()
+    ws_client.statement_execution.get_statement_result_chunk_n.return_value = (
+        SimpleNamespace(external_links=[_link(3, "https://chunks/3-fresh")])
+    )
+    refresh = _impl._link_refresher(ws_client, "stmt-1")
+    assert refresh(_link(3)).external_link == "https://chunks/3-fresh"
+    ws_client.statement_execution.get_statement_result_chunk_n.assert_called_once_with(
+        "stmt-1", 3
+    )
+
+
+def test_queries_run_only_when_their_tables_are_taken(monkeypatch):
+    built: list = []
+    monkeypatch.setattr(
+        _impl, "_build_workspace_client", lambda conn: built.append(conn) or MagicMock()
+    )
+    cfg = _impl.DatabricksReadCfg(
+        conn=_src_conn(warehouse=None, warehouse_id="a1b2c3d4e5f60718"),
+        queries=["SELECT 1", "SELECT 2"],
+    )
+    assert len(_impl.read_all_queries(cfg)) == 2
+    assert built == []

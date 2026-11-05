@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 # noinspection PyProtectedMember
@@ -25,16 +25,19 @@ from tabsdatak.conn.databricks import (
 from tabsdatak.conn.databricks._explorer import DatabricksConnectionExplorer
 from tabsdatak.conn.databricks.error import (
     DatabricksErrorCode,
+    DatabricksRuntimeException,
     DatabricksValidateException,
 )
 from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
+    FrameMetadata,
+    LazyFrameInput,
+    MetadataSpec,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
-    TableFileInput,
     TableFileSpec,
     TableMode,
 )
@@ -182,14 +185,45 @@ def _unbound_bind(exc: BaseException) -> str | None:
     return f"'{found.group(1)}'" if found else "a parameter it does not name"
 
 
+def _inputs(
+    tables: Iterable[Any],
+    index: int,
+    metadata: FrameMetadata | None,
+    host: str,
+) -> Iterator[LazyFrameInput]:
+    import polars as pl
+
+    try:
+        for table in tables:
+            yield LazyFrameInput(pl.from_arrow(table).lazy(), metadata=metadata)
+    except (DatabricksValidateException, DatabricksRuntimeException):
+        raise
+    except Exception as e:  # noqa: BLE001 -- runtime wrapper
+        if _is_connection_error(e):
+            raise DatabricksErrorCode.DATABRICKS_5.exception(
+                cause=e,
+                host=host,
+            )
+        unbound = _unbound_bind(e)
+        if unbound is not None:
+            raise DatabricksErrorCode.DATABRICKS_12.exception(
+                cause=e,
+                parameter=unbound,
+            )
+        raise DatabricksErrorCode.DATABRICKS_6.exception(
+            cause=e,
+            query_index=index,
+        )
+
+
 class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrcConn, DatabricksSrc]):
     def read_in(
         self,
         ctx: SrcPluginCtx,
         conn: DatabricksSrcConn,
         src: DatabricksSrc,
-    ) -> list[list[TableFileInput]]:
-        from tabsdatak.conn.common.sql._metadata import to_sql_table_file_inputs
+    ) -> list[Iterable[LazyFrameInput]]:
+        from tabsdatak.conn.common.sql._metadata import sql_metadata
 
         # noinspection PyProtectedMember
         from tabsdatak.conn.databricks import _impl
@@ -208,38 +242,16 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrcConn, DatabricksSrc]):
             initial_values=_resolve_initial_values(ctx, src),
         )
         host = _convert(conn.host_url, str)
-        try:
-            parquet_paths = _impl.read_all_queries(read_cfg, ctx.work_dir)
-        except DatabricksValidateException:
-            raise  # adapter-side validation is already typed
-        except Exception as e:  # noqa: BLE001 -- runtime wrapper
-            if _is_connection_error(e):
-                raise DatabricksErrorCode.DATABRICKS_5.exception(
-                    cause=e,
-                    host=host,
-                )
-            unbound = _unbound_bind(e)
-            if unbound is not None:
-                raise DatabricksErrorCode.DATABRICKS_12.exception(
-                    cause=e,
-                    parameter=unbound,
-                )
-            # Query/download failure; we don't know which slot
-            # without cooperation from the adapter, so emit -1.
-            raise DatabricksErrorCode.DATABRICKS_6.exception(
-                cause=e,
-                query_index=-1,
-            )
-
-        # One parquet per query; SrcDef.table_mode is SINGLE. Each
-        # adapter-returned path becomes a ``TableFileInput`` carrying the
-        # query and the bind values it ran with as metadata.
-        return to_sql_table_file_inputs(
-            [[Path(p)] for p in parquet_paths],
-            read_cfg.queries,
-            read_cfg.initial_values,
-            drop_metadata=cfg.drop_metadata,
-        )
+        inputs: list[Iterable[LazyFrameInput]] = []
+        for index, (query, tables) in enumerate(
+            zip(read_cfg.queries, _impl.read_all_queries(read_cfg), strict=True)
+        ):
+            metadata = None
+            if not cfg.drop_metadata:
+                columns: MetadataSpec = {**sql_metadata(query, read_cfg.initial_values)}
+                metadata = FrameMetadata(columns=columns)
+            inputs.append(_inputs(tables, index, metadata, host))
+        return inputs
 
 
 class _DatabricksDestPlugin(DestPlugin[DatabricksDestConn, DatabricksDest]):

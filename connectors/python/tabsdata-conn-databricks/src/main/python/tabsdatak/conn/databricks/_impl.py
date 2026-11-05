@@ -21,12 +21,14 @@ metadata).
 from __future__ import annotations
 
 import io
+import itertools
 import logging
 import threading
 import time
 import uuid
-from collections.abc import Collection
-from concurrent.futures import ThreadPoolExecutor
+from collections import deque
+from collections.abc import Callable, Collection, Iterator
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -78,7 +80,6 @@ _DOWNLOAD_CONNECT_TIMEOUT_SECONDS = 10
 _DOWNLOAD_READ_TIMEOUT_SECONDS = 300
 _DOWNLOAD_RETRY_ATTEMPTS = 12
 _DOWNLOAD_RETRY_WAIT_SECONDS = 5
-_PARQUET_COMPRESSION = "snappy"
 # Delta's only timestamp width: it has no nanosecond type.
 _DELTA_TIME_UNIT = "us"
 _COPY_INTO_RETRY_ATTEMPTS = 6
@@ -342,10 +343,10 @@ def _chunk_links_iterator(ws_client, response):
     return next_link
 
 
-def _download_chunk(link):
+def _download_chunk(link, refresh: Callable[[Any], Any]) -> "pa.Table":
     """Fetch a single external-link payload and parse it as an
-    Arrow IPC stream. Retried with fixed-wait backoff (matches the
-    legacy ``tenacity`` configuration)."""
+    Arrow IPC stream. Retried with fixed-wait backoff; every retry asks
+    for a fresh link, as a presigned one expires."""
     import pyarrow.ipc as ipc
     import requests
 
@@ -374,8 +375,62 @@ def _download_chunk(link):
                     _DOWNLOAD_RETRY_WAIT_SECONDS,
                 )
                 time.sleep(_DOWNLOAD_RETRY_WAIT_SECONDS)
+                link = _refreshed(link, refresh)
     assert last_exc is not None
     raise last_exc
+
+
+def _refreshed(link, refresh: Callable[[Any], Any]):
+    try:
+        return refresh(link)
+    except Exception as e:  # noqa: BLE001 -- the stale link is retried
+        logger.warning("databricks: cannot refresh a chunk link (%s)", e)
+        return link
+
+
+def _link_refresher(ws_client, statement_id: str) -> Callable[[Any], Any]:
+    def refresh(link):
+        if link.chunk_index is None:
+            return link
+        payload = ws_client.statement_execution.get_statement_result_chunk_n(
+            statement_id,
+            link.chunk_index,
+        )
+        for fresh in payload.external_links or []:
+            if fresh.chunk_index == link.chunk_index:
+                return fresh
+        return link
+
+    return refresh
+
+
+def _downloaded(ws_client, response, threads: int) -> Iterator["pa.Table"]:
+    """Every chunk of a finished statement, in order, downloading at most
+    ``threads`` chunks ahead of the one handed over."""
+    next_link = _chunk_links_iterator(ws_client, response)
+    refresh = _link_refresher(ws_client, response.statement_id)
+
+    def links() -> Iterator[Any]:
+        while (item := next_link()) is not None:
+            yield item[1]
+
+    if threads <= 1:
+        for link in links():
+            yield _download_chunk(link, refresh)
+        return
+    upcoming = links()
+    executor = ThreadPoolExecutor(max_workers=threads)
+    pending: deque[Future] = deque()
+    try:
+        for link in itertools.islice(upcoming, threads):
+            pending.append(executor.submit(_download_chunk, link, refresh))
+        while pending:
+            table = pending.popleft().result()
+            for link in itertools.islice(upcoming, 1):
+                pending.append(executor.submit(_download_chunk, link, refresh))
+            yield table
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def _databricks_type_to_arrow(col) -> "pa.DataType":
@@ -443,81 +498,10 @@ def _arrow_schema_from_manifest(response) -> "pa.Schema | None":
     return pa.schema(fields)
 
 
-class _ChunkWriter:
-    """Drain pa.Tables to a single parquet file, preserving order
-    across worker threads.
-
-    ``empty_schema`` is the result-set schema derived from the query
-    manifest; when no chunks arrive (a 0-row result), :meth:`close`
-    uses it to still emit a valid empty (0-row) parquet so downstream
-    steps that read the file's schema don't hit a missing path."""
-
-    def __init__(self, path: Path, empty_schema: "pa.Schema | None" = None) -> None:
-        import pyarrow.parquet as pq
-
-        self._path = path
-        self._pq = pq
-        self._empty_schema = empty_schema
-        self._lock = threading.Lock()
-        self._pending: dict[int, "pa.Table"] = {}
-        self._next = 0
-        self._writer: pq.ParquetWriter | None = None
-        self.written = 0
-
-    def submit(self, chunk: int, table: "pa.Table") -> None:
-        with self._lock:
-            self._pending[chunk] = table
-            self._drain()
-
-    def _drain(self) -> None:
-        while self._next in self._pending:
-            table = self._pending.pop(self._next)
-            if self._writer is None:
-                self._writer = self._pq.ParquetWriter(
-                    str(self._path),
-                    table.schema,
-                    compression=_PARQUET_COMPRESSION,
-                )
-            self._writer.write_table(table)
-            self._next += 1
-            self.written += 1
-
-    def close(self) -> None:
-        with self._lock:
-            self._drain()
-            if self._writer is not None:
-                self._writer.close()
-                self._writer = None
-            elif self._empty_schema is not None:
-                # Zero chunks arrived: materialize a valid empty parquet with
-                # the real column schema so the slot's file always exists.
-                self._pq.ParquetWriter(
-                    str(self._path),
-                    self._empty_schema,
-                    compression=_PARQUET_COMPRESSION,
-                ).close()
-
-
-def _process_chunks(next_link, chunk_writer: _ChunkWriter) -> None:
-    while True:
-        item = next_link()
-        if item is None:
-            return
-        chunk, link = item
-        chunk_writer.submit(chunk, _download_chunk(link))
-
-
-def execute_query(
-    ws_client,
-    cfg: DatabricksReadCfg,
-    statement: str,
-    work_dir: Path,
-    index: int,
-) -> Path:
+def _statement(ws_client, cfg: DatabricksReadCfg, statement: str):
     """Execute one query via ``statement_execution.execute_statement``
-    (``Disposition.EXTERNAL_LINKS`` + ``Format.ARROW_STREAM``), poll
-    until completion, then download every result chunk and write them
-    in order to a single parquet file under ``work_dir``."""
+    (``Disposition.EXTERNAL_LINKS`` + ``Format.ARROW_STREAM``) and poll
+    until it completes."""
     from databricks.sdk.service.sql import (
         Disposition,
         Format,
@@ -527,9 +511,6 @@ def execute_query(
     # ``:name`` markers stay in the SQL; the resolved values bind natively as
     # typed parameters (no text interpolation).
     parameters = _statement_parameters(cfg.initial_values)
-
-    uuid_string = uuid.uuid4().hex[:16]
-    out_path = work_dir / f"intermediate_{index}_{uuid_string}.parquet"
 
     warehouse_id = _resolve_warehouse_id(ws_client, cfg.conn)
     # Run the query in the connection's catalog/schema so unqualified table
@@ -561,33 +542,31 @@ def execute_query(
             f"Databricks query failed with state"
             f" {response.status.state!r}: {response.status.error}"
         )
+    return response
 
-    # The result manifest carries the column schema even for a 0-row result;
-    # capture it so an empty result still materializes a valid typed parquet.
+
+def execute_query(
+    ws_client,
+    cfg: DatabricksReadCfg,
+    statement: str,
+    index: int,
+) -> Iterator["pa.Table"]:
+    """The result of one query as Arrow tables, one per result chunk and in
+    order; a result without rows is one empty table typed by the result
+    manifest."""
+    response = _statement(ws_client, cfg, statement)
+    chunks = 0
+    for table in _downloaded(ws_client, response, cfg.download_threads):
+        chunks += 1
+        yield table
+    if chunks:
+        return
     empty_schema = _arrow_schema_from_manifest(response)
-
-    next_link = _chunk_links_iterator(ws_client, response)
-    chunk_writer = _ChunkWriter(out_path, empty_schema)
-    try:
-        if cfg.download_threads <= 1:
-            _process_chunks(next_link, chunk_writer)
-        else:
-            with ThreadPoolExecutor(max_workers=cfg.download_threads) as executor:
-                futures = [
-                    executor.submit(_process_chunks, next_link, chunk_writer)
-                    for _ in range(cfg.download_threads)
-                ]
-                for future in futures:
-                    future.result()
-    finally:
-        chunk_writer.close()
-
-    if chunk_writer.written == 0 and empty_schema is None:
+    if empty_schema is None:
         from tabsdatak.conn.databricks.error import DatabricksErrorCode
 
         raise DatabricksErrorCode.DATABRICKS_11.exception(query_index=index)
-
-    return out_path
+    yield empty_schema.empty_table()
 
 
 # --- Destination: table FQN + volume upload + COPY INTO -------------
@@ -951,20 +930,35 @@ def delete_from_volume(ws_client, file_in_volume: str) -> None:
 # --- Top-level read / write orchestration ---------------------------
 
 
-def read_all_queries(cfg: DatabricksReadCfg, work_dir: Path) -> list[Path]:
-    """Execute every statement in ``cfg.queries`` against the
-    workspace and return the list of resulting parquet paths (one per
-    query, in order). The plugin wraps these into
-    ``list[list[TableFileInput]]`` for the SPI."""
-    logger.debug("databricks: establishing workspace client")
-    ws_client = _build_workspace_client(cfg.conn)
-    out: list[Path] = []
-    total = len(cfg.queries)
-    for index, statement in enumerate(cfg.queries):
+class _Reading:
+    def __init__(self, cfg: DatabricksReadCfg) -> None:
+        self.cfg = cfg
+        self.client = None
+
+    def workspace(self):
+        if self.client is None:
+            logger.debug("databricks: establishing workspace client")
+            self.client = _build_workspace_client(self.cfg.conn)
+        return self.client
+
+    def tables(self, index: int) -> Iterator["pa.Table"]:
+        total = len(self.cfg.queries)
         logger.info("databricks: reading query %d/%d", index + 1, total)
-        out.append(execute_query(ws_client, cfg, statement, work_dir, index))
+        yield from execute_query(
+            self.workspace(),
+            self.cfg,
+            self.cfg.queries[index],
+            index,
+        )
         logger.debug("databricks: finished query %d/%d", index + 1, total)
-    return out
+
+
+def read_all_queries(cfg: DatabricksReadCfg) -> list[Iterator["pa.Table"]]:
+    """The result of every statement in ``cfg.queries``, one iterator of
+    Arrow tables per query, in order. Nothing runs until an iterator is
+    taken from; the queries share one workspace client."""
+    reading = _Reading(cfg)
+    return [reading.tables(index) for index in range(len(cfg.queries))]
 
 
 def reject_unsupported_columns(

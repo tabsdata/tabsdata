@@ -7,19 +7,14 @@ from __future__ import annotations
 import json
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from pathlib import Path
 
 import pytest
 
+from tabsdatak.conn.common.sql._metadata import sql_metadata
 from tabsdatak.conn.common.sql.constants import (
     SQL_META_INITIAL_VALUES,
     SQL_META_QUERY,
 )
-from tabsdatak.conn.common.sql._metadata import (
-    sql_metadata,
-    to_sql_table_file_inputs,
-)
-from tabsdatak.spi import TableFileInput
 
 # ---------------------------------------------------------------------------
 # sql_metadata
@@ -81,82 +76,3 @@ def test_falsy_bind_values_survive():
         "empty": "",
     }
 
-
-# ---------------------------------------------------------------------------
-# to_sql_table_file_inputs
-# ---------------------------------------------------------------------------
-
-
-def test_every_file_of_a_slot_carries_its_query():
-    files = [
-        [Path("slot0_chunk0.parquet"), Path("slot0_chunk1.parquet")],
-        [Path("slot1_chunk0.parquet")],
-    ]
-    inputs = to_sql_table_file_inputs(files, ["SELECT 1", "SELECT 2"], {"id": 7})
-
-    assert [[i.file for i in slot] for slot in inputs] == files
-    assert all(isinstance(i, TableFileInput) for slot in inputs for i in slot)
-    assert [i.metadata[SQL_META_QUERY] for i in inputs[0]] == [
-        "SELECT 1",
-        "SELECT 1",
-    ]
-    assert [i.metadata[SQL_META_QUERY] for i in inputs[1]] == ["SELECT 2"]
-
-
-def test_initial_values_are_shared_by_every_slot():
-    inputs = to_sql_table_file_inputs(
-        [[Path("a.parquet")], [Path("b.parquet")]],
-        ["SELECT 1", "SELECT 2"],
-        {"id": 7},
-    )
-    serialized = {i.metadata[SQL_META_INITIAL_VALUES] for slot in inputs for i in slot}
-    assert serialized == {'{"id": 7}'}
-
-
-def test_drop_metadata_leaves_every_file_without_metadata():
-    files = [
-        [Path("slot0_chunk0.parquet"), Path("slot0_chunk1.parquet")],
-        [Path("slot1_chunk0.parquet")],
-    ]
-    inputs = to_sql_table_file_inputs(
-        files,
-        ["SELECT 1", "SELECT 2"],
-        {"id": 7},
-        drop_metadata=True,
-    )
-
-    assert [[i.file for i in slot] for slot in inputs] == files
-    assert all(i.metadata is None for slot in inputs for i in slot)
-
-
-def test_drop_metadata_still_enforces_the_slot_query_pairing():
-    with pytest.raises(ValueError):
-        to_sql_table_file_inputs(
-            [[Path("a.parquet")]],
-            ["SELECT 1", "SELECT 2"],
-            None,
-            drop_metadata=True,
-        )
-
-
-def test_empty_slot_yields_no_inputs():
-    inputs = to_sql_table_file_inputs([[]], ["SELECT 1"], None)
-    assert inputs == [[]]
-
-
-def test_no_queries_yields_no_slots():
-    assert to_sql_table_file_inputs([], [], None) == []
-
-
-@pytest.mark.parametrize(
-    "files, queries",
-    [
-        ([[Path("a.parquet")]], ["SELECT 1", "SELECT 2"]),
-        ([[Path("a.parquet")], [Path("b.parquet")]], ["SELECT 1"]),
-    ],
-)
-def test_slot_query_length_mismatch_raises(files, queries):
-    # A read that does not produce one slot per query broke its
-    # contract -- fail loudly instead of dropping files or queries.
-    with pytest.raises(ValueError):
-        to_sql_table_file_inputs(files, queries, None)

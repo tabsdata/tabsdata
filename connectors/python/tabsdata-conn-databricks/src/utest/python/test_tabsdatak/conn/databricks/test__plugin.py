@@ -18,6 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pyarrow as pa
 import pytest
 
 from tabsdatak.api import Secret
@@ -41,7 +42,6 @@ from tabsdatak.conn.databricks.error import (
     DatabricksRuntimeException,
     DatabricksValidateException,
 )
-from tabsdatak.spi import TableFileInput
 
 pytestmark = pytest.mark.databricks
 
@@ -204,17 +204,34 @@ def test_resolve_dest_cfg_defaults_when_none():
 # ---------------------------------------------------------------------------
 
 
+def _failing(error: Exception):
+    def tables():
+        raise error
+        yield
+
+    return lambda _cfg: [tables()]
+
+
+def _drained(out) -> list[list]:
+    return [list(slot) for slot in out]
+
+
+def test_src_plugin_reads_nothing_until_iterated(monkeypatch, work_dir):
+    monkeypatch.setattr(impl, "read_all_queries", _failing(RuntimeError("late")))
+    out = plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src_conn(), _src())
+    assert len(out) == 1
+
+
 def test_src_plugin_wraps_connection_failure_as_databricks_5(
     monkeypatch,
     work_dir,
 ):
-    def boom(*_a, **_kw):
-        raise _StubDatabricksError("connect fail")
-
-    monkeypatch.setattr(impl, "read_all_queries", boom)
-
+    monkeypatch.setattr(
+        impl, "read_all_queries", _failing(_StubDatabricksError("connect fail"))
+    )
+    out = plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src_conn(), _src())
     with pytest.raises(DatabricksRuntimeException) as ei:
-        plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src_conn(), _src())
+        _drained(out)
     assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_5
 
 
@@ -222,14 +239,24 @@ def test_src_plugin_wraps_query_failure_as_databricks_6(
     monkeypatch,
     work_dir,
 ):
+    monkeypatch.setattr(impl, "read_all_queries", _failing(RuntimeError("failed")))
+    out = plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src_conn(), _src())
+    with pytest.raises(DatabricksRuntimeException) as ei:
+        _drained(out)
+    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_6
+    assert "query_index=0" in str(ei.value)
+
+
+def test_src_plugin_passes_its_own_errors_through(monkeypatch, work_dir):
     monkeypatch.setattr(
         impl,
         "read_all_queries",
-        MagicMock(side_effect=RuntimeError("query failed")),
+        _failing(DatabricksErrorCode.DATABRICKS_11.exception(query_index=0)),
     )
+    out = plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src_conn(), _src())
     with pytest.raises(DatabricksRuntimeException) as ei:
-        plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src_conn(), _src())
-    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_6
+        _drained(out)
+    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_11
 
 
 @pytest.mark.parametrize(
@@ -254,77 +281,70 @@ def test_src_plugin_wraps_unbound_bind_as_databricks_12(
     message: str,
     expected: str,
 ):
-    monkeypatch.setattr(
-        impl,
-        "read_all_queries",
-        MagicMock(side_effect=RuntimeError(message)),
-    )
+    monkeypatch.setattr(impl, "read_all_queries", _failing(RuntimeError(message)))
+    out = plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src_conn(), _src())
     with pytest.raises(DatabricksRuntimeException) as ei:
-        plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src_conn(), _src())
+        _drained(out)
     assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_12
     assert expected in str(ei.value)
     assert "initial_values" in str(ei.value)
 
 
-def test_src_plugin_returns_one_parquet_per_query(
-    monkeypatch,
-    work_dir,
-):
-    def fake(_cfg, _dir):
-        return [Path("q0.parquet"), Path("q1.parquet")]
+def _results(*queries: list[pa.Table]):
+    return lambda _cfg: [iter(tables) for tables in queries]
 
-    monkeypatch.setattr(impl, "read_all_queries", fake)
 
-    src = DatabricksSrc(
-        queries=["SELECT 1", "SELECT 2"],
+def test_src_plugin_hands_over_a_frame_per_chunk(monkeypatch, work_dir):
+    monkeypatch.setattr(
+        impl,
+        "read_all_queries",
+        _results(
+            [pa.table({"id": [1, 2]}), pa.table({"id": [3]})],
+            [pa.table({"name": ["a"]})],
+        ),
     )
+    src = DatabricksSrc(queries=["SELECT 1", "SELECT 2"])
     out = plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src_conn(), src)
-    # Each spec is a TableFileInput wrapping the adapter's Path.
-    assert len(out) == 2
-    assert all(len(row) == 1 for row in out)
-    assert [str(out[0][0].file), str(out[1][0].file)] == [
-        "q0.parquet",
-        "q1.parquet",
+    frames = [[table.frame.collect().to_dicts() for table in slot] for slot in out]
+    assert frames == [
+        [[{"id": 1}, {"id": 2}], [{"id": 3}]],
+        [[{"name": "a"}]],
     ]
-    assert all(isinstance(out[i][0], TableFileInput) for i in (0, 1))
-    assert all(isinstance(out[i][0].file, Path) for i in (0, 1))
 
 
 def test_src_plugin_reports_query_and_binds_as_metadata(
     monkeypatch,
     work_dir,
 ):
-    def fake(_cfg, _dir):
-        return [Path("q0.parquet"), Path("q1.parquet")]
-
-    monkeypatch.setattr(impl, "read_all_queries", fake)
-
+    monkeypatch.setattr(
+        impl,
+        "read_all_queries",
+        _results([pa.table({"id": [1]})], [pa.table({"id": [2]})]),
+    )
     src = DatabricksSrc(
         queries=["SELECT * FROM t WHERE id > {min_id}", "SELECT 2"],
         initial_values={"min_id": 7},
     )
     out = plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src_conn(), src)
-    assert [row[0].metadata[SQL_META_QUERY] for row in out] == [
+    columns = [[table.metadata.columns for table in slot] for slot in out]
+    assert [slot[0][SQL_META_QUERY] for slot in columns] == [
         "SELECT * FROM t WHERE id > {min_id}",
         "SELECT 2",
     ]
-    assert [row[0].metadata[SQL_META_INITIAL_VALUES] for row in out] == [
+    assert [slot[0][SQL_META_INITIAL_VALUES] for slot in columns] == [
         '{"min_id": 7}',
         '{"min_id": 7}',
     ]
 
 
 def test_src_plugin_drops_metadata_when_src_cfg_asks(monkeypatch, work_dir):
-    monkeypatch.setattr(
-        impl, "read_all_queries", lambda _cfg, _dir: [Path("q0.parquet")]
-    )
-
+    monkeypatch.setattr(impl, "read_all_queries", _results([pa.table({"id": [1]})]))
     src = DatabricksSrc(
         queries=["SELECT 1"],
         src_cfg={"tabsdata.src_metadata.drop": True},
     )
     out = plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src_conn(), src)
-    assert out[0][0].metadata is None
+    assert [table.metadata for table in out[0]] == [None]
 
 
 # ---------------------------------------------------------------------------
@@ -577,9 +597,9 @@ def test_read_in_uses_resolved_initial_values(work_dir, monkeypatch):
     raw Src field."""
     captured: dict = {}
 
-    def fake_read_all_queries(read_cfg, work_dir_arg):
+    def fake_read_all_queries(read_cfg):
         captured["initial_values"] = read_cfg.initial_values
-        return [Path("q0.parquet")]
+        return [iter([])]
 
     monkeypatch.setattr(impl, "read_all_queries", fake_read_all_queries)
 

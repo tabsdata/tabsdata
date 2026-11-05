@@ -20,7 +20,7 @@ from testi_tabsdatak.conn.common.sql.employees_model import (
     emp_nos,
 )
 from testi_tabsdatak.conn.common.sql.plugin_ctx import WatermarkSrcCtx
-from testi_tabsdatak.conn.common.sql.plugin_io import entity_rows, slot_frame, work_dir
+from testi_tabsdatak.conn.common.sql.plugin_io import entity_rows, slot_rows, work_dir
 from testi_tabsdatak.conn.databricks.backend import src_conn
 
 # noinspection PyProtectedMember
@@ -34,7 +34,7 @@ pytestmark = pytest.mark.databricks
 
 
 @databricks_domain("databricks_employees_xs")
-def test_src_plugin_read_in_returns_parquet_files(
+def test_src_plugin_read_in_returns_the_rows(
     domain_databricks_employees_xs: DatabricksDomain, tmp_path: Path
 ):
     domain = domain_databricks_employees_xs
@@ -45,7 +45,7 @@ def test_src_plugin_read_in_returns_parquet_files(
         PluginSrcCtx(work_dir(tmp_path)), src_conn(domain), src
     )
     assert len(out) == 1
-    assert slot_frame(out)["emp_no"].to_list() == emp_nos(
+    assert slot_rows(out)["emp_no"].to_list() == emp_nos(
         entity_rows(domain, EMPLOYEES)
     )
 
@@ -71,13 +71,13 @@ def test_src_plugin_read_in_multiple_queries(
         PluginSrcCtx(work_dir(tmp_path)), src_conn(domain), src
     )
     assert len(out) == 3
-    assert slot_frame(out, 0)["emp_no"].to_list() == [
+    assert slot_rows(out, 0)["emp_no"].to_list() == [
         n for n in all_emp_nos if n > cursor
     ]
-    assert slot_frame(out, 1)["emp_no"].to_list() == [
+    assert slot_rows(out, 1)["emp_no"].to_list() == [
         n for n in all_emp_nos if n <= cursor
     ]
-    assert slot_frame(out, 2).height == entity_rows(domain, DEPARTMENTS)
+    assert slot_rows(out, 2).height == entity_rows(domain, DEPARTMENTS)
 
 
 @databricks_domain("databricks_employees_xs")
@@ -99,7 +99,7 @@ def test_src_plugin_read_in_binds_several_names_in_one_query(
     out = plugin._DatabricksSrcPlugin().read_in(
         PluginSrcCtx(work_dir(tmp_path)), src_conn(domain), src
     )
-    assert slot_frame(out)["emp_no"].to_list() == [
+    assert slot_rows(out)["emp_no"].to_list() == [
         n for n in all_emp_nos if low < n <= high
     ]
 
@@ -117,24 +117,24 @@ def test_src_plugin_read_in_resumes_from_advanced_initial_values(
     )
     ctx = WatermarkSrcCtx(work_dir(tmp_path))
 
-    first = slot_frame(
+    first = slot_rows(
         plugin._DatabricksSrcPlugin().read_in(ctx, src_conn(domain), src)
     )
     assert first["emp_no"].to_list() == [n for n in all_emp_nos if n > cursor]
 
     # What a publisher does with the watermark it just consumed; the next run must
     # read from it rather than from the seed, so it sees nothing new. The statement
-    # manifest types a zero-row result, so the slot still holds a typed empty
-    # parquet rather than nothing at all.
+    # manifest types a zero-row result, so the input still holds a typed empty
+    # table rather than nothing at all.
     ctx.set_attr("cursor", all_emp_nos[-1])
-    empty = slot_frame(
+    empty = slot_rows(
         plugin._DatabricksSrcPlugin().read_in(ctx, src_conn(domain), src)
     )
     assert empty.height == 0
     assert empty.columns == ["emp_no"]
 
     # A run whose ctx never stored the bind falls back to the seed.
-    again = slot_frame(
+    again = slot_rows(
         plugin._DatabricksSrcPlugin().read_in(
             WatermarkSrcCtx(work_dir(tmp_path, "rerun")), src_conn(domain), src
         )
@@ -167,13 +167,13 @@ def test_src_plugin_read_in_advances_cursor_to_max_row_read(
     )
     ctx = WatermarkSrcCtx(work_dir(tmp_path))
 
-    first = slot_frame(
+    first = slot_rows(
         plugin._DatabricksSrcPlugin().read_in(ctx, src_conn(domain), windowed)
     )
     assert first["emp_no"].to_list() == [n for n in all_emp_nos if n <= window_end]
 
     ctx.set_attr("cursor", first["emp_no"].max())
-    rest = slot_frame(
+    rest = slot_rows(
         plugin._DatabricksSrcPlugin().read_in(ctx, src_conn(domain), rest_of_table)
     )
     assert rest["emp_no"].to_list() == [n for n in all_emp_nos if n > window_end]
@@ -201,10 +201,11 @@ def test_src_plugin_read_in_bind_absent_from_initial_values_fails(
         queries=["SELECT emp_no FROM employees WHERE emp_no > :cursor"],
         initial_values=initial_values,
     )
+    out = plugin._DatabricksSrcPlugin().read_in(
+        PluginSrcCtx(work_dir(tmp_path)), src_conn(domain), src
+    )
     with pytest.raises(DatabricksRuntimeException) as ei:
-        plugin._DatabricksSrcPlugin().read_in(
-            PluginSrcCtx(work_dir(tmp_path)), src_conn(domain), src
-        )
+        slot_rows(out)
     assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_12
     assert "'cursor'" in str(ei.value)
     assert "UNBOUND_SQL_PARAMETER" in str(ei.value.__cause__)
@@ -224,6 +225,6 @@ def test_src_plugin_read_in_ignores_seed_no_query_binds(
     out = plugin._DatabricksSrcPlugin().read_in(
         PluginSrcCtx(work_dir(tmp_path)), src_conn(domain), src
     )
-    assert slot_frame(out)["emp_no"].to_list() == emp_nos(
+    assert slot_rows(out)["emp_no"].to_list() == emp_nos(
         entity_rows(domain, EMPLOYEES)
     )

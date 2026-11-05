@@ -12,7 +12,6 @@ from tabsdatak.conn.common.sql.constants import (
     SQL_META_INITIAL_VALUES,
     SQL_META_QUERY,
 )
-from tabsdatak.spi import TableFileInput, TableFileSpec
 
 
 def _json_default(value: Any) -> str:
@@ -44,25 +43,3 @@ def sql_metadata(
             default=_json_default,
         ),
     }
-
-
-def to_sql_table_file_inputs(
-    files: list[list[TableFileSpec]],
-    queries: list[str],
-    initial_values: Mapping[str, Any] | None,
-    drop_metadata: bool = False,
-) -> list[list[TableFileInput]]:
-    """:func:`tabsdatak.spi.to_table_file_inputs` for SQL reads: every
-    file of slot ``i`` carries the :func:`sql_metadata` of
-    ``queries[i]``, or no metadata at all when ``drop_metadata`` is set
-    (the source's ``tabsdata.src_metadata.drop`` config key).
-
-    ``files`` and ``queries`` are positionally aligned -- one slot per
-    query -- so a length mismatch means the read broke its contract and
-    raises rather than dropping files or queries.
-    """
-    inputs: list[list[TableFileInput]] = []
-    for query, slot in zip(queries, files, strict=True):
-        metadata = None if drop_metadata else sql_metadata(query, initial_values)
-        inputs.append([TableFileInput(file=file, metadata=metadata) for file in slot])
-    return inputs
