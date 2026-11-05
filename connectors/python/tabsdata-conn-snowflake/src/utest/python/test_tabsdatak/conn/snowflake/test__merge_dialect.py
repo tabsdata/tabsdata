@@ -572,9 +572,14 @@ def _staging_fake() -> _FakeConnection:
     return column_fakes([], [("C", "NUMBER(38,0)"), ("OP", "TEXT")])
 
 
+def _staged_batch():
+    import polars as pl
+
+    return pl.LazyFrame({"c": [1], "op": ["i"]})
+
+
 def test_staging_puts_templates_and_copies_in_that_order(tmp_path):
-    batch = tmp_path / "in.parquet"
-    batch.write_bytes(b"")
+    batch = _staged_batch()
     fake = _staging_fake()
     with _dialect(fake).staging(_TARGET, batch) as staged:
         assert staged.columns == [("C", "NUMBER(38,0)"), ("OP", "TEXT")]
@@ -591,8 +596,7 @@ def test_staging_puts_templates_and_copies_in_that_order(tmp_path):
 def test_staging_loads_the_scratch_table_through_the_inferring_format(tmp_path):
     # The scratch table is templated from the file's logical types, so the COPY
     # that fills it has to read them too.
-    batch = tmp_path / "in.parquet"
-    batch.write_bytes(b"")
+    batch = _staged_batch()
     fake = _staging_fake()
     with _dialect(fake).staging(_TARGET, batch):
         pass
@@ -603,8 +607,7 @@ def test_staging_loads_the_scratch_table_through_the_inferring_format(tmp_path):
 def test_staging_reads_the_columns_before_the_copy_purges_the_file(tmp_path):
     # PURGE removes the staged file as soon as it has been ingested, so
     # infer_schema has to have run by then or there is nothing left to report.
-    batch = tmp_path / "in.parquet"
-    batch.write_bytes(b"")
+    batch = _staged_batch()
     fake = _staging_fake()
     with _dialect(fake).staging(_TARGET, batch):
         pass
@@ -616,8 +619,7 @@ def test_staging_reads_the_columns_before_the_copy_purges_the_file(tmp_path):
 def test_staging_keeps_the_marker_in_the_scratch_table(tmp_path):
     """The scratch table is templated from the whole batch: the clauses read the
     marker off it."""
-    batch = tmp_path / "in.parquet"
-    batch.write_bytes(b"")
+    batch = _staged_batch()
     fake = _staging_fake()
     with _dialect(fake).staging(_TARGET, batch):
         pass
@@ -628,8 +630,7 @@ def test_staging_keeps_the_marker_in_the_scratch_table(tmp_path):
 def test_staging_names_the_scratch_table_beside_the_target(tmp_path):
     # A temporary table shadows a permanent one of the same name for the rest of
     # the session, so it must never be spelled exactly like the target.
-    batch = tmp_path / "in.parquet"
-    batch.write_bytes(b"")
+    batch = _staged_batch()
     fake = _staging_fake()
     with _dialect(fake).staging(_TARGET, batch) as staged:
         assert staged.relation.startswith('"DB"."S"."T_')
@@ -640,8 +641,7 @@ def test_staging_leaves_the_scratch_table_to_the_session(tmp_path):
     # A TEMPORARY table goes with the connection, so nothing drops it here --
     # and its unique suffix means the few a multi-table write leaves behind
     # collide with nothing.
-    batch = tmp_path / "in.parquet"
-    batch.write_bytes(b"")
+    batch = _staged_batch()
     fake = _staging_fake()
     with _dialect(fake).staging(_TARGET, batch):
         pass
@@ -745,8 +745,7 @@ def test_watermark_probe_quotes_a_special_char_column():
 
 
 def _stage_with(fake, tmp_path, watermark_cfg):
-    batch = tmp_path / "in.parquet"
-    batch.write_bytes(b"")
+    batch = _staged_batch()
     with _dialect(fake).staging(_TARGET, batch, watermark_cfg) as staged:
         return staged
 
@@ -855,60 +854,37 @@ def test_evolve_leaves_a_watermark_the_target_already_has_alone(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def _batch(path: Path, **columns) -> Path:
-    """A parquet holding whatever columns the test names."""
+def _batch(path: Path, **columns):
+    """A parquet holding whatever columns the test names, scanned."""
     import polars as pl
 
     pl.DataFrame(columns).write_parquet(path)
-    return path
+    return pl.scan_parquet(path)
 
 
-def _coalesce(batch: Path, cfg: MergeCfg):
-    return coalesced_batch(_dialect(_FakeConnection()), "DB.S.T", batch, cfg)
+def _coalesce(batch, cfg: MergeCfg):
+    return coalesced_batch(_dialect(_FakeConnection()), "DB.S.T", batch, cfg).collect()
 
 
 def test_coalesce_normalizes_the_marker_case(tmp_path):
-    import polars as pl
 
     batch = _batch(tmp_path / "in.parquet", c=[1, 1], op=["I", "U"], v=[10, 20])
-    with _coalesce(batch, _cfg()) as out:
-        assert pl.read_parquet(out).rows() == [(1, "i", 20)]
-
-
-def test_coalesce_removes_its_temp_directory(tmp_path):
-    batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"])
-    with _coalesce(batch, _cfg()) as out:
-        assert out.exists()
-    assert not out.exists()
-    assert not out.parent.exists()
+    out = _coalesce(batch, _cfg())
+    assert out.rows() == [(1, "i", 20)]
 
 
 def test_coalesce_leaves_the_original_alone(tmp_path):
-    import polars as pl
 
     batch = _batch(tmp_path / "in.parquet", c=[1, 1], op=["i", "u"], v=[10, 20])
-    with _coalesce(batch, _cfg()):
-        pass
-    assert pl.read_parquet(batch).height == 2
-
-
-def test_coalesce_keeps_the_original_basename(tmp_path):
-    """Everything downstream keys off the staged basename, so the reduced file
-    has to carry the original's."""
-    batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"])
-    with _coalesce(batch, _cfg()) as out:
-        assert out.name == "in.parquet"
-        assert out != batch
+    _coalesce(batch, _cfg())
+    assert batch.collect().height == 2
 
 
 def test_coalesce_drops_an_ephemeral_key(tmp_path):
     """A key inserted and deleted inside one batch never reached the target, so
     it reaches neither the staged file nor the merge."""
-    import polars as pl
-
     batch = _batch(tmp_path / "in.parquet", c=[1, 1], op=["i", "d"], v=[10, 20])
-    with _coalesce(batch, _cfg()) as out:
-        reduced = pl.read_parquet(out)
+    reduced = _coalesce(batch, _cfg())
     assert reduced.is_empty()
     assert reduced.columns == ["c", "op", "v"]
 
@@ -916,20 +892,17 @@ def test_coalesce_drops_an_ephemeral_key(tmp_path):
 def test_coalesce_folds_a_lower_case_batch(tmp_path):
     """End to end through the resolution: an upper-folded cfg against a
     lower-case frame."""
-    import polars as pl
-
     batch = _batch(
         tmp_path / "in.parquet", order_id=[7, 7], op=["i", "u"], amount=[1, 2]
     )
-    with _coalesce(batch, _cfg(on=["order_id"])) as out:
-        assert pl.read_parquet(out).rows() == [(7, "i", 2)]
+    out = _coalesce(batch, _cfg(on=["order_id"]))
+    assert out.rows() == [(7, "i", 2)]
 
 
 def test_coalesce_rejects_a_missing_marker(tmp_path):
     batch = _batch(tmp_path / "in.parquet", c=[1], v=[10])
     with pytest.raises(SnowflakeRuntimeException) as ei:
-        with _coalesce(batch, _cfg()):
-            pass
+        _coalesce(batch, _cfg())
     assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_18
     assert "'op'" in str(ei.value)
 
@@ -937,8 +910,7 @@ def test_coalesce_rejects_a_missing_marker(tmp_path):
 def test_coalesce_rejects_a_missing_key(tmp_path):
     batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"])
     with pytest.raises(SnowflakeRuntimeException) as ei:
-        with _coalesce(batch, _cfg(on=["nope"])):
-            pass
+        _coalesce(batch, _cfg(on=["nope"]))
     assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_19
     assert "'nope'" in str(ei.value)
 
@@ -946,8 +918,7 @@ def test_coalesce_rejects_a_missing_key(tmp_path):
 def test_coalesce_names_every_missing_key(tmp_path):
     batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"])
     with pytest.raises(SnowflakeRuntimeException) as ei:
-        with _coalesce(batch, _cfg(on=["c", "gone", "also"])):
-            pass
+        _coalesce(batch, _cfg(on=["c", "gone", "also"]))
     message = str(ei.value)
     assert "'gone'" in message and "'also'" in message and "'c'" not in message
 

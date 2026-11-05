@@ -17,7 +17,7 @@ import contextlib
 import logging
 import uuid
 from collections.abc import Iterator
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._validation import fqn, unfqn
@@ -35,6 +35,9 @@ from tabsdatak.conn.common.sql._merge.dialect import (
     MergeSyntax,
     Staged,
 )
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._spool import spooled_parquet
 from tabsdatak.conn.snowflake import _iceberg
 from tabsdatak.conn.snowflake._evolution import (
     WATERMARK_TYPE,
@@ -58,6 +61,9 @@ from tabsdatak.conn.snowflake._validation import (
     MERGE_TARGET_ALIAS,
 )
 from tabsdatak.conn.snowflake.error import SnowflakeErrorCode
+
+if TYPE_CHECKING:
+    import polars as pl
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +127,10 @@ class SnowflakeMergeDialect(MergeDialect):
 
     @contextlib.contextmanager
     def staging(
-        self, target: str, batch: Path, watermark_cfg: WatermarkCfg | None = None
+        self,
+        target: str,
+        batch: pl.LazyFrame,
+        watermark_cfg: WatermarkCfg | None = None,
     ) -> Iterator[Staged]:
         """``PUT`` the batch, template a temporary table from it and ``COPY``
         the rows in.
@@ -144,7 +153,8 @@ class SnowflakeMergeDialect(MergeDialect):
         through ``ensure_target``, ``evolve`` and the write list onto the
         target.
         """
-        file_name = put_file_to_stage(self._cursor, batch, self._stage)
+        with spooled_parquet(batch, f"{uuid.uuid4().hex}.parquet") as spooled:
+            file_name = put_file_to_stage(self._cursor, spooled, self._stage)
         columns = inferred_columns(self._cursor, self._stage, file_name)
         scratch = self._create_scratch_table(target, file_name)
         copy_into(

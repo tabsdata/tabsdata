@@ -17,7 +17,6 @@ import contextlib
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from tabsdatak.conn.common.sql._merge import WatermarkCfg
@@ -175,7 +174,10 @@ class MergeDialect(ABC):
 
     @abstractmethod
     def staging(
-        self, target: str, batch: Path, watermark_cfg: WatermarkCfg | None = None
+        self,
+        target: str,
+        batch: pl.LazyFrame,
+        watermark_cfg: WatermarkCfg | None = None,
     ) -> contextlib.AbstractContextManager:
         """Land ``batch`` where the statement can read it, yielding a
         :class:`Staged`.

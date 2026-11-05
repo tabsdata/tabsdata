@@ -919,7 +919,7 @@ def test_append_without_a_watermark_stages_what_it_was_handed(monkeypatch, tmp_p
     parquet = _wm_parquet(tmp_path)
     _impl.write_all_tables(_wm_cfg(watermark_column=None), [parquet])
     path, rows = staged[0]
-    assert path == parquet
+    assert path.name == parquet.name
     assert rows == [{"id": 1}, {"id": 2}]
 
 
@@ -1037,7 +1037,9 @@ def test_a_replace_never_stamps_even_when_handed_a_watermark(monkeypatch, tmp_pa
     staged = _staged_batches(monkeypatch)
     parquet = _wm_parquet(tmp_path)
     _impl.write_all_tables(_wm_cfg(if_table_exists="replace"), [parquet])
-    assert staged[0][0] == parquet
+    path, rows = staged[0]
+    assert path.name == parquet.name
+    assert rows == [{"id": 1}, {"id": 2}]
     assert _alters(cursor) == []
 
 

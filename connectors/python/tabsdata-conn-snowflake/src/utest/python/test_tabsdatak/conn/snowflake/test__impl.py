@@ -1003,7 +1003,7 @@ def test_append_without_a_watermark_stages_the_file_it_was_handed(
     parquet = _parquet(tmp_path / "in.parquet")
     impl.write_all_tables(_write_cfg(), [parquet])
     path, frame = staged[0]
-    assert path == parquet
+    assert path.name == parquet.name
     assert frame.columns == ["c"]
 
 
@@ -1154,5 +1154,7 @@ def test_a_replace_never_stamps_even_when_handed_a_watermark(
     fake = _evolving_connection(monkeypatch, ["C"], [("C", "NUMBER(38,0)")])
     parquet = _parquet(tmp_path / "in.parquet")
     impl.write_all_tables(_watermark_cfg(if_table_exists="replace"), [parquet])
-    assert staged[0][0] == parquet
+    path, frame = staged[0]
+    assert path.name == parquet.name
+    assert frame.columns == ["c"]
     assert _watermark_alters(fake.log) == []

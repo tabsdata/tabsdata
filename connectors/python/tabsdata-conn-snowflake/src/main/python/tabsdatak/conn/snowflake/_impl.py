@@ -32,6 +32,9 @@ from tabsdatak.conn.common._validation import fqn, unfqn
 from tabsdatak.conn.common.sql._merge._driver import merge_batch
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._spool import spooled_parquet
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._watermark import watermarked_batch
 from tabsdatak.conn.common.types import UserPassword, _convert
 from tabsdatak.conn.snowflake import MergeCfg, SnowflakeDestConn
@@ -344,6 +347,8 @@ def _write_one(
     table: str,
     merge_cfg: MergeCfg | None = None,
 ) -> None:
+    import polars as pl
+
     sql_table = _fq_for_sql(table)
     logger.info("Uploading %s -> %s", file_path.name, sql_table)
     cursor = sf_conn.cursor()
@@ -370,7 +375,12 @@ def _write_one(
                 cfg.ctx.transaction_id,
             )
             return
-        with watermarked_batch(file_path, watermark, cfg.ctx.transaction_id) as batch:
+        with spooled_parquet(
+            watermarked_batch(
+                pl.scan_parquet(file_path), watermark, cfg.ctx.transaction_id
+            ),
+            file_path.name,
+        ) as batch:
             file_name = put_file_to_stage(cursor, batch, stage)
         _create_table_from_inferred_schema(cursor, stage, file_name, sql_table)
         if watermark is not None:
@@ -445,6 +455,8 @@ def _merge_one(
     scratch table, which is templated from the batch and has nothing to evolve
     onto. A merge evolves its target with ``ALTER`` statements instead.
     """
+    import polars as pl
+
     merge_batch(
         SnowflakeMergeDialect(
             cursor,
@@ -453,7 +465,7 @@ def _merge_one(
             purge=cfg.purge,
         ),
         target=sql_table,
-        batch=file_path,
+        batch=pl.scan_parquet(file_path),
         cfg=merge_cfg._sql_merge_cfg(),
         schema_evolution=cfg.schema_evolution,
         ctx=cfg.ctx,

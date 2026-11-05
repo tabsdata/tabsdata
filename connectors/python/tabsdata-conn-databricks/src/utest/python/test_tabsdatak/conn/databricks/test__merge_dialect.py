@@ -401,10 +401,15 @@ def _staging_cursor() -> _RecordingCursor:
     return _RecordingCursor([("order_id", "BIGINT"), ("op", "STRING")])
 
 
+def _staged_batch():
+    import polars as pl
+
+    return pl.LazyFrame({"order_id": [1], "op": ["i"]})
+
+
 class TestStaging:
     def test_uploads_builds_and_loads_in_that_order(self, tmp_path):
-        batch = tmp_path / "in.parquet"
-        batch.write_bytes(b"")
+        batch = _staged_batch()
         cursor, ws = _staging_cursor(), _FakeWorkspaceClient()
         with _dialect(cursor, ws_client=ws).staging(_TARGET, batch) as staged:
             assert staged.columns == [("order_id", "BIGINT"), ("op", "STRING")]
@@ -417,8 +422,7 @@ class TestStaging:
     def test_keeps_the_marker_in_the_scratch_table(self, tmp_path):
         """The clauses read the marker off the scratch table, so only the target
         loses it."""
-        batch = tmp_path / "in.parquet"
-        batch.write_bytes(b"")
+        batch = _staged_batch()
         cursor = _staging_cursor()
         with _dialect(cursor).staging(_TARGET, batch):
             pass
@@ -427,8 +431,7 @@ class TestStaging:
         assert "SELECT * FROM read_files" in create
 
     def test_loads_the_scratch_table_not_the_target(self, tmp_path):
-        batch = tmp_path / "in.parquet"
-        batch.write_bytes(b"")
+        batch = _staged_batch()
         cursor = _staging_cursor()
         with _dialect(cursor).staging(_TARGET, batch):
             pass
@@ -439,8 +442,7 @@ class TestStaging:
     def test_drops_the_scratch_table_and_the_staged_file_on_the_way_out(self, tmp_path):
         """Both outlive the statement -- a real catalog table and a file on the
         volume -- so both are cleaned up here."""
-        batch = tmp_path / "in.parquet"
-        batch.write_bytes(b"")
+        batch = _staged_batch()
         cursor, ws = _staging_cursor(), _FakeWorkspaceClient()
         with _dialect(cursor, ws_client=ws).staging(_TARGET, batch) as staged:
             relation = staged.relation
@@ -448,8 +450,7 @@ class TestStaging:
         assert ws.deleted == ws.uploaded
 
     def test_cleans_up_when_the_merge_fails(self, tmp_path):
-        batch = tmp_path / "in.parquet"
-        batch.write_bytes(b"")
+        batch = _staged_batch()
         cursor, ws = _staging_cursor(), _FakeWorkspaceClient()
         with pytest.raises(RuntimeError):
             with _dialect(cursor, ws_client=ws).staging(_TARGET, batch) as staged:
@@ -598,8 +599,7 @@ class TestEnsureWatermarkColumn:
 
 class TestStampingTheScratchTable:
     def _stage(self, cursor, tmp_path, watermark_cfg):
-        batch = tmp_path / "in.parquet"
-        batch.write_bytes(b"")
+        batch = _staged_batch()
         with _dialect(cursor).staging(_TARGET, batch, watermark_cfg) as staged:
             return staged
 
@@ -679,7 +679,11 @@ def _batch(path, **columns):
 
 
 def _coalesce(batch: Path, cfg: MergeCfg):
-    return coalesced_batch(_dialect(_RecordingCursor()), "t", batch, cfg)
+    import polars as pl
+
+    return coalesced_batch(
+        _dialect(_RecordingCursor()), "t", pl.scan_parquet(batch), cfg
+    ).collect()
 
 
 class TestIncomingColumn:
@@ -705,7 +709,6 @@ class TestIncomingColumn:
 
 class TestCoalescedBatch:
     def test_reduces_each_key_to_one_row(self, tmp_path):
-        import polars as pl
 
         batch = _batch(
             tmp_path / "in.parquet",
@@ -713,75 +716,55 @@ class TestCoalescedBatch:
             op=["i", "u", "u", "u"],
             v=[10, 20, 30, 40],
         )
-        with _coalesce(batch, _cfg()) as out:
-            # Key 1's three records collapse to one insert with its latest payload.
-            assert sorted(pl.read_parquet(out).rows()) == [(1, "i", 30), (2, "u", 40)]
-
-    def test_keeps_the_original_basename(self, tmp_path):
-        batch = _batch(tmp_path / "in.parquet", k=[1], op=["i"])
-        with _coalesce(batch, _cfg(on=["k"])) as out:
-            assert out.name == "in.parquet"
-            assert out != batch
-
-    def test_removes_its_temp_directory(self, tmp_path):
-        batch = _batch(tmp_path / "in.parquet", k=[1], op=["i"])
-        with _coalesce(batch, _cfg(on=["k"])) as out:
-            assert out.exists()
-        assert not out.exists() and not out.parent.exists()
+        out = _coalesce(batch, _cfg())
+        # Key 1's three records collapse to one insert with its latest payload.
+        assert sorted(out.rows()) == [(1, "i", 30), (2, "u", 40)]
 
     def test_leaves_the_original_alone(self, tmp_path):
         import polars as pl
 
         batch = _batch(tmp_path / "in.parquet", k=[1, 1], op=["i", "u"], v=[1, 2])
-        with _coalesce(batch, _cfg(on=["k"])):
-            pass
+        _coalesce(batch, _cfg(on=["k"]))
         assert pl.read_parquet(batch).height == 2
 
     def test_resolves_a_differently_cased_column(self, tmp_path):
         """The cfg folds to lower case but the publisher wrote upper, and
         Databricks would resolve them to one column -- so the coalesce has to
         find it too."""
-        import polars as pl
 
         batch = _batch(
             tmp_path / "in.parquet", ORDER_ID=[7, 7], OP=["i", "u"], v=[1, 2]
         )
-        with _coalesce(batch, _cfg()) as out:
-            assert pl.read_parquet(out).rows() == [(7, "i", 2)]
+        out = _coalesce(batch, _cfg())
+        assert out.rows() == [(7, "i", 2)]
 
     def test_does_not_match_a_name_differing_by_more_than_case(self, tmp_path):
         """``OrderId`` and ``order_id`` are two columns to Databricks as well, so
         neither stands in for the other."""
         batch = _batch(tmp_path / "in.parquet", OrderId=[7], op=["i"])
         with pytest.raises(DatabricksRuntimeException) as ei:
-            with _coalesce(batch, _cfg()):
-                pass
+            _coalesce(batch, _cfg())
         assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_20
 
     def test_rejects_a_missing_marker(self, tmp_path):
         batch = _batch(tmp_path / "in.parquet", k=[1], v=[10])
         with pytest.raises(DatabricksRuntimeException) as ei:
-            with _coalesce(batch, _cfg(on=["k"])):
-                pass
+            _coalesce(batch, _cfg(on=["k"]))
         assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_19
 
     def test_rejects_a_missing_key(self, tmp_path):
         batch = _batch(tmp_path / "in.parquet", k=[1], op=["i"])
         with pytest.raises(DatabricksRuntimeException) as ei:
-            with _coalesce(batch, _cfg(on=["nope"])):
-                pass
+            _coalesce(batch, _cfg(on=["nope"]))
         assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_20
         assert "'nope'" in str(ei.value)
 
     def test_drops_an_ephemeral_key(self, tmp_path):
         """A key inserted and deleted inside one batch never reached the target,
         so it reaches neither the upload nor the merge."""
-        import polars as pl
 
         batch = _batch(tmp_path / "in.parquet", k=[1, 1], op=["i", "d"], v=[1, 2])
-        with _coalesce(batch, _cfg(on=["k"])) as out:
-            got = pl.read_parquet(out)
-        assert got.is_empty()
+        assert _coalesce(batch, _cfg(on=["k"])).is_empty()
 
     def test_narrows_nanosecond_timestamps(self, tmp_path):
         """The merge path's cast rides this rewrite instead of adding one: Delta
@@ -792,8 +775,8 @@ class TestCoalescedBatch:
         pl.DataFrame({"k": [1], "op": ["i"], "ts": [1]}).with_columns(
             pl.col("ts").cast(pl.Datetime("ns"))
         ).write_parquet(batch)
-        with _coalesce(batch, _cfg(on=["k"])) as out:
-            assert pl.read_parquet(out).schema["ts"] == pl.Datetime("us")
+        out = _coalesce(batch, _cfg(on=["k"]))
+        assert out.schema["ts"] == pl.Datetime("us")
 
 
 # ---------------------------------------------------------------------------
@@ -822,10 +805,12 @@ class TestMergeBatch:
         """``watermark_column`` arrives at the driver already folded -- the
         destination that names it does the folding -- so it is spelled here the
         way the target stores it."""
+        import polars as pl
+
         return merge_batch(
             _dialect(cursor, schema_evolution=schema_evolution),
             target=_TARGET,
-            batch=batch,
+            batch=pl.scan_parquet(batch),
             cfg=_cfg(on=["k"], **cfg_kwargs),
             schema_evolution=schema_evolution,
             ctx=_FakeCtx(),

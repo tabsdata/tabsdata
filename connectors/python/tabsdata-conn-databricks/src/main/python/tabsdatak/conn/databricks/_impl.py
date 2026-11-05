@@ -46,6 +46,9 @@ from tabsdatak.conn.common._validation import complete_levels, fqn, unfqn
 from tabsdatak.conn.common.sql._merge._driver import merge_batch
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._spool import spooled_parquet
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._watermark import watermarked_batch
 from tabsdatak.conn.common.sql.cdc.constants import (
     OP_DELETE,
@@ -1047,6 +1050,8 @@ def write_all_tables(
     """Upload each parquet file to the volume and run the matching
     CREATE / COPY INTO sequence. Failures are surfaced to the caller
     which wraps them into the appropriate DATABRICKS_* code."""
+    import polars as pl
+
     if len(cfg.target_tables) != len(parquet_files):
         # Should already have been caught by the plugin; defensive.
         from tabsdatak.conn.databricks.error import DatabricksErrorCode
@@ -1111,11 +1116,16 @@ def write_all_tables(
                 )
                 continue
             logger.info("databricks: staging parquet for %s", fq_table)
-            with watermarked_batch(
-                path,
-                watermark,
-                cfg.ctx.transaction_id,
-                adapt=narrow_timestamps if has_nanosecond_timestamps(path) else None,
+            with spooled_parquet(
+                watermarked_batch(
+                    pl.scan_parquet(path),
+                    watermark,
+                    cfg.ctx.transaction_id,
+                    adapt=narrow_timestamps
+                    if has_nanosecond_timestamps(path)
+                    else None,
+                ),
+                path.name,
             ) as batch:
                 file_in_volume = upload_file_to_volume(
                     ws_client, cfg.conn, fq_table, batch
@@ -1147,6 +1157,8 @@ def _merge_one(
     The volume upload and the staged file's deletion move in with the staging,
     which is why nothing is left here but the cursor.
     """
+    import polars as pl
+
     cursor = sql_conn.cursor()
     try:
         merge_batch(
@@ -1160,7 +1172,7 @@ def _merge_one(
                 copy_kwargs=cfg.support_replace_copy_into,
             ),
             target=_fq_for_sql(fq_table),
-            batch=parquet_path,
+            batch=pl.scan_parquet(parquet_path),
             cfg=merge_cfg._sql_merge_cfg(),
             schema_evolution=cfg.schema_evolution,
             ctx=cfg.ctx,

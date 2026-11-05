@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge import MergeCfg, WatermarkCfg
@@ -23,6 +23,9 @@ from tabsdatak.conn.common.sql._merge._statement import render_merge, render_rep
 from tabsdatak.conn.common.sql._merge.dialect import MergeDialect, Staged
 from tabsdatak.conn.common.sql.error import SqlCommonErrorCode
 from tabsdatak.spi import DestContext
+
+if TYPE_CHECKING:
+    import polars as pl
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +91,7 @@ def merge_batch(
     dialect: MergeDialect,
     *,
     target: str,
-    batch: Path,
+    batch: pl.LazyFrame,
     cfg: MergeCfg,
     schema_evolution: str,
     ctx: DestContext,
@@ -129,47 +132,45 @@ def merge_batch(
     replacing = batch_resets(dialect, target, batch, cfg)
     if replacing and dialect.syntax.replace is None:
         raise SqlCommonErrorCode.SQL_COMMON_9.exception(table=target)
-    with coalesced_batch(dialect, target, batch, cfg) as reduced:
-        if watermark_cfg is not None:
-            logger.debug(
-                "Checking watermark column %s on %s", watermark_cfg.column, target
+    reduced = coalesced_batch(dialect, target, batch, cfg)
+    if watermark_cfg is not None:
+        logger.debug("Checking watermark column %s on %s", watermark_cfg.column, target)
+        if dialect.check_watermark_column(target, watermark_cfg):
+            logger.info(
+                "Skipping merge onto %s: watermark column %s already has value %s",
+                target,
+                watermark_cfg.column,
+                watermark_cfg.transaction_id,
             )
-            if dialect.check_watermark_column(target, watermark_cfg):
-                logger.info(
-                    "Skipping merge onto %s: watermark column %s already has value %s",
-                    target,
-                    watermark_cfg.column,
-                    watermark_cfg.transaction_id,
-                )
-                return MergeResult(evolved=[], written=[])
-        with dialect.staging(target, reduced, watermark_cfg) as staged:
-            marker = cfg._op_column()
-            dialect.ensure_target(target, staged, marker)
-            evolved = (
-                dialect.evolve(target, staged, marker)
-                if schema_evolution == "update"
-                else dialect.ensure_watermark_column(target, watermark_cfg)
+            return MergeResult(evolved=[], written=[])
+    with dialect.staging(target, reduced, watermark_cfg) as staged:
+        marker = cfg._op_column()
+        dialect.ensure_target(target, staged, marker)
+        evolved = (
+            dialect.evolve(target, staged, marker)
+            if schema_evolution == "update"
+            else dialect.ensure_watermark_column(target, watermark_cfg)
+        )
+        # Read after the ALTERs above, so a column just added counts as
+        # written rather than being left out of the merge.
+        written = write_columns(dialect, target, staged, cfg)
+        if not written:
+            raise dialect.errors.no_shared_columns(table=target)
+        if replacing:
+            logger.info(
+                "Replacing the rows of %s with %s on columns %s",
+                target,
+                staged.relation,
+                written,
             )
-            # Read after the ALTERs above, so a column just added counts as
-            # written rather than being left out of the merge.
-            written = write_columns(dialect, target, staged, cfg)
-            if not written:
-                raise dialect.errors.no_shared_columns(table=target)
-            if replacing:
-                logger.info(
-                    "Replacing the rows of %s with %s on columns %s",
-                    target,
-                    staged.relation,
-                    written,
-                )
-                statement = render_replace(dialect, target, staged, cfg, written)
-            else:
-                logger.info(
-                    "Merging %s into %s on columns %s",
-                    staged.relation,
-                    target,
-                    written,
-                )
-                statement = render_merge(dialect, target, staged, cfg, written)
-            dialect.execute(statement)
+            statement = render_replace(dialect, target, staged, cfg, written)
+        else:
+            logger.info(
+                "Merging %s into %s on columns %s",
+                staged.relation,
+                target,
+                written,
+            )
+            statement = render_merge(dialect, target, staged, cfg, written)
+        dialect.execute(statement)
     return MergeResult(evolved=evolved, written=written, replaced=replacing)

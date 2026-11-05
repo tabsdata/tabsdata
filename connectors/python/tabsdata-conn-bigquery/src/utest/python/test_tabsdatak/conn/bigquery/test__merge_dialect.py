@@ -516,7 +516,7 @@ def test_staging_loads_the_batch_into_a_table_of_its_own(work_dir, monkeypatch):
     })
     monkeypatch.setattr(impl, "temp_table_fqn", lambda table: _STAGING)
 
-    with _dialect(client).staging(_QUOTED_TARGET, batch) as staged:
+    with _dialect(client).staging(_QUOTED_TARGET, pl.scan_parquet(batch)) as staged:
         assert staged.relation == _QUOTED_STAGING
         assert staged.columns == [("order_id", "INT64"), ("op", "STRING")]
     assert loaded["uri"] == "gs://bucket/in.parquet"
@@ -536,7 +536,7 @@ def test_staging_drops_the_table_when_the_merge_fails(work_dir, monkeypatch):
     pl.DataFrame({"order_id": [1], "op": ["i"]}).write_parquet(batch)
     client = _field_client({_STAGING: [_field("order_id", "INTEGER")]})
     with pytest.raises(RuntimeError):
-        with _dialect(client).staging(_QUOTED_TARGET, batch):
+        with _dialect(client).staging(_QUOTED_TARGET, pl.scan_parquet(batch)):
             raise RuntimeError("merge blew up")
     client.delete_table.assert_called_once_with(_STAGING, not_found_ok=True)
 
@@ -684,7 +684,7 @@ def _stage(client, work_dir, monkeypatch, watermark_cfg):
 
     batch = work_dir / "in.parquet"
     pl.DataFrame({"order_id": [1], "op": ["i"]}).write_parquet(batch)
-    with _dialect(client).staging(_QUOTED_TARGET, batch, watermark_cfg) as staged:
+    with _dialect(client).staging(_QUOTED_TARGET, pl.scan_parquet(batch), watermark_cfg) as staged:
         return staged
 
 
@@ -728,10 +728,10 @@ def test_staging_stamps_nothing_without_a_watermark(work_dir, monkeypatch):
 def _coalesced_rows(work_dir: Path, rows: list[dict], **cfg) -> list[dict]:
     src = work_dir / "cdc.parquet"
     pl.DataFrame(rows).write_parquet(src)
-    with coalesced_batch(
-        _dialect(MagicMock()), _TARGET, src, _merge_cfg(**cfg)
-    ) as reduced:
-        return pl.read_parquet(reduced).to_dicts()
+    reduced = coalesced_batch(
+        _dialect(MagicMock()), _TARGET, pl.scan_parquet(src), _merge_cfg(**cfg)
+    )
+    return reduced.collect().to_dicts()
 
 
 def test_coalesce_reduces_a_key_to_its_net_state(work_dir):
@@ -756,14 +756,6 @@ def test_coalesce_drops_an_ephemeral_key(work_dir):
         ],
     )
     assert rows == []
-
-
-def test_coalesce_keeps_the_original_basename(work_dir):
-    src = work_dir / "cdc.parquet"
-    pl.DataFrame([{"order_id": 1, "op": "i"}]).write_parquet(src)
-    with coalesced_batch(_dialect(MagicMock()), _TARGET, src, _merge_cfg()) as reduced:
-        assert reduced.name == "cdc.parquet"
-        assert reduced != src
 
 
 def test_coalesce_matches_the_marker_case_insensitively(work_dir):

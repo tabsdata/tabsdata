@@ -10,8 +10,6 @@ makes on the watermark it names against the columns its merge already reads.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import polars as pl
 import pytest
 
@@ -42,9 +40,8 @@ class _UpperMergeCfg(MergeCfg):
         return name.upper()
 
 
-def _batch(path: Path, **columns) -> Path:
-    pl.DataFrame(columns or {"id": [1, 2]}).write_parquet(path)
-    return path
+def _batch(**columns) -> pl.LazyFrame:
+    return pl.LazyFrame(columns or {"id": [1, 2]})
 
 
 def _cfg(**overrides) -> MergeCfg:
@@ -57,76 +54,48 @@ def _cfg(**overrides) -> MergeCfg:
 
 
 class TestWatermarkedBatch:
-    def test_every_row_carries_the_trx_id(self, tmp_path):
-        with watermarked_batch(_batch(tmp_path / "in.parquet"), "wm", _TRX) as out:
-            assert pl.read_parquet(out)["wm"].to_list() == [_TRX, _TRX]
+    def test_every_row_carries_the_trx_id(self):
+        out = watermarked_batch(_batch(), "wm", _TRX).collect()
+        assert out["wm"].to_list() == [_TRX, _TRX]
 
-    def test_the_column_is_a_string(self, tmp_path):
+    def test_the_column_is_a_string(self):
         """A trx id is an opaque token, and every dialect declares the column a
         string type, so the batch has to agree."""
-        with watermarked_batch(_batch(tmp_path / "in.parquet"), "wm", _TRX) as out:
-            assert pl.read_parquet(out).schema["wm"] == pl.String
+        out = watermarked_batch(_batch(), "wm", _TRX)
+        assert out.collect_schema()["wm"] == pl.String
 
-    def test_the_batch_columns_are_kept(self, tmp_path):
-        batch = _batch(tmp_path / "in.parquet", order_id=[1, 2], status=["a", "b"])
-        with watermarked_batch(batch, "wm", _TRX) as out:
-            assert pl.read_parquet(out).columns == ["order_id", "status", "wm"]
+    def test_the_batch_columns_are_kept(self):
+        batch = _batch(order_id=[1, 2], status=["a", "b"])
+        out = watermarked_batch(batch, "wm", _TRX)
+        assert out.collect_schema().names() == ["order_id", "status", "wm"]
 
-    def test_the_basename_is_kept(self, tmp_path):
-        """A connector may name the staged object after it."""
-        batch = _batch(tmp_path / "in.parquet")
-        with watermarked_batch(batch, "wm", _TRX) as out:
-            assert out.name == batch.name
+    def test_no_column_hands_back_the_batch_itself(self):
+        batch = _batch()
+        assert watermarked_batch(batch, None, _TRX) is batch
 
-    def test_a_copy_is_yielded_not_the_original(self, tmp_path):
-        batch = _batch(tmp_path / "in.parquet")
-        with watermarked_batch(batch, "wm", _TRX) as out:
-            assert out != batch
-        assert pl.read_parquet(batch).columns == ["id"]
+    def test_an_empty_batch_still_gains_the_column(self):
+        out = watermarked_batch(pl.LazyFrame({"id": []}), "wm", _TRX).collect()
+        assert out.height == 0
+        assert "wm" in out.columns
 
-    def test_the_copy_is_removed_on_the_way_out(self, tmp_path):
-        with watermarked_batch(_batch(tmp_path / "in.parquet"), "wm", _TRX) as out:
-            staged = out
-            assert staged.exists()
-        assert not staged.exists()
+    def test_the_adapt_rewrite_rides_the_stamp(self):
+        out = watermarked_batch(
+            _batch(id=[1, 2]),
+            "wm",
+            _TRX,
+            adapt=lambda frame: frame.with_columns(pl.col("id") * 10),
+        ).collect()
+        assert out["id"].to_list() == [10, 20]
+        assert out["wm"].to_list() == [_TRX, _TRX]
 
-    def test_no_column_yields_the_original_untouched(self, tmp_path):
-        batch = _batch(tmp_path / "in.parquet")
-        with watermarked_batch(batch, None, _TRX) as out:
-            assert out == batch
-            assert pl.read_parquet(out).columns == ["id"]
-
-    def test_an_empty_batch_still_gains_the_column(self, tmp_path):
-        path = tmp_path / "empty.parquet"
-        pl.DataFrame({"id": []}).write_parquet(path)
-        with watermarked_batch(path, "wm", _TRX) as out:
-            frame = pl.read_parquet(out)
-        assert frame.height == 0
-        assert "wm" in frame.columns
-
-    def test_the_adapt_rewrite_rides_the_stamp(self, tmp_path):
-        """One sink, not two -- which is the point of passing the rewrite in
-        rather than making it beforehand."""
-        batch = _batch(tmp_path / "in.parquet", id=[1, 2])
-        with watermarked_batch(
-            batch, "wm", _TRX, adapt=lambda frame: frame.with_columns(pl.col("id") * 10)
-        ) as out:
-            frame = pl.read_parquet(out)
-        assert frame["id"].to_list() == [10, 20]
-        assert frame["wm"].to_list() == [_TRX, _TRX]
-
-    def test_an_adapt_alone_is_enough_to_rewrite(self, tmp_path):
-        batch = _batch(tmp_path / "in.parquet", id=[1])
-        with watermarked_batch(
-            batch, None, _TRX, adapt=lambda frame: frame.with_columns(pl.col("id") * 10)
-        ) as out:
-            assert out != batch
-            assert pl.read_parquet(out)["id"].to_list() == [10]
-
-    def test_neither_a_column_nor_an_adapt_yields_the_original(self, tmp_path):
-        batch = _batch(tmp_path / "in.parquet")
-        with watermarked_batch(batch, None, _TRX, adapt=None) as out:
-            assert out == batch
+    def test_an_adapt_alone_rewrites(self):
+        out = watermarked_batch(
+            _batch(id=[1]),
+            None,
+            _TRX,
+            adapt=lambda frame: frame.with_columns(pl.col("id") * 10),
+        )
+        assert out.collect()["id"].to_list() == [10]
 
 
 # --- validate_watermark_column ---------------------------------------

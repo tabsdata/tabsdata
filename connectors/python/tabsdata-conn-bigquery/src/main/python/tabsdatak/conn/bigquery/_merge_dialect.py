@@ -16,8 +16,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from collections.abc import Iterator
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from tabsdatak.conn.bigquery import _iceberg
 
@@ -44,7 +43,15 @@ from tabsdatak.conn.common.sql._merge.dialect import (
     Staged,
 )
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._spool import spooled_parquet
+
+if TYPE_CHECKING:
+    import polars as pl
+
 logger = logging.getLogger(__name__)
+
+_BATCH_FILE = "batch.parquet"
 
 _SYNTAX = MergeSyntax(
     target_alias="target",
@@ -120,7 +127,10 @@ class BigQueryMergeDialect(MergeDialect):
 
     @contextlib.contextmanager
     def staging(
-        self, target: str, batch: Path, watermark_cfg: WatermarkCfg | None = None
+        self,
+        target: str,
+        batch: pl.LazyFrame,
+        watermark_cfg: WatermarkCfg | None = None,
     ) -> Iterator[Staged]:
         """Upload the batch to GCS and load it into a staging table.
 
@@ -150,7 +160,8 @@ class BigQueryMergeDialect(MergeDialect):
         from tabsdatak.conn.bigquery._plugin import _load_table_from_uri, _upload_to_gcs
 
         try:
-            _upload_to_gcs(self._gcs_client, batch, self._uri)
+            with spooled_parquet(batch, _BATCH_FILE) as spooled:
+                _upload_to_gcs(self._gcs_client, spooled, self._uri)
         except Exception as e:
             raise BigQueryErrorCode.BIGQUERY_6.exception(cause=e, uri=self._uri)
 

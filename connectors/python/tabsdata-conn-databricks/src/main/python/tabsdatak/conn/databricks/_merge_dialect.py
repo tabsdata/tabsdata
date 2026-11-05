@@ -16,7 +16,6 @@ from __future__ import annotations
 import contextlib
 import logging
 from collections.abc import Iterator
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 # noinspection PyProtectedMember
@@ -29,12 +28,17 @@ from tabsdatak.conn.common.sql._merge.dialect import (
     MergeSyntax,
     Staged,
 )
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._spool import spooled_parquet
 from tabsdatak.conn.databricks.error import DatabricksErrorCode
 
 if TYPE_CHECKING:
     import polars as pl
 
 logger = logging.getLogger(__name__)
+
+_BATCH_FILE = "batch.parquet"
 
 _ERRORS = MergeErrors(
     marker_absent=DatabricksErrorCode.DATABRICKS_19.exception,
@@ -139,7 +143,10 @@ class DatabricksMergeDialect(MergeDialect):
 
     @contextlib.contextmanager
     def staging(
-        self, target: str, batch: Path, watermark_cfg: WatermarkCfg | None = None
+        self,
+        target: str,
+        batch: pl.LazyFrame,
+        watermark_cfg: WatermarkCfg | None = None,
     ) -> Iterator[Staged]:
         """Upload the batch to the volume, build a table from its schema and
         ``COPY`` the rows in.
@@ -164,9 +171,10 @@ class DatabricksMergeDialect(MergeDialect):
             upload_file_to_volume,
         )
 
-        staged_file = upload_file_to_volume(
-            self._ws_client, self._conn, self._fq_table, batch
-        )
+        with spooled_parquet(batch, _BATCH_FILE) as spooled:
+            staged_file = upload_file_to_volume(
+                self._ws_client, self._conn, self._fq_table, spooled
+            )
         try:
             scratch = _create_temp_table_from_volume_schema(
                 self._cursor, staged_file, self._fq_table

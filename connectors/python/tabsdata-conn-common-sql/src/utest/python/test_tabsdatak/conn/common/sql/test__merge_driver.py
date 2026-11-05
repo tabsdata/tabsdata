@@ -90,7 +90,7 @@ class _FakeDialect(MergeDialect):
 
     @contextlib.contextmanager
     def staging(self, target, batch, watermark_cfg=None):
-        frame = pl.read_parquet(batch)
+        frame = batch.collect()
         self.staged_rows = sorted(frame.rows(), key=str)
         yield Staged(
             relation=_SCRATCH,
@@ -115,7 +115,7 @@ def _cfg() -> MergeCfg:
     return MergeCfg(on=["pk"], op_column="op")
 
 
-def _batch(tmp_path: Path, records: list[tuple]) -> Path:
+def _batch(tmp_path: Path, records: list[tuple]) -> pl.LazyFrame:
     path = tmp_path / "batch.parquet"
     pl.DataFrame(
         {
@@ -125,7 +125,7 @@ def _batch(tmp_path: Path, records: list[tuple]) -> Path:
         },
         schema={"pk": pl.String, "op": pl.String, "v": pl.Int64},
     ).write_parquet(path)
-    return path
+    return pl.scan_parquet(path)
 
 
 def _merge(tmp_path, records, syntax=_MERGE):
@@ -202,8 +202,7 @@ class TestBatchResets:
         assert not batch_resets(_FakeDialect(_MERGE, []), _TARGET, batch, _cfg())
 
     def test_refuses_a_batch_without_the_marker(self, tmp_path):
-        batch = tmp_path / "batch.parquet"
-        pl.DataFrame({"pk": ["A"], "v": [1]}).write_parquet(batch)
+        batch = pl.LazyFrame({"pk": ["A"], "v": [1]})
         with pytest.raises(_Refused):
             batch_resets(_FakeDialect(_MERGE, []), _TARGET, batch, _cfg())
 

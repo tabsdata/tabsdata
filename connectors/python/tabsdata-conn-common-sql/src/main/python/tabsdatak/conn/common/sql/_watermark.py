@@ -22,11 +22,8 @@ name does not collide with the columns a merge already reads.
 
 from __future__ import annotations
 
-import contextlib
 import logging
-import tempfile
-from collections.abc import Callable, Iterator
-from pathlib import Path
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from tabsdatak.conn.common.sql.error import SqlCommonErrorCode
@@ -40,57 +37,41 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-@contextlib.contextmanager
 def watermarked_batch(
-    batch: Path,
+    batch: pl.LazyFrame,
     column: str | None,
     transaction_id: str,
     adapt: Callable[[pl.LazyFrame], pl.LazyFrame] | None = None,
-) -> Iterator[Path]:
-    """Yield a parquet carrying ``column`` stamped with ``transaction_id``, to be staged
-    in place of ``batch`` -- or ``batch`` itself when the write neither names a
+) -> pl.LazyFrame:
+    """``batch`` carrying ``column`` stamped with ``transaction_id``, to be
+    staged in its place -- or ``batch`` itself when the write neither names a
     watermark nor adapts the batch.
 
     ``adapt`` is the connector's own rewrite of the frame -- a cast its engine
-    needs, typically -- folded into this one so it costs no second round-trip.
+    needs, typically -- folded into the same plan so the rows are walked once,
+    when the batch is staged.
 
-    Written into the file rather than added to the target afterwards: a bulk
-    load matches the column onto the target by name like any other, so the load
-    stamps the rows it brings in and nothing has to walk them a second time.
-    Rows already in the target are left alone, which is what "written before
-    there was a watermark" looks like.
-
-    The rewritten file keeps the original's basename, since a connector may name
-    the staged object after it, and lives in a temp directory removed as soon as
-    it has been staged. The caller must therefore stage it inside the ``with``.
+    Written into the staged batch rather than added to the target afterwards: a
+    bulk load matches the column onto the target by name like any other, so the
+    load stamps the rows it brings in and nothing has to walk them a second
+    time. Rows already in the target are left alone, which is what "written
+    before there was a watermark" looks like.
 
     The target still has to be given the column before the load: the engines
     differ on whether a batch carrying a column the target lacks is dropped or
     refused, and neither is a watermark.
     """
-    if column is None and adapt is None:
-        yield batch
-        return
+    if adapt is not None:
+        batch = adapt(batch)
+    if column is None:
+        return batch
 
     import polars as pl
 
-    with tempfile.TemporaryDirectory() as work:
-        stamped = Path(work) / batch.name
-        frame = pl.scan_parquet(batch)
-        if adapt is not None:
-            frame = adapt(frame)
-        if column is not None:
-            logger.info(
-                "Stamping %s with %s = %r before staging",
-                batch.name,
-                column,
-                transaction_id,
-            )
-            frame = frame.with_columns(
-                pl.lit(transaction_id, dtype=pl.String).alias(column)
-            )
-        frame.sink_parquet(stamped)
-        yield stamped
+    logger.info(
+        "Stamping the batch with %s = %r before staging", column, transaction_id
+    )
+    return batch.with_columns(pl.lit(transaction_id, dtype=pl.String).alias(column))
 
 
 def validate_watermark_column(cfg: MergeCfg, watermark_column: str | None) -> None:

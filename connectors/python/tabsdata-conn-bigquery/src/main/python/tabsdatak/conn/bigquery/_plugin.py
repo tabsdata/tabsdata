@@ -89,6 +89,8 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
         dest: BigQueryDest,
         tables: list[TableFileSpec],
     ) -> None:
+        import polars as pl
+
         # noinspection PyProtectedMember
         from tabsdatak.conn.bigquery._evolution import (
             BigQuerySchemaEvolver,
@@ -109,6 +111,9 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
 
         # noinspection PyProtectedMember
         from tabsdatak.conn.common.sql._merge._driver import merge_batch
+
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.common.sql._spool import spooled_parquet
 
         # noinspection PyProtectedMember
         from tabsdatak.conn.common.sql._watermark import watermarked_batch
@@ -199,7 +204,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                                 target_fqn=table_fqn,
                             ),
                             target=quote_table(table_fqn),
-                            batch=Path(parquet_path),
+                            batch=pl.scan_parquet(parquet_path),
                             cfg=merge_cfg._sql_merge_cfg(),
                             schema_evolution=write_cfg.schema_evolution,
                             ctx=ctx,
@@ -253,8 +258,11 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                     continue
                 logger.debug("bigquery: staging %d/%d to %s", i, total, uri)
                 try:
-                    with watermarked_batch(
-                        Path(parquet_path), watermark, ctx.transaction_id
+                    with spooled_parquet(
+                        watermarked_batch(
+                            pl.scan_parquet(parquet_path), watermark, ctx.transaction_id
+                        ),
+                        Path(parquet_path).name,
                     ) as batch:
                         _upload_to_gcs(gcs_client, batch, uri)
                 except Exception as e:

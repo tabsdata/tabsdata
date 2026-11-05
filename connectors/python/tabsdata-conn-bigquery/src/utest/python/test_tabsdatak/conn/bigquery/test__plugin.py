@@ -1614,7 +1614,7 @@ def test_dest_plugin_append_without_a_watermark_uploads_what_it_was_handed(
     _, staged = _watermark_clients(monkeypatch)
     src = _watermark_write(work_dir, watermark_column=None)
     path, rows = staged[0]
-    assert path == src
+    assert path.name == src.name
     assert rows == [{"id": 1}, {"id": 2}]
 
 
@@ -1754,7 +1754,9 @@ def test_dest_plugin_replace_never_stamps_even_when_handed_a_watermark(
     plugin._BigQueryDestPlugin().write_out(
         _dest_ctx(work_dir), _bare_conn(), dest, [src]
     )
-    assert staged[0][0] == src
+    path, rows = staged[0]
+    assert path.name == src.name
+    assert rows == [{"id": 1}]
     assert _watermark_alters(bq_client) == []
 
 

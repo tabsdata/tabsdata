@@ -6,11 +6,8 @@
 
 from __future__ import annotations
 
-import contextlib
 import logging
-import tempfile
-from collections.abc import Iterator
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge import MergeCfg
@@ -18,6 +15,9 @@ from tabsdatak.conn.common.sql._merge import MergeCfg
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge.dialect import MergeDialect
 from tabsdatak.conn.common.sql.cdc import cdc_batch_resets, coalesce_cdc_batch
+
+if TYPE_CHECKING:
+    import polars as pl
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ def incoming_column(
 def batch_resets(
     dialect: MergeDialect,
     table: str,
-    batch: Path,
+    batch: pl.LazyFrame,
     cfg: MergeCfg,
 ) -> bool:
     """Whether ``batch`` loads or truncates the table, so that applying it
@@ -62,26 +62,21 @@ def batch_resets(
     truncate records once they have cut the batch, so its output cannot tell.
     Only the marker column is read.
     """
-    import polars as pl
-
-    lf = pl.scan_parquet(batch)
     marker = incoming_column(
-        dialect, lf.collect_schema().names(), cfg._op_column(), table
+        dialect, batch.collect_schema().names(), cfg._op_column(), table
     )
     if marker is None:
         raise dialect.errors.marker_absent(column=cfg.op_column, table=table)
-    return cdc_batch_resets(lf, marker).collect().item()
+    return cdc_batch_resets(batch, marker).collect().item()
 
 
-@contextlib.contextmanager
 def coalesced_batch(
     dialect: MergeDialect,
     table: str,
-    batch: Path,
+    batch: pl.LazyFrame,
     cfg: MergeCfg,
-) -> Iterator[Path]:
-    """Yield a parquet holding one row per key, to be staged in place of
-    ``batch``.
+) -> pl.LazyFrame:
+    """``batch`` reduced to one row per key, to be staged in its place.
 
     A captured batch can carry several changes for one key, and a ``MERGE``
     matches each incoming row against the target at most once -- a second row
@@ -92,20 +87,13 @@ def coalesced_batch(
     Records are resolved in arrival order, which for a single batch is the order
     the publisher wrote them in.
 
-    The reduced file keeps the original's basename, so the staged file -- and
-    everything downstream keyed off its name -- is indistinguishable from the
-    uncoalesced one. It lives in a temp directory removed as soon as it has been
-    staged.
-
-    :meth:`MergeDialect.adapt_batch` rides this rewrite, so a dialect needing a
-    cast before its engine reads the file pays no round-trip for it. It is
+    :meth:`MergeDialect.adapt_batch` rides the same plan, so a dialect needing
+    a cast before its engine reads the batch pays no extra pass for it. It is
     applied first, so the reduction sees the keys at the precision the target
     will.
     """
-    import polars as pl
-
-    lf = dialect.adapt_batch(pl.scan_parquet(batch))
-    # Reading the footer, not the rows: the names have to be known before the
+    lf = dialect.adapt_batch(batch)
+    # Resolving the schema, not the rows: the names have to be known before the
     # transformation can be built, and the transformation never resolves a
     # schema of its own.
     names = lf.collect_schema().names()
@@ -113,21 +101,18 @@ def coalesced_batch(
     marker = incoming_column(dialect, names, cfg._op_column(), table)
     if marker is None:
         raise dialect.errors.marker_absent(column=cfg.op_column, table=table)
-    keys = [incoming_column(dialect, names, key, table) for key in cfg._keys()]
-    absent = [spec for spec, found in zip(cfg.on, keys, strict=True) if found is None]
+    found = [incoming_column(dialect, names, key, table) for key in cfg._keys()]
+    absent = [spec for spec, key in zip(cfg.on, found, strict=True) if key is None]
     if absent:
         raise dialect.errors.keys_absent(
             columns=", ".join(repr(name) for name in absent), table=table
         )
+    keys = [key for key in found if key is not None]
 
-    with tempfile.TemporaryDirectory() as work:
-        reduced = Path(work) / batch.name
-        logger.info(
-            "Coalescing %s on %s (marker %r) before the merge onto %s",
-            batch.name,
-            keys,
-            marker,
-            table,
-        )
-        coalesce_cdc_batch(lf, keys, marker).sink_parquet(reduced)
-        yield reduced
+    logger.info(
+        "Coalescing the batch on %s (marker %r) before the merge onto %s",
+        keys,
+        marker,
+        table,
+    )
+    return coalesce_cdc_batch(lf, keys, marker)
