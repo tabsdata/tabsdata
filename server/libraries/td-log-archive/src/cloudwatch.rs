@@ -22,7 +22,7 @@ use aws_sdk_cloudwatchlogs::operation::get_log_events::GetLogEventsError;
 use bytes::Bytes;
 use serde::Deserialize;
 use td_bridge::worker::{LogBridgeError, WorkerLogStream};
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use crate::archive::{ArchiveReader, ArchiveRequest};
 use crate::render::container_header;
@@ -87,7 +87,12 @@ impl CloudWatchLogReader {
             warn!("An IAM role is set but no AWS region is: worker logs are read from pods only.");
             return None;
         }
-        Some(Self::new(Client::new(&config), namespace))
+        let reader = Self::new(Client::new(&config), namespace);
+        info!(
+            "Worker logs of removed pods are read from the CloudWatch log group '{}'.",
+            reader.log_group
+        );
+        Some(reader)
     }
 }
 

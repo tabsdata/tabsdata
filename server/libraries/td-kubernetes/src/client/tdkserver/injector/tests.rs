@@ -763,3 +763,95 @@ fn a_storage_stub_sets_uris_and_options_together() {
         "s3://bucket/bundles/"
     );
 }
+
+const TABSDATA_SCHEMA: &str =
+    include_str!("../../../../../../../variant/resources/kprofile/configs/tabsdata.schema.yaml");
+const TABSDATA_EKS: &str =
+    include_str!("../../../../../../../variant/resources/kprofile/configs/tabsdata_eks.yaml");
+const TABSDATA_GKE: &str =
+    include_str!("../../../../../../../variant/resources/kprofile/configs/tabsdata_gke.yaml");
+const TABSDATA_AKS: &str =
+    include_str!("../../../../../../../variant/resources/kprofile/configs/tabsdata_aks.yaml");
+
+fn identity_plan(
+    tabsdata: &str,
+    arguments: &[&str],
+) -> Result<BTreeMap<String, String>, InjectorError> {
+    let configs = BTreeMap::from([
+        ("tabsdata.yaml".to_owned(), tabsdata.to_owned()),
+        ("tabsdata.yamls".to_owned(), TABSDATA_SCHEMA.to_owned()),
+    ]);
+    plan(&configs, &settings(arguments))
+}
+
+#[test]
+fn an_eks_apiserver_takes_its_iam_role() {
+    let files = identity_plan(
+        TABSDATA_EKS,
+        &[
+            "tabsdata:pods.service.apiserver.service_account.annotations.\"eks.amazonaws.com/role-arn\"=arn:aws:iam::123456789012:role/apiserver",
+        ],
+    )
+    .expect("injected");
+    let annotations = &read(&files["tabsdata.yaml"])["pods"]["service"]["apiserver"]["service_account"]
+        ["annotations"];
+    assert_eq!(
+        annotations["eks.amazonaws.com/role-arn"],
+        "arn:aws:iam::123456789012:role/apiserver"
+    );
+    assert_eq!(
+        annotations.as_mapping().map(serde_yaml::Mapping::len),
+        Some(1)
+    );
+}
+
+#[test]
+fn a_gke_apiserver_takes_its_google_service_account_and_worker_logs_bucket() {
+    let files = identity_plan(
+        TABSDATA_GKE,
+        &[
+            "tabsdata:pods.service.apiserver.service_account.annotations.\"iam.gke.io/gcp-service-account\"=apiserver@project.iam.gserviceaccount.com",
+            "tabsdata:pods.service.apiserver.worker_logs.bucket=tabsdata-logs",
+            "tabsdata:pods.service.apiserver.worker_logs.location=europe-west1",
+        ],
+    )
+    .expect("injected");
+    let apiserver = &read(&files["tabsdata.yaml"])["pods"]["service"]["apiserver"];
+    assert_eq!(
+        apiserver["service_account"]["annotations"]["iam.gke.io/gcp-service-account"],
+        "apiserver@project.iam.gserviceaccount.com"
+    );
+    assert_eq!(apiserver["worker_logs"]["bucket"], "tabsdata-logs");
+    assert_eq!(apiserver["worker_logs"]["location"], "europe-west1");
+}
+
+#[test]
+fn an_aks_apiserver_takes_its_workload_identity_and_worker_logs_workspace() {
+    let files = identity_plan(
+        TABSDATA_AKS,
+        &[
+            "tabsdata:pods.service.apiserver.service_account.annotations.\"azure.workload.identity/client-id\"=af088ea7-37cd-4fb6-bdb7-cc50392a3384",
+            "tabsdata:pods.service.apiserver.worker_logs.workspace=fccdfef1-d7b9-4f1b-86a8-78fc72277906",
+        ],
+    )
+    .expect("injected");
+    let apiserver = &read(&files["tabsdata.yaml"])["pods"]["service"]["apiserver"];
+    assert_eq!(
+        apiserver["service_account"]["annotations"]["azure.workload.identity/client-id"],
+        "af088ea7-37cd-4fb6-bdb7-cc50392a3384"
+    );
+    assert_eq!(
+        apiserver["worker_logs"]["workspace"],
+        "fccdfef1-d7b9-4f1b-86a8-78fc72277906"
+    );
+}
+
+#[test]
+fn the_tabsdata_schema_opens_only_the_annotations() {
+    let error = identity_plan(
+        TABSDATA_EKS,
+        &["tabsdata:pods.service.apiserver.service_account.name=other"],
+    )
+    .expect_err("rejected");
+    assert!(matches!(error, InjectorError::KeyNotFound { .. }));
+}

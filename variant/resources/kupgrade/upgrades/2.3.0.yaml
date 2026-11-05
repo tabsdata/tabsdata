@@ -54,6 +54,9 @@ configs:
           leaf: storage.mounts[*]
           child: options
           value: {}
+  tabsdata.schema.yaml:
+    tabsdata.schema.yaml:
+      action: create
   tabsdata.yaml:
     tabsdata_aks.yaml:
       action: modify

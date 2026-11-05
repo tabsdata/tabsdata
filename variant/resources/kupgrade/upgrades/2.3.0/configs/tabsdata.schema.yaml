@@ -1,0 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+directives:
+  - at: pods.service.apiserver.service_account.annotations
+    treat: open
