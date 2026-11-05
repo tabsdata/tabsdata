@@ -172,10 +172,11 @@ def _pandas_read(
         text(query),
         con=connection.execution_options(stream_results=True),
         chunksize=chunk_size,
-        dtype=dict(schema_overrides) if schema_overrides else None,
         params=dict(parameters) if parameters else None,
     ):
-        yield pl.from_pandas(frame)
+        yield pl.from_pandas(
+            frame, schema_overrides=dict(schema_overrides) if schema_overrides else None
+        )
 
 
 class PandasReadEngine(SqlAlchemyReadEngine):

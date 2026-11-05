@@ -173,16 +173,42 @@ def test_polars_chunking_yields_a_table_per_chunk(db_path):
     assert pl.concat(frames)["id"].to_list() == [1, 2, 3, 4]
 
 
-def test_polars_schema_override_applies(db_path):
+@pytest.mark.parametrize("engine", [sar.PolarsReadEngine, sar.PandasReadEngine])
+@pytest.mark.parametrize(
+    "column, override, expected",
+    [
+        ("age", DataType.STRING, pl.String),
+        ("id", DataType.FLOAT, pl.Float64),
+        ("age", DataType.BOOL, pl.Boolean),
+        ("name", DataType.BYTES, pl.Binary),
+    ],
+)
+def test_a_schema_override_applies_with_either_engine(
+    db_path, engine, column, override, expected
+):
     [df] = _read(
-        sar.PolarsReadEngine(),
+        engine(),
         _cfg(
             db_path,
-            queries=["SELECT id, age FROM users ORDER BY id"],
-            schema_overrides=[{"age": DataType.STRING}],
+            queries=["SELECT id, age, name FROM users ORDER BY id"],
+            schema_overrides=[{column: override}],
         ),
     )
-    assert df.schema["age"] == pl.Utf8
+    assert df.schema[column] == expected
+    assert df.height == 4
+
+
+@pytest.mark.parametrize("engine", [sar.PolarsReadEngine, sar.PandasReadEngine])
+def test_an_override_for_a_column_not_read_is_ignored(db_path, engine):
+    [df] = _read(
+        engine(),
+        _cfg(
+            db_path,
+            queries=["SELECT id FROM users ORDER BY id"],
+            schema_overrides=[{"missing": DataType.STRING}],
+        ),
+    )
+    assert df.columns == ["id"]
 
 
 def test_polars_named_params_filter_rows(db_path):
