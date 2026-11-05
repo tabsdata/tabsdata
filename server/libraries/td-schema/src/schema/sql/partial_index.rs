@@ -9,7 +9,7 @@ use sea_query::{DynIden, IntoIden};
 
 use crate::schema::source::Derived;
 
-pub(crate) struct PartialIndexDef {
+pub struct PartialIndexDef {
     name: &'static str,
     table: DynIden,
     columns: Vec<DynIden>,

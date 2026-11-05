@@ -19,6 +19,6 @@ mod version;
 pub(crate) mod tests;
 
 pub use current::Source as CurrentSource;
-pub(crate) use entity::Entity;
+pub use entity::Entity;
 pub use source::{Delta, Derived, SchemaSource, derived_scripts, fold_view_drops, index_derived, install_script, tabsdata_system_ddl};
 pub use version::SchemaDelta;

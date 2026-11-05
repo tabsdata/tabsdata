@@ -15,13 +15,13 @@ pub(crate) mod statistics;
 pub mod trigger;
 pub(crate) mod view;
 
-pub(crate) use partial_index::PartialIndexDef;
+pub use partial_index::PartialIndexDef;
 pub use rollup::{Children, Instants, Parent, Physical, RollupArm, RollupDef};
-pub(crate) use statistics::StatisticsDef;
+pub use statistics::StatisticsDef;
 pub(crate) use trigger::{
     ImmutableColumnsTriggerDef, Scd2PendingTriggerDef, Scd2TriggerDef, SupersedeEndedTriggerDef, Transitions, TransitionsTriggerDef,
 };
-pub(crate) use view::ViewDef;
+pub use view::ViewDef;
 
 use crate::ID_COLLATION;
 use sea_query::{ColumnDef, DynIden, Iden, IntoIden, TableCreateStatement, TableName, TableRef};

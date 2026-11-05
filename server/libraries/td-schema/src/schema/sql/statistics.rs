@@ -11,7 +11,7 @@ use sea_query::{Alias, DynIden, IntoIden};
 
 use crate::schema::source::Derived;
 
-pub(crate) struct StatisticsDef {
+pub struct StatisticsDef {
     name: String,
     kind: &'static str,
     table: DynIden,

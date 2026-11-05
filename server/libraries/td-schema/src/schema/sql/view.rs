@@ -11,7 +11,7 @@ pub(crate) const DROP_VIEW: &str = "DROP VIEW IF EXISTS ";
 /// statement. Names are passed in as `Iden` structs so the view's identifier
 /// lives in one place — the struct definition — and can be referenced from
 /// other views without re-typing the string.
-pub(crate) struct ViewDef {
+pub struct ViewDef {
     pub name: DynIden,
     pub select: SelectStatement,
 }

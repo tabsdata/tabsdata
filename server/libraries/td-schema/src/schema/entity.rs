@@ -15,7 +15,7 @@ use sea_query::{IndexCreateStatement, InsertStatement, TableCreateStatement};
 /// Implementors are zero-sized `Defs` markers; `current/mod.rs`'s ordered
 /// `ENTITIES` slice fixes FK-safe table order and per-phase emission order. Every
 /// method defaults to empty — override only the phases this entity participates in.
-pub(crate) trait Entity {
+pub trait Entity {
     /// `CREATE TABLE` statements.
     fn create_tables(&self) -> Vec<TableCreateStatement> {
         vec![]
