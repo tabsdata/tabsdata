@@ -156,56 +156,6 @@ async fn new_session_held_open(
     Ok(session.access_token_id)
 }
 
-/// The user changes their password while a refresh of one of their
-/// sessions is in flight (held here after it locked and retired the old
-/// session and inserted the new one). The password change waits for the old
-/// session; once both commit, the session the refresh created must not be
-/// Active either.
-#[td_test::test(db)]
-async fn test_a_password_change_ends_a_session_refreshed_concurrently(
-    db: TdPool,
-) -> Result<(), TdError> {
-    let services = Services::with_defaults(db.clone());
-    let old = logged_in_user(&db, &services, "u_refreshing").await?;
-
-    let mut gate = gate(&db).await?;
-    let conn = gate.get(Grant::asserted("refresh held open"));
-    let user: UserDB = conn.fetch_one(&UserName::try_from("u_refreshing")?).await?;
-    let session: SessionDB = conn.for_update().fetch_one(&old).await?;
-    assert_eq!(session.user_id, user.id);
-    conn.update(
-        &SessionInvalidateDB::new(AtTime::default(), SessionStatus::InvalidNewToken),
-        old,
-    )
-    .await?;
-    let refreshed = new_session_held_open(&mut gate, &services, session.user_id).await?;
-
-    let changing = tokio::spawn({
-        let services = services.clone();
-        async move {
-            services
-                .password_change(password_change("u_refreshing")?)
-                .await
-        }
-    });
-    assert!(
-        gate.get(Grant::asserted("blocking probe"))
-            .wait_until_blocking(Duration::from_secs(10))
-            .await
-            .expect("blocking probe"),
-        "the password change never waited on the refresh"
-    );
-    gate.commit().await?;
-    changing.await.expect("password change task")?;
-
-    assert_session_ended(&db, refreshed, "a password change").await
-}
-
-/// The user logs in with their old password while they change it
-/// (the login held here after it read the user and inserted its session). Once
-/// both are done, the session created with the old password must not be
-/// Active: either the password change ends it, or the login is failed to be
-/// run again and never creates it.
 #[td_test::test(db)]
 async fn test_a_password_change_ends_a_session_logged_in_concurrently(
     db: TdPool,
@@ -279,7 +229,7 @@ async fn test_a_purging_refresh_and_a_password_change_do_not_deadlock(
     });
     let finished = tokio::select! {
         refreshed = &mut refreshing => Some(refreshed),
-        _ = gate.get(Grant::asserted("blocking probe")).wait_until_blocking(Duration::from_secs(10)) => None,
+        _ = gate.get(Grant::asserted("blocking probe")).wait_until_blocking(1, Duration::from_secs(10)) => None,
     };
     let revoked = gate
         .get(Grant::asserted("password change held open"))

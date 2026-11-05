@@ -8,7 +8,9 @@ use std::collections::HashSet;
 use ta_services::ctx_service::{Message, ReqCtx};
 use td_bridge::messaging::FunctionStopRequest;
 use td_common::execution_status::WorkerCallbackStatus;
-use td_database::access::{AccessMode, InProject, LockInstant, SeesProjectRows, WriteMode};
+use td_database::access::{
+    AccessMode, Holds, InProject, LockInstant, ProjectLock, SeesProjectRows,
+};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error, td_error};
 use td_objects::and;
@@ -54,8 +56,8 @@ pub(crate) enum UpdateStatusRunError {
     level = "debug",
     err(Debug, level = "debug")
 )]
-pub async fn update_worker_status<S: SeesProjectRows, M: WriteMode>(
-    conn: &mut DomainConnection<Apiserver, S, M>,
+pub async fn update_worker_status<M: Holds<ProjectLock>>(
+    conn: &mut DomainConnection<Apiserver, InProject, M>,
     update: &WorkerUpdateDB,
     worker_id: &WorkerId,
 ) -> Result<bool, TdError> {
@@ -79,8 +81,8 @@ pub async fn update_worker_status<S: SeesProjectRows, M: WriteMode>(
 /// Moves the workers to `update.status`, each keyed on the status it was read
 /// in. A worker whose type does not allow that change from where it stands is
 /// left as it is. Returns how many moved.
-pub async fn move_workers<S: SeesProjectRows, M: WriteMode>(
-    conn: &mut DomainConnection<Apiserver, S, M>,
+pub async fn move_workers<M: Holds<ProjectLock>>(
+    conn: &mut DomainConnection<Apiserver, InProject, M>,
     workers: &[WorkerDB],
     update: &WorkerUpdateDB,
 ) -> Result<u64, TdError> {
@@ -108,7 +110,7 @@ pub async fn move_workers<S: SeesProjectRows, M: WriteMode>(
     err(Debug, level = "debug")
 )]
 pub async fn abandon_requested_physical_runs(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     at: LockInstant,
     logical_function_runs: &[LogicalFunctionRunDB],
 ) -> Result<Vec<FunctionStopRequest>, TdError> {
@@ -291,7 +293,7 @@ fn cascade_transition(
 /// the run's current one is in flight (a replay still running, say); those
 /// runs keep their status.
 pub(crate) async fn without_attempt_in_flight(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     lfr_ids: Vec<LogicalFunctionRunId>,
 ) -> Result<Vec<LogicalFunctionRunId>, TdError> {
     let current: Vec<PhysicalFunctionRunDB> = conn
@@ -321,7 +323,7 @@ pub(crate) async fn without_attempt_in_flight(
 /// `recovered`: rescheduling it would only wait on that failure. A run left on
 /// hold keeps its own readers on hold, to a fixpoint.
 async fn recoverable(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     runs: &[LogicalFunctionRunDB],
     ids: Vec<LogicalFunctionRunId>,
     recovered: &HashSet<LogicalFunctionRunId>,
@@ -369,7 +371,7 @@ async fn recoverable(
 )]
 pub async fn update_function_run_status(
     msgs: &mut ReqCtx,
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     logical_function_runs: &Vec<LogicalFunctionRunDB>,
     status: LogicalFunctionRunStatus,
 ) -> Result<(), TdError> {
@@ -460,7 +462,7 @@ pub async fn update_function_run_status(
 )]
 async fn cascade_downstream_status(
     msgs: &mut ReqCtx,
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     starting: &[LogicalFunctionRunId],
     status: &LogicalFunctionRunStatus,
 ) -> Result<(), TdError> {
@@ -539,8 +541,8 @@ async fn bfs_downstream_lfrs<S: SeesProjectRows, M: AccessMode>(
 /// On Done, settles the attempt's pending materializations into their logical
 /// versions' timelines at `at`, with what the worker reported for each. Any
 /// other report leaves them pending: the data they would replace stays current.
-pub async fn update_table_data_version_status<S: SeesProjectRows, M: WriteMode>(
-    conn: &mut DomainConnection<Apiserver, S, M>,
+pub async fn update_table_data_version_status<M: Holds<ProjectLock>>(
+    conn: &mut DomainConnection<Apiserver, InProject, M>,
     physical_function_run_id: &PhysicalFunctionRunId,
     callback: &CallbackRequest,
     at: LockInstant,

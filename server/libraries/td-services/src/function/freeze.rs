@@ -8,7 +8,7 @@
 //! version; a thaw carries them forward again.
 
 use crate::function::workers::stop_triggers;
-use td_database::access::{InProject, WriteMode};
+use td_database::access::{Holds, InProject, ProjectLock};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
@@ -20,7 +20,7 @@ use td_objects::{and, or};
 use td_queries::Queries;
 
 pub async fn freeze_functions(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     functions: &[FunctionDB],
     ctx: &RequestContext,
     topology_at: TopologyInstant,

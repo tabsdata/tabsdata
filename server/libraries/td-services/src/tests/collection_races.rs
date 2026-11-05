@@ -60,7 +60,7 @@ async fn test_a_rename_planned_before_a_delete_does_not_rename_the_deleted_colle
         )
         .await?;
 
-    let mut trx = pool.begin(Attempt::unretried()).await?;
+    let mut trx = pool.lock_project().begin(Attempt::unretried()).await?;
     let at = trx.locked_at();
     let outcome = apply_collection_update(trx.get(grant()), &admin, at, &plan).await;
     drop(trx);

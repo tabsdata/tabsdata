@@ -8,7 +8,9 @@
 
 use crate::execution::update_status::move_workers;
 use std::collections::HashMap;
-use td_database::access::{AccessMode, InProject, LockInstant, SeesProjectRows, WriteMode};
+use td_database::access::{
+    AccessMode, Holds, InProject, LockInstant, ProjectLock, SeesProjectRows,
+};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::function::FunctionInsertDB;
@@ -21,7 +23,7 @@ use td_queries::Queries;
 use tracing::{debug, error};
 
 pub async fn register_workers(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     function: &FunctionInsertDB,
     previous_function_version_id: &Option<FunctionVersionId>,
     new_workers: &Option<HashMap<WorkerTypeDto, WorkerConfig>>,
@@ -33,8 +35,8 @@ pub async fn register_workers(
     Ok(())
 }
 
-pub async fn stop_current_workers<S: SeesProjectRows, M: WriteMode>(
-    conn: &mut DomainConnection<Apiserver, S, M>,
+pub async fn stop_current_workers<M: Holds<ProjectLock>>(
+    conn: &mut DomainConnection<Apiserver, InProject, M>,
     function_version_id: &Option<FunctionVersionId>,
     at: LockInstant,
 ) -> Result<(), TdError> {
@@ -58,8 +60,8 @@ pub async fn stop_current_workers<S: SeesProjectRows, M: WriteMode>(
 
 /// Stops cron and stage `workers`. One never started has no workload, so it
 /// ends at once; the rest wait for the tick to send their stop.
-pub async fn stop_triggers<S: SeesProjectRows, M: WriteMode>(
-    conn: &mut DomainConnection<Apiserver, S, M>,
+pub async fn stop_triggers<M: Holds<ProjectLock>>(
+    conn: &mut DomainConnection<Apiserver, InProject, M>,
     workers: &[WorkerDB],
     at: LockInstant,
 ) -> Result<u64, TdError> {

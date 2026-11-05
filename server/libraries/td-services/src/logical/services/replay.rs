@@ -13,7 +13,7 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_database::access::{AcrossProjects, DbPool, retrying};
 use td_error::TdError;
-use td_execution::SchedulerNotify;
+use td_execution::{Concerns, ProjectWakes};
 use td_objects::dxo::crudl::CreateRequest;
 use td_objects::dxo::logical::{
     LogicalFunctionRunDB, LogicalFunctionRunParam, LogicalFunctionRunReplayResponse,
@@ -24,7 +24,7 @@ use td_queries::Queries;
 #[service_factory]
 async fn replay_logical_function_run(
     authz: Ctx<AuthzContext>,
-    scheduler_notify: Ctx<SchedulerNotify>,
+    wakes: Ctx<ProjectWakes>,
     db: DbPool<AcrossProjects>,
     request: CreateRequest<(), LogicalFunctionRunParam>,
 ) -> Result<LogicalFunctionRunReplayResponse, TdError> {
@@ -41,7 +41,11 @@ async fn replay_logical_function_run(
         (project, grant)
     };
     let response = retrying(|attempt| async {
-        let mut trx = db.in_project(&project).begin(attempt).await?;
+        let mut trx = db
+            .in_project(&project)
+            .lock_project()
+            .begin(attempt)
+            .await?;
         let locked_at = trx.locked_at();
         let at = AtTime::from(locked_at);
         let conn = trx.get(grant);
@@ -63,7 +67,7 @@ async fn replay_logical_function_run(
 
     // Wake the scheduler so the next tick fires immediately instead of
     // waiting for the periodic interval.
-    scheduler_notify.notify_scheduler();
+    wakes.wake(&project, Concerns::REPLAYS);
     Ok(response)
 }
 

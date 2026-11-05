@@ -24,8 +24,7 @@ use td_common::execution_status::WorkerCallbackStatus;
 use td_common::status::ExitStatus;
 use td_common::worker::Decorator as WorkloadDecorator;
 use td_database::access::Attempt as DbAttempt;
-use td_database::access::{AcrossProjects, DbPool, GatedConnection, Grant, InProject, RW};
-use td_database::connection::PgConnectionExt;
+use td_database::access::{AcrossProjects, DbPool, Grant};
 use td_database::domain::DomainPools;
 use td_database::pool::TdPool;
 use td_database::pool::scoped::ScopedExt;
@@ -50,6 +49,7 @@ use td_objects::types::basic::{
 };
 use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
+use td_queries::test_utils::probes::wait_until_queued_on_lock;
 
 const COLLECTION: &str = "c_recovery";
 const FUNCTION: &str = "f_recovery";
@@ -122,7 +122,7 @@ async fn dispatch(db: &TdPool, decorator: Decorator) -> Result<(ProjectId, Attem
         )
         .in_project(p.project_id);
     let execution = dispatch_services(db).execute_function(request).await?.data;
-    dispatch_services(db).request(()).await?;
+    dispatch_services(db).tick().await?;
     let attempt = current_attempt(db, &execution).await?;
     Ok((p.project_id, attempt))
 }
@@ -230,7 +230,7 @@ async fn test_a_redispatched_subscriber_keeps_its_transaction(db: TdPool) -> Res
         .0
         .recovery(())
         .await?;
-    dispatch_services(&db).request(()).await?;
+    dispatch_services(&db).tick().await?;
 
     for pfr in attempts(&db, &attempt.execution).await? {
         assert_eq!(pfr.transaction_id, attempt.pfr.transaction_id);
@@ -311,7 +311,7 @@ async fn test_a_transiently_failed_streamer_is_started_again(db: TdPool) -> Resu
     let (services, sent) = observing(&db, RecoveryConfig::default(), vec![]);
     for _ in 0..3 {
         services.clone().recovery(()).await?;
-        services.clone().request(()).await?;
+        services.clone().tick().await?;
     }
 
     let started = queued(&sent).into_iter().any(|payload| {
@@ -390,12 +390,9 @@ fn stop_sent(sent: &InMemoryOrchestratorMessageQueue, worker: &WorkerDB) -> bool
     })
 }
 
-async fn assert_recovery_waits_on(gate: &mut GatedConnection<RW, InProject>) {
+async fn assert_recovery_waits_on(db: &TdPool, project: &ProjectId) {
     assert!(
-        gate.get(Grant::asserted("blocking probe"))
-            .wait_until_blocking(Duration::from_secs(10))
-            .await
-            .expect("blocking probe"),
+        wait_until_queued_on_lock(db, project, Duration::from_secs(10)).await,
         "the recovery tick never waited on the gate's write"
     );
 }
@@ -424,6 +421,7 @@ async fn test_a_no_recover_verdict_survives_an_aborted_tick(db: TdPool) -> Resul
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
     let mut gate = DbPool::in_project(&pools, &p)
+        .lock_project()
         .begin(DbAttempt::unretried())
         .await?;
     let _: WorkerDB = gate
@@ -434,7 +432,7 @@ async fn test_a_no_recover_verdict_survives_an_aborted_tick(db: TdPool) -> Resul
     let (first, first_sent) = observing(&db, config, vec![working.clone()]);
     let ticking = first.clone();
     let tick = tokio::spawn(async move { ticking.recovery(()).await });
-    assert_recovery_waits_on(&mut gate).await;
+    assert_recovery_waits_on(&db, &p).await;
     tick.abort();
     let _ = tick.await;
     gate.commit().await?;
@@ -479,7 +477,7 @@ async fn test_a_run_whose_workload_keeps_vanishing_is_not_redispatched_forever(
     );
     for _ in 0..CYCLES {
         services.clone().recovery(()).await?;
-        services.clone().request(()).await?;
+        services.clone().tick().await?;
     }
 
     let dispatched = attempts(&db, &attempt.execution).await?.len();
@@ -511,7 +509,7 @@ async fn test_a_user_recover_starts_the_recovery_count_over(db: TdPool) -> Resul
     );
     for _ in 0..5 {
         services.clone().recovery(()).await?;
-        services.clone().request(()).await?;
+        services.clone().tick().await?;
     }
     let gave_up = lfr(&db, &attempt.pfr).await?;
     assert_eq!(gave_up.status, LogicalFunctionRunStatus::Failed);
@@ -601,6 +599,7 @@ async fn test_recovery_does_not_start_a_trigger_stopped_since_its_snapshot(
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
     let mut gate = DbPool::in_project(&pools, &p)
+        .lock_project()
         .begin(DbAttempt::unretried())
         .await?;
     let stopped = WorkerUpdateDB::stop_scheduled();
@@ -609,7 +608,7 @@ async fn test_recovery_does_not_start_a_trigger_stopped_since_its_snapshot(
         .await?;
     let ticking = services.clone();
     let tick = tokio::spawn(async move { ticking.recovery(()).await });
-    assert_recovery_waits_on(&mut gate).await;
+    assert_recovery_waits_on(&db, &p).await;
     gate.commit().await?;
     tick.await.expect("recovery task")?;
 

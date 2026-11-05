@@ -72,7 +72,8 @@ async fn test_a_new_user_can_create_a_project_with_a_warm_grants_cache(
 }
 
 async fn manages_access(services: &Services, db: &TdPool, user: &UserId) -> Result<bool, TdError> {
-    let mut slot = DomainConnection::<Apiserver, Global, RO>::new(db.begin_ro().await.unwrap());
+    let mut slot =
+        DomainConnection::<Apiserver, Global, RO>::asserted(db.begin_ro().await.unwrap());
     let grants = services.auth_context.user_grants(&mut slot, user).await?;
     Ok(grants.allows(&Requires::system(SystemPermission::ManageAccess)))
 }
@@ -115,7 +116,7 @@ async fn test_a_committed_revoke_is_enforced_when_its_request_is_dropped(
     });
     assert!(
         gate.get(Grant::asserted("blocking probe"))
-            .wait_until_blocking(Duration::from_secs(10))
+            .wait_until_blocking(1, Duration::from_secs(10))
             .await
             .expect("blocking probe"),
         "the revoke never waited on the gate"
@@ -140,7 +141,7 @@ async fn test_a_committed_revoke_is_enforced_when_its_request_is_dropped(
         .expect("second waiter")
         .expect("second connection");
 
-    let mut first = DomainConnection::<Apiserver, Global, RO>::new(first);
+    let mut first = DomainConnection::<Apiserver, Global, RO>::asserted(first);
     let left: Option<UserRoleDB> = first.fetch_optional(&membership.id).await?;
     assert!(left.is_none(), "the revoke did not commit");
     revoking.abort();

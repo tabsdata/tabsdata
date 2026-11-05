@@ -10,6 +10,7 @@ use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_database::access::{AcrossProjects, DbPool, SeesProjectRows, WriteMode, retrying};
 use td_database::domain::{Apiserver, DomainConnection};
+use td_database::pool::SystemPool;
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::function::FunctionDB;
@@ -28,7 +29,7 @@ use tracing::instrument;
 async fn resolve_worker_message(
     storage: Ctx<Storage>,
     authz: Ctx<AuthzContext>,
-    db: DbPool<AcrossProjects>,
+    db: DbPool<AcrossProjects, SystemPool>,
     request: ReadRequest<WorkerParam>,
 ) -> Result<WorkerInput, TdError> {
     let (ctx, param) = request.into_parts();

@@ -4,12 +4,12 @@
 
 //! Releasing runs held on hold. A run is on hold only while an upstream run is
 //! Failed or on hold; once none is, it goes back to the scheduler. A replay
-//! that heals a failed run releases its readers at once, and the scheduler
-//! tick releases whatever any other path left held.
+//! that heals a failed run releases its readers at once, and the project's
+//! pass releases whatever any other path left held.
 
 use crate::execution::update_status::without_attempt_in_flight;
 use std::collections::HashSet;
-use td_database::access::{InProject, WriteMode};
+use td_database::access::{Holds, InProject, ProjectLock};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
@@ -19,7 +19,7 @@ use tracing::debug;
 
 /// Releases the on-hold readers of `healed`, and theirs in turn.
 pub async fn release_readers_of(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     healed: &[LogicalFunctionRunId],
 ) -> Result<(), TdError> {
     let held = on_hold_readers(conn, healed).await?;
@@ -29,7 +29,7 @@ pub async fn release_readers_of(
 /// Releases every run of the project held on hold with nothing left
 /// blocking it.
 pub async fn release_unblocked(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
 ) -> Result<(), TdError> {
     let held: Vec<LogicalFunctionRunId> = conn
         .fetch_all::<LogicalFunctionRunDB>(&LogicalFunctionRunStatus::OnHold)
@@ -41,7 +41,7 @@ pub async fn release_unblocked(
 }
 
 async fn release(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     mut held: Vec<LogicalFunctionRunId>,
 ) -> Result<(), TdError> {
     while !held.is_empty() {
@@ -73,7 +73,7 @@ async fn release(
 }
 
 async fn on_hold_readers(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     upstream: &[LogicalFunctionRunId],
 ) -> Result<Vec<LogicalFunctionRunId>, TdError> {
     if upstream.is_empty() {

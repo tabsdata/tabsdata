@@ -2,7 +2,9 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use td_database::access::{AccessMode, InProject, LockInstant, SeesProjectRows, WriteMode};
+use td_database::access::{
+    AccessMode, Holds, InProject, LockInstant, ProjectLock, SeesProjectRows,
+};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::FromDao;
@@ -30,7 +32,7 @@ pub async fn entity_tags<S: SeesProjectRows, M: AccessMode>(
 }
 
 pub async fn set_user_tag(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     ctx: &RequestContext,
     entity: TagEntity,
     set: TagSet,
@@ -63,8 +65,8 @@ pub async fn set_user_tag(
     })
 }
 
-pub async fn delete_user_tag<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S, impl WriteMode>,
+pub async fn delete_user_tag(
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     entity: TagEntity,
     key: UserTagKey,
     at: LockInstant,
@@ -80,8 +82,8 @@ pub async fn delete_user_tag<S: SeesProjectRows>(
 }
 
 /// The open user tags of the entities, closed with them at the lock instant.
-pub async fn close_user_tags_of<T: Taggable<EntityType = TagEntityType>, S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S, impl WriteMode>,
+pub async fn close_user_tags_of<T: Taggable<EntityType = TagEntityType>>(
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     entities: &[T],
     at: LockInstant,
 ) -> Result<(), TdError> {

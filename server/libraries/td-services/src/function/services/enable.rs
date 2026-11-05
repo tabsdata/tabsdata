@@ -12,7 +12,7 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_database::access::{DbPool, InProject, retrying};
 use td_error::TdError;
-use td_execution::SchedulerNotify;
+use td_execution::{Concerns, ProjectWakes};
 use td_objects::dxo::collection::{CollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{UpdateRequest, WithinProject};
 use td_objects::dxo::function::FunctionParam;
@@ -24,14 +24,14 @@ use td_queries::Queries;
 #[service_factory]
 async fn enable_function(
     authz: Ctx<AuthzContext>,
-    scheduler_notify: Ctx<SchedulerNotify>,
+    wakes: Ctx<ProjectWakes>,
     db: DbPool<InProject>,
     request: WithinProject<UpdateRequest<FunctionEnable, (CollectionParam, FunctionParam)>>,
 ) -> Result<Function, TdError> {
     let (project, request) = request.into_parts();
     let (ctx, (collection_param, function_param), enable) = request.into_parts();
     let read = retrying(|attempt| async {
-        let mut gated_trx = db.begin(attempt).await?;
+        let mut gated_trx = db.lock_project().begin(attempt).await?;
         let grant = authz
             .require::<Project, DevelopProject>(&mut gated_trx, &ctx, &project)
             .await?;
@@ -77,7 +77,7 @@ async fn enable_function(
 
     // Wake the scheduler so worker state changes (cron Stop/Start) are picked
     // up immediately.
-    scheduler_notify.notify_scheduler();
+    wakes.wake(&project, Concerns::TRIGGERS);
 
     Ok(read)
 }

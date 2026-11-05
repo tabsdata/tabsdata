@@ -66,6 +66,7 @@ async fn test_execute_after_waiting_on_a_delete_sees_the_function_gone(
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
     let mut gate = DbPool::in_project(&pools, &p.project_id)
+        .lock_project()
         .begin(Attempt::unretried())
         .await?;
     let at = gate.locked_at();
@@ -130,6 +131,7 @@ async fn test_execute_after_waiting_on_a_disable_sees_the_function_disabled(
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
     let mut gate = DbPool::in_project(&pools, &p.project_id)
+        .lock_project()
         .begin(Attempt::unretried())
         .await?;
     let at = gate.locked_at();

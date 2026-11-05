@@ -15,7 +15,7 @@ use td_authz::rbac::{DevelopProject, Project};
 use td_bridge::BridgeProviderHandle;
 use td_database::access::{AcrossProjects, DbPool, retrying};
 use td_error::TdError;
-use td_execution::SchedulerNotify;
+use td_execution::{Concerns, ProjectWakes};
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::transaction::{TransactionDB, TransactionParam};
@@ -26,7 +26,7 @@ use td_queries::Queries;
 async fn transaction_recover(
     authz: Ctx<AuthzContext>,
     bridge: Ctx<BridgeProviderHandle>,
-    scheduler_notify: Ctx<SchedulerNotify>,
+    wakes: Ctx<ProjectWakes>,
     msgs: &mut ReqCtx,
     db: DbPool<AcrossProjects>,
     request: UpdateRequest<(), TransactionParam>,
@@ -46,7 +46,11 @@ async fn transaction_recover(
     };
     let (stops, recorded) = retrying(|attempt| async {
         let mut recorded = ReqCtx::default();
-        let mut trx = db.in_project(&project).begin(attempt).await?;
+        let mut trx = db
+            .in_project(&project)
+            .lock_project()
+            .begin(attempt)
+            .await?;
         let at = trx.locked_at();
         let conn = trx.get(grant);
         let lfrs: Vec<LogicalFunctionRunDB> = conn.fetch_all(&transaction_id).await?;
@@ -66,7 +70,7 @@ async fn transaction_recover(
     msgs.merge(recorded);
     stop_function_workers(&bridge, stops).await;
 
-    scheduler_notify.notify_scheduler();
+    wakes.wake(&project, Concerns::RUNS);
     Ok(())
 }
 

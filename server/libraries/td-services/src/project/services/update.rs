@@ -59,8 +59,9 @@ async fn update_project(
         }
         None => {}
     }
+    let in_project = db.in_project(&current.project_id);
     retrying(|attempt| async {
-        let mut gated_trx = db.begin(attempt).await?;
+        let mut gated_trx = in_project.lock_project().begin(attempt).await?;
         let conn = gated_trx.get(authz.none());
         let current: ProjectDB = conn.scd2().fetch_one(&param.project).await?;
         let _grant = authz
@@ -75,7 +76,6 @@ async fn update_project(
         assert_project_roles_rename_available(conn, &update, &current).await?;
 
         let current_id = current.project_id;
-        let mut gated_trx = gated_trx.enter_project(&current_id).await?;
         let at = gated_trx.locked_at();
         let conn = gated_trx.get(authz.none());
         conn.scd2()

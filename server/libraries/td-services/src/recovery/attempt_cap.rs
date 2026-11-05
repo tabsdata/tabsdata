@@ -6,7 +6,7 @@
 //! workload that keeps vanishing ends Failed for the user instead of looping.
 //! A user recover starts the count over.
 
-use td_database::access::{SeesProjectRows, WriteMode};
+use td_database::access::{Holds, InProject, ProjectLock};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunRecoveriesUpdateDB};
@@ -23,8 +23,8 @@ pub(crate) fn gave_up() -> String {
     format!("gave up after {MAX_RECOVERY_ATTEMPTS} automatic re-dispatches")
 }
 
-pub(crate) async fn count_recoveries<S: SeesProjectRows, M: WriteMode>(
-    conn: &mut DomainConnection<Apiserver, S, M>,
+pub(crate) async fn count_recoveries<M: Holds<ProjectLock>>(
+    conn: &mut DomainConnection<Apiserver, InProject, M>,
     runs: &[LogicalFunctionRunDB],
 ) -> Result<(), TdError> {
     for run in runs {
@@ -38,8 +38,8 @@ pub(crate) async fn count_recoveries<S: SeesProjectRows, M: WriteMode>(
     Ok(())
 }
 
-pub(crate) async fn reset_recoveries<S: SeesProjectRows, M: WriteMode>(
-    conn: &mut DomainConnection<Apiserver, S, M>,
+pub(crate) async fn reset_recoveries<M: Holds<ProjectLock>>(
+    conn: &mut DomainConnection<Apiserver, InProject, M>,
     runs: &[LogicalFunctionRunDB],
 ) -> Result<(), TdError> {
     let reset = LogicalFunctionRunRecoveriesUpdateDB {

@@ -6,7 +6,7 @@ pub mod parent;
 pub mod services;
 pub mod user;
 
-use td_database::access::{InProject, WriteMode};
+use td_database::access::{Holds, InProject, ProjectLock};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::Taggable;
@@ -17,7 +17,7 @@ use td_queries::Queries;
 
 /// Every open tag of the entities, closed with them at the topology instant.
 pub async fn close_tags_of<T: Taggable<EntityType = TagEntityType>>(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     entities: &[T],
     topology_at: TopologyInstant,
 ) -> Result<(), TdError> {

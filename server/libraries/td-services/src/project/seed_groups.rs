@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use td_database::access::{InProject, LockInstant, WriteMode};
+use td_database::access::{Holds, InProject, LockInstant, ProjectLock};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
@@ -22,7 +22,7 @@ use td_queries::Queries;
 /// field-less row defaults its `project_id` from that GUC. The groups open at
 /// the project's creation instant, `at`.
 pub async fn seed_default_groups(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     context: &RequestContext,
     at: LockInstant,
 ) -> Result<(), TdError> {

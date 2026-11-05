@@ -147,7 +147,7 @@ async fn split_transaction_settles(db: TdPool, order: Order) -> Result<(), TdErr
                         .await?;
                     }
                 }
-                dispatch_services(&db).request(()).await?;
+                dispatch_services(&db).tick().await?;
                 assert_discarded(&db, &transaction).await?;
                 if matches!(order, Order::CancelThenDone) {
                     let attempt: PhysicalFunctionRunDB =
@@ -229,7 +229,7 @@ async fn test_the_tick_discards_done_runs_beside_a_canceled_one(db: TdPool) -> R
         ],
     )
     .await?;
-    dispatch_services(&db).request(()).await?;
+    dispatch_services(&db).tick().await?;
     assert_discarded(&db, &transaction).await
 }
 
@@ -245,7 +245,7 @@ async fn test_the_tick_commits_an_all_done_transaction(db: TdPool) -> Result<(),
         ],
     )
     .await?;
-    dispatch_services(&db).request(()).await?;
+    dispatch_services(&db).tick().await?;
     let runs: Vec<LogicalFunctionRunDB> = db.fetch_all(&transaction).await?;
     assert!(
         runs.iter()
@@ -338,7 +338,7 @@ async fn test_a_transaction_does_not_commit_before_the_ones_it_read(
                     WorkerCallbackStatus::Done,
                 )
                 .await?;
-                dispatch_services(&db).request(()).await?;
+                dispatch_services(&db).tick().await?;
                 assert_eq!(
                     run_status(&db, &reader_run).await?,
                     LogicalFunctionRunStatus::Done,
@@ -383,7 +383,7 @@ async fn test_a_transaction_commits_after_the_ones_it_read(db: TdPool) -> Result
                 for (run, worker) in &runs {
                     post_callback(&db, &run.id, worker, WorkerCallbackStatus::Done).await?;
                 }
-                dispatch_services(&db).request(()).await?;
+                dispatch_services(&db).tick().await?;
                 for (run, _) in &runs {
                     assert_eq!(
                         run_status(&db, run).await?,

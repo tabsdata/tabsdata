@@ -157,7 +157,7 @@ async fn test_late_callbacks_of_an_abandoned_attempt_do_not_revive_it(
         )
         .in_project(p.project_id);
     let execution = dispatch_services(&db).execute_function(request).await?.data;
-    dispatch_services(&db).request(()).await?;
+    dispatch_services(&db).tick().await?;
 
     let attempts: Vec<PhysicalFunctionRunDB> = db
         .timeline()
@@ -197,7 +197,7 @@ async fn test_late_callbacks_of_an_abandoned_attempt_do_not_revive_it(
         PhysicalFunctionRunStatus::Failed,
         "a late Running must not revive an abandoned attempt"
     );
-    dispatch_services(&db).request(()).await?;
+    dispatch_services(&db).tick().await?;
 
     post_callback(
         &db,

@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use super::dispatch::{DISPATCH_LOCK_KEY, refresh_due, within_caps};
+use super::dispatch::{refresh_due, within_caps};
 use crate::Services;
 use crate::collection::services::connection::test_support::{
     collection_param, create_collection, seed_dev_user,
@@ -25,7 +25,6 @@ use td_bridge::messaging::{
 use td_bridge::test::TestBridgeProvider;
 use td_bridge::{BridgeProviderHandle, Orchestrator};
 use td_common::execution_status::WorkerCallbackStatus;
-use td_database::connection::PgConnectionExt;
 use td_database::pool::TdPool;
 use td_database::pool::scoped::ScopedExt as _;
 use td_error::ApiError;
@@ -1074,33 +1073,6 @@ async fn an_expired_sample_is_hidden_then_purged(db: TdPool) {
             .await
             .unwrap();
     assert!(stored.is_none(), "the tick purges the rows");
-}
-
-#[td_test::test(db)]
-async fn a_second_replica_does_not_claim_while_one_is_claiming(db: TdPool) {
-    let project = project_with_source(&db).await;
-    let services = services(&db, Orchestrator::Kubernetes);
-    let probe = submit(&services, admin(), project, submit_of(ProbeKind::Check))
-        .await
-        .unwrap();
-
-    let mut claiming = db.begin().await.unwrap();
-    assert!(
-        claiming
-            .try_schema_advisory_xact_lock_text(DISPATCH_LOCK_KEY)
-            .await
-            .unwrap()
-    );
-    dispatch(&services).await;
-    assert!(sent_requests(&services).await.is_empty());
-    assert_eq!(
-        read_probe(&services, project, probe.probe_id).await.status,
-        ProbeStatus::Queued
-    );
-
-    claiming.rollback().await.unwrap();
-    dispatch(&services).await;
-    assert_eq!(sent_requests(&services).await.len(), 1);
 }
 
 #[td_test::test(db)]

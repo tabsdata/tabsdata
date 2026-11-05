@@ -12,7 +12,7 @@ use td_authz::rbac::{DevelopProject, Project};
 use td_bridge::BridgeProviderHandle;
 use td_database::access::{AcrossProjects, DbPool, retrying};
 use td_error::TdError;
-use td_execution::SchedulerNotify;
+use td_execution::{Concerns, ProjectWakes};
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::execution::ExecutionParam;
@@ -22,7 +22,7 @@ use td_queries::Queries;
 #[service_factory]
 async fn execution_cancel(
     authz: Ctx<AuthzContext>,
-    scheduler_notify: Ctx<SchedulerNotify>,
+    wakes: Ctx<ProjectWakes>,
     bridge: Ctx<BridgeProviderHandle>,
     msgs: &mut ReqCtx,
     db: DbPool<AcrossProjects>,
@@ -43,7 +43,11 @@ async fn execution_cancel(
     };
     let (stops, recorded) = retrying(|attempt| async {
         let mut recorded = ReqCtx::default();
-        let mut trx = db.in_project(&project).begin(attempt).await?;
+        let mut trx = db
+            .in_project(&project)
+            .lock_project()
+            .begin(attempt)
+            .await?;
         let at = trx.locked_at();
         let conn = trx.get(grant);
         let lfrs: Vec<LogicalFunctionRunDB> = conn.fetch_all(&execution_id).await?;
@@ -58,7 +62,7 @@ async fn execution_cancel(
     msgs.merge(recorded);
 
     stop_function_workers(&bridge, stops).await;
-    scheduler_notify.notify_scheduler();
+    wakes.wake(&project, Concerns::RUNS);
     Ok(())
 }
 
@@ -82,7 +86,7 @@ mod tests {
         ProjectId, TableNameDto, TransactionStatus, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
-    use td_queries::test_utils::{SeedEntry, begin_exclusive, seed_run};
+    use td_queries::test_utils::{SeedEntry, begin_locked, seed_run};
 
     async fn test_cancel_execution(
         db: TdPool,
@@ -125,7 +129,7 @@ mod tests {
             .scd2()
             .fetch_one(&lfrs[0].id)
             .await?;
-        let mut trx = begin_exclusive(&db, p.project_id).await?;
+        let mut trx = begin_locked(&db, p.project_id).await?;
         let at = trx.locked_at();
         let conn = trx.get(Grant::asserted("cancel test"));
         for status in [
@@ -174,7 +178,7 @@ mod tests {
             .scd2()
             .fetch_one(&lfrs[0].id)
             .await?;
-        let mut trx = begin_exclusive(&db, p.project_id).await?;
+        let mut trx = begin_locked(&db, p.project_id).await?;
         let at = trx.locked_at();
         let conn = trx.get(Grant::asserted("cancel test"));
         conn.logical_runs()

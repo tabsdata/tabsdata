@@ -15,7 +15,9 @@ use crate::tests::fixtures::register;
 use std::str::FromStr;
 use std::time::Duration;
 use td_database::access::Attempt;
-use td_database::access::{AcrossProjects, DbPool, GatedConnection, Grant, InProject, RW};
+use td_database::access::{
+    AcrossProjects, DbPool, GatedConnection, Grant, InProject, ProjectLock, RW,
+};
 use td_database::connection::PgConnectionExt;
 use td_database::domain::DomainPools;
 use td_database::pool::TdPool;
@@ -30,22 +32,20 @@ use td_objects::types::basic::{
 };
 use td_objects::types::composed::TableDependencyDto;
 use td_queries::Queries;
+use td_queries::test_utils::probes::wait_until_queued_on_lock;
 use td_queries::test_utils::{SeedEntry, seed_instant};
 
 const BLOCKED_WITHIN: Duration = Duration::from_secs(10);
 
-async fn wait_for_the_delete(gate: &mut GatedConnection<RW, InProject>) {
+async fn wait_for_the_delete(db: &TdPool, project: &ProjectId) {
     assert!(
-        gate.get(Grant::asserted("blocking probe"))
-            .wait_until_blocking(BLOCKED_WITHIN)
-            .await
-            .expect("blocking probe"),
+        wait_until_queued_on_lock(db, project, BLOCKED_WITHIN).await,
         "the table delete never waited on the gate"
     );
 }
 
 async fn finish(
-    gate: GatedConnection<RW, InProject>,
+    gate: GatedConnection<RW<ProjectLock>, InProject>,
     next: Result<(), TdError>,
 ) -> Result<(), TdError> {
     match next {
@@ -73,7 +73,7 @@ async fn test_table_delete_and_update_of_a_dependant_do_not_deadlock(
         .open(&current.re_registered(&admin(), Enabled::TRUE), topology_at)
         .await?;
     let deleting = delete_t_gone(&db, p.project_id);
-    wait_for_the_delete(&mut gate).await;
+    wait_for_the_delete(&db, &p.project_id).await;
     let updated = gate.commit().await;
     let deleted = deleting.await.expect("delete task");
     assert!(
@@ -169,7 +169,7 @@ async fn test_table_delete_and_delete_of_a_dependant_do_not_deadlock(
     apply(conn, &Changes::for_delete(&state, &admin()), topology_at).await?;
 
     let deleting = delete_t_gone(&db, p.project_id);
-    wait_for_the_delete(&mut gate).await;
+    wait_for_the_delete(&db, &p.project_id).await;
 
     let closed = gate
         .get(Grant::asserted("function delete held open"))
@@ -217,10 +217,7 @@ async fn test_collection_delete_and_update_of_a_dependant_do_not_deadlock(
         services.delete_collection(request).await.map(|_| ())
     });
     assert!(
-        gate.get(Grant::asserted("blocking probe"))
-            .wait_until_blocking(BLOCKED_WITHIN)
-            .await
-            .expect("blocking probe"),
+        wait_until_queued_on_lock(&db, &p.project_id, BLOCKED_WITHIN).await,
         "the collection delete never waited on the gate"
     );
     gate.commit().await?;
@@ -367,6 +364,7 @@ async fn test_a_collection_close_does_not_block_a_trigger_flip_into_it(
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
     let mut gate = DbPool::in_project(&pools, &p.project_id)
+        .lock_project()
         .begin(Attempt::unretried())
         .await?;
     gate.get(Grant::asserted("collection delete close held open"))
@@ -402,7 +400,7 @@ async fn test_a_collection_close_does_not_block_a_trigger_flip_into_it(
         }
         blocked = gate
             .get(Grant::asserted("blocking probe"))
-            .wait_until_blocking(BLOCKED_WITHIN) => blocked.expect("blocking probe"),
+            .wait_until_blocking(1, BLOCKED_WITHIN) => blocked.expect("blocking probe"),
     };
     gate.commit().await?;
     if blocked {

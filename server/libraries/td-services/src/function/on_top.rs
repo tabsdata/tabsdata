@@ -12,7 +12,7 @@ use http::StatusCode;
 use std::collections::HashMap;
 use std::fmt::Display;
 use td_common::datetime::Timestamp;
-use td_database::access::{InProject, LockInstant, WriteMode};
+use td_database::access::{Holds, InProject, LockInstant, ProjectLock};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, api_error};
 use td_objects::dxo::function::FunctionDB;
@@ -20,7 +20,7 @@ use td_objects::dxo::trigger::TriggerDB;
 use td_objects::types::basic::{FunctionId, FunctionVersionId, TriggerId, TriggerVersionId};
 use td_queries::Queries;
 
-pub(crate) async fn ensure_freezes_on_top<M: WriteMode>(
+pub(crate) async fn ensure_freezes_on_top<M: Holds<ProjectLock>>(
     conn: &mut DomainConnection<Apiserver, InProject, M>,
     read: &[FunctionDB],
     at: LockInstant,
@@ -42,7 +42,7 @@ pub(crate) async fn ensure_freezes_on_top<M: WriteMode>(
     Ok(())
 }
 
-pub(crate) async fn ensure_flips_on_top<M: WriteMode>(
+pub(crate) async fn ensure_flips_on_top<M: Holds<ProjectLock>>(
     conn: &mut DomainConnection<Apiserver, InProject, M>,
     read: &[TriggerDB],
     at: LockInstant,

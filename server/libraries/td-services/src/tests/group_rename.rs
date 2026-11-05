@@ -63,6 +63,7 @@ async fn test_a_group_rename_does_not_block_inserts_referencing_the_group(
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
     let mut gate = DbPool::in_project(&pools, &p.project_id)
+        .lock_project()
         .begin(Attempt::unretried())
         .await?;
     let context = admin().read::<String>("").context;
@@ -107,7 +108,7 @@ async fn test_a_group_rename_does_not_block_inserts_referencing_the_group(
         }
         blocked = gate
             .get(Grant::asserted("blocking probe"))
-            .wait_until_blocking(BLOCKED_WITHIN) => blocked.expect("blocking probe"),
+            .wait_until_blocking(1, BLOCKED_WITHIN) => blocked.expect("blocking probe"),
     };
     gate.commit().await?;
     if blocked {

@@ -7,7 +7,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{ManageProject, Project, ViewProject};
-use td_database::access::{AccessMode, GatedConnection, InProject, RO, RW};
+use td_database::access::{AccessMode, GatedConnection, InProject, ProjectLock, RO, RW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::{CreateRequest, DeleteRequest, ReadRequest, WithinProject};
@@ -43,7 +43,7 @@ async fn list_group_tags(
 #[service_factory]
 async fn set_group_tag(
     authz: Ctx<AuthzContext>,
-    gated_trx: &mut GatedConnection<RW, InProject>,
+    gated_trx: &mut GatedConnection<RW<ProjectLock>, InProject>,
     request: WithinProject<CreateRequest<TagSet, GroupParam>>,
 ) -> Result<Tag, TdError> {
     let (project, request) = request.into_parts();
@@ -60,7 +60,7 @@ async fn set_group_tag(
 #[service_factory]
 async fn delete_group_tag(
     authz: Ctx<AuthzContext>,
-    gated_trx: &mut GatedConnection<RW, InProject>,
+    gated_trx: &mut GatedConnection<RW<ProjectLock>, InProject>,
     request: WithinProject<DeleteRequest<(GroupParam, TagParam)>>,
 ) -> Result<(), TdError> {
     let (project, request) = request.into_parts();

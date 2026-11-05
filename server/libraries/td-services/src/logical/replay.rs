@@ -9,7 +9,7 @@
 use crate::function::topology::{RunnableVersion, latest_patch_or_head};
 use crate::logical::mint::{mint_function_run, mint_output_table_data_versions};
 use td_database::access::LockInstant;
-use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
+use td_database::access::{AccessMode, Holds, InProject, ProjectLock, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunReplayResponse};
@@ -145,7 +145,7 @@ pub async fn resolve_replay_function_version_id<S: SeesProjectRows, M: AccessMod
     err(Debug, level = "debug")
 )]
 pub async fn mint_replay_function_run(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
     at: LockInstant,
@@ -160,7 +160,7 @@ pub async fn mint_replay_function_run(
     err(Debug, level = "debug")
 )]
 pub async fn mint_replay_table_data_versions(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
     fr_new: &PhysicalFunctionRunInsertDB,

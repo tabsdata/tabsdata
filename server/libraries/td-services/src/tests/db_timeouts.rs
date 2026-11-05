@@ -52,7 +52,7 @@ async fn test_regular_units_have_bounded_statements_and_idle_transactions(
 }
 
 /// A unit that gave up waiting for its project's lock (what
-/// `begin_exclusive` returns once the pool's acquire timeout elapses) reports
+/// `lock_project().begin` returns once the pool's acquire timeout elapses) reports
 /// a condition the client can retry, not an internal error (500).
 #[test]
 fn test_a_busy_project_lock_is_not_an_internal_error() {

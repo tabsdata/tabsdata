@@ -21,8 +21,9 @@ use td_bridge::messaging::FunctionStopRequest;
 use td_database::access::SeesProjectRows;
 use td_database::access::{AccessMode, AcrossProjects, DbPool, Grant, retrying};
 use td_database::domain::{Apiserver, DomainConnection};
+use td_database::pool::{ServingPool, SystemPool};
 use td_error::TdError;
-use td_execution::{RecoveryConfig, SchedulerNotify};
+use td_execution::{Concerns, ProjectWakes, RecoveryConfig};
 use td_objects::dxo::worker::WorkerDBWithNames;
 use td_objects::types::basic::{AtTime, ProjectId};
 use td_queries::Queries;
@@ -44,10 +45,10 @@ async fn recovery(
     storage: Ctx<Storage>,
     bridge: Ctx<BridgeProviderHandle>,
     internal_api: Ctx<InternalApi>,
-    scheduler_notify: Ctx<SchedulerNotify>,
+    wakes: Ctx<ProjectWakes>,
     config: Ctx<RecoveryConfig>,
     msgs: &mut ReqCtx,
-    db: DbPool<AcrossProjects>,
+    db: DbPool<AcrossProjects, SystemPool>,
     _request: (),
 ) -> Result<(), TdError> {
     let grant = Grant::asserted("recovery tick");
@@ -83,6 +84,7 @@ async fn recovery(
             for (project, actions) in actions.by_project() {
                 match apply_project(msgs, &db, grant, &project, &actions).await {
                     Ok(committed) => {
+                        wakes.wake(&project, Concerns::RUNS);
                         stop_recovered_workloads(bridge.message_queue(), &committed).await;
                         recreate_trigger_workloads(
                             &bridge,
@@ -103,7 +105,10 @@ async fn recovery(
         _ => {
             for project in active_project_ids(&db, grant).await? {
                 match sweep_project(msgs, &db, grant, &project, &config).await {
-                    Ok(stops) => stop_function_workers(&bridge, stops).await,
+                    Ok(stops) => {
+                        wakes.wake(&project, Concerns::RUNS);
+                        stop_function_workers(&bridge, stops).await
+                    }
                     Err(e) => error!(
                         project_id = %project,
                         "recovery.sweep: project failed, continuing with the rest: {e:?}"
@@ -113,25 +118,23 @@ async fn recovery(
         }
     }
 
-    // Recovered LFRs re-dispatch on the next request tick; the apply/sweep
-    // transaction has already committed here.
-    scheduler_notify.notify_scheduler();
     Ok(())
 }
 
 /// Applies a project's verdicts in its own write transaction and returns
 /// those it committed. Ends are stamped at the unit's own instant: the tick's
 /// may predate a report this unit reads.
-async fn apply_project(
+#[instrument(name = "recovery.project", skip_all, fields(project_id = %project))]
+async fn apply_project<P: ServingPool>(
     msgs: &mut ReqCtx,
-    db: &DbPool<AcrossProjects>,
+    db: &DbPool<AcrossProjects, P>,
     grant: Grant,
     project: &ProjectId,
     actions: &RecoveryActions,
 ) -> Result<RecoveryActions, TdError> {
     let (committed, recorded) = retrying(|attempt| async {
         let mut recorded = ReqCtx::default();
-        let mut trx = db.in_project(project).begin(attempt).await?;
+        let mut trx = db.in_project(project).lock_project().begin(attempt).await?;
         let at = trx.locked_at();
         let committed = apply_recovery_actions(&mut recorded, trx.get(grant), at, actions).await?;
         trx.commit().await?;
@@ -144,16 +147,17 @@ async fn apply_project(
 
 /// Sweeps a project's stale runs in its own write transaction, judging and
 /// stamping at the unit's own instant.
-async fn sweep_project(
+#[instrument(name = "recovery.project", skip_all, fields(project_id = %project))]
+async fn sweep_project<P: ServingPool>(
     msgs: &mut ReqCtx,
-    db: &DbPool<AcrossProjects>,
+    db: &DbPool<AcrossProjects, P>,
     grant: Grant,
     project: &ProjectId,
     config: &RecoveryConfig,
 ) -> Result<Vec<FunctionStopRequest>, TdError> {
     let (stops, recorded) = retrying(|attempt| async {
         let mut recorded = ReqCtx::default();
-        let mut trx = db.in_project(project).begin(attempt).await?;
+        let mut trx = db.in_project(project).lock_project().begin(attempt).await?;
         let at = trx.locked_at();
         let stops = sweep_stale_runs(&mut recorded, trx.get(grant), at, config).await?;
         trx.commit().await?;
@@ -265,7 +269,7 @@ mod tests {
         });
         recovery.recovery(()).await?;
         let (request, sent) = sending_to(dispatch_services(db), TestBridgeProvider::default());
-        request.request(()).await?;
+        request.tick().await?;
         Ok(sent)
     }
 
@@ -327,7 +331,7 @@ mod tests {
         let execution = dispatch_services(&db).execute_function(request).await?.data;
 
         let (context_1, sent_1) = sending_to(dispatch_services(&db), TestBridgeProvider::default());
-        context_1.clone().request(()).await?;
+        context_1.clone().tick().await?;
         let pfrs: Vec<PhysicalFunctionRunDB> = db
             .timeline()
             .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
@@ -373,7 +377,7 @@ mod tests {
         assert_eq!(sent_2.messages().len(), 1);
 
         let (context_3, sent_3) = sending_to(dispatch_services(&db), TestBridgeProvider::default());
-        context_3.clone().request(()).await?;
+        context_3.clone().tick().await?;
         let pfrs: Vec<PhysicalFunctionRunDB> = db
             .timeline()
             .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
@@ -460,7 +464,7 @@ mod tests {
             .data;
 
         let context_1 = dispatch_services(&db);
-        context_1.clone().request(()).await?;
+        context_1.clone().tick().await?;
         let pfr: PhysicalFunctionRunDB = db
             .timeline()
             .fetch_one::<PhysicalFunctionRunDB>(&replay_response.new_function_run_id)
@@ -678,7 +682,7 @@ mod tests {
             )
             .in_project(p.project_id);
         let execution = dispatch_services(&db).execute_function(request).await?.data;
-        dispatch_services(&db).request(()).await?;
+        dispatch_services(&db).tick().await?;
 
         let pfrs: Vec<PhysicalFunctionRunDB> = db
             .timeline()
@@ -742,7 +746,7 @@ mod tests {
             db.fetch_one::<LogicalFunctionRunDB>(&lfr.id).await?;
         assert_eq!(lfr_recovered.status, LogicalFunctionRunStatus::ReScheduled);
 
-        dispatch_services(&db).request(()).await?;
+        dispatch_services(&db).tick().await?;
         let pfrs: Vec<PhysicalFunctionRunDB> = db
             .timeline()
             .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))

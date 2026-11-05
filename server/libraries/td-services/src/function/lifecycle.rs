@@ -3,6 +3,7 @@
 //
 
 use crate::function::children::child_tables;
+use crate::function::declared::carried_forward;
 use crate::function::engine::{
     Changes, FunctionSpec, FunctionState, apply, register_version, requested_parents,
 };
@@ -13,7 +14,7 @@ use crate::tag::close_tags_of;
 use crate::tag::parent::stamp_parent;
 use std::collections::HashMap;
 use td_bridge::BridgeProviderHandle;
-use td_database::access::{InProject, WriteMode};
+use td_database::access::{Holds, InProject, ProjectLock};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::and;
@@ -52,7 +53,7 @@ impl<'a> ChildOf<'a> {
 }
 
 pub async fn register_one(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     ctx: &RequestContext,
     bridge: &BridgeProviderHandle,
     collection: &CollectionDBWithNames,
@@ -109,7 +110,7 @@ pub async fn register_one(
 
 #[allow(clippy::too_many_arguments)]
 pub async fn update_one(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     ctx: &RequestContext,
     bridge: &BridgeProviderHandle,
     collection: &CollectionDBWithNames,
@@ -118,6 +119,7 @@ pub async fn update_one(
     child_of: Option<ChildOf<'_>>,
     topology_at: TopologyInstant,
 ) -> Result<FunctionInsertDB, TdError> {
+    let update = &carried_forward(conn, current, update).await?;
     assert_function_name_not_exists(conn, &collection.collection_id, current, update).await?;
 
     let previous: FunctionDB = conn.timeline().fetch_one(&current.id).await?;
@@ -162,7 +164,7 @@ pub async fn update_one(
 /// Close one function version and everything hanging off it. User tables
 /// freeze so their data stays adoptable; dependencies, triggers and workers go.
 pub async fn delete_one(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     ctx: &RequestContext,
     function: &FunctionInsertDB,
     topology_at: TopologyInstant,
@@ -190,7 +192,7 @@ pub async fn delete_one(
 
 /// Mark the uploaded bundle as Registered (kept as a durable record, not deleted).
 async fn claim_bundle(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     function: &FunctionInsertDB,
 ) -> Result<(), TdError> {
     let bundle_registered = BundleStatusUpdateDB::registered();

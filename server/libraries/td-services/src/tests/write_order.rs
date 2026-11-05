@@ -86,7 +86,7 @@ async fn test_a_cancel_writes_the_worker_before_the_attempt(db: TdPool) -> Resul
                     );
                 assert!(
                     gate.get(Grant::asserted("blocking probe"))
-                        .wait_until_blocking(BLOCKED_WITHIN)
+                        .wait_until_blocking(1, BLOCKED_WITHIN)
                         .await
                         .expect("blocking probe"),
                     "the cancel never waited on the worker"
@@ -147,7 +147,7 @@ async fn test_a_callback_writes_the_attempt_before_the_run(db: TdPool) -> Result
                 });
                 assert!(
                     gate.get(Grant::asserted("blocking probe"))
-                        .wait_until_blocking(BLOCKED_WITHIN)
+                        .wait_until_blocking(1, BLOCKED_WITHIN)
                         .await
                         .expect("blocking probe"),
                     "the callback never waited on the attempt"

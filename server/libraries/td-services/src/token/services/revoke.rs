@@ -132,7 +132,8 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_a_system_token_cannot_be_revoked_by_its_owner(db: TdPool) {
-        let mut conn = DomainConnection::<Apiserver, Global, RW>::new(db.begin().await.unwrap());
+        let mut conn =
+            DomainConnection::<Apiserver, Global, RW>::asserted(db.begin().await.unwrap());
         seed_system_token(
             &mut conn,
             &UserId::admin(),

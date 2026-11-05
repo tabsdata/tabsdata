@@ -16,7 +16,9 @@ use td_bridge::messaging::{
 };
 use td_bridge::observer::{ObservedWorkload, WorkloadKind, WorkloadObservation, WorkloadPhase};
 use td_common::worker::WorkerName;
-use td_database::access::{AccessMode, InProject, LockInstant, SeesProjectRows, WriteMode};
+use td_database::access::{
+    AccessMode, Holds, InProject, LockInstant, ProjectLock, SeesProjectRows,
+};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::RecoveryConfig;
@@ -880,7 +882,7 @@ pub fn failed_worker_ids(actions: &RecoveryActions) -> Result<Vec<WorkerId>, TdE
     err(Debug, level = "debug")
 )]
 pub async fn fail_recovered_attempts(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     at: LockInstant,
     actions: &RecoveryActions,
 ) -> Result<(), TdError> {

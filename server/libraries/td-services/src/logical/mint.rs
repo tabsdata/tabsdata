@@ -15,7 +15,7 @@ use std::collections::HashMap;
 
 use crate::function::topology::RunnableVersion;
 use td_database::access::LockInstant;
-use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
+use td_database::access::{AccessMode, Holds, InProject, ProjectLock, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::execution::ExecutionDB;
@@ -98,7 +98,7 @@ pub fn build_function_run(
 }
 
 pub async fn mint_function_run(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
     at: LockInstant,
@@ -168,7 +168,7 @@ pub fn build_output_table_data_versions(
 }
 
 pub async fn mint_output_table_data_versions(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
     fr: &PhysicalFunctionRunInsertDB,

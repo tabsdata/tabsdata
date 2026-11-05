@@ -8,6 +8,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_database::access::{AcrossProjects, DbPool, retrying};
+use td_database::pool::SystemPool;
 use td_error::TdError;
 use td_objects::dxo::callback::CallbackRequest;
 use td_objects::dxo::callback::{CallbackOutcome, CallbackResponse};
@@ -19,18 +20,23 @@ use td_queries::Queries;
 #[service_factory]
 async fn worker_callback(
     authz: Ctx<AuthzContext>,
-    db: DbPool<AcrossProjects>,
+    db: DbPool<AcrossProjects, SystemPool>,
     request: UpdateRequest<CallbackRequest, WorkerParam>,
 ) -> Result<CallbackResponse, TdError> {
     let (_, param, callback) = request.into_parts();
     let update = WorkerExecutionUpdate::from(&callback);
 
     let worker_id = param.worker;
+    let project = {
+        let mut conn = db.read().await?;
+        let worker: WorkerDB = conn.get(authz.none()).fetch_one(&worker_id).await?;
+        worker.project_id
+    };
+    let db = db.in_project(&project);
     let applied = retrying(|attempt| async {
-        let mut trx = db.begin(attempt).await?;
+        let mut trx = db.lock_project().begin(attempt).await?;
         let at = AtTime::from(trx.locked_at());
         let worker: WorkerDB = trx.get(authz.none()).fetch_one(&worker_id).await?;
-        let mut trx = trx.enter_project(&worker.project_id).await?;
 
         let worker_update: WorkerUpdateDB = WorkerUpdateDB::try_from(&update)?;
         let conn = trx.get(authz.none());

@@ -17,8 +17,9 @@ use td_bridge::test::TestBridgeProvider;
 use td_common::execution_status::WorkerCallbackStatus;
 use td_common::status::ExitStatus;
 use td_database::access::Attempt;
-use td_database::access::{AcrossProjects, DbPool, GatedConnection, Grant, InProject, RW};
-use td_database::connection::PgConnectionExt;
+use td_database::access::{
+    AcrossProjects, DbPool, GatedConnection, Grant, InProject, ProjectLock, RW,
+};
 use td_database::domain::DomainPools;
 use td_database::pool::TdPool;
 use td_database::pool::scoped::ScopedExt;
@@ -35,6 +36,7 @@ use td_objects::types::basic::{
 use td_objects::types::composed::TableDependencyDto;
 use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
+use td_queries::test_utils::probes::wait_until_queued_on_lock;
 
 fn running_report() -> CallbackRequest {
     CallbackRequest {
@@ -341,9 +343,11 @@ async fn test_function_update_stops_a_trigger_the_tick_is_claiming(
 
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut tick: GatedConnection<RW, InProject> = DbPool::in_project(&pools, &p.project_id)
-        .begin(Attempt::unretried())
-        .await?;
+    let mut tick: GatedConnection<RW<ProjectLock>, InProject> =
+        DbPool::in_project(&pools, &p.project_id)
+            .lock_project()
+            .begin(Attempt::unretried())
+            .await?;
     let conn = tick.get(Grant::asserted("request tick held open"));
     let claimed: Vec<WorkerDB> = conn
         .fetch_all(WorkerDB::triggers_to_schedule(WorkerType::CronTrigger))
@@ -370,10 +374,7 @@ async fn test_function_update_stops_a_trigger_the_tick_is_claiming(
         .in_project(p.project_id);
     let updating = tokio::spawn(async move { services.update_function(update).await.map(|_| ()) });
     assert!(
-        tick.get(Grant::asserted("blocking probe"))
-            .wait_until_blocking(Duration::from_secs(10))
-            .await
-            .expect("blocking probe"),
+        wait_until_queued_on_lock(&db, &p.project_id, Duration::from_secs(10)).await,
         "the update never waited on the tick"
     );
     tick.commit().await?;
@@ -438,7 +439,7 @@ async fn cron_stops_after_a_tick(db: &TdPool) -> Result<Vec<String>, TdError> {
         dispatch_services(db),
         TestBridgeProvider::default().with_orchestrator(Orchestrator::Kubernetes),
     );
-    services.request(()).await?;
+    services.tick().await?;
     Ok(sent
         .messages()
         .into_iter()

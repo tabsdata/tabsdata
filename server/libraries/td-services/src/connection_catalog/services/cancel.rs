@@ -28,7 +28,7 @@ async fn cancel_connection_probe(
     let (project, request) = request.into_parts();
     let (ctx, param, ()) = request.into_parts();
     let (probe, names) = retrying(|attempt| async {
-        let mut trx = db.begin(attempt).await?;
+        let mut trx = db.lock_project().begin(attempt).await?;
         let grant = authz
             .require::<Project, (DevelopProject, MaintainCatalog)>(&mut trx, &ctx, &project)
             .await?;

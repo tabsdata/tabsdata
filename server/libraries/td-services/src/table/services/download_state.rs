@@ -8,6 +8,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_database::access::{AcrossProjects, DbPool};
+use td_database::pool::SystemPool;
 use td_error::TdError;
 use td_error::{ApiError, api_error};
 use td_objects::and;
@@ -26,7 +27,7 @@ use td_storage::Storage;
 async fn table_state_download(
     authz: Ctx<AuthzContext>,
     storage: Ctx<Storage>,
-    db: DbPool<AcrossProjects>,
+    db: DbPool<AcrossProjects, SystemPool>,
     request: ReadRequest<(FunctionVersionParam, AtTimeParam)>,
 ) -> Result<BoxedSyncStream, TdError> {
     let (_, (version, at)) = request.into_parts();

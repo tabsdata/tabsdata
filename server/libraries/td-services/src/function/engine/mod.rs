@@ -23,7 +23,7 @@ pub use state::FunctionState;
 use crate::function::workers::register_workers;
 use crate::tag::parent::parents_of;
 use std::collections::HashMap;
-use td_database::access::{InProject, WriteMode};
+use td_database::access::{Holds, InProject, ProjectLock};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
@@ -37,7 +37,7 @@ use td_objects::types::basic::{FunctionVersionId, TableId, WorkerConfig, WorkerT
 /// update when it was loaded.
 #[allow(clippy::too_many_arguments)]
 pub async fn register_version(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     ctx: &RequestContext,
     topology_at: TopologyInstant,
     collection: &CollectionDB,

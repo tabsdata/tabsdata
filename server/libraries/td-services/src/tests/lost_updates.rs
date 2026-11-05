@@ -29,6 +29,7 @@ use td_objects::types::basic::{
 };
 use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
+use td_queries::test_utils::probes::wait_until_queued_on_lock;
 use td_security::config::PasswordHashingConfig;
 
 const BLOCKED_WITHIN: Duration = Duration::from_secs(10);
@@ -59,13 +60,15 @@ async fn test_description_update_racing_delete_keeps_the_project_deleted(
 
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut gate = pools.begin(Attempt::unretried()).await?;
+    let mut gate = DbPool::in_project(&pools, &p.project_id)
+        .lock_project()
+        .begin(Attempt::unretried())
+        .await?;
     delete_project_roles(
         gate.get(Grant::asserted("project delete held open")),
         &p.project_id,
     )
     .await?;
-    let mut gate = gate.enter_project(&p.project_id).await?;
     let at = gate.locked_at();
     let conn = gate.get(Grant::asserted("project delete held open"));
     conn.scd2().close::<ProjectDB>(&p.project_id, at).await?;
@@ -83,10 +86,7 @@ async fn test_description_update_racing_delete_keeps_the_project_deleted(
     let services = Services::with_defaults(db.clone());
     let racing = tokio::spawn(async move { services.update_project(update).await });
     assert!(
-        gate.get(Grant::asserted("blocking probe"))
-            .wait_until_blocking(BLOCKED_WITHIN)
-            .await
-            .expect("blocking probe"),
+        wait_until_queued_on_lock(&db, &p.project_id, BLOCKED_WITHIN).await,
         "the update never waited on the delete"
     );
     gate.commit().await?;
@@ -121,7 +121,10 @@ async fn test_description_update_racing_rename_keeps_the_new_name(
 
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut gate = pools.begin(Attempt::unretried()).await?;
+    let mut gate = DbPool::in_project(&pools, &p.project_id)
+        .lock_project()
+        .begin(Attempt::unretried())
+        .await?;
     let conn = gate.get(Grant::asserted("project rename held open"));
     let current: ProjectDB = conn.scd2().fetch_one(&p.project_id).await?;
     let rename = ProjectUpdate {
@@ -130,7 +133,6 @@ async fn test_description_update_racing_rename_keeps_the_new_name(
         secrets: None,
     };
     rename_project_roles(conn, &admin(), &p.project_id, &rename, &current).await?;
-    let mut gate = gate.enter_project(&p.project_id).await?;
     let at = gate.locked_at();
     let conn = gate.get(Grant::asserted("project rename held open"));
     conn.scd2()
@@ -150,10 +152,7 @@ async fn test_description_update_racing_rename_keeps_the_new_name(
     let services = Services::with_defaults(db.clone());
     let racing = tokio::spawn(async move { services.update_project(update).await });
     assert!(
-        gate.get(Grant::asserted("blocking probe"))
-            .wait_until_blocking(BLOCKED_WITHIN)
-            .await
-            .expect("blocking probe"),
+        wait_until_queued_on_lock(&db, &p.project_id, BLOCKED_WITHIN).await,
         "the update never waited on the rename"
     );
     gate.commit().await?;
@@ -202,7 +201,7 @@ async fn test_self_edit_racing_disable_keeps_the_user_disabled(db: TdPool) -> Re
     let racing = tokio::spawn(async move { services.update_user(edit).await });
     assert!(
         gate.get(Grant::asserted("blocking probe"))
-            .wait_until_blocking(BLOCKED_WITHIN)
+            .wait_until_blocking(1, BLOCKED_WITHIN)
             .await
             .expect("blocking probe"),
         "the edit never waited on the disable"
@@ -232,6 +231,7 @@ async fn test_collection_description_update_racing_rename_keeps_the_new_name(
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
     let mut gate = DbPool::in_project(&pools, &p.project_id)
+        .lock_project()
         .begin(Attempt::unretried())
         .await?;
     let at = gate.locked_at();
@@ -258,10 +258,7 @@ async fn test_collection_description_update_racing_rename_keeps_the_new_name(
     let services = Services::with_defaults(db.clone());
     let racing = tokio::spawn(async move { services.update_collection(update).await });
     assert!(
-        gate.get(Grant::asserted("blocking probe"))
-            .wait_until_blocking(BLOCKED_WITHIN)
-            .await
-            .expect("blocking probe"),
+        wait_until_queued_on_lock(&db, &p.project_id, BLOCKED_WITHIN).await,
         "the update never waited on the rename"
     );
     gate.commit().await?;

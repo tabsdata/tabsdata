@@ -90,7 +90,7 @@ async fn test_a_grant_racing_a_user_delete_leaves_no_membership(db: TdPool) -> R
     });
     let finished = tokio::select! {
         granted = &mut granting => Some(granted),
-        _ = gate.get(Grant::asserted("blocking probe")).wait_until_blocking(BLOCKED_WITHIN) => None,
+        _ = gate.get(Grant::asserted("blocking probe")).wait_until_blocking(1, BLOCKED_WITHIN) => None,
     };
     gate.commit().await?;
     let _ = match finished {
@@ -167,7 +167,7 @@ async fn test_a_project_delete_and_a_user_delete_do_not_deadlock(
     });
     assert!(
         gate.get(Grant::asserted("blocking probe"))
-            .wait_until_blocking(BLOCKED_WITHIN)
+            .wait_until_blocking(1, BLOCKED_WITHIN)
             .await
             .expect("blocking probe"),
         "the user delete never waited on the project delete"
@@ -251,7 +251,7 @@ async fn test_a_simple_grant_lands_in_the_resolved_projects_role(
     });
     assert!(
         gate.get(Grant::asserted("blocking probe"))
-            .wait_until_blocking(BLOCKED_WITHIN)
+            .wait_until_blocking(1, BLOCKED_WITHIN)
             .await
             .expect("blocking probe"),
         "the grant never waited on the gate"
@@ -270,16 +270,22 @@ async fn test_a_simple_grant_lands_in_the_resolved_projects_role(
         .open(&current.updated(&rename, &ctx), seed_instant())
         .await?;
 
+    gate.commit().await?;
     let other_create = create("a")?;
     let other = other_create.to_dao(&ctx);
-    let mut gate = gate.enter_project(&other.project_id).await?;
-    let at = gate.locked_at();
-    let conn = gate.get(Grant::asserted("create held open"));
+    let mut creating =
+        DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects)
+            .in_project(&other.project_id)
+            .lock_project()
+            .begin(Attempt::unretried())
+            .await?;
+    let at = creating.locked_at();
+    let conn = creating.get(Grant::asserted("create held open"));
     conn.topology().bump(&other.project_id, at).await?;
     conn.scd2().open(&other, at).await?;
     seed_default_groups(conn, &ctx, at).await?;
     seed_project_roles(conn, &ctx, &other.project_id, &other_create.name).await?;
-    gate.commit().await?;
+    creating.commit().await?;
     let _ = granting.await.expect("grant task");
 
     for membership in memberships_of(&db, &user.id).await? {

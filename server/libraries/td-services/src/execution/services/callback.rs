@@ -5,14 +5,18 @@
 use crate::execution::update_status::{
     update_function_run_status, update_table_data_version_status, update_worker_status,
 };
+use crate::scheduler::stats;
 use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_database::access::{AcrossProjects, DbPool, InProject, LockInstant, WriteMode, retrying};
+use td_database::access::{
+    AcrossProjects, DbPool, Holds, InProject, LockInstant, ProjectLock, retrying,
+};
 use td_database::domain::{Apiserver, DomainConnection};
+use td_database::pool::SystemPool;
 use td_error::{ApiError, TdError, api_error};
-use td_execution::SchedulerNotify;
+use td_execution::{Concerns, ProjectWakes};
 use td_objects::dxo::callback::CallbackRequest;
 use td_objects::dxo::callback::ExecutionCallbackRequest;
 use td_objects::dxo::callback::{CallbackOutcome, CallbackResponse};
@@ -32,9 +36,9 @@ use tracing::debug;
 #[service_factory]
 async fn execution_callback(
     authz: Ctx<AuthzContext>,
-    scheduler_notify: Ctx<SchedulerNotify>,
+    wakes: Ctx<ProjectWakes>,
     msgs: &mut ReqCtx,
-    db: DbPool<AcrossProjects>,
+    db: DbPool<AcrossProjects, SystemPool>,
     request: UpdateRequest<ExecutionCallbackRequest, (FunctionRunParam, WorkerParam)>,
 ) -> Result<CallbackResponse, TdError> {
     let (_ctx, (function_run_param, worker_param), callback) = request.into_parts();
@@ -52,9 +56,10 @@ async fn execution_callback(
             "Worker {worker_id} does not run attempt {physical_function_run_id}"
         ));
     }
+    let db = db.in_project(&worker.project_id);
     let ((outcome, applied_run), recorded) = retrying(|attempt| async {
         let mut recorded = ReqCtx::default();
-        let mut trx = db.in_project(&worker.project_id).begin(attempt).await?;
+        let mut trx = db.lock_project().begin(attempt).await?;
         let at = trx.locked_at();
         let conn = trx.get(grant);
         let physical_run: PhysicalFunctionRunDB =
@@ -83,8 +88,12 @@ async fn execution_callback(
     .await?;
     msgs.merge(recorded);
 
+    match outcome {
+        CallbackOutcome::Applied => stats::report_applied(),
+        CallbackOutcome::Stale => stats::report_stale(),
+    }
     if applied_run {
-        scheduler_notify.notify_scheduler();
+        wakes.wake(&worker.project_id, Concerns::RUNS);
     }
     Ok(CallbackResponse { outcome })
 }
@@ -97,7 +106,7 @@ fn is_current(physical_run: &PhysicalFunctionRunDB) -> bool {
 /// value says whether it did.
 async fn apply_report(
     recorded: &mut ReqCtx,
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     physical_run: &PhysicalFunctionRunDB,
     worker_id: &WorkerId,
     report: &CallbackRequest,
@@ -144,7 +153,7 @@ async fn apply_report(
 /// could write twice, so recovery leaves it to the user if it is lost. Only
 /// a current, running attempt may say so.
 async fn mark_destination_write(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     physical_run: &PhysicalFunctionRunDB,
     worker_id: &WorkerId,
     at: LockInstant,

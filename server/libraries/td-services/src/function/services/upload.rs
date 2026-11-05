@@ -74,7 +74,7 @@ async fn upload_function(
         created_by_id: ctx.user_id,
     };
     retrying(|attempt| async {
-        let mut trx = db.begin(attempt).await?;
+        let mut trx = db.lock_project().begin(attempt).await?;
         trx.get(grant).insert(&bundle).await?;
         trx.commit().await
     })

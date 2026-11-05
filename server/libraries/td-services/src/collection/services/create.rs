@@ -78,7 +78,7 @@ async fn create_collection(
 
     // 3. create (short TX): insert the connection row + the collection.
     let created = retrying(|attempt| async {
-        let mut trx = db.begin(attempt).await?;
+        let mut trx = db.lock_project().begin(attempt).await?;
         let at = trx.locked_at();
         let conn = trx.get(grant);
         let _ = conn.scd2().fetch_one::<ProjectDB>(&project).await?;

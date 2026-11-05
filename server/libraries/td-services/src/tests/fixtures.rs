@@ -187,7 +187,7 @@ pub(crate) async fn dispatched_publisher(
         )
         .in_project(p.project_id);
     let execution = dispatch_services(db).execute_function(execute).await?.data;
-    dispatch_services(db).request(()).await?;
+    dispatch_services(db).tick().await?;
     let attempts: Vec<PhysicalFunctionRunDB> = db
         .timeline()
         .fetch_all(&(&execution.manual_trigger))

@@ -149,7 +149,7 @@ async fn test_a_pending_run_of_a_deleted_function_ends(db: TdPool) -> Result<(),
 
     delete(&db, project).await?;
     register(&db, project).await?;
-    kubernetes(&db).request(()).await?;
+    kubernetes(&db).tick().await?;
 
     let lfrs: Vec<LogicalFunctionRunDB> = db.fetch_all(&execution.id).await?;
     assert!(!lfrs.is_empty());
@@ -175,7 +175,7 @@ async fn test_a_dispatched_run_of_a_deleted_function_resolves_not_found(
     let project = setup(&db).await?;
     register(&db, project).await?;
     execute(&db, project).await?;
-    kubernetes(&db).request(()).await?;
+    kubernetes(&db).tick().await?;
     let workers = function_runners(&db).await?;
     assert_eq!(workers.len(), 1);
 
@@ -192,7 +192,7 @@ async fn test_resolve_refuses_a_run_whose_function_is_gone(db: TdPool) -> Result
     let project = setup(&db).await?;
     let function_id = register(&db, project).await?;
     execute(&db, project).await?;
-    kubernetes(&db).request(()).await?;
+    kubernetes(&db).tick().await?;
     let workers = function_runners(&db).await?;
     assert_eq!(workers.len(), 1);
 

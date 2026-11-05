@@ -274,7 +274,8 @@ async fn a_replaced_attempt_is_filtered_not_deducted(db: TdPool) -> Result<(), T
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
     let mut trx = DbPool::in_project(&pools, &p.project_id)
-        .begin_exclusive(Attempt::unretried())
+        .lock_project()
+        .begin(Attempt::unretried())
         .await?;
     runs_reattempted(
         trx.get(Grant::asserted("metrics behavior test")),

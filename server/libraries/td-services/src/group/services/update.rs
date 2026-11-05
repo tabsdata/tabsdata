@@ -24,7 +24,7 @@ async fn update_group(
     let (project, request) = request.into_parts();
     let (ctx, param, update) = request.into_parts();
     retrying(|attempt| async {
-        let mut gated_trx = db.begin(attempt).await?;
+        let mut gated_trx = db.lock_project().begin(attempt).await?;
         let grant = authz
             .require::<Project, ManageProject>(&mut gated_trx, &ctx, &project)
             .await?;

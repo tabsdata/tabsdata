@@ -15,7 +15,7 @@ use td_database::access::SeesProjectRows;
 use td_database::access::{AccessMode, DbPool, InProject, retrying};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_execution::SchedulerNotify;
+use td_execution::{Concerns, ProjectWakes};
 use td_objects::dxo::collection::{CollectionDBWithNames, CollectionParam};
 use td_objects::dxo::crudl::{UpdateRequest, WithinProject};
 use td_objects::dxo::function::FunctionParam;
@@ -27,7 +27,7 @@ use td_queries::Queries;
 #[service_factory]
 async fn update_function(
     authz: Ctx<AuthzContext>,
-    scheduler_notify: Ctx<SchedulerNotify>,
+    wakes: Ctx<ProjectWakes>,
     bridge: Ctx<BridgeProviderHandle>,
     db: DbPool<InProject>,
     request: WithinProject<UpdateRequest<FunctionUpdate, (CollectionParam, FunctionParam)>>,
@@ -35,7 +35,7 @@ async fn update_function(
     let (project, request) = request.into_parts();
     let (ctx, (collection_param, function_param), update) = request.into_parts();
     let read = retrying(|attempt| async {
-        let mut gated_trx = db.begin(attempt).await?;
+        let mut gated_trx = db.lock_project().begin(attempt).await?;
         let grant = authz
             .require::<Project, DevelopProject>(&mut gated_trx, &ctx, &project)
             .await?;
@@ -88,7 +88,7 @@ async fn update_function(
 
     // Wake the scheduler so worker rotations (stop old / start new cron/stage
     // workers) are picked up immediately.
-    scheduler_notify.notify_scheduler();
+    wakes.wake(&project, Concerns::RUNS | Concerns::TRIGGERS);
 
     Ok(read)
 }
@@ -112,6 +112,145 @@ pub async fn assert_function_name_not_exists<S: SeesProjectRows, M: AccessMode>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    async fn transformer_with_declarations(
+        db: &TdPool,
+    ) -> Result<(ProjectId, CollectionDB, FunctionDB), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection = db
+            .scoped(p.project_id)
+            .seed()
+            .collection(&CollectionName::try_from("c")?, &UserId::admin())
+            .await?;
+        db.scoped(p.project_id)
+            .seed()
+            .function(
+                &collection,
+                &FunctionRegister {
+                    name: "p".try_into()?,
+                    tables: Some(vec![TableNameDto::try_from("t")?]),
+                    ..declaring("p")
+                },
+            )
+            .await?;
+        let transformer = db
+            .scoped(p.project_id)
+            .seed()
+            .function(
+                &collection,
+                &FunctionRegister {
+                    name: "tf".try_into()?,
+                    decorator: Decorator::Transformer,
+                    dependencies: Some(vec![TableDependencyDto::try_from("c/t")?]),
+                    triggers: Some(vec![TableTriggerDto::try_from("c/t")?]),
+                    tables: Some(vec![TableNameDto::try_from("u")?]),
+                    ..declaring("tf")
+                },
+            )
+            .await?;
+        Ok((p.project_id, collection, transformer))
+    }
+
+    fn declaring(name: &str) -> FunctionRegister {
+        FunctionRegister {
+            child_functions: None,
+            name: name.try_into().unwrap(),
+            description: "d".try_into().unwrap(),
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into().unwrap(),
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: None,
+            table_types: None,
+            parent_tables: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv").unwrap(),
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        }
+    }
+
+    async fn update_tf(
+        db: &TdPool,
+        project: ProjectId,
+        update: FunctionUpdate,
+    ) -> Result<(), TdError> {
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str("c")?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str("tf")?,
+                    },
+                ),
+                update,
+            )
+            .in_project(project);
+        Services::with_defaults(db.clone())
+            .update_function(request)
+            .await?;
+        Ok(())
+    }
+
+    async fn declared_counts(
+        db: &TdPool,
+        function_id: FunctionId,
+    ) -> Result<(usize, usize, usize), TdError> {
+        let tables: Vec<TableDBWithNames> = db
+            .scd2()
+            .fetch_all(and!(&function_id, TableStatus::Active, System::FALSE))
+            .await?;
+        let dependencies: Vec<DependencyDBWithNames> = db
+            .scd2()
+            .fetch_all(and!(&function_id, DependencyDBWithNames::user()))
+            .await?;
+        let triggers: Vec<TriggerDBWithNames> = db
+            .scd2()
+            .fetch_all(and!(&function_id, TriggerDBWithNames::active()))
+            .await?;
+        Ok((tables.len(), dependencies.len(), triggers.len()))
+    }
+
+    #[td_test::test(db)]
+    async fn test_update_without_lists_keeps_the_declared_ones(db: TdPool) -> Result<(), TdError> {
+        let (project, _, tf) = transformer_with_declarations(&db).await?;
+        assert_eq!(declared_counts(&db, tf.function_id).await?, (1, 1, 1));
+        update_tf(
+            &db,
+            project,
+            FunctionUpdate {
+                description: Some("d2".try_into()?),
+                ..Default::default()
+            },
+        )
+        .await?;
+        assert_eq!(declared_counts(&db, tf.function_id).await?, (1, 1, 1));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_update_with_empty_lists_clears_them(db: TdPool) -> Result<(), TdError> {
+        let (project, _, tf) = transformer_with_declarations(&db).await?;
+        update_tf(
+            &db,
+            project,
+            FunctionUpdate {
+                dependencies: Some(vec![]),
+                triggers: Some(vec![]),
+                tables: Some(vec![]),
+                ..Default::default()
+            },
+        )
+        .await?;
+        assert_eq!(declared_counts(&db, tf.function_id).await?, (0, 0, 0));
+        Ok(())
+    }
+
     use crate::Services;
     use crate::function::register::RegisterFunctionError;
     use crate::function::services::tests::{assert_register, assert_update};
@@ -142,6 +281,11 @@ mod tests {
     use td_objects::types::basic::{CollectionIdName, FunctionIdName};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
 
+    use td_objects::dxo::collection::CollectionDB;
+    use td_objects::dxo::dependency::DependencyDBWithNames;
+    use td_objects::dxo::table::TableDBWithNames;
+    use td_objects::dxo::trigger::TriggerDBWithNames;
+    use td_objects::types::basic::{FunctionId, ProjectId, System};
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
@@ -420,6 +564,7 @@ mod tests {
             snippet: Some("function_foo snippet updated".try_into()?),
             decorator: Some(Decorator::Transformer),
             runtime_values: Some(FunctionRuntimeValues::try_from("new mock runtime values")?),
+            tables: Some(vec![]),
             ..Default::default()
         };
 
@@ -1134,6 +1279,7 @@ mod tests {
             decorator: Some(Decorator::Transformer),
             tables: Some(vec![TableNameDto::try_from("new_table")?]),
             runtime_values: Some(FunctionRuntimeValues::try_from("new mock runtime values")?),
+            dependencies: Some(vec![]),
             ..Default::default()
         };
 
@@ -1428,6 +1574,7 @@ mod tests {
             snippet: Some("function_foo snippet updated".try_into()?),
             decorator: Some(Decorator::Transformer),
             runtime_values: Some(FunctionRuntimeValues::try_from("new mock runtime values")?),
+            triggers: Some(vec![]),
             ..Default::default()
         };
 
@@ -1729,6 +1876,7 @@ mod tests {
             snippet: Some("function_foo snippet".try_into()?),
             decorator: Some(Decorator::Transformer),
             runtime_values: Some(FunctionRuntimeValues::try_from("mock runtime values")?),
+            tables: Some(vec![]),
             ..Default::default()
         };
 
@@ -2378,6 +2526,8 @@ mod tests {
 
         let update = FunctionUpdate {
             name: Some("function_2".try_into()?),
+            dependencies: Some(vec![]),
+            triggers: Some(vec![]),
             ..Default::default()
         };
 

@@ -15,7 +15,7 @@ use td_error::TdError;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::types::basic::{BasePath, CollectionName, UserId};
 use td_queries::Queries;
-use td_queries::test_utils::{SeedEntry, begin_exclusive};
+use td_queries::test_utils::{SeedEntry, begin_locked};
 
 /// One dispatch batch across the full resolution ladder: a function override,
 /// a collection's own prefix, and the fall-through to the project's. For every
@@ -120,7 +120,7 @@ async fn test_replay_mint_resolves_same_ladder(db: TdPool) -> Result<(), TdError
             function_version_id: lfr.function_version_id.clone(),
             function_version_patch_id: None,
         };
-        let mut trx = begin_exclusive(&db, lfr.project_id).await?;
+        let mut trx = begin_locked(&db, lfr.project_id).await?;
         let at = trx.locked_at();
         let conn = trx.get(Grant::asserted("base path test"));
         assert_eq!(

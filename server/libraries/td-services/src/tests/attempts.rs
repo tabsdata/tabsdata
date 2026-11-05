@@ -71,7 +71,7 @@ async fn test_recover_during_replay_keeps_one_attempt_in_flight(db: TdPool) -> R
     dispatch_services(&db)
         .replay_logical_function_run(replay)
         .await?;
-    dispatch_services(&db).request(()).await?;
+    dispatch_services(&db).tick().await?;
 
     let recover = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
         ExecutionParam {
@@ -80,7 +80,7 @@ async fn test_recover_during_replay_keeps_one_attempt_in_flight(db: TdPool) -> R
         (),
     );
     dispatch_services(&db).execution_recover(recover).await?;
-    dispatch_services(&db).request(()).await?;
+    dispatch_services(&db).tick().await?;
 
     let run: LogicalFunctionRunDB = db.fetch_one(&run_id).await?;
     let attempts: Vec<PhysicalFunctionRunDB> = db.timeline().fetch_all(&run_id).await?;
@@ -149,7 +149,7 @@ async fn test_replay_that_heals_a_producer_releases_its_on_hold_consumers(
                     .replay_logical_function_run(replay)
                     .await?
                     .data;
-                dispatch_services(&db).request(()).await?;
+                dispatch_services(&db).tick().await?;
                 let workers: Vec<WorkerDB> = db.fetch_all(&replayed.new_function_run_id).await?;
                 assert_eq!(workers.len(), 1);
 
@@ -209,7 +209,7 @@ async fn test_the_tick_releases_a_run_nothing_holds(db: TdPool) -> Result<(), Td
             let db = db.clone();
             let consumer = f[&test_executions[0].transactions[0].functions[1]].clone();
             async move {
-                dispatch_services(&db).request(()).await?;
+                dispatch_services(&db).tick().await?;
                 let consumer: LogicalFunctionRunDB =
                     db.fetch_one(&consumer.logical_function_run_id).await?;
                 assert_ne!(

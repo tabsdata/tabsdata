@@ -24,8 +24,7 @@ use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_bridge::BridgeProviderHandle;
-use td_database::access::SeesProjectRows;
-use td_database::access::{DbPool, InProject, LockInstant, WriteMode, retrying};
+use td_database::access::{DbPool, Holds, InProject, LockInstant, ProjectLock, retrying};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
@@ -65,7 +64,7 @@ async fn delete_collection(
     };
 
     let connection_id = retrying(|attempt| async {
-        let mut trx = db.begin(attempt).await?;
+        let mut trx = db.lock_project().begin(attempt).await?;
         let at = trx.locked_at();
         let conn = trx.get(grant);
         // A raced delete loses with not-found: the timeline is already closed.
@@ -127,8 +126,8 @@ async fn delete_collection(
     Ok(())
 }
 
-pub async fn update_deleted_workers<S: SeesProjectRows, M: WriteMode>(
-    conn: &mut DomainConnection<Apiserver, S, M>,
+pub async fn update_deleted_workers<M: Holds<ProjectLock>>(
+    conn: &mut DomainConnection<Apiserver, InProject, M>,
     collection_id: &CollectionId,
     at: LockInstant,
 ) -> Result<(), TdError> {

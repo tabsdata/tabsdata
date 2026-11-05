@@ -475,7 +475,7 @@ mod tests {
         uncommitted: bool,
     ) -> Result<Option<SPath>, TdError> {
         let mut connection =
-            DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+            DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
         resolve_table_location(
             &mut connection,
             None,

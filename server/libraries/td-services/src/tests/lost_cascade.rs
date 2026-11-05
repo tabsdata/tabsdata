@@ -15,7 +15,6 @@ use std::str::FromStr;
 use std::time::Duration;
 use td_database::access::Attempt;
 use td_database::access::{AcrossProjects, DbPool, Grant};
-use td_database::connection::PgConnectionExt;
 use td_database::domain::DomainPools;
 use td_database::pool::TdPool;
 use td_database::pool::scoped::ScopedExt;
@@ -35,6 +34,7 @@ use td_objects::types::basic::{
 use td_objects::types::composed::TableDependencyDto;
 use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
+use td_queries::test_utils::probes::wait_until_queued_on_lock;
 
 const BLOCKED_WITHIN: Duration = Duration::from_secs(5);
 
@@ -98,6 +98,7 @@ async fn test_a_registration_racing_a_table_delete_does_not_stay_active(
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
     let mut gate = DbPool::in_project(&pools, &p.project_id)
+        .lock_project()
         .begin(Attempt::unretried())
         .await?;
     let at = gate.locked_at();
@@ -138,10 +139,8 @@ async fn test_a_registration_racing_a_table_delete_does_not_stay_active(
     });
     let finished_first = tokio::select! {
         registered = &mut registering => Some(registered.expect("register task")),
-        blocked = gate
-            .get(Grant::asserted("blocking probe"))
-            .wait_until_blocking(BLOCKED_WITHIN) => {
-            assert!(blocked.expect("blocking probe"), "the register neither finished nor waited");
+        queued = wait_until_queued_on_lock(&db, &project, BLOCKED_WITHIN) => {
+            assert!(queued, "the register neither finished nor waited");
             None
         }
     };

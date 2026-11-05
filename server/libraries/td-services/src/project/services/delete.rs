@@ -25,8 +25,18 @@ async fn delete_project(
     request: DeleteRequest<ProjectParam>,
 ) -> Result<(), TdError> {
     let (ctx, param) = request.into_parts();
+    let project = {
+        let mut conn = db.read().await?;
+        let current: ProjectDB = conn
+            .get(authz.none())
+            .scd2()
+            .fetch_one(&param.project)
+            .await?;
+        current.project_id
+    };
+    let in_project = db.in_project(&project);
     retrying(|attempt| async {
-        let mut trx = db.begin(attempt).await?;
+        let mut trx = in_project.lock_project().begin(attempt).await?;
         let id_name = &param.project;
         let conn = trx.get(authz.none());
         let current = conn.scd2().fetch_one::<ProjectDB>(&id_name).await?;
@@ -44,7 +54,6 @@ async fn delete_project(
         // The project row closes before the role cascade, as a rename writes it
         // before its roles: both serialize on the project row, never on each
         // other's roles.
-        let mut trx = trx.enter_project(&current.project_id).await?;
         let at = trx.locked_at();
         let conn = trx.get(authz.none());
         let groups: Vec<GroupDB> = conn.scd2().fetch_all(&current.project_id).await?;

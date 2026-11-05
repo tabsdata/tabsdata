@@ -22,9 +22,8 @@ use td_bridge::{BridgeProviderHandle, Orchestrator};
 use td_common::datetime::Timestamp;
 use td_database::access::Attempt;
 use td_database::access::{
-    AcrossProjects, DbPool, GatedConnection, Grant, InProject, LockInstant, RW,
+    AcrossProjects, DbPool, GatedConnection, Grant, InProject, LockInstant, ProjectLock, RW,
 };
-use td_database::connection::PgConnectionExt;
 use td_database::domain::DomainPools;
 use td_database::pool::TdPool;
 use td_database::pool::scoped::ScopedExt;
@@ -42,6 +41,7 @@ use td_objects::types::basic::{
 use td_objects::types::composed::TableDependencyDto;
 use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
+use td_queries::test_utils::probes::wait_until_queued_on_lock;
 use tokio::task::JoinHandle;
 
 const BLOCKED_WITHIN: Duration = Duration::from_secs(10);
@@ -124,10 +124,11 @@ pub(crate) async fn setup(db: &TdPool, project: ProjectId) -> Result<FunctionId,
 pub(crate) async fn function_service_gate(
     db: &TdPool,
     project: ProjectId,
-) -> Result<(GatedConnection<RW, InProject>, LockInstant), TdError> {
+) -> Result<(GatedConnection<RW<ProjectLock>, InProject>, LockInstant), TdError> {
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
     let gate = DbPool::in_project(&pools, &project)
+        .lock_project()
         .begin(Attempt::unretried())
         .await?;
     let at = gate.locked_at();
@@ -151,12 +152,13 @@ pub(crate) fn delete_t_gone(db: &TdPool, project: ProjectId) -> JoinHandle<Resul
     })
 }
 
-async fn release(mut gate: GatedConnection<RW, InProject>) -> Result<(), TdError> {
+async fn release(
+    gate: GatedConnection<RW<ProjectLock>, InProject>,
+    db: &TdPool,
+    project: &ProjectId,
+) -> Result<(), TdError> {
     assert!(
-        gate.get(Grant::asserted("blocking probe"))
-            .wait_until_blocking(BLOCKED_WITHIN)
-            .await
-            .expect("blocking probe"),
+        wait_until_queued_on_lock(db, project, BLOCKED_WITHIN).await,
         "the table delete never waited on the gate"
     );
     gate.commit().await
@@ -182,7 +184,7 @@ async fn test_freeze_keeps_a_concurrent_disable(db: TdPool) -> Result<(), TdErro
         .await?;
 
     let deleting = delete_t_gone(&db, p.project_id);
-    release(gate).await?;
+    release(gate, &db, &p.project_id).await?;
     deleting.await.expect("delete task")?;
 
     let after: FunctionDB = db.scd2().fetch_one(&reader).await?;
@@ -209,7 +211,7 @@ async fn test_freeze_does_not_resurrect_a_concurrently_deleted_function(
         .await?;
 
     let deleting = delete_t_gone(&db, p.project_id);
-    release(gate).await?;
+    release(gate, &db, &p.project_id).await?;
     deleting.await.expect("delete task")?;
 
     let after: Option<FunctionDB> = db.scd2().fetch_optional(&reader).await?;
@@ -240,7 +242,7 @@ async fn test_freeze_with_an_older_instant_is_not_lost(db: TdPool) -> Result<(),
         .await?;
 
     let deleting = delete_t_gone(&db, p.project_id);
-    release(gate).await?;
+    release(gate, &db, &p.project_id).await?;
     let deleted = deleting.await.expect("delete task");
 
     let after: FunctionDB = db.scd2().fetch_one(&reader).await?;
@@ -288,7 +290,7 @@ async fn test_table_delete_committing_after_a_plan_gives_its_pod_an_answer(
         .await
         .expect("delete task")?;
 
-    kubernetes(&db).request(()).await?;
+    kubernetes(&db).tick().await?;
     let workers: Vec<WorkerDB> = db.fetch_all(()).await?;
     let runner = workers
         .iter()

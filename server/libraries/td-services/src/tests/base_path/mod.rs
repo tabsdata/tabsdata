@@ -33,7 +33,7 @@ use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDBWithNames;
 use td_objects::types::basic::PhysicalFunctionRunId;
 use td_queries::Queries;
-use td_queries::test_utils::begin_exclusive;
+use td_queries::test_utils::begin_locked;
 
 /// Dispatch-mint `ready` and commit, so reads observe what mint wrote.
 async fn mint_committed(
@@ -43,11 +43,12 @@ async fn mint_committed(
     let Some(first) = ready.first() else {
         return Ok(Vec::new());
     };
-    let mut trx = begin_exclusive(db, first.project_id).await?;
+    let mut trx = begin_locked(db, first.project_id).await?;
     let at = trx.locked_at();
     let minted =
         mint_function_runs_on_dispatch(trx.get(Grant::asserted("base path test")), ready, at)
-            .await?;
+            .await?
+            .minted;
     trx.commit().await?;
     Ok(minted)
 }

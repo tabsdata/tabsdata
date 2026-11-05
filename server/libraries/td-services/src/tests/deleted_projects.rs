@@ -92,7 +92,7 @@ async fn running(db: &TdPool) -> Result<(ProjectId, ExecutionResponse), TdError>
         )
         .in_project(p.project_id);
     let execution = dispatch_services(db).execute_function(execute).await?.data;
-    kubernetes(db).0.request(()).await?;
+    kubernetes(db).0.tick().await?;
     Ok((p.project_id, execution))
 }
 
@@ -136,7 +136,7 @@ async fn test_a_deleted_project_ends_its_runs_and_stops_its_workers(
 
     delete_collection_and_project(&db, project).await?;
     let (services, sent) = kubernetes(&db);
-    services.request(()).await?;
+    services.tick().await?;
 
     let runs: Vec<LogicalFunctionRunDB> = db.fetch_all(&execution.id).await?;
     assert!(!runs.is_empty());
@@ -167,9 +167,9 @@ async fn test_a_deleted_project_is_never_dispatched(db: TdPool) -> Result<(), Td
     let (project, _) = running(&db).await?;
     delete_collection_and_project(&db, project).await?;
     let (services, _) = kubernetes(&db);
-    services.request(()).await?;
+    services.tick().await?;
     let (services, sent) = kubernetes(&db);
-    services.request(()).await?;
+    services.tick().await?;
     assert!(
         sent.messages().is_empty(),
         "a drained deleted project still got messages"

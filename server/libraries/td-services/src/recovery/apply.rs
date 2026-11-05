@@ -16,7 +16,7 @@ use crate::worker::retry::after_failure;
 use itertools::Itertools;
 use ta_services::ctx_service::ReqCtx;
 use td_common::execution_status::WorkerCallbackStatus;
-use td_database::access::{InProject, LockInstant, WriteMode};
+use td_database::access::{Holds, InProject, LockInstant, ProjectLock};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::worker::{WorkerDB, WorkerDBWithNames, WorkerExecutionUpdate, WorkerUpdateDB};
@@ -38,7 +38,7 @@ use tracing::instrument;
 )]
 pub async fn apply_recovery_actions(
     msgs: &mut ReqCtx,
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     at: LockInstant,
     actions: &RecoveryActions,
 ) -> Result<RecoveryActions, TdError> {
@@ -99,7 +99,7 @@ pub async fn apply_recovery_actions(
 /// that comes later waits for it, and recovery never starts a worker a newer
 /// one displaced.
 async fn still_as_read(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     read: &[WorkerDBWithNames],
 ) -> Result<Vec<WorkerDBWithNames>, TdError> {
     let mut kept = Vec::with_capacity(read.len());
@@ -117,7 +117,7 @@ async fn still_as_read(
 /// with its next restart due by the same backoff as a reported failure. A
 /// worker a callback or a stop moved meanwhile is left as it is.
 async fn fail_exited_streams(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     at: LockInstant,
     exited: &[WorkerDBWithNames],
 ) -> Result<(), TdError> {

@@ -30,7 +30,7 @@ use td_objects::types::basic::{
     TransactionStatus, UserId, WorkerId,
 };
 use td_queries::Queries;
-use td_queries::test_utils::{SeedEntry, begin_exclusive};
+use td_queries::test_utils::{SeedEntry, begin_locked};
 
 fn done_without_data(table: &str) -> Result<CallbackRequest, TdError> {
     Ok(CallbackRequest {
@@ -169,7 +169,7 @@ async fn test_replay_in_flight_keeps_committed_data_visible(db: TdPool) -> Resul
                     "an in-flight replay must not hide the committed data"
                 );
 
-                let mut trx = begin_exclusive(&db, project_id).await?;
+                let mut trx = begin_locked(&db, project_id).await?;
                 let at = trx.locked_at();
                 trx.get(Grant::asserted("a replay attempt fails"))
                     .physical_runs()

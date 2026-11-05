@@ -7,7 +7,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{ManageProject, Project};
-use td_database::access::{GatedConnection, InProject, RW};
+use td_database::access::{GatedConnection, InProject, ProjectLock, RW};
 use td_error::TdError;
 use td_objects::dxo::crudl::{CreateRequest, DeleteRequest, WithinProject};
 use td_objects::dxo::tag::{Tag, TagParam, TagSet};
@@ -16,7 +16,7 @@ use td_objects::types::basic::TagEntity;
 #[service_factory]
 async fn set_project_tag(
     authz: Ctx<AuthzContext>,
-    gated_trx: &mut GatedConnection<RW, InProject>,
+    gated_trx: &mut GatedConnection<RW<ProjectLock>, InProject>,
     request: WithinProject<CreateRequest<TagSet>>,
 ) -> Result<Tag, TdError> {
     let (project, request) = request.into_parts();
@@ -32,7 +32,7 @@ async fn set_project_tag(
 #[service_factory]
 async fn delete_project_tag(
     authz: Ctx<AuthzContext>,
-    gated_trx: &mut GatedConnection<RW, InProject>,
+    gated_trx: &mut GatedConnection<RW<ProjectLock>, InProject>,
     request: WithinProject<DeleteRequest<TagParam>>,
 ) -> Result<(), TdError> {
     let (project, request) = request.into_parts();

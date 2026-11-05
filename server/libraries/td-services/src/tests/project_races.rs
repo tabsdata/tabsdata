@@ -15,7 +15,9 @@ use crate::project::seed_project_roles::seed_project_roles;
 use std::str::FromStr;
 use std::time::Duration;
 use td_database::access::Attempt;
-use td_database::access::{AcrossProjects, DbPool, DbScope, GatedConnection, Global, Grant, RW};
+use td_database::access::{
+    AcrossProjects, DbPool, DbScope, GatedConnection, Global, Grant, LockKind, RW,
+};
 use td_database::connection::PgConnectionExt;
 use td_database::domain::{Apiserver, DomainPools, ScopedBy};
 use td_database::pool::TdPool;
@@ -23,11 +25,13 @@ use td_error::{ApiError, TdError};
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::project::{ProjectCreate, ProjectDB, ProjectParam, ProjectUpdate};
 use td_objects::types::basic::{
-    AccessTokenId, BasePath, ProjectIdName, ProjectName, UserEnabled, UserId, UserName,
+    AccessTokenId, BasePath, ProjectId, ProjectIdName, ProjectName, UserEnabled, UserId, UserName,
 };
 use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
-use td_queries::test_utils::probes::{lock_row_nowait, lock_table_exclusive};
+use td_queries::test_utils::probes::{
+    lock_row_nowait, lock_table_exclusive, wait_until_queued_on_lock,
+};
 
 const BLOCKED_WITHIN: Duration = Duration::from_secs(10);
 
@@ -70,15 +74,24 @@ async fn create_project(services: &Services, name: &str) -> Result<(), TdError> 
     Ok(())
 }
 
-async fn wait_until_blocking<S: DbScope>(gate: &mut GatedConnection<RW, S>, what: &str)
-where
+async fn wait_until_blocking<S: DbScope, L: LockKind>(
+    gate: &mut GatedConnection<RW<L>, S>,
+    what: &str,
+) where
     Apiserver: ScopedBy<S>,
 {
     assert!(
         gate.get(Grant::asserted("blocking probe"))
-            .wait_until_blocking(BLOCKED_WITHIN)
+            .wait_until_blocking(1, BLOCKED_WITHIN)
             .await
             .expect("blocking probe"),
+        "{what} never waited on the gate"
+    );
+}
+
+async fn wait_until_queued(db: &TdPool, project: &ProjectId, what: &str) {
+    assert!(
+        wait_until_queued_on_lock(db, project, BLOCKED_WITHIN).await,
         "{what} never waited on the gate"
     );
 }
@@ -138,10 +151,13 @@ async fn test_a_rename_racing_a_create_of_its_name_fails_cleanly(
     create_project(&services, "p_old").await?;
 
     let ctx = admin();
-    let gate = pools(&db).begin(Attempt::unretried()).await?;
     let project_create = create("p_new")?;
     let project = project_create.to_dao(&ctx);
-    let mut gate = gate.enter_project(&project.project_id).await?;
+    let mut gate = pools(&db)
+        .in_project(&project.project_id)
+        .lock_project()
+        .begin(Attempt::unretried())
+        .await?;
     let at = gate.locked_at();
     let conn = gate.get(Grant::asserted("create held open"));
     conn.topology().bump(&project.project_id, at).await?;
@@ -189,14 +205,16 @@ async fn test_a_create_racing_a_rename_to_its_name_fails_cleanly(
     create_project(&services, "p_old").await?;
 
     let ctx = admin();
-    let mut gate = pools(&db).begin(Attempt::unretried()).await?;
-    let current: ProjectDB = gate
-        .get(Grant::asserted("rename held open"))
+    let current: ProjectDB = db
         .scd2()
         .fetch_one(&ProjectName::try_from("p_old")?)
         .await?;
     let update = rename("p_new")?;
-    let mut gate = gate.enter_project(&current.project_id).await?;
+    let mut gate = pools(&db)
+        .in_project(&current.project_id)
+        .lock_project()
+        .begin(Attempt::unretried())
+        .await?;
     let at = gate.locked_at();
     let conn = gate.get(Grant::asserted("rename held open"));
     conn.scd2()
@@ -235,16 +253,16 @@ async fn test_a_rename_racing_a_delete_does_not_deadlock(db: TdPool) -> Result<(
     let services = Services::with_defaults(db.clone());
     create_project(&services, "p_old").await?;
 
-    let mut gate =
-        DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects)
-            .begin(Attempt::unretried())
-            .await?;
-    let current: ProjectDB = gate
-        .get(Grant::asserted("delete held open"))
+    let current: ProjectDB = db
         .scd2()
         .fetch_one(&ProjectName::try_from("p_old")?)
         .await?;
-    let mut gate = gate.enter_project(&current.project_id).await?;
+    let mut gate =
+        DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects)
+            .in_project(&current.project_id)
+            .lock_project()
+            .begin(Attempt::unretried())
+            .await?;
     let at = gate.locked_at();
     let conn = gate.get(Grant::asserted("delete held open"));
     conn.scd2()
@@ -259,7 +277,7 @@ async fn test_a_rename_racing_a_delete_does_not_deadlock(db: TdPool) -> Result<(
                 .await
         }
     });
-    wait_until_blocking(&mut gate, "the rename").await;
+    wait_until_queued(&db, &current.project_id, "the rename").await;
     let cascade = delete_project_roles(
         gate.get(Grant::asserted("delete held open")),
         &current.project_id,

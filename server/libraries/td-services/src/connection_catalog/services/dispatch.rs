@@ -16,11 +16,11 @@ use ta_services::service::Ctx;
 use td_bridge::messaging::{OrchestratorMessagePayload, ProbeRequest, ProbeStartRequest};
 use td_bridge::{BridgeProviderHandle, Orchestrator};
 use td_database::access::{
-    AccessMode, AcrossProjects, DbPool, Grant, SeesProjectRows, ServiceDbError, WriteMode,
+    AccessMode, AcrossProjects, DbPool, Grant, Holds, InProject, ProjectLock, SeesProjectRows,
     retrying, unique_violation_on,
 };
-use td_database::connection::PgConnectionExt;
 use td_database::domain::{Apiserver, DomainConnection};
+use td_database::pool::{ServingPool, SystemPool};
 use td_error::TdError;
 use td_objects::and;
 use td_objects::dxo::connection_catalog::{
@@ -41,112 +41,131 @@ use tracing::{debug, warn};
 
 type ProbeMessage = OrchestratorMessagePayload<serde_yaml::Value>;
 
-/// One replica claims at a time, so the caps it counts are the caps that
-/// hold; another replica's tick skips its claim meanwhile.
-pub(crate) const DISPATCH_LOCK_KEY: &str = "apiserver:connection_probes:dispatch";
-
-/// One dispatcher tick: expire sample rows, delete probes past the
-/// retention, time out probes that never reported, queue the scheduled
-/// metadata refreshes that are due, then requeue claims whose request never
-/// left and claim queued probes within the caps and send their requests,
-/// marking each delivered once it is.
+/// One dispatcher tick, each project under its own lock.
 #[service_factory]
 async fn dispatch_connection_probes(
     catalog: Ctx<ConnectionCatalog>,
     catalog_config: Ctx<CatalogConfig>,
     bridge: Ctx<BridgeProviderHandle>,
     internal_api: Ctx<InternalApi>,
-    db: DbPool<AcrossProjects>,
+    db: DbPool<AcrossProjects, SystemPool>,
     _request: (),
 ) -> Result<(), TdError> {
     let grant = Grant::asserted("connection probe dispatch tick");
     let now = AtTime::now();
 
-    let timed_out = retrying(|attempt| async {
-        let mut trx = db.begin(attempt).await?;
-        let conn = trx.get(grant);
-        conn.update(
-            &ProbeResultPurgeDB::default(),
-            SampleResultsExpired {
-                at: Expires::from(now),
-            },
-        )
-        .await?;
-        conn.delete::<ConnectionProbeDB>(EndedBefore {
-            at: Ended::from(shifted(&now, RETENTION, false)),
-        })
-        .await?;
-        let mut timed_out = 0;
-        for kind in [ProbeKind::Check, ProbeKind::Metadata, ProbeKind::Sample] {
+    let projects: Vec<ProjectId> = {
+        let mut conn = db.read().await?;
+        let probes: Vec<ConnectionProbeDB> = conn.get(grant).fetch_all(()).await?;
+        probes
+            .into_iter()
+            .map(|probe| probe.project_id)
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect()
+    };
+
+    let mut timed_out = 0;
+    for project in &projects {
+        let in_project = db.in_project(project);
+        timed_out += retrying(|attempt| async {
+            let mut trx = in_project.lock_project().begin(attempt).await?;
+            let conn = trx.get(grant);
+            conn.update(
+                &ProbeResultPurgeDB::default(),
+                SampleResultsExpired {
+                    at: Expires::from(now),
+                },
+            )
+            .await?;
+            conn.delete::<ConnectionProbeDB>(EndedBefore {
+                at: Ended::from(shifted(&now, RETENTION, false)),
+            })
+            .await?;
+            let mut timed_out = 0;
+            for kind in [ProbeKind::Check, ProbeKind::Metadata, ProbeKind::Sample] {
+                timed_out += conn
+                    .update(
+                        &ended(ProbeStatus::Timeout, "no outcome reported in time", &now),
+                        RunningOverdue {
+                            kind,
+                            started_before: Started::from(shifted(
+                                &now,
+                                running_deadline(kind),
+                                false,
+                            )),
+                        },
+                    )
+                    .await?
+                    .rows_affected();
+            }
             timed_out += conn
                 .update(
-                    &ended(ProbeStatus::Timeout, "no outcome reported in time", &now),
-                    RunningOverdue {
-                        kind,
-                        started_before: Started::from(shifted(&now, running_deadline(kind), false)),
+                    &ended(ProbeStatus::Timeout, "never started within the caps", &now),
+                    QueuedOverdue {
+                        requested_before: ProbeRequestedOn::try_from(shifted(
+                            &now, MAX_QUEUED, false,
+                        ))?,
                     },
                 )
                 .await?
                 .rows_affected();
-        }
-        timed_out += conn
-            .update(
-                &ended(ProbeStatus::Timeout, "never started within the caps", &now),
-                QueuedOverdue {
-                    requested_before: ProbeRequestedOn::try_from(shifted(&now, MAX_QUEUED, false))?,
+            conn.update(
+                &ProbeRequeueUpdateDB::default(),
+                UndeliveredOverdue {
+                    started_before: Started::from(shifted(&now, DELIVERY_GRACE, false)),
                 },
             )
-            .await?
-            .rows_affected();
-        trx.commit().await?;
-        Ok(timed_out)
-    })
-    .await?;
+            .await?;
+            trx.commit().await?;
+            Ok(timed_out)
+        })
+        .await?;
+    }
 
     let kubernetes = matches!(bridge.orchestrator(), Orchestrator::Kubernetes);
     let refresh_interval = catalog_config.refresh_interval.filter(|_| kubernetes);
 
-    let refreshes = retrying(|attempt| async {
-        let mut trx = db.begin(attempt).await?;
-        let conn = trx.get(grant);
-        if !dispatch_lock(conn).await? {
-            trx.commit().await?;
-            return Ok(None);
-        }
-        let refreshes = match refresh_interval {
-            Some(interval) => due_refreshes(conn, interval, &now).await?,
+    let refreshes = {
+        let mut conn = db.read().await?;
+        match refresh_interval {
+            Some(interval) => due_refreshes(conn.get(grant), interval, &now).await?,
             None => Vec::new(),
-        };
-        trx.commit().await?;
-        Ok(Some(refreshes))
-    })
-    .await?;
-
-    let Some(refreshes) = refreshes else {
-        debug!("another replica is claiming connection probes");
-        if timed_out > 0 {
-            catalog.ended.notify_waiters();
         }
-        return Ok(());
     };
-
     let queued = queue_refreshes(&db, grant, refreshes, &now).await?;
     if queued > 0 {
         debug!(queued, "scheduled connection metadata refreshes");
     }
 
-    let (messages, refused) = retrying(|attempt| async {
-        let mut trx = db.begin(attempt).await?;
-        let conn = trx.get(grant);
-        if !dispatch_lock(conn).await? {
+    let chosen = {
+        let mut conn = db.read().await?;
+        let conn = conn.get(grant);
+        let running: Vec<ConnectionProbeDB> = conn.fetch_all(ConnectionProbeDB::running()).await?;
+        let queued: Vec<ConnectionProbeDB> = conn.fetch_all(ConnectionProbeDB::queued()).await?;
+        within_caps(MAX_CONCURRENT, MAX_CONCURRENT_PER_PROJECT, &running, queued)
+    };
+    let mut by_project: HashMap<ProjectId, HashSet<ProbeId>> = HashMap::new();
+    for probe in chosen {
+        by_project
+            .entry(probe.project_id)
+            .or_default()
+            .insert(probe.base.id);
+    }
+    let mut messages = Vec::new();
+    let mut refused = 0;
+    for (project, chosen) in by_project {
+        let in_project = db.in_project(&project);
+        let (claimed, refused_here) = retrying(|attempt| async {
+            let mut trx = in_project.lock_project().begin(attempt).await?;
+            let claimed = claim(trx.get(grant), &bridge, &internal_api, &chosen, &now).await?;
             trx.commit().await?;
-            return Ok((Vec::new(), 0));
-        }
-        let claimed = claim(conn, &bridge, &internal_api, &now).await?;
-        trx.commit().await?;
-        Ok(claimed)
-    })
-    .await?;
+            Ok(claimed)
+        })
+        .await?;
+        messages.extend(claimed);
+        refused += refused_here;
+    }
 
     let mut requeued = 0;
     for (project, probe, message) in messages {
@@ -168,42 +187,25 @@ async fn dispatch_connection_probes(
     Ok(())
 }
 
-/// Takes the dispatch lock for the transaction: `false` when another
-/// replica holds it.
-async fn dispatch_lock<S: SeesProjectRows, M: WriteMode>(
-    conn: &mut DomainConnection<Apiserver, S, M>,
-) -> Result<bool, TdError> {
-    Ok(conn
-        .try_schema_advisory_xact_lock_text(DISPATCH_LOCK_KEY)
-        .await
-        .map_err(ServiceDbError::CannotAcquireLock)?)
-}
-
-/// Requeues claims whose request never left, then claims queued probes
-/// within the caps and marks them running; a probe whose request cannot be
-/// built fails instead.
-async fn claim<S: SeesProjectRows, M: WriteMode>(
-    conn: &mut DomainConnection<Apiserver, S, M>,
+/// Claims the project's queued probes the caps chose and marks them
+/// running; a probe whose request cannot be built fails instead.
+async fn claim<M: Holds<ProjectLock>>(
+    conn: &mut DomainConnection<Apiserver, InProject, M>,
     bridge: &BridgeProviderHandle,
     internal_api: &InternalApi,
+    chosen: &HashSet<ProbeId>,
     now: &AtTime,
 ) -> Result<(Vec<(ProjectId, ProbeId, ProbeMessage)>, usize), TdError> {
-    conn.update(
-        &ProbeRequeueUpdateDB::default(),
-        UndeliveredOverdue {
-            started_before: Started::from(shifted(now, DELIVERY_GRACE, false)),
-        },
-    )
-    .await?;
-    let running: Vec<ConnectionProbeDB> = conn.fetch_all(ConnectionProbeDB::running()).await?;
     let queued: Vec<ConnectionProbeDB> = conn
         .for_update()
         .claim_all(ConnectionProbeDB::queued())
         .await?;
-    let chosen = within_caps(MAX_CONCURRENT, MAX_CONCURRENT_PER_PROJECT, &running, queued);
     let mut messages = Vec::new();
     let mut refused = 0;
-    for probe in chosen {
+    for probe in queued
+        .into_iter()
+        .filter(|probe| chosen.contains(&probe.base.id))
+    {
         let message = match bridge.orchestrator() {
             Orchestrator::Kubernetes => {
                 probe_start(conn, internal_api, &probe).await.map(|start| {
@@ -444,8 +446,8 @@ pub(super) fn refresh_due(
 
 /// Queues the chosen metadata refreshes, each in its project. One that a
 /// probe submitted since already covers is skipped.
-async fn queue_refreshes(
-    db: &DbPool<AcrossProjects>,
+async fn queue_refreshes<P: ServingPool>(
+    db: &DbPool<AcrossProjects, P>,
     grant: Grant,
     due: Vec<ConnectionCatalogDBWithNames>,
     now: &AtTime,
@@ -456,7 +458,7 @@ async fn queue_refreshes(
     for catalog in &due {
         let in_project = db.in_project(&catalog.project_id);
         let inserted = retrying(|attempt| async {
-            let mut trx = in_project.begin(attempt).await?;
+            let mut trx = in_project.lock_project().begin(attempt).await?;
             trx.get(grant)
                 .insert(&ConnectionProbeInsertDB {
                     id: ProbeId::default(),
@@ -491,8 +493,8 @@ async fn queue_refreshes(
 
 /// A delivered request is stamped; an undelivered one goes back to the
 /// queue for the next tick, within the queued deadline.
-async fn settle_delivery(
-    db: &DbPool<AcrossProjects>,
+async fn settle_delivery<P: ServingPool>(
+    db: &DbPool<AcrossProjects, P>,
     grant: Grant,
     project: &ProjectId,
     probe: ProbeId,
@@ -500,7 +502,7 @@ async fn settle_delivery(
 ) -> Result<(), TdError> {
     let db = db.in_project(project);
     retrying(|attempt| async {
-        let mut trx = db.begin(attempt).await?;
+        let mut trx = db.lock_project().begin(attempt).await?;
         let conn = trx.get(grant);
         if delivered {
             conn.update(

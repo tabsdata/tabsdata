@@ -10,8 +10,9 @@ use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_database::access::{AcrossProjects, DbPool, retrying};
+use td_database::pool::SystemPool;
 use td_error::TdError;
-use td_execution::{SchedulerNotify, TransactionBy};
+use td_execution::{Concerns, ProjectWakes, TransactionBy};
 use td_objects::dxo::crudl::CreateRequest;
 use td_objects::dxo::execution::{ExecutionRequest, InternalExecutionRequest, TriggerResponse};
 use td_objects::dxo::function::{FunctionDBWithNames, FunctionVersionParam};
@@ -22,9 +23,9 @@ use td_queries::Queries;
 async fn execute_function_version(
     authz: Ctx<AuthzContext>,
     transaction_by: Ctx<TransactionBy>,
-    scheduler_notify: Ctx<SchedulerNotify>,
+    wakes: Ctx<ProjectWakes>,
     msgs: &mut ReqCtx,
-    db: DbPool<AcrossProjects>,
+    db: DbPool<AcrossProjects, SystemPool>,
     request: CreateRequest<InternalExecutionRequest, FunctionVersionParam>,
 ) -> Result<TriggerResponse, TdError> {
     let (ctx, param, internal_request) = request.into_parts();
@@ -37,7 +38,7 @@ async fn execute_function_version(
             conn.timeline().fetch_one(&function_version_id).await?;
         let project = requested.project_id;
         // the project is known now: authorize before any further read and
-        // before queueing on its exclusive lock
+        // before queueing on its lock
         let grant = authz
             .require::<Project, DevelopProject>(&mut trx, &ctx, &project)
             .await?;
@@ -48,7 +49,7 @@ async fn execute_function_version(
     let db = db.in_project(&project);
     let (executed, recorded) = retrying(|attempt| async {
         let mut recorded = ReqCtx::default();
-        let mut trx = db.begin_exclusive(attempt).await?;
+        let mut trx = db.lock_project().begin(attempt).await?;
         let at = trx.locked_at();
         let conn = trx.get(grant);
 
@@ -83,7 +84,7 @@ async fn execute_function_version(
         Err(refused) => return Ok(refused),
     };
 
-    scheduler_notify.notify_scheduler();
+    wakes.wake(&project, Concerns::RUNS);
     Ok(TriggerResponse {
         outcome: TriggerOutcome::Scheduled,
         execution_id: response.id,
@@ -612,7 +613,7 @@ mod tests {
     }
 
     /// Concurrent identical-`external_uid` triggers must not race into a 500:
-    /// the project's lock, which every exclusive connection holds for its whole
+    /// the project's lock, which every planning unit holds for its whole
     /// transaction, serializes them so exactly one schedules and the other
     /// finds the key held, leaving a single execution row. Unserialized, both
     /// could pass the check and the INSERT loser would hit a constraint and

@@ -3,6 +3,7 @@
 //
 
 pub mod children;
+pub mod declared;
 pub mod engine;
 pub mod freeze;
 pub mod lifecycle;

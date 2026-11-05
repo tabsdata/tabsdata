@@ -43,8 +43,9 @@ async fn create_project(
     secrets
         .upsert(&project_id, &create.name, &create.secrets)
         .await?;
+    let in_project = db.in_project(&project_id);
     let created = retrying(|attempt| async {
-        let mut trx = db.begin(attempt).await?;
+        let mut trx = in_project.lock_project().begin(attempt).await?;
         let grant = authz
             .require::<System, CreateProjects>(&mut trx, &ctx, &SystemEntity)
             .await?;
@@ -59,12 +60,8 @@ async fn create_project(
             .assert_not_exists::<ProjectDB>(&create.name)
             .await?;
 
-        // Enter the new project for the rest of the unit of work: the seeds below
-        // default `project_id` from the GUC instead of stamping it by hand, and
-        // the connection is typed for it. The project, its system groups and its
-        // first, empty topology version all open at the same instant.
-        let mut trx = trx.enter_project(&project_id).await?;
-        let conn = trx.get(grant);
+        // Under the new project's lock, the seeds below default `project_id`
+        // from the GUC.
         conn.topology().bump(&project_id, at).await?;
         conn.scd2()
             .open(&project, at)

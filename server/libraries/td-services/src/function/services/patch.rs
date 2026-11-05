@@ -8,7 +8,7 @@ use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_database::access::SeesProjectRows;
-use td_database::access::{AccessMode, GatedConnection, InProject, RW};
+use td_database::access::{AccessMode, GatedConnection, InProject, ProjectLock, RW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_error::td_error;
@@ -26,7 +26,7 @@ use td_queries::Queries;
 #[service_factory]
 async fn create_function_patch(
     authz: Ctx<AuthzContext>,
-    gated_trx: &mut GatedConnection<RW, InProject>,
+    gated_trx: &mut GatedConnection<RW<ProjectLock>, InProject>,
     request: WithinProject<CreateRequest<FunctionPatch, (CollectionParam, FunctionParam)>>,
 ) -> Result<FunctionPatchRecord, TdError> {
     let (project, request) = request.into_parts();

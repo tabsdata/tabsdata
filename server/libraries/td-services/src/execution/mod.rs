@@ -16,7 +16,7 @@ use crate::execution::plan::versions::resolve_execution_plan_versions;
 use crate::function::children::ensure_user_managed;
 use ta_services::ctx_service::ReqCtx;
 use td_database::access::LockInstant;
-use td_database::access::{InProject, SeesProjectRows, XW};
+use td_database::access::{Holds, InProject, ProjectLock};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::TransactionBy;
@@ -41,11 +41,11 @@ pub(crate) mod settlement;
 pub(crate) mod update_status;
 
 /// The trigger gates shared by the function- and version-trigger services,
-/// run on the exclusive connection before planning. `Some` names the
+/// run under the project's lock before planning. `Some` names the
 /// execution that stops this trigger: `Busy` when `skip_if_running` finds the
 /// function running, `Held` or `Consumed` when its `external_uid` is taken.
-pub(crate) async fn trigger_gate<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S, XW>,
+pub(crate) async fn trigger_gate(
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     request: &ExecutionRequest,
     function: &FunctionDBWithNames,
     trigger_type: &TriggerType,
@@ -74,7 +74,7 @@ pub(crate) async fn trigger_gate<S: SeesProjectRows>(
 /// trigger gates.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute(
-    conn: &mut DomainConnection<Apiserver, InProject, XW>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     msgs: &mut ReqCtx,
     transaction_by: &TransactionBy,
     request_context: RequestContext,

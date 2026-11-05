@@ -7,7 +7,7 @@ use crate::function::workers::register_workers;
 use crate::tag::parent::{children_of, parent_of};
 use std::collections::{HashMap, HashSet};
 use td_bridge::BridgeProviderHandle;
-use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
+use td_database::access::{AccessMode, Holds, InProject, ProjectLock, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::dxo::collection::CollectionDBWithNames;
@@ -57,7 +57,7 @@ pub fn child_tables(children: Option<&[ChildFunction]>) -> HashSet<&TableNameDto
 /// `None` keeps the children, which still follow the parent's `enabled`.
 #[allow(clippy::too_many_arguments)]
 pub async fn reconcile_children(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     ctx: &RequestContext,
     bridge: &BridgeProviderHandle,
     collection: &CollectionDBWithNames,
@@ -135,7 +135,7 @@ pub async fn reconcile_children(
 }
 
 pub async fn cascade_enabled(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     ctx: &RequestContext,
     parent: &FunctionId,
     enabled: Enabled,

@@ -261,7 +261,8 @@ mod tests {
         let p1 = insert_patch(&db, p.project_id, &head, t1, "p1").await?;
         let p2 = insert_patch(&db, p.project_id, &head, t2, "p2").await?;
 
-        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+        let mut conn =
+            DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
 
         let at_t1 = latest_patch_or_head(&mut conn, &head.id, &t1).await?;
         assert_eq!(at_t1.function_version_id, head.id);
@@ -292,7 +293,8 @@ mod tests {
         let p_a = insert_patch(&db, p.project_id, &head_a, now, "p-a").await?;
         let p_b = insert_patch(&db, p.project_id, &head_b, now, "p-b").await?;
 
-        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+        let mut conn =
+            DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
         let map =
             latest_patch_or_head_batch(&mut conn, vec![head_a.id.clone(), head_b.id.clone()], &now)
                 .await?;

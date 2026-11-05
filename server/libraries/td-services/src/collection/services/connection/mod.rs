@@ -12,7 +12,7 @@ pub(crate) mod test_support;
 mod upsert;
 
 use td_bridge::connection::ConnectionStore;
-use td_database::access::{DbPool, Grant};
+use td_database::access::{DbPool, Grant, Holds, ProjectLock};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::connection::{ConnectionUpsert, KeyValue};
 use td_objects::types::basic::{CollectionId, CollectionName, ConnectionId, ProjectId};
@@ -126,7 +126,7 @@ use serde::Deserialize;
 use std::collections::HashSet;
 use td_authz::rbac::{ManageProject, Project, SqlRbacSource};
 use td_database::access::Gated;
-use td_database::access::{AccessMode, InProject, LockInstant, SeesProjectRows, WriteMode};
+use td_database::access::{AccessMode, InProject, LockInstant, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_objects::Dao;
 use td_objects::FromDao;
@@ -428,7 +428,7 @@ pub struct CollectionCreatePlan {
 /// The create transaction: insert the (store-confirmed) connection row, then
 /// the collection pointing at it and its catalog row, and read the result back.
 pub async fn insert_collection_with_connection(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     request_context: &RequestContext,
     plan: &CollectionCreatePlan,
     at: LockInstant,

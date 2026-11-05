@@ -11,7 +11,7 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_database::access::{DbPool, InProject, retrying};
 use td_error::TdError;
-use td_execution::SchedulerNotify;
+use td_execution::{Concerns, ProjectWakes};
 use td_objects::and;
 use td_objects::dxo::collection::{CollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{DeleteRequest, WithinProject};
@@ -23,14 +23,14 @@ use td_queries::Queries;
 #[service_factory]
 async fn delete_function(
     authz: Ctx<AuthzContext>,
-    scheduler_notify: Ctx<SchedulerNotify>,
+    wakes: Ctx<ProjectWakes>,
     db: DbPool<InProject>,
     request: WithinProject<DeleteRequest<(CollectionParam, FunctionParam)>>,
 ) -> Result<(), TdError> {
     let (project, request) = request.into_parts();
     let (ctx, (collection_param, function_param)) = request.into_parts();
     retrying(|attempt| async {
-        let mut gated_trx = db.begin(attempt).await?;
+        let mut gated_trx = db.lock_project().begin(attempt).await?;
         let grant = authz
             .require::<Project, DevelopProject>(&mut gated_trx, &ctx, &project)
             .await?;
@@ -60,7 +60,7 @@ async fn delete_function(
 
     // Wake the scheduler so cron/stage workers stop immediately instead of at
     // the next polling tick.
-    scheduler_notify.notify_scheduler();
+    wakes.wake(&project, Concerns::RUNS | Concerns::TRIGGERS);
 
     Ok(())
 }

@@ -9,7 +9,6 @@ use crate::tests::fixtures::register;
 use std::time::Duration;
 use td_database::access::Attempt;
 use td_database::access::{AcrossProjects, DbPool, Grant, LockInstant, retrying};
-use td_database::connection::PgConnectionExt;
 use td_database::domain::DomainPools;
 use td_database::pool::TdPool;
 use td_error::TdError;
@@ -18,6 +17,7 @@ use td_objects::dxo::function::FunctionDB;
 use td_objects::types::basic::{AccessTokenId, AtTime, CollectionName, Enabled, UserId};
 use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
+use td_queries::test_utils::probes::wait_until_queued_on_lock;
 
 const BLOCKED_WITHIN: Duration = Duration::from_secs(10);
 
@@ -43,6 +43,7 @@ async fn test_close_racing_an_open_closes_the_new_version(db: TdPool) -> Result<
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
     let mut opening = DbPool::in_project(&pools, &p.project_id)
+        .lock_project()
         .begin(Attempt::unretried())
         .await?;
     let conn = opening.get(Grant::asserted("open held uncommitted"));
@@ -62,7 +63,7 @@ async fn test_close_racing_an_open_closes_the_new_version(db: TdPool) -> Result<
     let racing = tokio::spawn(async move {
         let closing_pools = DbPool::in_project(&closing_pools, &project);
         retrying(|attempt| async {
-            let mut closing = closing_pools.begin(attempt).await?;
+            let mut closing = closing_pools.lock_project().begin(attempt).await?;
             let at = closing.locked_at();
             let conn = closing.get(Grant::asserted("close racing the open"));
             let topology_at = conn.topology().bump(&project, at).await?;
@@ -74,11 +75,7 @@ async fn test_close_racing_an_open_closes_the_new_version(db: TdPool) -> Result<
         .await
     });
     assert!(
-        opening
-            .get(Grant::asserted("blocking probe"))
-            .wait_until_blocking(BLOCKED_WITHIN)
-            .await
-            .expect("blocking probe"),
+        wait_until_queued_on_lock(&db, &p.project_id, BLOCKED_WITHIN).await,
         "the close never waited on the open"
     );
     opening.commit().await?;

@@ -11,7 +11,7 @@ use td_authz::rbac::{DevelopProject, Project};
 use td_bridge::BridgeProviderHandle;
 use td_database::access::{DbPool, InProject, retrying};
 use td_error::TdError;
-use td_execution::SchedulerNotify;
+use td_execution::{Concerns, ProjectWakes};
 use td_objects::FromDao;
 use td_objects::dxo::collection::CollectionDBWithNames;
 use td_objects::dxo::collection::CollectionParam;
@@ -22,7 +22,7 @@ use td_queries::Queries;
 #[service_factory]
 async fn register_function(
     authz: Ctx<AuthzContext>,
-    scheduler_notify: Ctx<SchedulerNotify>,
+    wakes: Ctx<ProjectWakes>,
     bridge: Ctx<BridgeProviderHandle>,
     db: DbPool<InProject>,
     request: WithinProject<CreateRequest<FunctionRegister, CollectionParam>>,
@@ -30,7 +30,7 @@ async fn register_function(
     let (project, request) = request.into_parts();
     let (ctx, param, register) = request.into_parts();
     let read = retrying(|attempt| async {
-        let mut gated_trx = db.begin(attempt).await?;
+        let mut gated_trx = db.lock_project().begin(attempt).await?;
         let grant = authz
             .require::<Project, DevelopProject>(&mut gated_trx, &ctx, &project)
             .await?;
@@ -72,7 +72,7 @@ async fn register_function(
 
     // Wake the scheduler so newly registered cron/stage workers start
     // immediately instead of at the next polling tick.
-    scheduler_notify.notify_scheduler();
+    wakes.wake(&project, Concerns::TRIGGERS);
 
     Ok(read)
 }

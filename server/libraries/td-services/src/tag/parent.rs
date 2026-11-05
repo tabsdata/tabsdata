@@ -3,7 +3,7 @@
 //
 
 use std::collections::HashMap;
-use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
+use td_database::access::{AccessMode, Holds, InProject, ProjectLock, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::Taggable;
@@ -107,7 +107,7 @@ pub fn parent_version(
 }
 
 pub async fn stamp_parent<T: Taggable<EntityType = TagEntityType>>(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     ctx: &RequestContext,
     child: T,
     parent: T,

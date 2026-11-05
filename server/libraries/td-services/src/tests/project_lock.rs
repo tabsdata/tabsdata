@@ -2,16 +2,16 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! The project lock bounds its own wait and nothing else, and waiting on one
+//! The project's lock bounds its own wait and nothing else, and waiting on one
 //! project never holds up another.
 
-use std::time::Duration;
 use td_database::access::Attempt;
 use td_database::access::{
-    AccessMode, AcrossProjects, DbPool, GatedConnection, Grant, InProject, XW,
+    AccessMode, AcrossProjects, DbPool, GatedConnection, Grant, InProject, ProjectLock, RW,
 };
 use td_database::domain::DomainPools;
 use td_database::pool::TdPool;
+use td_database::test_utils::poll::poll_once;
 use td_error::TdError;
 use td_objects::dxo::collection::{CollectionDB, CollectionUpdate};
 use td_objects::dxo::crudl::RequestContext;
@@ -45,8 +45,8 @@ async fn test_project_lock_bounds_only_its_own_wait(db: TdPool) -> Result<(), Td
     let default = lock_timeout(&mut plain).await;
     plain.commit().await?;
 
-    let mut held: GatedConnection<XW, InProject> =
-        project.begin_exclusive(Attempt::unretried()).await?;
+    let mut held: GatedConnection<RW<ProjectLock>, InProject> =
+        project.lock_project().begin(Attempt::unretried()).await?;
     assert_eq!(lock_timeout(&mut held).await, default);
     held.commit().await
 }
@@ -64,67 +64,48 @@ async fn test_waiting_on_one_project_does_not_starve_another(db: TdPool) -> Resu
         .await?;
     let idle = DbPool::in_project(&pools(&db), &idle_project.project_id);
 
-    let held: GatedConnection<XW, InProject> = busy.begin_exclusive(Attempt::unretried()).await?;
-    let queued =
-        tokio::spawn(async move { busy.begin_exclusive(Attempt::unretried()).await.map(|_| ()) });
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    let held: GatedConnection<RW<ProjectLock>, InProject> =
+        busy.lock_project().begin(Attempt::unretried()).await?;
+    let mut queued = Box::pin(busy.lock_project().begin(Attempt::unretried()));
+    assert!(poll_once(&mut queued).await.is_pending());
 
-    let other = tokio::time::timeout(
-        Duration::from_secs(5),
-        idle.begin_exclusive(Attempt::unretried()),
-    )
-    .await;
-    assert!(
-        matches!(other, Ok(Ok(_))),
-        "another project's unit could not start while one project was busy"
-    );
+    idle.lock_project()
+        .begin(Attempt::unretried())
+        .await?
+        .commit()
+        .await?;
     held.commit().await?;
-    let _ = queued.await;
-    Ok(())
+    queued.await?.commit().await
 }
 
-/// An exclusive unit holds the project's lock from before it begins until it
+/// A locked unit holds the project's lock from before it begins until it
 /// ends, committed or dropped.
 #[td_test::test(db)]
-async fn test_an_exclusive_unit_holds_the_project_lock_until_it_ends(
+async fn test_a_locked_unit_holds_the_project_lock_until_it_ends(
     db: TdPool,
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let project = DbPool::in_project(&pools(&db), &p.project_id);
 
-    let held = project.begin_exclusive(Attempt::unretried()).await?;
-    let waiting = tokio::time::timeout(
-        Duration::from_millis(300),
-        project.begin_exclusive(Attempt::unretried()),
-    )
-    .await;
+    let held = project.lock_project().begin(Attempt::unretried()).await?;
+    let mut waiting = Box::pin(project.lock_project().begin(Attempt::unretried()));
     assert!(
-        waiting.is_err(),
-        "an exclusive unit opened while the lock was held"
+        poll_once(&mut waiting).await.is_pending(),
+        "a locked unit opened while the lock was held"
     );
     held.commit().await?;
 
-    let dropped = tokio::time::timeout(
-        Duration::from_secs(5),
-        project.begin_exclusive(Attempt::unretried()),
-    )
-    .await
-    .expect("the lock outlived the commit")?;
+    let dropped = waiting.await?;
+    let mut next = Box::pin(project.lock_project().begin(Attempt::unretried()));
+    assert!(poll_once(&mut next).await.is_pending());
     drop(dropped);
-    tokio::time::timeout(
-        Duration::from_secs(5),
-        project.begin_exclusive(Attempt::unretried()),
-    )
-    .await
-    .expect("the lock outlived the dropped unit")?
-    .commit()
-    .await
+    next.await?.commit().await
 }
 
-/// An exclusive unit queued behind the project's lock reads what the unit
+/// A locked unit queued behind the project's lock reads what the unit
 /// holding it committed.
 #[td_test::test(db)]
-async fn test_an_exclusive_unit_reads_the_last_holders_commit(db: TdPool) -> Result<(), TdError> {
+async fn test_a_locked_unit_reads_the_last_holders_commit(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let c = db
         .scoped(p.project_id)
@@ -133,7 +114,7 @@ async fn test_an_exclusive_unit_reads_the_last_holders_commit(db: TdPool) -> Res
         .await?;
     let project = DbPool::in_project(&pools(&db), &p.project_id);
 
-    let mut held = project.begin_exclusive(Attempt::unretried()).await?;
+    let mut held = project.lock_project().begin(Attempt::unretried()).await?;
     let admin = RequestContext::with(AccessTokenId::default(), UserId::admin());
     let renamed = CollectionUpdate {
         name: Some(CollectionName::try_from("c_after")?),
@@ -145,23 +126,17 @@ async fn test_an_exclusive_unit_reads_the_last_holders_commit(db: TdPool) -> Res
         .open(&c.updated(&renamed, &admin), seed_instant())
         .await?;
 
-    let queued = tokio::spawn({
-        let project = project.clone();
-        async move {
-            let mut next = project.begin_exclusive(Attempt::unretried()).await?;
-            let read: CollectionDB = next
-                .get(Grant::asserted("read after the lock"))
-                .scd2()
-                .fetch_one(&c.collection_id)
-                .await?;
-            next.commit().await?;
-            Ok::<_, TdError>(read.base.name)
-        }
-    });
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    let mut queued = Box::pin(project.lock_project().begin(Attempt::unretried()));
+    assert!(poll_once(&mut queued).await.is_pending());
     held.commit().await?;
 
-    let name = queued.await.expect("queued unit")?;
-    assert_eq!(name, CollectionName::try_from("c_after")?);
+    let mut next = queued.await?;
+    let read: CollectionDB = next
+        .get(Grant::asserted("read after the lock"))
+        .scd2()
+        .fetch_one(&c.collection_id)
+        .await?;
+    next.commit().await?;
+    assert_eq!(read.name, CollectionName::try_from("c_after")?);
     Ok(())
 }

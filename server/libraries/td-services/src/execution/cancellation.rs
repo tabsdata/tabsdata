@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 use td_bridge::messaging::{FunctionRequest, FunctionStopRequest, OrchestratorMessagePayload};
 use td_bridge::{BridgeProviderHandle, Orchestrator};
 use td_common::worker::WorkerName;
-use td_database::access::{InProject, LockInstant, WriteMode};
+use td_database::access::{Holds, InProject, LockInstant, ProjectLock};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::function::FunctionDB;
@@ -47,7 +47,7 @@ pub struct Cancelled {
 /// Committed run through its inputs: a transaction commits only once every
 /// transaction it read from has. Ends the cancelled runs' attempts.
 pub async fn cancel_runs(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     at: LockInstant,
     named: &[LogicalFunctionRunDB],
 ) -> Result<Cancelled, TdError> {
@@ -76,7 +76,7 @@ pub async fn cancel_runs(
 /// reading their outputs (across executions). Finished runs end nothing, so
 /// the walk does not continue from them.
 async fn cancel_closure(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     named: &[LogicalFunctionRunDB],
 ) -> Result<Vec<LogicalFunctionRunDB>, TdError> {
     let mut reached: HashMap<LogicalFunctionRunId, LogicalFunctionRunDB> = HashMap::new();
@@ -140,7 +140,7 @@ async fn cancel_closure(
 /// recovery would end them once their workloads are gone: attempt and worker
 /// `Failed`. Returns the stops for the workers that have a workload.
 async fn end_cancelled_attempts(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     at: LockInstant,
     cancelled: &[LogicalFunctionRunDB],
 ) -> Result<Vec<FunctionStopRequest>, TdError> {
@@ -160,7 +160,7 @@ async fn end_cancelled_attempts(
 }
 
 pub(crate) async fn function_stops(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     workers: Vec<WorkerDBWithNames>,
 ) -> Result<Vec<FunctionStopRequest>, TdError> {
     if workers.is_empty() {

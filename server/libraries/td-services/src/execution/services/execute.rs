@@ -12,7 +12,7 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_database::access::{DbPool, InProject, retrying};
 use td_error::TdError;
-use td_execution::{SchedulerNotify, TransactionBy};
+use td_execution::{Concerns, ProjectWakes, TransactionBy};
 use td_objects::and;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::{CreateRequest, WithinProject};
@@ -25,7 +25,7 @@ use td_queries::Queries;
 async fn execute_function(
     authz: Ctx<AuthzContext>,
     transaction_by: Ctx<TransactionBy>,
-    scheduler_notify: Ctx<SchedulerNotify>,
+    wakes: Ctx<ProjectWakes>,
     msgs: &mut ReqCtx,
     db: DbPool<InProject>,
     request: WithinProject<CreateRequest<ExecutionRequest, (CollectionParam, FunctionParam)>>,
@@ -34,7 +34,7 @@ async fn execute_function(
     let (ctx, (collection_param, function_param), execution_request) = request.into_parts();
 
     // Authz before any read (the 425/409 trigger-gate answers must not be
-    // observable unauthorized) and before the exclusive lock (unauthorized
+    // observable unauthorized) and before the project's lock (unauthorized
     // callers must not queue on it).
     let grant = {
         let mut conn = db.read().await?;
@@ -44,7 +44,7 @@ async fn execute_function(
     };
     let (response, recorded) = retrying(|attempt| async {
         let mut recorded = ReqCtx::default();
-        let mut trx = db.begin_exclusive(attempt).await?;
+        let mut trx = db.lock_project().begin(attempt).await?;
         let at = trx.locked_at();
         let conn = trx.get(grant);
         let collection_id = resolve_collection_id(conn, &collection_param.collection).await?;
@@ -75,7 +75,7 @@ async fn execute_function(
     .await?;
     msgs.merge(recorded);
 
-    scheduler_notify.notify_scheduler();
+    wakes.wake(&project, Concerns::RUNS);
     Ok(response)
 }
 

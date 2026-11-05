@@ -31,7 +31,9 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_bridge::BridgeProviderHandle;
 use td_database::access::SeesProjectRows;
-use td_database::access::{AccessMode, DbPool, InProject, LockInstant, WriteMode, retrying};
+use td_database::access::{
+    AccessMode, DbPool, Holds, InProject, LockInstant, ProjectLock, retrying,
+};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::FromDao;
@@ -84,7 +86,7 @@ async fn update_collection(
 
     // 3. update (short TX).
     let updated = retrying(|attempt| async {
-        let mut trx = db.begin(attempt).await?;
+        let mut trx = db.lock_project().begin(attempt).await?;
         let at = trx.locked_at();
         let read = apply_collection_update(trx.get(grant), &ctx, at, &plan).await?;
         trx.commit().await?;
@@ -176,7 +178,7 @@ pub async fn plan_collection_update<S: SeesProjectRows, M: AccessMode>(
 
 /// The update transaction: open the (store-confirmed) update's version, mark
 /// the connection's catalog texts written, and read the result back.
-pub async fn apply_collection_update<M: WriteMode>(
+pub async fn apply_collection_update<M: Holds<ProjectLock>>(
     conn: &mut DomainConnection<Apiserver, InProject, M>,
     ctx: &RequestContext,
     at: LockInstant,

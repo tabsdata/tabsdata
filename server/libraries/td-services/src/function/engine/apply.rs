@@ -7,7 +7,7 @@ use crate::function::on_top::ensure_flips_on_top;
 use crate::tag::close_tags_of;
 use itertools::Itertools;
 use std::collections::HashMap;
-use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
+use td_database::access::{AccessMode, Holds, InProject, ProjectLock, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::and;
@@ -24,7 +24,7 @@ use td_queries::Queries;
 /// read the new table versions; the triggers reading a table that froze or
 /// thawed belong to other functions, so they are fetched here, not diffed.
 pub async fn apply(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     changes: &Changes,
     topology_at: TopologyInstant,
 ) -> Result<(), TdError> {
@@ -69,7 +69,7 @@ pub async fn apply(
 }
 
 async fn trigger_flips(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     transitions: &[TableTransition],
     topology_at: TopologyInstant,
 ) -> Result<Vec<TriggerInsertDB>, TdError> {

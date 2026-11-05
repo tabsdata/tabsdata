@@ -11,7 +11,9 @@ use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use ta_services::ctx_service::ReqCtx;
 use td_bridge::messaging::FunctionStopRequest;
-use td_database::access::{AccessMode, InProject, LockInstant, SeesProjectRows, WriteMode};
+use td_database::access::{
+    AccessMode, Holds, InProject, LockInstant, ProjectLock, SeesProjectRows,
+};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::RecoveryConfig;
@@ -115,7 +117,7 @@ pub async fn fetch_stale_dispatched_runs<S: SeesProjectRows, M: AccessMode>(
     err(Debug, level = "debug")
 )]
 pub async fn fail_stale_abandoned_attempts(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     at: LockInstant,
     stale: &StaleDispatchedRuns,
 ) -> Result<Vec<FunctionStopRequest>, TdError> {
@@ -144,7 +146,7 @@ pub async fn fail_stale_abandoned_attempts(
 )]
 pub async fn sweep_stale_runs(
     msgs: &mut ReqCtx,
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     at: LockInstant,
     config: &RecoveryConfig,
 ) -> Result<Vec<FunctionStopRequest>, TdError> {

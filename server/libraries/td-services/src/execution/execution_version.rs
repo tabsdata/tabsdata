@@ -3,7 +3,7 @@
 //
 
 use http::StatusCode;
-use td_database::access::{AccessMode, SeesProjectRows, XW};
+use td_database::access::{AccessMode, Holds, InProject, ProjectLock, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::and;
@@ -85,9 +85,8 @@ pub async fn running_execution<S: SeesProjectRows, M: AccessMode>(
 /// canceled or yanked run releases its key: the old execution gives it up
 /// here, so the new one can take it under the unique index.
 ///
-/// Check-then-write cannot race: planning runs on an exclusive connection,
-/// which holds the project's lock for the whole transaction, and a function
-/// belongs to one project.
+/// Check-then-write cannot race: planning holds the project's lock for the
+/// whole transaction, and a function belongs to one project.
 #[instrument(
     name = "execution.external_uid_holder",
     skip_all,
@@ -95,8 +94,8 @@ pub async fn running_execution<S: SeesProjectRows, M: AccessMode>(
     level = "debug",
     err(Debug, level = "debug")
 )]
-pub async fn external_uid_holder<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S, XW>,
+pub async fn external_uid_holder(
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     function_id: &FunctionId,
     external_uid: &Option<ExternalUid>,
 ) -> Result<Option<TriggerResponse>, TdError> {

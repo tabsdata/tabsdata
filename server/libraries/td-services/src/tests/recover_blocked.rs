@@ -75,7 +75,7 @@ async fn test_recovering_a_run_blocked_on_a_foreign_failure_does_not_read_runnin
                         (),
                     );
                 dispatch_services(&db).execution_recover(recover).await?;
-                dispatch_services(&db).request(()).await?;
+                dispatch_services(&db).tick().await?;
 
                 let runs: Vec<LogicalFunctionRunDB> = db.fetch_all(&execution).await?;
                 let statuses: Vec<_> = runs.iter().map(|r| r.status).collect();

@@ -9,8 +9,9 @@ use serde::Deserialize;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_common::execution_status::WorkerCallbackStatus;
-use td_database::access::{AcrossProjects, DbPool, Grant, InProject, WriteMode, retrying};
+use td_database::access::{AcrossProjects, DbPool, Grant, Holds, InProject, ProjectLock, retrying};
 use td_database::domain::{Apiserver, DomainConnection};
+use td_database::pool::SystemPool;
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::connection_catalog::{
     CatalogCheckWriteDB, CatalogMetadataFailureWriteDB, CatalogMetadataWriteDB,
@@ -70,7 +71,7 @@ enum Ending {
 #[service_factory]
 async fn connection_probe_result(
     catalog: Ctx<ConnectionCatalog>,
-    db: DbPool<AcrossProjects>,
+    db: DbPool<AcrossProjects, SystemPool>,
     request: UpdateRequest<ProbeCallback, ProbeParam>,
 ) -> Result<(), TdError> {
     let (_, param, callback) = request.into_parts();
@@ -88,7 +89,7 @@ async fn connection_probe_result(
 
     let in_project = db.in_project(&probe.project_id);
     let Some((probe, end)) = retrying(|attempt| async {
-        let mut trx = in_project.begin(attempt).await?;
+        let mut trx = in_project.lock_project().begin(attempt).await?;
         let conn = trx.get(grant);
         let probe: ConnectionProbeDB = conn.for_update().fetch_one(&param.probe).await?;
         if probe.base.status.is_terminal() {
@@ -174,7 +175,7 @@ fn unsupported(result: &serde_json::Value) -> bool {
 }
 
 /// The probe's ending, and whether the catalog's entities changed.
-async fn persist<M: WriteMode>(
+async fn persist<M: Holds<ProjectLock>>(
     conn: &mut DomainConnection<Apiserver, InProject, M>,
     probe: &ConnectionProbeDB,
     names: &ConnectionCatalogDBWithNames,
@@ -287,7 +288,7 @@ fn metadata_status(status: ProbeStatus) -> MetadataStatus {
     }
 }
 
-async fn write_check<M: WriteMode>(
+async fn write_check<M: Holds<ProjectLock>>(
     conn: &mut DomainConnection<Apiserver, InProject, M>,
     probe: &ConnectionProbeDB,
     names: &ConnectionCatalogDBWithNames,
@@ -312,7 +313,7 @@ async fn write_check<M: WriteMode>(
     Ok(())
 }
 
-async fn write_metadata_failure<M: WriteMode>(
+async fn write_metadata_failure<M: Holds<ProjectLock>>(
     conn: &mut DomainConnection<Apiserver, InProject, M>,
     probe: &ConnectionProbeDB,
     names: &ConnectionCatalogDBWithNames,
@@ -352,7 +353,7 @@ fn kept_entities(
 /// An unchanged fingerprint only stamps the catalog; a changed one replaces
 /// the entities in the same transaction. The probe keeps the summary; the
 /// flag says whether the entities were replaced.
-async fn write_metadata<M: WriteMode>(
+async fn write_metadata<M: Holds<ProjectLock>>(
     conn: &mut DomainConnection<Apiserver, InProject, M>,
     probe: &ConnectionProbeDB,
     names: &ConnectionCatalogDBWithNames,

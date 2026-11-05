@@ -7,7 +7,6 @@
 use crate::connection_catalog::ConnectionCatalog;
 use crate::execution::services::runtime_info::RuntimeContext;
 use crate::internal_api::InternalApi;
-use crate::scheduler::cursor::TickCursor;
 use crate::table::sample::TableSampler;
 use axum::extract::FromRef;
 use std::path::PathBuf;
@@ -19,7 +18,7 @@ use td_bridge::BridgeProviderHandle;
 use td_common::jwt::JwtConfig;
 use td_database::access::{DbPool, Global};
 use td_database::domain::DomainPools;
-use td_execution::{RecoveryConfig, SchedulerConfig, SchedulerNotify, TransactionBy};
+use td_execution::{ProjectWakes, RecoveryConfig, SchedulerConfig, TransactionBy};
 use td_objects::types::addresses::ApiServerAddresses;
 use td_objects::types::basic::InstanceId;
 use td_objects::types::catalog::CatalogConfig;
@@ -79,8 +78,7 @@ pub struct Services {
     pub runtime_context: Ctx<RuntimeContext>,
     pub instance_id: Ctx<InstanceId>,
     pub transaction_by: Ctx<TransactionBy>,
-    pub scheduler_notify: Ctx<SchedulerNotify>,
-    pub tick_cursor: Ctx<TickCursor>,
+    pub wakes: Ctx<ProjectWakes>,
     pub scheduler_config: Ctx<SchedulerConfig>,
     pub recovery_config: Ctx<RecoveryConfig>,
     pub bridge: Ctx<BridgeProviderHandle>,
@@ -100,7 +98,11 @@ impl FromRef<Services> for DbPool<Global> {
 #[cfg(feature = "test-utils")]
 use crate::internal_api::InternalRoutes;
 #[cfg(feature = "test-utils")]
+use crate::scheduler::services::ProjectPass;
+#[cfg(feature = "test-utils")]
 use td_database::pool::TdPool;
+#[cfg(feature = "test-utils")]
+use td_error::TdError;
 
 #[cfg(feature = "test-utils")]
 impl Default for Services {
@@ -125,8 +127,7 @@ impl Default for Services {
                 InstanceId::try_from("00000000-0000-0000-0000-000000000000").unwrap(),
             ),
             transaction_by: Ctx::new(TransactionBy::default()),
-            scheduler_notify: Ctx::new(SchedulerNotify::new()),
-            tick_cursor: Ctx::new(TickCursor::default()),
+            wakes: Ctx::new(ProjectWakes::default()),
             scheduler_config: Ctx::new(SchedulerConfig::default()),
             recovery_config: Ctx::new(RecoveryConfig::default()),
             bridge: Ctx::new(BridgeProviderHandle::default()),
@@ -148,5 +149,21 @@ impl Services {
             pools: DomainPools::of_apiserver(db),
             ..Self::default()
         }
+    }
+
+    /// The sweep, then one pass of every runnable project, inline.
+    pub async fn tick(&self) -> Result<(), TdError> {
+        self.sweep(()).await?;
+        let runnable: Vec<_> = std::iter::from_fn(|| self.wakes.take()).collect();
+        for (project, concerns) in runnable {
+            let again = self
+                .pass(ProjectPass { project, concerns })
+                .await
+                .map(|again| again.data);
+            self.wakes
+                .finish(&project, again.as_ref().copied().unwrap_or_default());
+            again?;
+        }
+        Ok(())
     }
 }

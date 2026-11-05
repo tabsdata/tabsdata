@@ -7,7 +7,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project, ViewProject};
-use td_database::access::{AccessMode, GatedConnection, InProject, RO, RW, WriteMode};
+use td_database::access::{AccessMode, GatedConnection, Holds, InProject, ProjectLock, RO, RW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::collection::{CollectionDB, CollectionParam};
@@ -24,7 +24,7 @@ async fn collection<M: AccessMode>(
 }
 
 /// A connected collection's tags are part of its catalog's texts.
-async fn tags_written<M: WriteMode>(
+async fn tags_written<M: Holds<ProjectLock>>(
     conn: &mut DomainConnection<Apiserver, InProject, M>,
     collection: &CollectionDB,
 ) -> Result<(), TdError> {
@@ -55,7 +55,7 @@ async fn list_collection_tags(
 #[service_factory]
 async fn set_collection_tag(
     authz: Ctx<AuthzContext>,
-    gated_trx: &mut GatedConnection<RW, InProject>,
+    gated_trx: &mut GatedConnection<RW<ProjectLock>, InProject>,
     request: WithinProject<CreateRequest<TagSet, CollectionParam>>,
 ) -> Result<Tag, TdError> {
     let (project, request) = request.into_parts();
@@ -81,7 +81,7 @@ async fn set_collection_tag(
 #[service_factory]
 async fn delete_collection_tag(
     authz: Ctx<AuthzContext>,
-    gated_trx: &mut GatedConnection<RW, InProject>,
+    gated_trx: &mut GatedConnection<RW<ProjectLock>, InProject>,
     request: WithinProject<DeleteRequest<(CollectionParam, TagParam)>>,
 ) -> Result<(), TdError> {
     let (project, request) = request.into_parts();

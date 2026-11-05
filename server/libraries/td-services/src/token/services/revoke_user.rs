@@ -155,7 +155,8 @@ mod tests {
             .user(&UserName::try_from("u0").unwrap(), &UserEnabled::TRUE)
             .await
             .unwrap();
-        let mut conn = DomainConnection::<Apiserver, Global, RW>::new(db.begin().await.unwrap());
+        let mut conn =
+            DomainConnection::<Apiserver, Global, RW>::asserted(db.begin().await.unwrap());
         seed_system_token(
             &mut conn,
             &other.id,

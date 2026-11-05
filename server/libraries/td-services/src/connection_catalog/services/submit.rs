@@ -48,7 +48,7 @@ async fn submit_connection_probe(
     let admitted = AtomicBool::new(false);
 
     let unit = |attempt| async {
-        let mut trx = db.begin(attempt).await?;
+        let mut trx = db.lock_project().begin(attempt).await?;
         let grant = authz
             .require::<Project, (DevelopProject, MaintainCatalog)>(&mut trx, &ctx, &project)
             .await?;

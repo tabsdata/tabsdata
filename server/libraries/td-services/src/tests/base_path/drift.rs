@@ -17,7 +17,7 @@ use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::types::basic::{BasePath, CollectionName, UserId};
 use td_queries::Queries;
-use td_queries::test_utils::{SeedEntry, begin_exclusive};
+use td_queries::test_utils::{SeedEntry, begin_locked};
 
 /// Moving the collection prefix redirects new mints and leaves prior runs'
 /// stamped rows untouched, while the live resolution visibly changed.
@@ -41,7 +41,7 @@ async fn test_collection_move_freezes_prior_runs(db: TdPool) -> Result<(), TdErr
     let coll = set_collection_base_path(&db, p.project_id, &coll, Some(&new)).await?;
 
     // The live resolution moved...
-    let mut trx = begin_exclusive(&db, p.project_id).await?;
+    let mut trx = begin_locked(&db, p.project_id).await?;
     assert_eq!(
         resolve_output_base_path(
             trx.get(Grant::asserted("base path test")),
@@ -118,7 +118,7 @@ async fn test_replay_attempts_diverge_across_move(db: TdPool) -> Result<(), TdEr
         function_version_patch_id: None,
     };
 
-    let mut trx = begin_exclusive(&db, p.project_id).await?;
+    let mut trx = begin_locked(&db, p.project_id).await?;
     let at = trx.locked_at();
     let attempt_1 = mint_function_run(
         trx.get(Grant::asserted("base path test")),
@@ -132,7 +132,7 @@ async fn test_replay_attempts_diverge_across_move(db: TdPool) -> Result<(), TdEr
     let new = BasePath::try_from("/new")?;
     set_collection_base_path(&db, p.project_id, &coll, Some(&new)).await?;
 
-    let mut trx = begin_exclusive(&db, p.project_id).await?;
+    let mut trx = begin_locked(&db, p.project_id).await?;
     let at = trx.locked_at();
     trx.get(Grant::asserted("base path test"))
         .physical_runs()

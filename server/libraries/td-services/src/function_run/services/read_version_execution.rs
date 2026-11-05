@@ -7,6 +7,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_database::access::{AcrossProjects, DbPool};
+use td_database::pool::SystemPool;
 use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::ReadRequest;
@@ -18,7 +19,7 @@ use td_queries::Queries;
 #[service_factory]
 async fn function_version_execution_read(
     authz: Ctx<AuthzContext>,
-    db: DbPool<AcrossProjects>,
+    db: DbPool<AcrossProjects, SystemPool>,
     request: ReadRequest<(FunctionVersionParam, ExecutionParam)>,
 ) -> Result<PhysicalFunctionRun, TdError> {
     let (_, (version, execution)) = request.into_parts();

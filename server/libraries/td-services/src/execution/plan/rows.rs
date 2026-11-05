@@ -3,7 +3,7 @@
 //
 
 use std::collections::HashMap;
-use td_database::access::{InProject, XW};
+use td_database::access::{Holds, InProject, ProjectLock};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_execution::transaction_map::TransactionMap;
@@ -248,7 +248,7 @@ pub fn build_logical_function_run_inputs(
     err(Debug, level = "debug")
 )]
 pub async fn update_initial_function_run_status(
-    conn: &mut DomainConnection<Apiserver, InProject, XW>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     execution: &ExecutionInsertDB,
 ) -> Result<(), TdError> {
     let lfr_ids = conn.logical_runs().blocked_ids(&execution.id).await?;
