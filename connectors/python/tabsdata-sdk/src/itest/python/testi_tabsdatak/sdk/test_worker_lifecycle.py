@@ -131,32 +131,34 @@ def test_names_are_annotations_and_labels_carry_only_ids(
 ):
     cluster = Cluster(instance_tdtest)
     collection = source_collection(collection_factory)
-    function = register(collection, lifecycle.quick, LONG_NAME)
+    function = register(collection, lifecycle.sleeper, LONG_NAME)
 
     execution = function.trigger()
-    wait_for_completion(execution)
-    worker = run_worker(execution)
-    assert worker is not None
-    selector = worker_selector(worker.id)
-    objects = (
-        cluster.jobs(selector)
-        + cluster.configmaps(selector)
-        + cluster.secrets(selector)
-    )
+    try:
+        worker = running_run_worker(execution, cluster)
+        selector = worker_selector(worker.id)
+        jobs = cluster.jobs(selector)
+        configmaps = cluster.configmaps(selector)
+        secrets = cluster.secrets(selector)
 
-    assert cluster.jobs(selector)
-    assert len(cluster.configmaps(selector)) == 2
-    assert len(cluster.secrets(selector)) == 1
-    function_ids = {obj.metadata.labels[FUNCTION_ID] for obj in objects}
-    assert len(function_ids) == 1
-    for obj in objects:
-        labels = obj.metadata.labels
-        annotations = obj.metadata.annotations or {}
-        assert FUNCTION_ANNOTATION not in labels
-        assert COLLECTION_ANNOTATION not in labels
-        assert all(len(value) <= LABEL_VALUE_MAX_LENGTH for value in labels.values())
-        assert annotations[FUNCTION_ANNOTATION] == LONG_NAME
-        assert annotations[COLLECTION_ANNOTATION] == collection.name
+        assert jobs
+        assert len(configmaps) == 2
+        assert len(secrets) == 1
+        objects = jobs + configmaps + secrets
+        function_ids = {obj.metadata.labels[FUNCTION_ID] for obj in objects}
+        assert len(function_ids) == 1
+        for obj in objects:
+            labels = obj.metadata.labels
+            annotations = obj.metadata.annotations or {}
+            assert FUNCTION_ANNOTATION not in labels
+            assert COLLECTION_ANNOTATION not in labels
+            assert all(
+                len(value) <= LABEL_VALUE_MAX_LENGTH for value in labels.values()
+            )
+            assert annotations[FUNCTION_ANNOTATION] == LONG_NAME
+            assert annotations[COLLECTION_ANNOTATION] == collection.name
+    finally:
+        finish(execution)
 
 
 @tabsdata_instance(consumer="tdtest")
