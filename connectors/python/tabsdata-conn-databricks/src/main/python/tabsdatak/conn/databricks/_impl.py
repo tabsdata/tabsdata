@@ -30,8 +30,7 @@ from collections import deque
 from collections.abc import Callable, Collection, Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 from tenacity import (
     retry,
@@ -46,7 +45,7 @@ from tabsdatak.conn.common._validation import complete_levels, fqn, unfqn
 from tabsdatak.conn.common.sql._merge._driver import merge_batch
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._spool import spooled_parquet
+from tabsdatak.conn.common.sql._spool import piped_parquet
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._watermark import watermarked_batch
@@ -84,7 +83,7 @@ _DOWNLOAD_READ_TIMEOUT_SECONDS = 300
 _DOWNLOAD_RETRY_ATTEMPTS = 12
 _DOWNLOAD_RETRY_WAIT_SECONDS = 5
 # Delta's only timestamp width: it has no nanosecond type.
-_DELTA_TIME_UNIT = "us"
+_DELTA_TIME_UNIT: Final = "us"
 _COPY_INTO_RETRY_ATTEMPTS = 6
 _COPY_INTO_RETRY_WAIT_SECONDS = 5
 
@@ -179,16 +178,17 @@ def _resolve_warehouse_id(
     cross-field check in ``_AnyDatabricksConn.validate`` ensures at most
     one is set.
     """
-    if conn.warehouse_id is not None:
-        return conn._warehouse_id()
-    if conn.warehouse is None:
+    warehouse_id = conn._warehouse_id()
+    if warehouse_id is not None:
+        return warehouse_id
+    target_name = conn._warehouse()
+    if target_name is None:
         raise ValueError(
             "_AnyDatabricksConn requires either ``warehouse`` (name) or"
             " ``warehouse_id`` for runtime operations"
         )
-    target_name = conn._warehouse()
     for w in ws_client.warehouses.list():
-        if w.name == target_name:
+        if w.name == target_name and w.id is not None:
             return w.id
     raise ValueError(f"Databricks warehouse {target_name!r} not found in workspace")
 
@@ -520,8 +520,8 @@ def _statement(ws_client, cfg: DatabricksReadCfg, statement: str):
     # names (e.g. ``SELECT * FROM wld_country``) resolve against the right
     # schema instead of the warehouse default.
     conn = cfg.conn
-    catalog = conn._catalog() if conn.catalog is not None else None
-    schema = conn._schema() if conn.schema is not None else None
+    catalog = conn._catalog()
+    schema = conn._schema()
     response = ws_client.statement_execution.execute_statement(
         warehouse_id=warehouse_id,
         statement=statement,
@@ -584,8 +584,17 @@ def _fq_for_sql(fq_table: str) -> str:
     ``unfqn`` -> ``fqn`` round-trip strips any pre-existing quotes so
     the result never double-quotes.
     """
+    return fqn(_bare_parts(fq_table), _DATABRICKS_FQN_DEF)
+
+
+def _bare_parts(fq_table: str) -> list[str]:
     parts = unfqn(fq_table, _DATABRICKS_FQN_DEF)
-    return fqn(parts, _DATABRICKS_FQN_DEF)
+    present = [part for part in parts if part is not None]
+    if len(present) != len(parts):
+        from tabsdatak.conn.databricks.error import DatabricksErrorCode
+
+        raise DatabricksErrorCode.DATABRICKS_10.exception(value=fq_table)
+    return present
 
 
 def _fully_qualify_table(conn: _AnyDatabricksConn, table: str) -> str:
@@ -601,15 +610,16 @@ def _fully_qualify_table(conn: _AnyDatabricksConn, table: str) -> str:
     Raises a :class:`DatabricksValidateException` (DATABRICKS_10) if
     the result is not 3-part.
     """
-    catalog = conn._catalog() if conn.catalog is not None else None
-    schema = conn._schema() if conn.schema is not None else None
+    catalog = conn._catalog()
+    schema = conn._schema()
     parts = unfqn(table, _DATABRICKS_FQN_DEF, total_parts=3)
     parts = complete_levels(parts, [catalog or None, schema or None, None])
-    if any(p is None for p in parts):
+    present = [part for part in parts if part is not None]
+    if len(present) != len(parts):
         from tabsdatak.conn.databricks.error import DatabricksErrorCode
 
         raise DatabricksErrorCode.DATABRICKS_10.exception(value=table)
-    return ".".join(parts)
+    return ".".join(present)
 
 
 def _volume_path(conn: _AnyDatabricksConn, fq_table: str) -> str:
@@ -637,20 +647,19 @@ def _volume_path(conn: _AnyDatabricksConn, fq_table: str) -> str:
     return f"/Volumes/{v_catalog}/{v_schema}/{v_name}"
 
 
-def upload_file_to_volume(
+def upload_frame_to_volume(
     ws_client,
     conn: _AnyDatabricksConn,
     fq_table: str,
-    local_path: Path,
+    frame: pl.LazyFrame,
 ) -> str:
-    """Upload ``local_path`` to the conn's volume and return the
+    """Stream ``frame`` as parquet to the conn's volume and return the
     in-volume absolute path (suitable for ``read_files`` /
     ``COPY INTO``)."""
-    staged_name = f"{uuid.uuid4().hex}_{local_path.name}"
-    target = f"{_volume_path(conn, fq_table)}/{staged_name}"
-    logger.debug("Uploading %s to volume %s", local_path, target)
-    with open(local_path, "rb") as f:
-        ws_client.files.upload(target, f)
+    target = f"{_volume_path(conn, fq_table)}/{uuid.uuid4().hex}.parquet"
+    logger.debug("Streaming parquet to volume %s", target)
+    with piped_parquet(frame) as stream:
+        ws_client.files.upload(target, stream, use_parallel=False)
     return target
 
 
@@ -685,7 +694,7 @@ def _temp_table_name(fq_table: str) -> str:
     re-deriving it from a bare string is what keeps a target part holding a dot
     or a backtick from re-splitting into a different name.
     """
-    parts = unfqn(fq_table, _DATABRICKS_FQN_DEF)
+    parts = _bare_parts(fq_table)
     parts[-1] = f"{parts[-1]}_{uuid.uuid4().hex[:8]}"
     return fqn(parts, _DATABRICKS_FQN_DEF)
 
@@ -803,7 +812,7 @@ def has_watermark_column(cursor, fq_table: str, column: str) -> bool:
     also how both paths fold one, so both sides of each comparison are lowered
     and the two agree.
     """
-    catalog, schema, table = unfqn(fq_table, _DATABRICKS_FQN_DEF, total_parts=3)
+    catalog, schema, table = _bare_parts(fq_table)
     cursor.execute(
         f"SELECT COUNT(*) FROM {fqn([catalog], _DATABRICKS_FQN_DEF)}"
         f".information_schema.columns"
@@ -966,7 +975,7 @@ def read_all_queries(cfg: DatabricksReadCfg) -> list[Iterator["pa.Table"]]:
 
 def reject_unsupported_columns(
     target_tables: list[str],
-    parquet_files: list[Path],
+    tables: list[pl.LazyFrame],
 ) -> None:
     """Fail before uploading anything if a column has a type Databricks cannot
     store and cannot be cast to one.
@@ -974,50 +983,27 @@ def reject_unsupported_columns(
     COPY INTO rejects the parquet TIME type outright
     ("[PARQUET_TYPE_ILLEGAL] Illegal Parquet type: INT64 (TIME(...))"), and it
     does so per file after the upload and the CREATE have already run. Reading
-    the parquet footer up front costs nothing and turns that into one error that
-    names the table and the offending columns.
+    the schema up front costs nothing and turns that into one error that names
+    the table and the offending columns.
 
     Only types with no single correct target belong here: a time-of-day could
     be a timestamp on some arbitrary date or a string in some format, and
     picking one would be a guess. A type with one obvious target is cast by
     :func:`narrow_timestamps` instead.
     """
-    import pyarrow.parquet as pq
+    import polars as pl
 
     from tabsdatak.conn.databricks.error import DatabricksErrorCode
 
-    for table, path in zip(target_tables, parquet_files):
-        schema = pq.read_schema(str(path))
-        offenders = [f.name for f in schema if pa_is_time(f.type)]
+    for table, frame in zip(target_tables, tables):
+        offenders = [
+            name for name, dtype in frame.collect_schema().items() if dtype == pl.Time
+        ]
         if offenders:
             raise DatabricksErrorCode.DATABRICKS_13.exception(
                 table=table,
                 columns=", ".join(repr(name) for name in offenders),
             )
-
-
-def pa_is_time(arrow_type: Any) -> bool:
-    import pyarrow as pa
-
-    return pa.types.is_time(arrow_type)
-
-
-def pa_is_nanosecond_timestamp(arrow_type: Any) -> bool:
-    import pyarrow as pa
-
-    return pa.types.is_timestamp(arrow_type) and arrow_type.unit == "ns"
-
-
-def has_nanosecond_timestamps(batch: Path) -> bool:
-    """Whether ``batch`` needs :func:`narrow_timestamps` before it is staged.
-
-    Done reading schema only (file footer), no full scan done.
-    """
-    import pyarrow.parquet as pq
-
-    return any(
-        pa_is_nanosecond_timestamp(field.type) for field in pq.read_schema(str(batch))
-    )
 
 
 def narrow_timestamps(frame: pl.LazyFrame) -> pl.LazyFrame:
@@ -1045,23 +1031,21 @@ def narrow_timestamps(frame: pl.LazyFrame) -> pl.LazyFrame:
 
 def write_all_tables(
     cfg: DatabricksWriteCfg,
-    parquet_files: list[Path],
+    tables: list[pl.LazyFrame],
 ) -> None:
-    """Upload each parquet file to the volume and run the matching
+    """Stream each table to the volume and run the matching
     CREATE / COPY INTO sequence. Failures are surfaced to the caller
     which wraps them into the appropriate DATABRICKS_* code."""
-    import polars as pl
-
-    if len(cfg.target_tables) != len(parquet_files):
+    if len(cfg.target_tables) != len(tables):
         # Should already have been caught by the plugin; defensive.
         from tabsdatak.conn.databricks.error import DatabricksErrorCode
 
         raise DatabricksErrorCode.DATABRICKS_7.exception(
             tables=len(cfg.target_tables),
-            slots=len(parquet_files),
+            slots=len(tables),
         )
 
-    reject_unsupported_columns(list(cfg.target_tables), parquet_files)
+    reject_unsupported_columns(list(cfg.target_tables), tables)
 
     logger.debug("databricks: establishing workspace client")
     ws_client = _build_workspace_client(cfg.conn)
@@ -1071,22 +1055,24 @@ def write_all_tables(
     # ``strict`` also holds the merge configs to one per table: the plugin
     # normalizes them to that shape, and a mismatch here would silently merge one
     # table by another's keys.
-    merge_cfgs = cfg.merge_cfgs or [None] * len(cfg.target_tables)
+    merge_cfgs: list[MergeCfg | None] = (
+        list(cfg.merge_cfgs) if cfg.merge_cfgs else [None] * len(cfg.target_tables)
+    )
     try:
-        for i, (raw_table, parquet_path, merge_cfg) in enumerate(
+        for i, (raw_table, frame, merge_cfg) in enumerate(
             zip(
                 cfg.target_tables,
-                parquet_files,
+                tables,
                 merge_cfgs,
                 strict=True,
             ),
             1,
         ):
-            path = Path(parquet_path)
             fq_table = _fully_qualify_table(cfg.conn, raw_table)
             logger.info("databricks: writing table %d/%d: %s", i, total, fq_table)
             if cfg.if_table_exists == "merge":
-                _merge_one(sql_conn, ws_client, cfg, path, fq_table, merge_cfg)
+                assert merge_cfg is not None
+                _merge_one(sql_conn, ws_client, cfg, frame, fq_table, merge_cfg)
                 logger.debug("databricks: finished table %s", fq_table)
                 continue
             # Append is the only disposition that stamps: a merge has
@@ -1104,9 +1090,8 @@ def write_all_tables(
                 watermark,
                 cfg.ctx.transaction_id,
             ):
-                # Asked before the batch is rewritten and uploaded: a rerun that
-                # has nothing to do should not pay to build and ship a file it
-                # will not load.
+                # Asked before the batch is staged: a rerun that has nothing to
+                # do should not pay to read and ship rows it will not load.
                 logger.info(
                     "databricks: skipping append onto %s: watermark column %s"
                     " already has value %s",
@@ -1116,20 +1101,14 @@ def write_all_tables(
                 )
                 continue
             logger.info("databricks: staging parquet for %s", fq_table)
-            with spooled_parquet(
+            file_in_volume = upload_frame_to_volume(
+                ws_client,
+                cfg.conn,
+                fq_table,
                 watermarked_batch(
-                    pl.scan_parquet(path),
-                    watermark,
-                    cfg.ctx.transaction_id,
-                    adapt=narrow_timestamps
-                    if has_nanosecond_timestamps(path)
-                    else None,
+                    frame, watermark, cfg.ctx.transaction_id, narrow_timestamps
                 ),
-                path.name,
-            ) as batch:
-                file_in_volume = upload_file_to_volume(
-                    ws_client, cfg.conn, fq_table, batch
-                )
+            )
             try:
                 copy_into_table(sql_conn, cfg, file_in_volume, fq_table)
             finally:
@@ -1145,7 +1124,7 @@ def _merge_one(
     sql_conn,
     ws_client,
     cfg: DatabricksWriteCfg,
-    parquet_path: Path,
+    frame: pl.LazyFrame,
     fq_table: str,
     merge_cfg: MergeCfg,
 ) -> None:
@@ -1157,8 +1136,6 @@ def _merge_one(
     The volume upload and the staged file's deletion move in with the staging,
     which is why nothing is left here but the cursor.
     """
-    import polars as pl
-
     cursor = sql_conn.cursor()
     try:
         merge_batch(
@@ -1172,7 +1149,7 @@ def _merge_one(
                 copy_kwargs=cfg.support_replace_copy_into,
             ),
             target=_fq_for_sql(fq_table),
-            batch=pl.scan_parquet(parquet_path),
+            batch=frame,
             cfg=merge_cfg._sql_merge_cfg(),
             schema_evolution=cfg.schema_evolution,
             ctx=cfg.ctx,

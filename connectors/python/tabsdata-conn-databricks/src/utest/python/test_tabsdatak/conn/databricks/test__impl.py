@@ -11,10 +11,10 @@ Databricks integration suite.
 
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import polars as pl
 import pyarrow as pa
 import pytest
 
@@ -441,7 +441,7 @@ def test_write_all_tables_rejects_a_time_column_before_connecting(tmp_path):
     )
     # No workspace/SQL fixture: the check must fire before any connect.
     with pytest.raises(DatabricksRuntimeException) as ei:
-        _impl.write_all_tables(cfg, [parquet])
+        _impl.write_all_tables(cfg, [pl.scan_parquet(parquet)])
     assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_13
     assert "'clock'" in str(ei.value)
     assert "'ok'" not in str(ei.value)
@@ -465,41 +465,12 @@ def test_write_all_tables_rejects_every_time_width(tmp_path, unit):
         ctx=_FakeCtx(),
     )
     with pytest.raises(DatabricksRuntimeException):
-        _impl.write_all_tables(cfg, [parquet])
+        _impl.write_all_tables(cfg, [pl.scan_parquet(parquet)])
 
 
 # ---------------------------------------------------------------------------
 # Nanosecond timestamps narrowed to what Delta can store
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    ("unit", "expected"),
-    [("s", False), ("ms", False), ("us", False), ("ns", True)],
-)
-def test_only_the_nanosecond_width_needs_narrowing(unit, expected):
-    assert _impl.pa_is_nanosecond_timestamp(pa.timestamp(unit)) is expected
-
-
-def test_a_batch_without_nanoseconds_needs_no_narrowing(tmp_path):
-    import datetime
-
-    parquet = _parquet(
-        tmp_path / "coarse.parquet",
-        n=pa.array([1], pa.int64()),
-        us=pa.array([datetime.datetime(2023, 1, 1, 8)], pa.timestamp("us")),
-    )
-    assert _impl.has_nanosecond_timestamps(parquet) is False
-
-
-def test_a_batch_with_nanoseconds_needs_narrowing(tmp_path):
-    import datetime
-
-    parquet = _parquet(
-        tmp_path / "fine.parquet",
-        ns=pa.array([datetime.datetime(2023, 1, 1, 8)], pa.timestamp("ns")),
-    )
-    assert _impl.has_nanosecond_timestamps(parquet) is True
 
 
 class TestNarrowTimestamps:
@@ -588,7 +559,7 @@ def test_a_time_column_is_still_refused_rather_than_narrowed(tmp_path):
         ctx=_FakeCtx(),
     )
     with pytest.raises(DatabricksRuntimeException) as ei:
-        _impl.write_all_tables(cfg, [parquet])
+        _impl.write_all_tables(cfg, [pl.scan_parquet(parquet)])
     assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_13
     assert "'clock'" in str(ei.value)
     assert "'ts'" not in str(ei.value)
@@ -610,7 +581,7 @@ def test_write_all_tables_names_the_table_the_offending_file_targets(tmp_path):
         ctx=_FakeCtx(),
     )
     with pytest.raises(DatabricksRuntimeException) as ei:
-        _impl.write_all_tables(cfg, [clean, dirty])
+        _impl.write_all_tables(cfg, [pl.scan_parquet(clean), pl.scan_parquet(dirty)])
     assert "main.analytics.second" in str(ei.value)
 
 
@@ -838,8 +809,9 @@ def _bulk_clients(monkeypatch, cursor):
     recording every file handed to the volume."""
     uploaded: list[str] = []
 
-    def upload(target, contents):
+    def upload(target, contents, **kwargs):
         uploaded.append(target)
+        contents.read()
 
     ws_client = SimpleNamespace(files=SimpleNamespace(upload=upload))
     sql_conn = SimpleNamespace(cursor=lambda: cursor, close=lambda: None)
@@ -849,19 +821,15 @@ def _bulk_clients(monkeypatch, cursor):
 
 
 def _staged_batches(monkeypatch):
-    """Capture the local path and rows of every volume upload, read while the
-    file still exists -- the rewritten batch lives in a temp directory removed
-    as soon as it has been staged."""
-    import polars as pl
+    """The rows of every frame streamed to the volume."""
+    staged: list[list[dict]] = []
+    original = _impl.upload_frame_to_volume
 
-    staged: list[tuple[Path, list[dict]]] = []
-    original = _impl.upload_file_to_volume
+    def capture(ws_client, conn, fq_table, frame):
+        staged.append(frame.collect().to_dicts())
+        return original(ws_client, conn, fq_table, frame)
 
-    def capture(ws_client, conn, fq_table, local_path):
-        staged.append((Path(local_path), pl.read_parquet(local_path).to_dicts()))
-        return original(ws_client, conn, fq_table, local_path)
-
-    monkeypatch.setattr(_impl, "upload_file_to_volume", capture)
+    monkeypatch.setattr(_impl, "upload_frame_to_volume", capture)
     return staged
 
 
@@ -878,12 +846,12 @@ def _wm_cfg(**overrides) -> _impl.DatabricksWriteCfg:
     return _impl.DatabricksWriteCfg(**kwargs)
 
 
-def _wm_parquet(tmp_path) -> Path:
+def _wm_parquet(tmp_path):
     import polars as pl
 
     path = tmp_path / "in.parquet"
     pl.DataFrame({"id": [1, 2]}).write_parquet(path)
-    return path
+    return pl.scan_parquet(path)
 
 
 def _alters(cursor) -> list[str]:
@@ -895,41 +863,15 @@ def test_append_watermark_stamps_every_staged_row(monkeypatch, tmp_path):
     _bulk_clients(monkeypatch, cursor)
     staged = _staged_batches(monkeypatch)
     _impl.write_all_tables(_wm_cfg(), [_wm_parquet(tmp_path)])
-    _, rows = staged[0]
-    assert [row[_WATERMARK] for row in rows] == ["TRX_1", "TRX_1"]
-
-
-def test_append_watermark_stages_a_copy_keeping_the_basename(monkeypatch, tmp_path):
-    # The staged name is built from the local basename, so the rewrite has to be
-    # indistinguishable from the file the write was handed.
-    cursor = _BulkCursor(("id", _WATERMARK))
-    _bulk_clients(monkeypatch, cursor)
-    staged = _staged_batches(monkeypatch)
-    parquet = _wm_parquet(tmp_path)
-    _impl.write_all_tables(_wm_cfg(), [parquet])
-    path, _ = staged[0]
-    assert path != parquet
-    assert path.name == parquet.name
+    assert [row[_WATERMARK] for row in staged[0]] == ["TRX_1", "TRX_1"]
 
 
 def test_append_without_a_watermark_stages_what_it_was_handed(monkeypatch, tmp_path):
     cursor = _BulkCursor(("id",))
     _bulk_clients(monkeypatch, cursor)
     staged = _staged_batches(monkeypatch)
-    parquet = _wm_parquet(tmp_path)
-    _impl.write_all_tables(_wm_cfg(watermark_column=None), [parquet])
-    path, rows = staged[0]
-    assert path.name == parquet.name
-    assert rows == [{"id": 1}, {"id": 2}]
-
-
-def test_append_watermark_removes_the_copy_once_it_is_staged(monkeypatch, tmp_path):
-    cursor = _BulkCursor(("id", _WATERMARK))
-    _bulk_clients(monkeypatch, cursor)
-    staged = _staged_batches(monkeypatch)
-    _impl.write_all_tables(_wm_cfg(), [_wm_parquet(tmp_path)])
-    path, _ = staged[0]
-    assert not path.exists()
+    _impl.write_all_tables(_wm_cfg(watermark_column=None), [_wm_parquet(tmp_path)])
+    assert staged == [[{"id": 1}, {"id": 2}]]
 
 
 def test_append_watermark_adds_the_column_to_the_target(monkeypatch, tmp_path):
@@ -1035,38 +977,32 @@ def test_a_replace_never_stamps_even_when_handed_a_watermark(monkeypatch, tmp_pa
     cursor = _BulkCursor(("id",))
     _bulk_clients(monkeypatch, cursor)
     staged = _staged_batches(monkeypatch)
-    parquet = _wm_parquet(tmp_path)
-    _impl.write_all_tables(_wm_cfg(if_table_exists="replace"), [parquet])
-    path, rows = staged[0]
-    assert path.name == parquet.name
-    assert rows == [{"id": 1}, {"id": 2}]
+    _impl.write_all_tables(_wm_cfg(if_table_exists="replace"), [_wm_parquet(tmp_path)])
+    assert staged == [[{"id": 1}, {"id": 2}]]
     assert _alters(cursor) == []
 
 
 def _staged_schemas(monkeypatch):
-    """The schema of every file handed to the volume, read while it still
-    exists."""
-    import polars as pl
-
+    """The schema of every frame streamed to the volume."""
     schemas: list[dict] = []
-    original = _impl.upload_file_to_volume
+    original = _impl.upload_frame_to_volume
 
-    def capture(ws_client, conn, fq_table, local_path):
-        schemas.append(dict(pl.read_parquet_schema(local_path)))
-        return original(ws_client, conn, fq_table, local_path)
+    def capture(ws_client, conn, fq_table, frame):
+        schemas.append(dict(frame.collect_schema()))
+        return original(ws_client, conn, fq_table, frame)
 
-    monkeypatch.setattr(_impl, "upload_file_to_volume", capture)
+    monkeypatch.setattr(_impl, "upload_frame_to_volume", capture)
     return schemas
 
 
-def _ns_parquet(tmp_path) -> Path:
+def _ns_parquet(tmp_path):
     import polars as pl
 
     path = tmp_path / "ns.parquet"
     pl.DataFrame({"id": [1], "ts": [1]}).with_columns(
         pl.col("ts").cast(pl.Datetime("ns"))
     ).write_parquet(path)
-    return path
+    return pl.scan_parquet(path)
 
 
 def test_append_stages_timestamps_delta_can_read(monkeypatch, tmp_path):

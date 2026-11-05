@@ -106,10 +106,12 @@ class _FakeWorkspaceClient:
     def __init__(self) -> None:
         self.uploaded: list[str] = []
         self.deleted: list[str] = []
+        self.bodies: list[bytes] = []
         self.files = self
 
-    def upload(self, target: str, _stream) -> None:
+    def upload(self, target: str, stream, **kwargs) -> None:
         self.uploaded.append(target)
+        self.bodies.append(stream.read())
 
     def delete(self, target: str) -> None:
         self.deleted.append(target)

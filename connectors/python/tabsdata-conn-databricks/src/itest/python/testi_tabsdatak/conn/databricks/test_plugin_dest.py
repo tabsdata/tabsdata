@@ -45,7 +45,7 @@ def test_dest_plugin_write_out_appends_rows(
             PluginDestCtx(work),
             conn,
             DatabricksDest(tables=[table], if_table_exists="replace"),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
         assert db.read_table(table).height == rows
 
@@ -53,7 +53,7 @@ def test_dest_plugin_write_out_appends_rows(
             PluginDestCtx(work),
             conn,
             DatabricksDest(tables=[table], if_table_exists="append"),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
         assert db.read_table(table).height == 2 * rows
     finally:
@@ -82,7 +82,7 @@ def test_dest_plugin_write_out_replace_clears_existing(
             PluginDestCtx(work),
             conn,
             DatabricksDest(tables=[table], if_table_exists="replace"),
-            [first],
+            [pl.scan_parquet(first)],
         )
         assert db.read_table(table).height == pl.read_parquet(first).height
 
@@ -90,7 +90,7 @@ def test_dest_plugin_write_out_replace_clears_existing(
             PluginDestCtx(work),
             conn,
             DatabricksDest(tables=[table], if_table_exists="replace"),
-            [second],
+            [pl.scan_parquet(second)],
         )
         got = db.read_table(table)
         assert got.height == expected.height
@@ -178,7 +178,7 @@ def _merge_out(
             schema_evolution=schema_evolution,
             watermark_column=watermark_column,
         ),
-        [parquet],
+        [pl.scan_parquet(parquet)],
     )
 
 
@@ -790,9 +790,11 @@ def test_dest_plugin_write_out_merge_applies_one_cfg_per_table(
         ),
     ]
     try:
-        plugin._DatabricksDestPlugin().write_out(PluginDestCtx(work), conn, dest, seeds)
         plugin._DatabricksDestPlugin().write_out(
-            PluginDestCtx(work), conn, dest, deltas
+            PluginDestCtx(work), conn, dest, [pl.scan_parquet(path) for path in seeds]
+        )
+        plugin._DatabricksDestPlugin().write_out(
+            PluginDestCtx(work), conn, dest, [pl.scan_parquet(path) for path in deltas]
         )
         assert_frames_match(
             db.read_table(orders),
@@ -1065,7 +1067,7 @@ def _append_out(
             schema_evolution=schema_evolution,
             watermark_column=watermark_column,
         ),
-        [parquet],
+        [pl.scan_parquet(parquet)],
     )
 
 

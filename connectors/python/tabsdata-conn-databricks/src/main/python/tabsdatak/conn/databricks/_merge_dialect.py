@@ -28,17 +28,12 @@ from tabsdatak.conn.common.sql._merge.dialect import (
     MergeSyntax,
     Staged,
 )
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._spool import spooled_parquet
 from tabsdatak.conn.databricks.error import DatabricksErrorCode
 
 if TYPE_CHECKING:
     import polars as pl
 
 logger = logging.getLogger(__name__)
-
-_BATCH_FILE = "batch.parquet"
 
 _ERRORS = MergeErrors(
     marker_absent=DatabricksErrorCode.DATABRICKS_19.exception,
@@ -168,13 +163,12 @@ class DatabricksMergeDialect(MergeDialect):
             _execute_volume_statement,
             delete_from_volume,
             drop_temp_table,
-            upload_file_to_volume,
+            upload_frame_to_volume,
         )
 
-        with spooled_parquet(batch, _BATCH_FILE) as spooled:
-            staged_file = upload_file_to_volume(
-                self._ws_client, self._conn, self._fq_table, spooled
-            )
+        staged_file = upload_frame_to_volume(
+            self._ws_client, self._conn, self._fq_table, batch
+        )
         try:
             scratch = _create_temp_table_from_volume_schema(
                 self._cursor, staged_file, self._fq_table

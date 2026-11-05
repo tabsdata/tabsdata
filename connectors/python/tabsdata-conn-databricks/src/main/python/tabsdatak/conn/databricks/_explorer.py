@@ -56,8 +56,8 @@ class DatabricksConnectionExplorer(Explorer):
         # noinspection PyProtectedMember
         from tabsdatak.conn.databricks import _impl
 
-        catalog = conn._catalog() if conn.catalog is not None else ""
-        schema_filter = conn._schema() if conn.schema is not None else None
+        catalog = conn._catalog() or ""
+        schema_filter = conn._schema()
 
         client = _impl._build_workspace_client(conn)
 
@@ -127,7 +127,8 @@ class DatabricksConnectionExplorer(Explorer):
                 # identifiers come from our own Unity Catalog scan.
                 cursor.execute(f"SELECT * FROM {fqn} LIMIT {int(limit)}")
                 columns = [c[0] for c in cursor.description]
-                return [dict(zip(columns, row)) for row in cursor.fetchall()]
+                rows = cursor.fetchall() or []
+                return [dict(zip(columns, row)) for row in rows]
         finally:
             connection.close()
 

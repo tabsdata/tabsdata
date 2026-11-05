@@ -10,6 +10,8 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from typing import Any
 
+import polars as pl
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.databricks import (
@@ -38,7 +40,6 @@ from tabsdatak.spi import (
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
-    TableFileSpec,
     TableMode,
 )
 
@@ -191,11 +192,9 @@ def _inputs(
     metadata: FrameMetadata | None,
     host: str,
 ) -> Iterator[LazyFrameInput]:
-    import polars as pl
-
     try:
         for table in tables:
-            yield LazyFrameInput(pl.from_arrow(table).lazy(), metadata=metadata)
+            yield LazyFrameInput(pl.DataFrame(table).lazy(), metadata=metadata)
     except (DatabricksValidateException, DatabricksRuntimeException):
         raise
     except Exception as e:  # noqa: BLE001 -- runtime wrapper
@@ -254,13 +253,15 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrcConn, DatabricksSrc]):
         return inputs
 
 
-class _DatabricksDestPlugin(DestPlugin[DatabricksDestConn, DatabricksDest]):
+class _DatabricksDestPlugin(
+    DestPlugin[DatabricksDestConn, DatabricksDest, list[pl.LazyFrame]],
+):
     def write_out(
         self,
         ctx: DestContext,
         conn: DatabricksDestConn,
         dest: DatabricksDest,
-        tables: list[TableFileSpec],
+        tables: list[pl.LazyFrame],
     ) -> None:
         # noinspection PyProtectedMember
         from tabsdatak.conn.databricks import _impl
@@ -272,7 +273,7 @@ class _DatabricksDestPlugin(DestPlugin[DatabricksDestConn, DatabricksDest]):
         )
         logging.getLogger("databricks").setLevel(cfg.logging_level)
 
-        # Verifies that the number of incoming parquet files matches
+        # Verifies that the number of incoming tables matches
         # the destination's declared ``tables`` (DATABRICKS_7).
         if len(dest.tables) != len(tables):
             raise DatabricksErrorCode.DATABRICKS_7.exception(
@@ -291,10 +292,7 @@ class _DatabricksDestPlugin(DestPlugin[DatabricksDestConn, DatabricksDest]):
         )
         host = _convert(conn.host_url, str)
         try:
-            # ``tables`` is ``list[TableFileSpec]`` =
-            # ``list[Path]`` (a ``Path`` subclass), so each
-            # entry is path-like directly -- no ``.path`` access.
-            _impl.write_all_tables(write_cfg, list(tables))
+            _impl.write_all_tables(write_cfg, tables)
         except DatabricksValidateException:
             raise  # adapter-side validation is already typed (DATABRICKS_10)
         except Exception as e:  # noqa: BLE001 -- runtime wrapper

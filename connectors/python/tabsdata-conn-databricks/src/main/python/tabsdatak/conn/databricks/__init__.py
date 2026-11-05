@@ -297,17 +297,17 @@ class DatabricksSrcConn(Conn):
     def _volume(self) -> str:
         return _convert(self.volume, str)
 
-    def _warehouse(self) -> str:
-        return _convert(self.warehouse, str)
+    def _warehouse(self) -> str | None:
+        return None if self.warehouse is None else _convert(self.warehouse, str)
 
-    def _warehouse_id(self) -> str:
-        return _convert(self.warehouse_id, str)
+    def _warehouse_id(self) -> str | None:
+        return None if self.warehouse_id is None else _convert(self.warehouse_id, str)
 
-    def _catalog(self) -> str:
-        return _convert(self.catalog, str)
+    def _catalog(self) -> str | None:
+        return None if self.catalog is None else _convert(self.catalog, str)
 
-    def _schema(self) -> str:
-        return _convert(self.schema, str)
+    def _schema(self) -> str | None:
+        return None if self.schema is None else _convert(self.schema, str)
 
     def validate(self) -> None:
         """Cross-field validation: `warehouse` and `warehouse_id` are
@@ -343,17 +343,17 @@ class DatabricksDestConn(Conn):
     def _volume(self) -> str:
         return _convert(self.volume, str)
 
-    def _warehouse(self) -> str:
-        return _convert(self.warehouse, str)
+    def _warehouse(self) -> str | None:
+        return None if self.warehouse is None else _convert(self.warehouse, str)
 
-    def _warehouse_id(self) -> str:
-        return _convert(self.warehouse_id, str)
+    def _warehouse_id(self) -> str | None:
+        return None if self.warehouse_id is None else _convert(self.warehouse_id, str)
 
-    def _catalog(self) -> str:
-        return _convert(self.catalog, str)
+    def _catalog(self) -> str | None:
+        return None if self.catalog is None else _convert(self.catalog, str)
 
-    def _schema(self) -> str:
-        return _convert(self.schema, str)
+    def _schema(self) -> str | None:
+        return None if self.schema is None else _convert(self.schema, str)
 
     def validate(self) -> None:
         """Cross-field validation: `warehouse` and `warehouse_id` are
