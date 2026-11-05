@@ -108,3 +108,44 @@ def test_src_plugin_read_in_resumes_from_advanced_initial_values(
         )
     )
     assert again["EMP_NO"].to_list() == first["EMP_NO"].to_list()
+
+
+@oracle_domain("oracle")
+def test_the_polars_read_runs_on_the_readers_own_connection(
+    domain_oracle: OracleDomain,
+):
+    """Polars once read an oracledb connection through a separate pool
+    connection, outside the reader's transaction; a row the transaction wrote
+    is visible only if the read stays on that connection."""
+    from sqlalchemy import create_engine, text
+
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._engine.sqlalchemy_reader import _polars_read
+
+    engine = create_engine(domain_oracle.sqlalchemy_uri)
+    table = "td_src_own_connection"
+    with engine.connect() as setup:
+        setup.execute(
+            text(
+                f"BEGIN EXECUTE IMMEDIATE 'DROP TABLE {table}'; "
+                "EXCEPTION WHEN OTHERS THEN NULL; END;"
+            )
+        )
+        setup.execute(text(f"CREATE TABLE {table} (id NUMBER)"))
+        setup.commit()
+    try:
+        with engine.connect() as connection:
+            connection.execute(text(f"INSERT INTO {table} VALUES (7)"))
+            [frame] = _polars_read(
+                connection=connection,
+                query=f"SELECT id FROM {table}",
+                chunk_size=100,
+                schema_overrides=None,
+            )
+            assert frame["ID"].to_list() == [7]
+            connection.rollback()
+    finally:
+        with engine.connect() as cleanup:
+            cleanup.execute(text(f"DROP TABLE {table}"))
+            cleanup.commit()
+        engine.dispose()

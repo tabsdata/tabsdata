@@ -7,7 +7,6 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
-from contextlib import nullcontext
 from typing import Any, Callable, Mapping
 
 import polars as pl
@@ -198,23 +197,14 @@ def _polars_read(
     if parameters:
         execute_options["parameters"] = dict(parameters)
 
-    streamed_conn = connection.execution_options(stream_results=True)
-    # Polars reads an oracledb-backed Connection through a separate raw pool
-    # connection, outside this connection's transaction; a Session bound to it
-    # keeps the read on this connection.
-    with (
-        Session(bind=streamed_conn)
-        if streamed_conn.engine.driver == "oracledb"
-        else nullcontext(streamed_conn)
-    ) as source:
-        yield from pl.read_database(
-            text(query),
-            connection=source,
-            iter_batches=True,
-            batch_size=chunk_size,
-            schema_overrides=schema_overrides,
-            execute_options=execute_options or None,
-        )
+    yield from pl.read_database(
+        text(query),
+        connection=connection.execution_options(stream_results=True),
+        iter_batches=True,
+        batch_size=chunk_size,
+        schema_overrides=schema_overrides,
+        execute_options=execute_options or None,
+    )
 
 
 class PolarsReadEngine(SqlAlchemyReadEngine):
