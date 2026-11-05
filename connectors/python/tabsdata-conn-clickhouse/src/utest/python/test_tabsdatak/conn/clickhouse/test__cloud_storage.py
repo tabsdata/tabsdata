@@ -121,7 +121,9 @@ def test_gcs_table_function_inlines_hmac_only() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_azure_table_function_builds_connection_string() -> None:
+def test_azure_table_function_passes_the_key_as_its_own_argument() -> None:
+    """ClickHouse hides a key passed as its own argument in its query log;
+    one inside a connection string is logged in clear."""
     storage = AzureClickHouseStorage(
         AzureConfig(
             container="staging-container",
@@ -130,16 +132,20 @@ def test_azure_table_function_builds_connection_string() -> None:
             account_key="KEY==",
         )
     )
-    fn = storage.clickhouse_table_function(
-        "staging/UID/x.parquet"
-    )
+    fn = storage.clickhouse_table_function("staging/UID/x.parquet")
     assert fn == (
         "azureBlobStorage("
-        "'DefaultEndpointsProtocol=https;"
-        "AccountName=ACCT;"
-        "AccountKey=KEY==;"
-        "EndpointSuffix=core.windows.net', "
+        "'https://ACCT.blob.core.windows.net', "
         "'staging-container', "
         "'staging/UID/x.parquet', "
+        "'ACCT', "
+        "'KEY==', "
         "'Parquet')"
     )
+    assert "AccountKey" not in fn
+
+
+def test_table_function_arguments_are_escaped() -> None:
+    from tabsdatak.conn.clickhouse._cloud_storage import table_function
+
+    assert table_function("s3", "a\\b", "it's") == "s3('a\\\\b', 'it\\'s')"

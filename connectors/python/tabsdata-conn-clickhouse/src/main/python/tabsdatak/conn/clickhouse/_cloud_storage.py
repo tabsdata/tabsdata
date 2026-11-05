@@ -379,6 +379,18 @@ class AzureStorage(CloudStorage):
 # --- ClickHouse-aware cloud storage ----------------------------------
 
 
+PARQUET = "Parquet"
+
+
+def string_literal(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace("'", "\\'")
+    return f"'{escaped}'"
+
+
+def table_function(name: str, *arguments: str) -> str:
+    return f"{name}({', '.join(string_literal(argument) for argument in arguments)})"
+
+
 class ClickHouseCloudStorage(CloudStorage, ABC):
     """Extension of :class:`CloudStorage` for ClickHouse bulk loading.
 
@@ -396,11 +408,12 @@ class S3ClickHouseStorage(S3Storage, ClickHouseCloudStorage):
     """``S3Storage`` + ClickHouse ``s3()`` table function."""
 
     def clickhouse_table_function(self, staged_file_ref: str) -> str:
-        return (
-            f"s3('{staged_file_ref}', "
-            f"'{self._config.access_key_id}', "
-            f"'{self._config.secret_access_key}', "
-            f"'Parquet')"
+        return table_function(
+            "s3",
+            staged_file_ref,
+            self._config.access_key_id,
+            self._config.secret_access_key,
+            PARQUET,
         )
 
 
@@ -415,11 +428,12 @@ class GCSClickHouseStorage(GCSStorage, ClickHouseCloudStorage):
     """
 
     def clickhouse_table_function(self, staged_file_ref: str) -> str:
-        return (
-            f"s3('{staged_file_ref}', "
-            f"'{self._config.hmac_access_key}', "
-            f"'{self._config.hmac_secret_key}', "
-            f"'Parquet')"
+        return table_function(
+            "s3",
+            staged_file_ref,
+            self._config.hmac_access_key,
+            self._config.hmac_secret_key,
+            PARQUET,
         )
 
 
@@ -427,10 +441,15 @@ class AzureClickHouseStorage(AzureStorage, ClickHouseCloudStorage):
     """``AzureStorage`` + ClickHouse ``azureBlobStorage()`` table function."""
 
     def clickhouse_table_function(self, staged_file_ref: str) -> str:
-        return (
-            f"azureBlobStorage("
-            f"'{self._connection_string()}', "
-            f"'{self._config.container}', "
-            f"'{staged_file_ref}', "
-            f"'Parquet')"
+        # The account key goes in as an argument of its own: ClickHouse hides
+        # it in its query log and server logs then, which it does not do for a
+        # key inside a connection string.
+        return table_function(
+            "azureBlobStorage",
+            f"https://{self._config.account_name}.blob.core.windows.net",
+            self._config.container,
+            staged_file_ref,
+            self._config.account_name,
+            self._config.account_key,
+            PARQUET,
         )
