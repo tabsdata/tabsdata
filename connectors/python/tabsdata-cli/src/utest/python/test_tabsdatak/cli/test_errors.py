@@ -12,6 +12,7 @@ import rich_click as click
 from click.testing import CliRunner
 
 from tabsdatak.cli._errors import ExitCode, TdkException, classify
+from tabsdatak.cli._unattended import UNATTENDED_ENV, UNATTENDED_MARKERS
 from tabsdatak.cli.td.cli import cli
 from tabsdatak.sdk._apiserver import APIServerError, NoProjectSelectedError, NotFound
 from tabsdatak.sdk.tabsdata_server import TabsdataServer
@@ -81,6 +82,27 @@ def test_api_error_carries_retry_after():
 )
 def test_client_side_causes_classify(cause, expected):
     assert classify(_wrapped(cause)).type == expected
+
+
+def _attended(monkeypatch):
+    for name in (UNATTENDED_ENV, *UNATTENDED_MARKERS):
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_no_project_tells_a_person_to_set_or_pass_one(monkeypatch):
+    _attended(monkeypatch)
+    message = classify(_wrapped(NoProjectSelectedError())).message
+    assert message.startswith("Failed to do it: No project selected.")
+    assert "tdk set --proj" in message
+
+
+def test_no_project_tells_an_agent_only_what_it_may_run(monkeypatch):
+    _attended(monkeypatch)
+    monkeypatch.setenv(UNATTENDED_ENV, "1")
+    message = classify(_wrapped(NoProjectSelectedError())).message
+    assert message.startswith("Failed to do it: No project selected.")
+    assert "tdk set" not in message
+    assert "--proj <name>" in message and "tdk project list" in message
 
 
 def test_bare_click_exception_is_an_invalid_request():

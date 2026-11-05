@@ -13,6 +13,8 @@ from typing import Any
 
 import rich_click as click
 
+from tabsdatak.cli._unattended import unattended_cause
+
 
 class ExitCode(IntEnum):
     OK = 0
@@ -54,6 +56,10 @@ ERROR_TYPES: dict[str, ExitCode] = {
 }
 
 _CONFLICT_CODES = frozenset({"SqlError::1", "SqlError::2"})
+_UNATTENDED_NO_PROJECT = (
+    "No project selected. Pass '--proj <name>' to the command; 'tdk project list' "
+    "shows the projects."
+)
 _LIST_HINT = (
     "Check the fields in '--filter' and '--order-by': the message names the one "
     "this listing does not support."
@@ -142,6 +148,8 @@ def classify(exc: BaseException, list_options_used: bool = False) -> TdkError:
         if isinstance(cause, click.UsageError):
             return TdkError(type="usage", message=cause.format_message())
         if isinstance(cause, NoProjectSelectedError):
+            if unattended_cause() is not None:
+                message = message.replace(str(cause), _UNATTENDED_NO_PROJECT)
             return TdkError(type="no_project", message=message)
         if isinstance(cause, NotFound):
             return TdkError(type="not_found", message=message)
