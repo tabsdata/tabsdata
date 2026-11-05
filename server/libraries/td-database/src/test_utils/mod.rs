@@ -27,8 +27,10 @@ use tracing::warn;
 
 #[cfg(test)]
 pub(crate) mod domain;
+pub mod poll;
 pub mod postgres;
 
+pub use crate::access::in_process::waiting_on;
 pub use crate::generated_sql::generated;
 /// Pool settings for the test pools. One server backs the whole suite, so each
 /// pool stays lean and holds **no resident connections**
@@ -49,7 +51,7 @@ pub fn test_pool_config() -> PoolsConfig {
     };
     PoolsConfig {
         regular: Some(pool.clone()),
-        exclusive: Some(pool.clone()),
+        system: None,
         admin: Some(pool),
     }
 }

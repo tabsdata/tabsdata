@@ -36,23 +36,6 @@ pub trait PgConnectionExt {
         key: &str,
     ) -> impl Future<Output = Result<bool, Error>> + Send;
 
-    /// [`try_advisory_xact_lock_text`](Self::try_advisory_xact_lock_text)'s
-    /// key, held by the session instead: taken outside a transaction, it is
-    /// held until the session releases it or ends. The two conflict.
-    fn try_advisory_lock_text(
-        &mut self,
-        key: &str,
-    ) -> impl Future<Output = Result<bool, Error>> + Send;
-
-    /// [`try_advisory_xact_lock_text`](Self::try_advisory_xact_lock_text)
-    /// with `key` qualified by `current_schema()`: for a lock on a
-    /// schema-wide resource, which schemas sharing one database must not
-    /// contend on.
-    fn try_schema_advisory_xact_lock_text(
-        &mut self,
-        key: &str,
-    ) -> impl Future<Output = Result<bool, Error>> + Send;
-
     /// Bound as a parameter, so the value reaches no SQL text — client batch
     /// logs, server statement logs and wire captures see only `set_config`.
     fn set_local_secret(
@@ -84,12 +67,14 @@ pub trait PgConnectionExt {
     #[cfg(feature = "td-test")]
     fn analyze_current_schema(&mut self) -> impl Future<Output = Result<(), Error>> + Send;
 
-    /// Waits until another backend is blocked on a lock this transaction
-    /// holds: the point at which a concurrent unit under test has reached
-    /// the statement the interleaving is about. `false` if `within` elapsed.
+    /// Waits until `waiters` other backends wait behind locks this transaction
+    /// holds, directly or queued behind one another: the point at which
+    /// concurrent units under test have reached the statement the interleaving
+    /// is about. `false` if `within` elapsed.
     #[cfg(feature = "td-test")]
     fn wait_until_blocking(
         &mut self,
+        waiters: i64,
         within: Duration,
     ) -> impl Future<Output = Result<bool, Error>> + Send;
 }
@@ -116,33 +101,6 @@ impl PgConnectionExt for PgConnection {
             .expr(
                 Func::cust("pg_try_advisory_xact_lock")
                     .arg(Func::cust("hashtextextended").args([Expr::val(key), Expr::val(0)])),
-            )
-            .build_query_scalar()
-            .fetch_one(self)
-            .await
-    }
-
-    async fn try_advisory_lock_text(&mut self, key: &str) -> Result<bool, Error> {
-        Query::select()
-            .expr(
-                Func::cust("pg_try_advisory_lock")
-                    .arg(Func::cust("hashtextextended").args([Expr::val(key), Expr::val(0)])),
-            )
-            .build_query_scalar()
-            .fetch_one(self)
-            .await
-    }
-
-    async fn try_schema_advisory_xact_lock_text(&mut self, key: &str) -> Result<bool, Error> {
-        let qualified = Func::cust("concat").args([
-            Func::cust("current_schema").into(),
-            Expr::val(":"),
-            Expr::val(key),
-        ]);
-        Query::select()
-            .expr(
-                Func::cust("pg_try_advisory_xact_lock")
-                    .arg(Func::cust("hashtextextended").args([qualified.into(), Expr::val(0)])),
             )
             .build_query_scalar()
             .fetch_one(self)
@@ -210,19 +168,21 @@ impl PgConnectionExt for PgConnection {
     }
 
     #[cfg(feature = "td-test")]
-    async fn wait_until_blocking(&mut self, within: Duration) -> Result<bool, Error> {
+    async fn wait_until_blocking(&mut self, waiters: i64, within: Duration) -> Result<bool, Error> {
         let deadline = tokio::time::Instant::now() + within;
         loop {
             sqlx::query("SELECT pg_stat_clear_snapshot()")
                 .execute(&mut *self)
                 .await?;
             let blocked: i64 = sqlx::query_scalar(
-                "SELECT count(*) FROM pg_stat_activity \
-                 WHERE pg_backend_pid() = ANY(pg_blocking_pids(pid))",
+                "WITH RECURSIVE waiting AS ( \
+                     SELECT pid FROM pg_stat_activity WHERE pg_backend_pid() = ANY(pg_blocking_pids(pid)) \
+                     UNION SELECT a.pid FROM pg_stat_activity a JOIN waiting w ON w.pid = ANY(pg_blocking_pids(a.pid))) \
+                 SELECT count(*) FROM waiting",
             )
             .fetch_one(&mut *self)
             .await?;
-            if blocked > 0 {
+            if blocked >= waiters {
                 return Ok(true);
             }
             if tokio::time::Instant::now() >= deadline {

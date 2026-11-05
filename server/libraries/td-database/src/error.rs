@@ -25,22 +25,11 @@ pub enum DbError {
     )]
     MissingPoolConfig(&'static str) = 3,
     #[error(
-        "Missing pool configuration: the `{0}` component declares the `{1}` \
-         pool, so its entry must carry an explicit `pool.{1}` block (with \
-         `min_connections` and `max_connections`) — pool blocks are never \
-         inherited or defaulted."
+        "Missing pool configuration: the `{0}` component's entry must carry an \
+         explicit `pool.regular` block (with `min_connections` and \
+         `max_connections`) — pool blocks are never inherited or defaulted."
     )]
-    MissingComponentPoolConfig(&'static str, &'static str) = 12,
-    #[error(
-        "The `{0}` component declares the `{1}` pool but no such pool was \
-         connected — the declared pools and the connected pools must agree."
-    )]
-    MissingComponentPool(&'static str, crate::pool::PoolKind) = 4,
-    #[error(
-        "Unexpected pool configuration: the `{0}` component has no `{1}` \
-         pool; remove the `pool.{1}` block from its entry."
-    )]
-    UnexpectedPoolConfig(&'static str, &'static str) = 5,
+    MissingComponentPoolConfig(&'static str) = 12,
     #[error(
         "The Tabsdata database schema has not been created. Create it with \
          `tdkserver create` on a managed instance, or `td_dbmanager db create` \

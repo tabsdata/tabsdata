@@ -177,7 +177,6 @@ mod tests {
     use super::*;
     use crate::components::{ApiserverComponent, SchemaSource};
     use crate::generated_sql::generated;
-    use crate::pool::PoolKind;
     use crate::test_utils::domain::PostgresDomain;
 
     struct DummySource;
@@ -192,10 +191,6 @@ mod tests {
 
     struct DummyComponent;
     impl SchemaComponent for DummyComponent {
-        fn pools(&self) -> &'static [PoolKind] {
-            &[PoolKind::Regular]
-        }
-
         fn key(&self) -> &'static str {
             "dummy"
         }

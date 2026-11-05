@@ -5,11 +5,8 @@
 use std::fmt::{Debug, Formatter};
 use td_common::datetime::Timestamp;
 
-/// The instant a write unit of work writes at, minted as it opens: by
-/// [`RW`](crate::access::RW) once its snapshot is fixed, by
-/// [`XW`](crate::access::XW) once it holds the project's advisory lock. The
-/// only instant an SCD2 interval opens or closes at, so a stamp never predates
-/// rows the unit reads, as a request's arrival time may.
+/// The instant a write unit writes at, minted once it holds its lock: the only
+/// one an SCD2 interval opens or closes at, so it never predates what it read.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LockInstant(Timestamp);
 

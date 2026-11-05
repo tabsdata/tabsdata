@@ -8,9 +8,8 @@
 //! against a [`Grant`], so neither an unscoped connection nor an unauthorized
 //! query is obtainable here.
 //!
-//! Which pool a connection comes from is the mode's business: [`RO`] and [`RW`]
-//! share the component's regular pool, [`XW`] draws from the exclusive one and
-//! serializes on the project it is scoped to.
+//! What a write unit locks before it begins is the opener's:
+//! [`DbPool::begin`] nothing, [`DbPool::lock_project`] its project ([`lock`]).
 //!
 //! A handle carries both the scope it applies and the domain it opens on.
 //! [`InProject`] runs as the tenant role with `app.project_id` set, letting
@@ -30,32 +29,41 @@
 mod connection;
 mod extract;
 mod grant;
+pub(crate) mod in_process;
+pub mod lock;
 mod lock_instant;
 mod mode;
 mod retry;
+mod telemetry;
 
 #[cfg(test)]
 mod tests;
 
+/// Scopes, modes and lock kinds are this crate's alone: one defined
+/// elsewhere could open a unit that claims a lock it never took.
+mod sealed {
+    pub trait Sealed {}
+}
+
 use crate::connection::{PgConnectionExt, scope_in_project};
-use crate::domain::{Apiserver, DomainConnection, DomainPools, ScopedBy, Supports};
+use crate::domain::{Apiserver, DomainConnection, DomainPools, ScopedBy};
+use crate::pool::{RegularPool, ServingPool};
 pub use connection::GatedConnection;
 pub use grant::{Gated, Grant};
+use lock::Held;
+use lock::ProjectLockKey;
+pub use lock::{Holds, Isolation, LockKind, Locker, ProjectLock, Unlocked};
 pub use lock_instant::LockInstant;
-pub use mode::{AccessMode, OpensIn, RO, RW, WriteMode, XW};
+pub use mode::{AccessMode, OpensIn, RO, RW, WriteMode};
 pub use retry::{Attempt, conflicted, retrying, unique_violation_on};
 use sqlx::postgres::PgConnection;
 use std::fmt::Display;
 use std::marker::PhantomData;
-use std::time::Duration;
+use std::panic::Location;
 use td_error::{TdError, td_error};
+use telemetry::{GaveUpOn, Unit, UnitLock, UnitLog};
 use tokio::time::Instant;
 use tracing::{debug, warn};
-
-/// The first and the longest pause between attempts to open a unit whose
-/// mode waits on a lock someone else holds.
-const OPEN_BACKOFF_MIN: Duration = Duration::from_millis(10);
-const OPEN_BACKOFF_MAX: Duration = Duration::from_millis(200);
 
 #[td_error]
 pub enum ServiceDbError {
@@ -77,6 +85,12 @@ pub enum ServiceDbError {
     PoolBusy(#[source] sqlx::Error) = 8001,
     #[error("The request conflicted with a concurrent one; retry the request")]
     Conflicted(#[source] sqlx::Error) = 8002,
+}
+
+fn pool_busy(error: &TdError) -> bool {
+    std::error::Error::source(error)
+        .and_then(|e| e.downcast_ref::<ServiceDbError>())
+        .is_some_and(|e| matches!(e, ServiceDbError::PoolBusy(_)))
 }
 
 impl ServiceDbError {
@@ -102,8 +116,12 @@ impl ServiceDbError {
 
 /// The row-level-security scope a [`DbPool`] handle applies to every connection it
 /// hands out.
-pub trait DbScope: Clone + Send + Sync + 'static {
+pub trait DbScope: sealed::Sealed + Clone + Send + Sync + 'static {
     fn apply(&self, conn: &mut PgConnection) -> impl Future<Output = Result<(), TdError>> + Send;
+
+    /// The project the scope is bound to: what a locking unit locks, and
+    /// what the logs name.
+    fn project(&self) -> Option<&str>;
 }
 
 /// No project: the relations reached carry no `project_id`, so there is
@@ -113,11 +131,17 @@ pub trait DbScope: Clone + Send + Sync + 'static {
 #[derive(Debug, Clone, Copy)]
 pub struct Global;
 
+impl sealed::Sealed for Global {}
+
 impl DbScope for Global {
     async fn apply(&self, conn: &mut PgConnection) -> Result<(), TdError> {
         conn.scope_global()
             .await
             .map_err(|e| TdError::from(ServiceDbError::CannotSetProjectScope(e)))
+    }
+
+    fn project(&self) -> Option<&str> {
+        None
     }
 }
 
@@ -128,17 +152,23 @@ impl DbScope for Global {
 #[derive(Debug, Clone, Copy)]
 pub struct AcrossProjects;
 
+impl sealed::Sealed for AcrossProjects {}
+
 impl DbScope for AcrossProjects {
     async fn apply(&self, conn: &mut PgConnection) -> Result<(), TdError> {
         conn.scope_across_projects()
             .await
             .map_err(|e| TdError::from(ServiceDbError::CannotBypassProjectScope(e)))
     }
+
+    fn project(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// The id a project scope is keyed by. Implemented by the project's entity id
 /// alone, so a version id, another entity's id or a name cannot scope a
-/// connection, nor key the lock [`XW`] serializes on.
+/// connection, nor key the lock a project's units serialize on.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a project's entity id",
     note = "scope by the project's `project_id`, not its version `id` or its name"
@@ -155,18 +185,19 @@ impl InProject {
     pub fn new(project: &impl ProjectKey) -> Self {
         Self(project.to_string())
     }
-
-    /// What [`XW`] serializes on.
-    pub(crate) fn project(&self) -> &str {
-        &self.0
-    }
 }
+
+impl sealed::Sealed for InProject {}
 
 impl DbScope for InProject {
     async fn apply(&self, conn: &mut PgConnection) -> Result<(), TdError> {
         scope_in_project(conn, &self.0)
             .await
             .map_err(|e| TdError::from(ServiceDbError::CannotSetProjectScope(e)))
+    }
+
+    fn project(&self) -> Option<&str> {
+        Some(&self.0)
     }
 }
 
@@ -191,19 +222,26 @@ pub trait SeesProjectRows: DbScope {}
 impl SeesProjectRows for InProject {}
 impl SeesProjectRows for AcrossProjects {}
 
-/// A handle over one domain's serving pools, in one scope. Both are the
-/// handle's own type: which database it opens on is settled where it is
+/// A handle over one domain's serving pools, in one scope, drawing from one
+/// of them. All three are the handle's own type: which database it opens on,
+/// what it sees and whose connections it uses are settled where it is
 /// declared, not at each call, and a domain can only be paired with a scope it
 /// declares ([`ScopedBy`]).
 #[derive(Clone)]
-pub struct DbPool<S: DbScope = Global, D: ScopedBy<S> = Apiserver> {
+pub struct DbPool<S: DbScope = Global, P: ServingPool = RegularPool, D: ScopedBy<S> = Apiserver> {
     pools: DomainPools,
     scope: S,
-    _d: PhantomData<D>,
+    _d: PhantomData<(P, D)>,
 }
 
-impl<S: DbScope, D: ScopedBy<S>> DbPool<S, D> {
+impl<S: DbScope, D: ScopedBy<S>> DbPool<S, RegularPool, D> {
     pub fn new(pools: DomainPools, scope: S) -> Self {
+        Self::with(pools, scope)
+    }
+}
+
+impl<S: DbScope, D: ScopedBy<S>, P: ServingPool> DbPool<S, P, D> {
+    pub(super) fn with(pools: DomainPools, scope: S) -> Self {
         Self {
             pools,
             scope,
@@ -212,81 +250,113 @@ impl<S: DbScope, D: ScopedBy<S>> DbPool<S, D> {
     }
 
     /// A read on this domain's database, scoped.
-    pub async fn read(&self) -> Result<GatedConnection<RO, S, D>, TdError>
-    where
-        D: Supports<RO>,
-    {
-        self.open::<RO>().await
+    #[track_caller]
+    pub fn read(&self) -> impl Future<Output = Result<GatedConnection<RO, S, D>, TdError>> {
+        self.open::<RO>(Unit::At(Location::caller()))
     }
 
-    /// A `SERIALIZABLE` write transaction on this domain's database, scoped,
-    /// from the regular pool. It takes no lock to be correct against
-    /// concurrent writes: one whose outcome no serial order explains fails
-    /// with a conflict, so it opens only for an [`Attempt`] of [`retrying`].
-    pub async fn begin(&self, _attempt: Attempt) -> Result<GatedConnection<RW, S, D>, TdError>
-    where
-        D: Supports<RW>,
-    {
-        self.open::<RW>().await
+    /// A `SERIALIZABLE` write transaction, scoped. A conflict fails it, so it
+    /// opens only for an [`Attempt`] of [`retrying`].
+    #[track_caller]
+    pub fn begin(
+        &self,
+        _attempt: Attempt,
+    ) -> impl Future<Output = Result<GatedConnection<RW, S, D>, TdError>> {
+        self.open::<RW>(Unit::At(Location::caller()))
     }
 
     /// Begin `M`'s unit of work on the domain's pool, tag and scope it, and
     /// mint what it carries — the one path a connection reaches service code
     /// by.
-    async fn open<M: OpensIn<S>>(&self) -> Result<GatedConnection<M, S, D>, TdError>
-    where
-        D: Supports<M>,
-    {
-        let pool = self.pools.get::<M, D>()?;
+    ///
+    /// A unit whose mode locks its project waits for the lock before it
+    /// begins, for no longer than the pool waits for a connection.
+    async fn open<M: OpensIn<S>>(&self, unit: Unit) -> Result<GatedConnection<M, S, D>, TdError> {
+        let kind = P::KIND;
+        let pool = self.pools.get::<D>(kind)?;
+        let project = self.scope.project();
+        let key = project
+            .filter(|_| M::LOCKS)
+            .map(|project| ProjectLockKey::of(pool, project));
+        let lock = match key {
+            Some(_) => UnitLock::Project,
+            None => UnitLock::None,
+        };
         let started = Instant::now();
-        let deadline = started + pool.acquire_timeout();
-        let mut backoff = OPEN_BACKOFF_MIN;
-        let mut polls: u32 = 0;
-        loop {
-            if let Some(conn) = M::begin(pool, &self.scope).await? {
-                if polls > 0 {
-                    debug!(
-                        polls,
-                        waited_ms = started.elapsed().as_millis() as u64,
-                        "db.tx: got the lock after waiting"
+        let held = match &key {
+            None => Held::default(),
+            Some(key) => match self.pools.locker().take(key, pool.acquire_timeout()).await {
+                Some(held) => held,
+                None => {
+                    warn!(
+                        unit = %unit,
+                        pool = %kind,
+                        project_id = project,
+                        lock_wait_ms = started.elapsed().as_millis() as u64,
+                        "db.tx: gave up waiting for the project lock"
                     );
+                    telemetry::gave_up(unit, GaveUpOn::ProjectLock);
+                    return Err(ServiceDbError::LockBusy.into());
                 }
-                let mut conn = DomainConnection::<D, S, M>::new(conn);
-                self.scope.apply(&mut conn).await?;
-                return Ok(GatedConnection::new(conn, M::opened()));
-            }
-            polls += 1;
-            if Instant::now() + backoff > deadline {
-                warn!(
-                    polls,
-                    waited_ms = started.elapsed().as_millis() as u64,
-                    "db.tx: gave up waiting for the lock"
-                );
-                return Err(ServiceDbError::LockBusy.into());
-            }
-            tokio::time::sleep(backoff).await;
-            backoff = (backoff * 2).min(OPEN_BACKOFF_MAX);
+            },
+        };
+        let lock_wait = started.elapsed();
+        if let Some(project) = project.filter(|_| !held.is_empty()) {
+            telemetry::waited(unit, project, lock_wait);
         }
+        let acquiring = Instant::now();
+        let trx = match M::begin(pool).await {
+            Ok(trx) => trx,
+            Err(error) => {
+                if pool_busy(&error) {
+                    warn!(
+                        unit = %unit,
+                        component = pool.component,
+                        pool = %kind,
+                        project_id = project,
+                        acquire_ms = acquiring.elapsed().as_millis() as u64,
+                        "db.tx: gave up waiting for a connection"
+                    );
+                    telemetry::gave_up(unit, GaveUpOn::Connection);
+                    telemetry::pool_timed_out(pool, kind);
+                }
+                return Err(error);
+            }
+        };
+        let acquired = acquiring.elapsed();
+        telemetry::acquired(unit, pool, kind, acquired);
+        debug!(
+            unit = %unit,
+            pool = %kind,
+            lock = lock.as_str(),
+            project_id = project,
+            lock_wait_ms = lock_wait.as_millis() as u64,
+            acquire_ms = acquired.as_millis() as u64,
+            "db.tx: began"
+        );
+        let log = UnitLog::began(unit, kind, project.map(str::to_owned), lock, lock_wait);
+        let mut conn = DomainConnection::<D, S, M>::new(trx);
+        self.scope.apply(&mut conn).await?;
+        Ok(GatedConnection::new(conn, M::instant(), held, log))
+    }
+
+    /// [`open`](Self::open) for a service's parameter, which the service
+    /// names once it ends it.
+    pub(super) async fn open_extracted<M: OpensIn<S>>(
+        &self,
+    ) -> Result<GatedConnection<M, S, D>, TdError> {
+        self.open::<M>(Unit::Extracted).await
     }
 }
 
-impl<S: DbScope, D: ScopedBy<S> + ScopedBy<InProject>> DbPool<S, D> {
+impl<S: DbScope, D: ScopedBy<S> + ScopedBy<InProject>, P: ServingPool> DbPool<S, P, D> {
     /// Re-scope to one project — for work that creates a project, or discovers
     /// which one it is about, and then operates inside it.
-    pub fn in_project(&self, project: &impl ProjectKey) -> DbPool<InProject, D> {
-        DbPool::new(self.pools.clone(), InProject::new(project))
-    }
-}
-
-impl<D: ScopedBy<InProject> + Supports<XW>> DbPool<InProject, D> {
-    /// [`begin`](DbPool::begin) on the exclusive pool, serialized against
-    /// every other exclusive transaction in this project: it holds the
-    /// project's lock from before it begins until it ends, so it reads what
-    /// the one before it committed. Only here, because the lock is the scope.
-    pub async fn begin_exclusive(
-        &self,
-        _attempt: Attempt,
-    ) -> Result<GatedConnection<XW, InProject, D>, TdError> {
-        self.open::<XW>().await
+    pub fn in_project(&self, project: &impl ProjectKey) -> DbPool<InProject, P, D> {
+        DbPool {
+            pools: self.pools.clone(),
+            scope: InProject::new(project),
+            _d: PhantomData,
+        }
     }
 }

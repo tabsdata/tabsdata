@@ -10,8 +10,9 @@
 //! compile.
 
 use super::{AcrossProjects, DbPool, GatedConnection, Global, InProject, OpensIn, ProjectKey};
-use crate::domain::{DomainPools, ScopedBy, Supports};
+use crate::domain::{DomainPools, ScopedBy};
 use crate::pool::scoped::Scoped;
+use crate::pool::{RegularPool, ServingPool};
 use ta_services::factory::{Extract, ExtractMut, FieldAccessor, Finished, Pass};
 use td_error::TdError;
 
@@ -31,43 +32,44 @@ impl<R, P: ProjectKey> ProjectScoped for Scoped<R, P> {
     }
 }
 
-impl<Srv, Req, D: ScopedBy<Global>> Extract<Srv, Req> for DbPool<Global, D>
+impl<Srv, Req, D: ScopedBy<Global>, P: ServingPool> Extract<Srv, Req> for DbPool<Global, P, D>
 where
     Srv: Sync,
     Req: Sync,
     DomainPools: FieldAccessor<Srv>,
 {
     async fn extract(srv: &Srv, _req: &Req) -> Result<Self, TdError> {
-        Ok(DbPool::new(DomainPools::get_field(srv), Global))
+        Ok(DbPool::with(DomainPools::get_field(srv), Global))
     }
 }
 
-impl<Srv, Req, D: ScopedBy<AcrossProjects>> Extract<Srv, Req> for DbPool<AcrossProjects, D>
+impl<Srv, Req, D: ScopedBy<AcrossProjects>, P: ServingPool> Extract<Srv, Req>
+    for DbPool<AcrossProjects, P, D>
 where
     Srv: Sync,
     Req: Sync,
     DomainPools: FieldAccessor<Srv>,
 {
     async fn extract(srv: &Srv, _req: &Req) -> Result<Self, TdError> {
-        Ok(DbPool::new(DomainPools::get_field(srv), AcrossProjects))
+        Ok(DbPool::with(DomainPools::get_field(srv), AcrossProjects))
     }
 }
 
-impl<Srv, Req, D: ScopedBy<InProject>> Extract<Srv, Req> for DbPool<InProject, D>
+impl<Srv, Req, D: ScopedBy<InProject>, P: ServingPool> Extract<Srv, Req> for DbPool<InProject, P, D>
 where
     Srv: Sync,
     Req: ProjectScoped + Sync,
     DomainPools: FieldAccessor<Srv>,
 {
     async fn extract(srv: &Srv, req: &Req) -> Result<Self, TdError> {
-        Ok(DbPool::new(
+        Ok(DbPool::with(
             DomainPools::get_field(srv),
             req.project_scope(),
         ))
     }
 }
 
-impl<Srv, Req, M: OpensIn<Global>, D: Supports<M> + ScopedBy<Global>> ExtractMut<Srv, Req>
+impl<Srv, Req, M: OpensIn<Global>, D: ScopedBy<Global>> ExtractMut<Srv, Req>
     for &mut GatedConnection<M, Global, D>
 where
     Srv: Sync,
@@ -77,9 +79,9 @@ where
     type Kept = GatedConnection<M, Global, D>;
 
     async fn extract(srv: &Srv, req: &Req) -> Result<Self::Kept, TdError> {
-        DbPool::<Global, D>::extract(srv, req)
+        DbPool::<Global, RegularPool, D>::extract(srv, req)
             .await?
-            .open::<M>()
+            .open_extracted::<M>()
             .await
     }
 
@@ -92,8 +94,8 @@ where
     }
 }
 
-impl<Srv, Req, M: OpensIn<AcrossProjects>, D: Supports<M> + ScopedBy<AcrossProjects>>
-    ExtractMut<Srv, Req> for &mut GatedConnection<M, AcrossProjects, D>
+impl<Srv, Req, M: OpensIn<AcrossProjects>, D: ScopedBy<AcrossProjects>> ExtractMut<Srv, Req>
+    for &mut GatedConnection<M, AcrossProjects, D>
 where
     Srv: Sync,
     Req: Sync,
@@ -102,9 +104,9 @@ where
     type Kept = GatedConnection<M, AcrossProjects, D>;
 
     async fn extract(srv: &Srv, req: &Req) -> Result<Self::Kept, TdError> {
-        DbPool::<AcrossProjects, D>::extract(srv, req)
+        DbPool::<AcrossProjects, RegularPool, D>::extract(srv, req)
             .await?
-            .open::<M>()
+            .open_extracted::<M>()
             .await
     }
 
@@ -117,7 +119,7 @@ where
     }
 }
 
-impl<Srv, Req, M: OpensIn<InProject>, D: Supports<M> + ScopedBy<InProject>> ExtractMut<Srv, Req>
+impl<Srv, Req, M: OpensIn<InProject>, D: ScopedBy<InProject>> ExtractMut<Srv, Req>
     for &mut GatedConnection<M, InProject, D>
 where
     Srv: Sync,
@@ -127,9 +129,9 @@ where
     type Kept = GatedConnection<M, InProject, D>;
 
     async fn extract(srv: &Srv, req: &Req) -> Result<Self::Kept, TdError> {
-        DbPool::<InProject, D>::extract(srv, req)
+        DbPool::<InProject, RegularPool, D>::extract(srv, req)
             .await?
-            .open::<M>()
+            .open_extracted::<M>()
             .await
     }
 
