@@ -41,7 +41,7 @@ def _write_out(
             if_collection_exists=if_collection_exists,
             docs_per_trx=docs_per_trx,
         ),
-        [parquet],
+        [pl.scan_parquet(parquet)],
     )
 
 

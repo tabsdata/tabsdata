@@ -4,12 +4,13 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Iterable, Literal
+from typing import Literal
 
+import polars as pl
 from sqlalchemy import Engine
 
 from tabsdatak.conn.common.types import CfgSpec
-from tabsdatak.spi import Conn, TableFileSpec
+from tabsdatak.spi import Conn
 
 
 @dataclass(kw_only=True)
@@ -32,5 +33,5 @@ class SqlWriteEngine(ABC):
     def write(
         self,
         cfg: SqlWriteCfg,
-        tables: Iterable[TableFileSpec],
+        tables: list[pl.LazyFrame],
     ) -> None: ...

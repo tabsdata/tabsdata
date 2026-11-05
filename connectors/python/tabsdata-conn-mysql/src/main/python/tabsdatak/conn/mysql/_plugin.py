@@ -9,6 +9,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, cast
 
+import polars as pl
+
 from tabsdatak.conn.mysql import (
     DestCfgKey,
     DestCfgSpec,
@@ -29,7 +31,6 @@ from tabsdatak.spi import (
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
-    TableFileSpec,
     TableMode,
 )
 
@@ -185,13 +186,13 @@ class MySQLSrcPlugin(SrcPlugin[MySQLSrcConn, MySQLSrc]):
         )
 
 
-class MySQLDestPlugin(DestPlugin[MySQLDestConn, MySQLDest]):
+class MySQLDestPlugin(DestPlugin[MySQLDestConn, MySQLDest, list[pl.LazyFrame]]):
     def write_out(
         self,
         ctx: DestContext,
         conn: MySQLDestConn,
         dest: MySQLDest,
-        tables: list[TableFileSpec],
+        tables: list[pl.LazyFrame],
     ) -> None:
         from sqlalchemy.exc import OperationalError, SQLAlchemyError
 

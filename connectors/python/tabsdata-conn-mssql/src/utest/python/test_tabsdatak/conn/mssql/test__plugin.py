@@ -58,11 +58,6 @@ def _dest_ctx(work: Path) -> CtxStub:
     return CtxStub(work)
 
 
-def _make_parquet(path: Path, rows: list[dict]) -> Path:
-    pl.DataFrame(rows).write_parquet(path, use_pyarrow=True)
-    return path
-
-
 @pytest.fixture
 def work_dir(tmp_path: Path) -> Path:
     out = tmp_path / "work"
@@ -155,7 +150,7 @@ def test_src_plugin_wraps_other_sqlalchemy_error_as_mssql_6(
 
 def test_dest_plugin_raises_mssql_7_on_tables_slots_mismatch(work_dir):
     dest = MSSQLDest(tables=["users", "orders"])
-    src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
+    src = pl.LazyFrame([{"id": 1}])
     with pytest.raises(MSSQLRuntimeException) as ei:
         plugin.MSSQLDestPlugin().write_out(
             _dest_ctx(work_dir),
@@ -170,7 +165,7 @@ def test_dest_plugin_wraps_operational_error_as_mssql_8(monkeypatch, work_dir):
     fake = MagicMock()
     fake.connect.side_effect = OperationalError("conn fail", {}, BaseException("c"))
     monkeypatch.setattr(impl, "build_mssql_engine", lambda *a, **kw: fake)
-    src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
+    src = pl.LazyFrame([{"id": 1}])
     dest = MSSQLDest(tables=["users"])
     with pytest.raises(MSSQLRuntimeException) as ei:
         plugin.MSSQLDestPlugin().write_out(
@@ -187,7 +182,7 @@ def test_dest_plugin_wraps_other_sqlalchemy_error_as_mssql_9(
     fake = MagicMock()
     fake.connect.side_effect = ProgrammingError("bad sql", {}, BaseException("p"))
     monkeypatch.setattr(impl, "build_mssql_engine", lambda *a, **kw: fake)
-    src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
+    src = pl.LazyFrame([{"id": 1}])
     dest = MSSQLDest(tables=["users"])
     with pytest.raises(MSSQLRuntimeException) as ei:
         plugin.MSSQLDestPlugin().write_out(

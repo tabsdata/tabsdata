@@ -7,11 +7,14 @@ from __future__ import annotations
 import datetime
 import functools
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote_plus
 
 # noinspection PyProtectedMember
+import polars as pl
+
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.mongodb import (
     DestCfgKey,
@@ -25,7 +28,6 @@ from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    TableFileSpec,
 )
 
 if TYPE_CHECKING:
@@ -256,30 +258,23 @@ def _ensure_clean_collection(collection: "Collection") -> None:
 # --- Row iteration ---------------------------------------------------
 
 
-def _iter_parquet_documents(path: TableFileSpec):
-    """Yield ``dict`` documents from a parquet file using polars.
-
-    Polars is the project's preferred dataframe lib and handles
-    nested / list / struct columns when reading parquet. ``to_dicts()``
-    materialises the column-major frame into row-major dicts ready
-    for ``bulk_write``.
-    """
-    import polars as pl
-
-    df = pl.read_parquet(str(path))
-    yield from df.iter_rows(named=True)
+def _iter_documents(frame: pl.LazyFrame, batch_rows: int) -> Iterator[dict]:
+    """Yield ``dict`` documents from ``frame``, ``batch_rows`` rows at a
+    time, so memory holds one batch rather than the whole table."""
+    for batch in frame.collect_batches(chunk_size=batch_rows):
+        yield from batch.iter_rows(named=True)
 
 
 # --- Plugin: destination ---------------------------------------------
 
 
-class _MongoDBDestPlugin(DestPlugin[MongoDBDestConn, MongoDBDest]):
+class _MongoDBDestPlugin(DestPlugin[MongoDBDestConn, MongoDBDest, list[pl.LazyFrame]]):
     def write_out(
         self,
         ctx: DestContext,
         conn: MongoDBDestConn,
         dest: MongoDBDest,
-        tables: list[TableFileSpec],
+        tables: list[pl.LazyFrame],
     ) -> None:
         from pymongo.errors import BulkWriteError, PyMongoError
 
@@ -353,7 +348,7 @@ class _MongoDBDestPlugin(DestPlugin[MongoDBDestConn, MongoDBDest]):
         collection_fqn: str,
         default_db: str | None,
         id_field: str | None,
-        table: TableFileSpec,
+        table: pl.LazyFrame,
     ) -> None:
 
         db_name, coll_name = _split_collection(collection_fqn, default_db)
@@ -367,7 +362,7 @@ class _MongoDBDestPlugin(DestPlugin[MongoDBDestConn, MongoDBDest]):
         # batch is broken up into ``docs_per_trx``-sized chunks so a
         # single transaction never grows unbounded.
         batch: list[Any] = []
-        for doc in _iter_parquet_documents(table):
+        for doc in _iter_documents(table, dest.docs_per_trx):
             op = self._build_op(
                 doc=doc,
                 id_field=id_field,

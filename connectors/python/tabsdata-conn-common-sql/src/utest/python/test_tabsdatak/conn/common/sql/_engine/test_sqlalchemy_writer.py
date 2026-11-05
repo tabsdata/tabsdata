@@ -68,10 +68,8 @@ def _cfg(db_path: Path, **kwargs) -> _SqliteSqlWriteCfg:
     return _SqliteSqlWriteCfg(uri=sqlite_uri(db_path), **kwargs)
 
 
-def _make_parquet(path: Path, rows: list[dict]) -> Path:
-    df = pl.DataFrame(rows)
-    df.write_parquet(path, use_pyarrow=True)
-    return path
+def _frame(rows: list[dict]) -> pl.LazyFrame:
+    return pl.LazyFrame(rows)
 
 
 @pytest.fixture(autouse=True)
@@ -87,9 +85,7 @@ def _fast_retry(monkeypatch):
 
 @pytest.mark.parametrize("transactional", [True, False])
 def test_polars_single_table_append(db_path, work_dir, transactional):
-    src = _make_parquet(
-        work_dir / "in0.parquet",
-        [
+    src = _frame([
             {"id": 100, "name": "dave", "age": 50},
             {"id": 101, "name": "eve", "age": 22},
         ],
@@ -108,9 +104,7 @@ def test_polars_single_table_append(db_path, work_dir, transactional):
 
 
 def test_polars_replace_drops_existing_rows(db_path, work_dir):
-    src = _make_parquet(
-        work_dir / "in0.parquet",
-        [{"id": 1, "name": "only"}],
+    src = _frame([{"id": 1, "name": "only"}],
     )
     saw.PolarsWriteEngine().write(
         _cfg(db_path, if_table_exists="replace"),
@@ -137,7 +131,7 @@ def test_polars_replace_does_not_reflect_the_table(db_path, work_dir, monkeypatc
     monkeypatch.setattr(
         sqlalchemy.MetaData, "reflect", lambda self, *a, **k: reflected.append(k)
     )
-    src = _make_parquet(work_dir / "r.parquet", [{"id": 1, "name": "x"}])
+    src = _frame([{"id": 1, "name": "x"}])
     # An existing table ('users', pre-created by the fixture) ...
     saw.PolarsWriteEngine().write(_cfg(db_path, if_table_exists="replace"), [src])
     # ... and a table that does not exist yet (must create-on-write, not fail).
@@ -159,9 +153,7 @@ def test_polars_replace_chunked_does_not_truncate_itself(db_path, work_dir):
     # Multi-chunk replace: first batch replaces, subsequent batches
     # must append -- otherwise batch N+1 wipes batch N. Drive
     # chunk_size=1 via the cfg dict.
-    src = _make_parquet(
-        work_dir / "in0.parquet",
-        [
+    src = _frame([
             {"id": 100, "name": "x"},
             {"id": 101, "name": "y"},
             {"id": 102, "name": "z"},
@@ -187,13 +179,9 @@ def test_polars_replace_chunked_does_not_truncate_itself(db_path, work_dir):
 
 
 def test_polars_multi_table(db_path, work_dir):
-    src_u = _make_parquet(
-        work_dir / "u.parquet",
-        [{"id": 1000, "name": "ZZ"}],
+    src_u = _frame([{"id": 1000, "name": "ZZ"}],
     )
-    src_o = _make_parquet(
-        work_dir / "o.parquet",
-        [{"id": 999, "user_id": 1000, "total": 1.0}],
+    src_o = _frame([{"id": 999, "user_id": 1000, "total": 1.0}],
     )
     saw.PolarsWriteEngine().write(
         _cfg(db_path, target_tables=["users", "orders"]),
@@ -213,17 +201,13 @@ def test_polars_multi_table(db_path, work_dir):
 
 
 # ---------------------------------------------------------------------------
-# Empty-parquet handling -- writer must still preserve / create the
+# Empty-frame handling -- writer must still preserve / create the
 # target table even when the input is empty.
 # ---------------------------------------------------------------------------
 
 
-def test_polars_write_empty_parquet_creates_table_with_replace(db_path, work_dir):
-    empty_pq = work_dir / "empty.parquet"
-    pl.DataFrame(
-        {"id": pl.Series([], dtype=pl.Int64),
-         "name": pl.Series([], dtype=pl.Utf8)},
-    ).write_parquet(empty_pq, use_pyarrow=True)
+def test_polars_write_empty_frame_creates_table_with_replace(db_path, work_dir):
+    empty = pl.LazyFrame(schema={"id": pl.Int64, "name": pl.Utf8})
 
     saw.PolarsWriteEngine().write(
         _cfg(
@@ -231,7 +215,7 @@ def test_polars_write_empty_parquet_creates_table_with_replace(db_path, work_dir
             target_tables=["empty_replace"],
             if_table_exists="replace",
         ),
-        [empty_pq],
+        [empty],
     )
     engine = create_engine(sqlite_uri(db_path))
     try:
@@ -250,16 +234,12 @@ def test_polars_write_empty_parquet_creates_table_with_replace(db_path, work_dir
         engine.dispose()
 
 
-def test_polars_write_empty_parquet_appends_zero_rows(db_path, work_dir):
-    empty_pq = work_dir / "empty.parquet"
-    pl.DataFrame(
-        {"id": pl.Series([], dtype=pl.Int64),
-         "name": pl.Series([], dtype=pl.Utf8)},
-    ).write_parquet(empty_pq, use_pyarrow=True)
+def test_polars_write_empty_frame_appends_zero_rows(db_path, work_dir):
+    empty = pl.LazyFrame(schema={"id": pl.Int64, "name": pl.Utf8})
 
     saw.PolarsWriteEngine().write(
         _cfg(db_path, if_table_exists="append"),
-        [empty_pq],
+        [empty],
     )
     engine = create_engine(sqlite_uri(db_path))
     try:
@@ -276,7 +256,7 @@ def test_polars_write_empty_parquet_appends_zero_rows(db_path, work_dir):
 
 
 def test_cardinality_mismatch_raises_value_error(db_path, work_dir):
-    src = _make_parquet(work_dir / "x.parquet", [{"id": 1}])
+    src = _frame([{"id": 1}])
     with pytest.raises(ValueError, match="tables count"):
         saw.PolarsWriteEngine().write(
             _cfg(db_path, target_tables=["a", "b"]),
@@ -306,17 +286,50 @@ def test_operational_error_on_write_retries(monkeypatch, tmp_path: Path):
 
     monkeypatch.setattr(_sqlite_helpers, "build_engine", fake_build_engine)
 
-    parquet = tmp_path / "x.parquet"
-    parquet.write_bytes(b"")
     with pytest.raises(OperationalError):
         saw.PolarsWriteEngine().write(
             _SqliteSqlWriteCfg(
                 uri=f"sqlite:///{tmp_path / 'unused.db'}",
                 target_tables=["t"],
             ),
-            [parquet],
+            [_frame([{"id": 1}])],
         )
     assert attempts["n"] >= 2
+
+
+def test_a_retried_write_does_not_repeat_the_rows_it_wrote(
+    monkeypatch,
+    db_path,
+):
+    write = saw._polars_write
+    calls = {"n": 0}
+
+    def flaky(**options):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise _operational("connection lost on the second table")
+        write(**options)
+
+    monkeypatch.setattr(saw.PolarsWriteEngine, "loader", lambda self: flaky)
+    saw.PolarsWriteEngine().write(
+        _cfg(db_path, target_tables=["users", "orders"]),
+        [
+            _frame([{"id": 1000, "name": "ZZ"}]),
+            _frame([{"id": 999, "user_id": 1000, "total": 1.0}]),
+        ],
+    )
+    engine = create_engine(sqlite_uri(db_path))
+    try:
+        with engine.connect() as conn:
+            assert conn.execute(
+                text("SELECT COUNT(*) FROM users WHERE id=1000")
+            ).scalar_one() == 1
+            assert conn.execute(
+                text("SELECT COUNT(*) FROM orders WHERE id=999")
+            ).scalar_one() == 1
+    finally:
+        engine.dispose()
+    assert calls["n"] == 4
 
 
 def test_engine_disposed_after_write_failure(monkeypatch, tmp_path: Path):
@@ -327,8 +340,6 @@ def test_engine_disposed_after_write_failure(monkeypatch, tmp_path: Path):
         _sqlite_helpers, "build_engine",
         lambda *a, **kw: fake_engine,
     )
-    parquet = tmp_path / "x.parquet"
-    parquet.write_bytes(b"")
     with pytest.raises(ProgrammingError):
         saw.PolarsWriteEngine().write(
             _SqliteSqlWriteCfg(
@@ -336,7 +347,7 @@ def test_engine_disposed_after_write_failure(monkeypatch, tmp_path: Path):
                 target_tables=["t"],
                 transactional=False,
             ),
-            [parquet],
+            [_frame([{"id": 1}])],
         )
     fake_engine.dispose.assert_called()
 

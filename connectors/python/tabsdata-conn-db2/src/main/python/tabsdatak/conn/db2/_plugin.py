@@ -9,6 +9,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
+import polars as pl
+
 from tabsdatak.conn.db2 import (
     Db2Dest,
     Db2DestConn,
@@ -29,7 +31,6 @@ from tabsdatak.spi import (
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
-    TableFileSpec,
     TableMode,
 )
 
@@ -170,13 +171,13 @@ class Db2SrcPlugin(SrcPlugin[Db2SrcConn, Db2Src]):
         )
 
 
-class Db2DestPlugin(DestPlugin[Db2DestConn, Db2Dest]):
+class Db2DestPlugin(DestPlugin[Db2DestConn, Db2Dest, list[pl.LazyFrame]]):
     def write_out(
         self,
         ctx: DestContext,
         conn: Db2DestConn,
         dest: Db2Dest,
-        tables: list[TableFileSpec],
+        tables: list[pl.LazyFrame],
     ) -> None:
         from sqlalchemy.exc import OperationalError, SQLAlchemyError
 

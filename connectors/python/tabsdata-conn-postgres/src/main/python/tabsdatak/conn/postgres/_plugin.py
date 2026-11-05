@@ -9,6 +9,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
+import polars as pl
+
 from tabsdatak.conn.postgres import (
     DestCfgKey,
     DestCfgSpec,
@@ -29,7 +31,6 @@ from tabsdatak.spi import (
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
-    TableFileSpec,
     TableMode,
 )
 
@@ -173,13 +174,15 @@ class PostgresSrcPlugin(SrcPlugin[PostgresSrcConn, PostgresSrc]):
         )
 
 
-class PostgresDestPlugin(DestPlugin[PostgresDestConn, PostgresDest]):
+class PostgresDestPlugin(
+    DestPlugin[PostgresDestConn, PostgresDest, list[pl.LazyFrame]]
+):
     def write_out(
         self,
         ctx: DestContext,
         conn: PostgresDestConn,
         dest: PostgresDest,
-        tables: list[TableFileSpec],
+        tables: list[pl.LazyFrame],
     ) -> None:
         from sqlalchemy.exc import OperationalError, SQLAlchemyError
 

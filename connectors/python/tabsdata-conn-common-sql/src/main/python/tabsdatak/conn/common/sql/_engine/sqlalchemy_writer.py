@@ -6,10 +6,9 @@ import contextlib
 import logging
 from abc import ABC, abstractmethod
 from datetime import date
-from pathlib import Path
-from typing import Any, Callable, Iterable, Iterator, Literal, cast
+from typing import Any, Callable, Iterator, Literal
 
-from polars import DataFrame
+import polars as pl
 from sqlalchemy import Connection
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
@@ -28,9 +27,7 @@ import tabsdatak.conn.common.sql._engine.constants as const
 from tabsdatak.conn.common import _config
 
 # noinspection PyProtectedMember
-# noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.writer import SqlWriteCfg, SqlWriteEngine
-from tabsdatak.spi import TableFileSpec
 
 # --- Retry ----------------------------------------------------------
 
@@ -60,13 +57,13 @@ class SqlAlchemyWriteEngine(SqlWriteEngine, ABC):
     def write(
         self,
         dest: SqlWriteCfg,
-        tables: Iterable[TableFileSpec],
+        tables: list[pl.LazyFrame],
     ) -> None:
         write_loader = self.loader()
-        files = list(tables)
-        if len(files) != len(dest.target_tables):
+        frames = list(tables)
+        if len(frames) != len(dest.target_tables):
             raise ValueError(
-                f"tables count {len(files)} must equal target_tables "
+                f"tables count {len(frames)} must equal target_tables "
                 f"count {len(dest.target_tables)}"
             )
 
@@ -77,10 +74,10 @@ class SqlAlchemyWriteEngine(SqlWriteEngine, ABC):
                 if dest.transactional:
                     with Session(engine) as session, session.begin():
                         conn = session.connection()
-                        self._run_writes(write_loader, conn, dest, files)
+                        self._run_writes(write_loader, conn, dest, frames)
                 else:
                     with engine.connect() as conn:
-                        self._run_writes(write_loader, conn, dest, files)
+                        self._run_writes(write_loader, conn, dest, frames)
                         conn.commit()
             finally:
                 logger.debug("sql-writer: disposing engine")
@@ -93,7 +90,7 @@ class SqlAlchemyWriteEngine(SqlWriteEngine, ABC):
         write_loader: WriteLoader,
         conn: Any,
         dest: SqlWriteCfg,
-        files: list[TableFileSpec],
+        frames: list[pl.LazyFrame],
     ):
         chunk_size = _config.get_cfg(
             dest.cfg,
@@ -102,14 +99,14 @@ class SqlAlchemyWriteEngine(SqlWriteEngine, ABC):
         )
         total = len(dest.target_tables)
         logger.info("sql-writer: writing %d table(s)", total)
-        for i, (parquet_path, table) in enumerate(
-            zip(files, dest.target_tables),
+        for i, (frame, table) in enumerate(
+            zip(frames, dest.target_tables),
             1,
         ):
             logger.info("sql-writer: writing table %d/%d: %r", i, total, table)
             write_loader(
                 connection=conn,
-                parquet_file=Path(parquet_path),
+                frame=frame,
                 table=table,
                 if_table_exists=dest.if_table_exists,
                 chunk_size=chunk_size,
@@ -223,8 +220,6 @@ _SENTINEL_DATE = date(1970, 1, 1)
 def _sentinel_datetime(column: str):
     """`column`'s time-of-day as a datetime on `_SENTINEL_DATE`. polars refuses to
     cast Time to Datetime directly, so the date is combined in."""
-    import polars as pl
-
     return pl.lit(_SENTINEL_DATE).dt.combine(pl.col(column))
 
 
@@ -313,21 +308,19 @@ def _qualify_for_write(connection: Connection, table: str) -> str:
 def _polars_write(
     *,
     connection: Connection,
-    parquet_file: Path,
+    frame: pl.LazyFrame,
     table: str,
     if_table_exists: Literal["append", "replace"],
     chunk_size: int,
 ) -> None:
-    import polars as pl
-    import pyarrow.parquet as pq
-
-    pf = pq.ParquetFile(parquet_file)
+    schema = frame.collect_schema()
+    arrow_schema = pl.DataFrame(schema=schema).to_arrow().schema
     table = _qualify_for_write(connection, table)
     options = _write_database_options(connection)
     # Force decimal columns to a (clamped) DECIMAL on create, across dialects, and
     # fix the types this dialect cannot take from pandas' inference.
-    _dtype = _decimal_dtype_overrides(connection, pf.schema_arrow)
-    _fixes, _transforms = _dialect_type_fixes(connection, pf.schema_arrow)
+    _dtype = _decimal_dtype_overrides(connection, arrow_schema)
+    _fixes, _transforms = _dialect_type_fixes(connection, arrow_schema)
     _dtype.update(_fixes)
     if _dtype:
         options.setdefault("engine_options", {})["dtype"] = _dtype
@@ -341,8 +334,7 @@ def _polars_write(
         _drop_table_if_exists(connection, table)
         if_table_exists = "append"
     wrote_any = False
-    for batch in pf.iter_batches(batch_size=chunk_size):
-        df = cast(DataFrame, pl.from_arrow(batch))
+    for df in frame.collect_batches(chunk_size=chunk_size):
         if _transforms:
             df = df.with_columns(**_transforms)
         df.write_database(
@@ -355,10 +347,9 @@ def _polars_write(
         wrote_any = True
 
     if not wrote_any:
-        # Empty file: still create / preserve the table with the
-        # caller's if_table_exists semantics by writing an empty
-        # frame matching the file's schema.
-        df = cast(DataFrame, pl.from_arrow(pf.read()))
+        # No rows: still create / preserve the table with the caller's
+        # if_table_exists semantics by writing an empty frame of the schema.
+        df = pl.DataFrame(schema=schema)
         if _transforms:
             df = df.with_columns(**_transforms)
         df.write_database(

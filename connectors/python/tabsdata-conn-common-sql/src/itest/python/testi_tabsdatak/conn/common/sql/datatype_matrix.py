@@ -29,6 +29,8 @@ import polars as pl
 from tabsdatax.itest.fixture.functions.files import PluginDestCtx
 from tabsdatax.itest.fixture.functions.sql import SqlStore
 
+from tabsdatak._handoff import DestinationContract
+
 
 @dataclass(frozen=True)
 class DataTypeCase:
@@ -101,12 +103,17 @@ def write_named_datatype_table(
     unpredictable behind in the domain.
     """
     parquet = build_parquet(work_dir / f"{case.id}.parquet", case)
+    handed = (
+        pl.scan_parquet(parquet)
+        if DestinationContract(type(dest_plugin)).frames()
+        else parquet
+    )
     try:
         dest_plugin.write_out(
             PluginDestCtx(work_dir),
             dest_conn,
             make_dest([table]),
-            [parquet],
+            [handed],
         )
         return sql.read_table(table)
     finally:

@@ -78,9 +78,8 @@ def _bare_conn() -> MongoDBDestConn:
     )
 
 
-def _make_parquet(path: Path, rows: list[dict]) -> Path:
-    pl.DataFrame(rows).write_parquet(path, use_pyarrow=True)
-    return path
+def _table(rows: list[dict]) -> pl.LazyFrame:
+    return pl.LazyFrame(rows)
 
 
 @pytest.fixture
@@ -235,15 +234,13 @@ def _install_client(monkeypatch, client: _FakeClient) -> _FakeClient:
 
 def test_write_out_inserts_when_id_field_none(monkeypatch, work_dir):
     client = _install_client(monkeypatch, _FakeClient())
-    parquet = _make_parquet(
-        work_dir / "users.parquet",
-        [{"name": "alice", "age": 30}, {"name": "bob", "age": 31}],
+    table = _table([{"name": "alice", "age": 30}, {"name": "bob", "age": 31}],
     )
     dest = MongoDBDest(
         collections_with_ids=[("app.users", None)],
     )
 
-    plugin._MongoDBDestPlugin().write_out(_Ctx(work_dir), _bare_conn(), dest, [parquet])
+    plugin._MongoDBDestPlugin().write_out(_Ctx(work_dir), _bare_conn(), dest, [table])
 
     coll = client["app"].collections["users"]
     assert len(coll.bulk_write_calls) == 1
@@ -255,9 +252,7 @@ def test_write_out_inserts_when_id_field_none(monkeypatch, work_dir):
 
 def test_write_out_upserts_when_id_field_provided(monkeypatch, work_dir):
     client = _install_client(monkeypatch, _FakeClient())
-    parquet = _make_parquet(
-        work_dir / "users.parquet",
-        [
+    table = _table([
             {"user_id": 1, "name": "alice"},
             {"user_id": 2, "name": "bob"},
         ],
@@ -266,7 +261,7 @@ def test_write_out_upserts_when_id_field_provided(monkeypatch, work_dir):
         collections_with_ids=[("app.users", "user_id")],
     )
 
-    plugin._MongoDBDestPlugin().write_out(_Ctx(work_dir), _bare_conn(), dest, [parquet])
+    plugin._MongoDBDestPlugin().write_out(_Ctx(work_dir), _bare_conn(), dest, [table])
 
     coll = client["app"].collections["users"]
     ops = coll.bulk_write_calls[0]["ops"]
@@ -279,16 +274,14 @@ def test_write_out_inserts_when_id_field_and_update_existing_false(
     work_dir,
 ):
     client = _install_client(monkeypatch, _FakeClient())
-    parquet = _make_parquet(
-        work_dir / "users.parquet",
-        [{"user_id": 1, "name": "alice"}],
+    table = _table([{"user_id": 1, "name": "alice"}],
     )
     dest = MongoDBDest(
         collections_with_ids=[("app.users", "user_id")],
         update_existing=False,
     )
 
-    plugin._MongoDBDestPlugin().write_out(_Ctx(work_dir), _bare_conn(), dest, [parquet])
+    plugin._MongoDBDestPlugin().write_out(_Ctx(work_dir), _bare_conn(), dest, [table])
 
     coll = client["app"].collections["users"]
     ops = coll.bulk_write_calls[0]["ops"]
@@ -301,16 +294,14 @@ def test_write_out_replace_drops_existing_collection(monkeypatch, work_dir):
     # Pre-populate the fake collection so count_documents() returns 1
     db = client["app"]
     db.collections["users"] = _FakeCollection("users", exists=True)
-    parquet = _make_parquet(
-        work_dir / "users.parquet",
-        [{"name": "alice"}],
+    table = _table([{"name": "alice"}],
     )
     dest = MongoDBDest(
         collections_with_ids=[("app.users", None)],
         if_collection_exists="replace",
     )
 
-    plugin._MongoDBDestPlugin().write_out(_Ctx(work_dir), _bare_conn(), dest, [parquet])
+    plugin._MongoDBDestPlugin().write_out(_Ctx(work_dir), _bare_conn(), dest, [table])
 
     coll = db.collections["users"]
     assert coll.dropped is True
@@ -322,16 +313,14 @@ def test_write_out_replace_drops_existing_collection(monkeypatch, work_dir):
 
 def test_write_out_chunks_by_docs_per_trx(monkeypatch, work_dir):
     client = _install_client(monkeypatch, _FakeClient())
-    parquet = _make_parquet(
-        work_dir / "users.parquet",
-        [{"name": f"u{i}"} for i in range(7)],
+    table = _table([{"name": f"u{i}"} for i in range(7)],
     )
     dest = MongoDBDest(
         collections_with_ids=[("app.users", None)],
         docs_per_trx=3,
     )
 
-    plugin._MongoDBDestPlugin().write_out(_Ctx(work_dir), _bare_conn(), dest, [parquet])
+    plugin._MongoDBDestPlugin().write_out(_Ctx(work_dir), _bare_conn(), dest, [table])
 
     coll = client["app"].collections["users"]
     sizes = [len(c["ops"]) for c in coll.bulk_write_calls]
@@ -341,9 +330,7 @@ def test_write_out_chunks_by_docs_per_trx(monkeypatch, work_dir):
 
 def test_write_out_uses_transactions_when_enabled(monkeypatch, work_dir):
     client = _install_client(monkeypatch, _FakeClient())
-    parquet = _make_parquet(
-        work_dir / "users.parquet",
-        [{"name": "alice"}, {"name": "bob"}],
+    table = _table([{"name": "alice"}, {"name": "bob"}],
     )
     dest = MongoDBDest(
         collections_with_ids=[("app.users", None)],
@@ -351,7 +338,7 @@ def test_write_out_uses_transactions_when_enabled(monkeypatch, work_dir):
         docs_per_trx=1,
     )
 
-    plugin._MongoDBDestPlugin().write_out(_Ctx(work_dir), _bare_conn(), dest, [parquet])
+    plugin._MongoDBDestPlugin().write_out(_Ctx(work_dir), _bare_conn(), dest, [table])
 
     # 2 docs at chunk size 1 -> 2 batches -> 2 transactions.
     assert client.session.started_transactions == 2
@@ -364,8 +351,8 @@ def test_write_out_uses_transactions_when_enabled(monkeypatch, work_dir):
 
 def test_write_out_multiple_collections(monkeypatch, work_dir):
     client = _install_client(monkeypatch, _FakeClient())
-    p1 = _make_parquet(work_dir / "u.parquet", [{"name": "a"}])
-    p2 = _make_parquet(work_dir / "o.parquet", [{"x": 1}])
+    p1 = _table([{"name": "a"}])
+    p2 = _table([{"x": 1}])
     dest = MongoDBDest(
         collections_with_ids=[("app.users", None), ("app.orders", None)],
     )
@@ -383,7 +370,7 @@ def test_write_out_multiple_collections(monkeypatch, work_dir):
 
 def test_write_out_raises_mongodb_18_on_count_mismatch(monkeypatch, work_dir):
     _install_client(monkeypatch, _FakeClient())
-    parquet = _make_parquet(work_dir / "u.parquet", [{"name": "a"}])
+    table = _table([{"name": "a"}])
     dest = MongoDBDest(
         collections_with_ids=[("app.users", None), ("app.orders", None)],
     )
@@ -392,7 +379,7 @@ def test_write_out_raises_mongodb_18_on_count_mismatch(monkeypatch, work_dir):
             _Ctx(work_dir),
             _bare_conn(),
             dest,
-            [parquet],
+            [table],
         )
     assert ei.value.api_error is MongoDBErrorCode.MONGODB_18
 
@@ -402,7 +389,7 @@ def test_write_out_raises_mongodb_19_on_connect_failure(monkeypatch, work_dir):
         monkeypatch,
         _FakeClient(ping_raises=ConnectionFailure("bad host")),
     )
-    parquet = _make_parquet(work_dir / "u.parquet", [{"name": "a"}])
+    table = _table([{"name": "a"}])
     dest = MongoDBDest(
         collections_with_ids=[("app.users", None)],
     )
@@ -411,7 +398,7 @@ def test_write_out_raises_mongodb_19_on_connect_failure(monkeypatch, work_dir):
             _Ctx(work_dir),
             _bare_conn(),
             dest,
-            [parquet],
+            [table],
         )
     assert ei.value.api_error is MongoDBErrorCode.MONGODB_19
 
@@ -421,7 +408,7 @@ def test_write_out_raises_mongodb_22_on_bare_collection_name(
     work_dir,
 ):
     _install_client(monkeypatch, _FakeClient())
-    parquet = _make_parquet(work_dir / "u.parquet", [{"name": "a"}])
+    table = _table([{"name": "a"}])
     dest = MongoDBDest(
         # "users" without a leading database -- legal as a collection
         # name validator-wise, and not resolvable at runtime because
@@ -433,20 +420,20 @@ def test_write_out_raises_mongodb_22_on_bare_collection_name(
             _Ctx(work_dir),
             _bare_conn(),
             dest,
-            [parquet],
+            [table],
         )
     assert ei.value.api_error is MongoDBErrorCode.MONGODB_22
 
 
 def test_write_out_bare_collection_uses_uri_default_db(monkeypatch, work_dir):
     client = _install_client(monkeypatch, _FakeClient(default_db="app"))
-    parquet = _make_parquet(work_dir / "u.parquet", [{"name": "alice"}])
+    table = _table([{"name": "alice"}])
     dest = MongoDBDest(
         # Bare "users" -- resolved against the URI's default database.
         collections_with_ids=[("users", None)],
     )
 
-    plugin._MongoDBDestPlugin().write_out(_Ctx(work_dir), _bare_conn(), dest, [parquet])
+    plugin._MongoDBDestPlugin().write_out(_Ctx(work_dir), _bare_conn(), dest, [table])
 
     coll = client["app"].collections["users"]
     assert len(coll.bulk_write_calls) == 1
@@ -458,7 +445,7 @@ def test_write_out_raises_mongodb_21_when_id_field_missing(
 ):
     _install_client(monkeypatch, _FakeClient())
     # Document is missing the declared id_field 'user_id'.
-    parquet = _make_parquet(work_dir / "u.parquet", [{"name": "alice"}])
+    table = _table([{"name": "alice"}])
     dest = MongoDBDest(
         collections_with_ids=[("app.users", "user_id")],
     )
@@ -467,7 +454,7 @@ def test_write_out_raises_mongodb_21_when_id_field_missing(
             _Ctx(work_dir),
             _bare_conn(),
             dest,
-            [parquet],
+            [table],
         )
     assert ei.value.api_error is MongoDBErrorCode.MONGODB_21
 
@@ -487,7 +474,7 @@ def test_write_out_raises_mongodb_20_on_pymongo_write_failure(
         "bulk_write",
         lambda self, *a, **kw: explode(),
     )
-    parquet = _make_parquet(work_dir / "u.parquet", [{"name": "a"}])
+    table = _table([{"name": "a"}])
     dest = MongoDBDest(
         collections_with_ids=[("app.users", None)],
     )
@@ -496,7 +483,7 @@ def test_write_out_raises_mongodb_20_on_pymongo_write_failure(
             _Ctx(work_dir),
             _bare_conn(),
             dest,
-            [parquet],
+            [table],
         )
     assert ei.value.api_error is MongoDBErrorCode.MONGODB_20
 
@@ -511,13 +498,13 @@ def test_write_out_swallows_dup_keys_when_configured(monkeypatch, work_dir):
 
     monkeypatch.setattr(_FakeCollection, "bulk_write", explode)
 
-    parquet = _make_parquet(work_dir / "u.parquet", [{"name": "a"}])
+    table = _table([{"name": "a"}])
     dest = MongoDBDest(
         collections_with_ids=[("app.users", None)],
         fail_on_duplicate_key=False,
     )
     # Should NOT raise -- the dup-key error is swallowed.
-    plugin._MongoDBDestPlugin().write_out(_Ctx(work_dir), _bare_conn(), dest, [parquet])
+    plugin._MongoDBDestPlugin().write_out(_Ctx(work_dir), _bare_conn(), dest, [table])
 
 
 def test_write_out_propagates_non_dup_key_bulk_errors(monkeypatch, work_dir):
@@ -530,7 +517,7 @@ def test_write_out_propagates_non_dup_key_bulk_errors(monkeypatch, work_dir):
 
     monkeypatch.setattr(_FakeCollection, "bulk_write", explode)
 
-    parquet = _make_parquet(work_dir / "u.parquet", [{"name": "a"}])
+    table = _table([{"name": "a"}])
     dest = MongoDBDest(
         collections_with_ids=[("app.users", None)],
         fail_on_duplicate_key=False,
@@ -540,7 +527,7 @@ def test_write_out_propagates_non_dup_key_bulk_errors(monkeypatch, work_dir):
             _Ctx(work_dir),
             _bare_conn(),
             dest,
-            [parquet],
+            [table],
         )
     assert ei.value.api_error is MongoDBErrorCode.MONGODB_20
 
@@ -553,7 +540,7 @@ def test_write_out_aborts_transaction_on_failure(monkeypatch, work_dir):
 
     monkeypatch.setattr(_FakeCollection, "bulk_write", explode)
 
-    parquet = _make_parquet(work_dir / "u.parquet", [{"name": "a"}])
+    table = _table([{"name": "a"}])
     dest = MongoDBDest(
         collections_with_ids=[("app.users", None)],
         use_trxs=True,
@@ -563,7 +550,7 @@ def test_write_out_aborts_transaction_on_failure(monkeypatch, work_dir):
             _Ctx(work_dir),
             _bare_conn(),
             dest,
-            [parquet],
+            [table],
         )
     assert client.session.aborted == 1
     assert client.session.committed == 0
@@ -761,7 +748,7 @@ def test_codec_options_leaves_a_datetime_alone():
 
 def test_write_out_opens_collection_with_decimal_codec(monkeypatch, work_dir):
     client = _install_client(monkeypatch, _FakeClient())
-    parquet = _make_parquet(work_dir / "c.parquet", [{"name": "us", "pop": 1}])
+    table = _table([{"name": "us", "pop": 1}])
     dest = MongoDBDest(collections_with_ids=[("app.country", None)])
-    plugin._MongoDBDestPlugin().write_out(_Ctx(work_dir), _bare_conn(), dest, [parquet])
+    plugin._MongoDBDestPlugin().write_out(_Ctx(work_dir), _bare_conn(), dest, [table])
     assert client["app"].last_codec_options is not None

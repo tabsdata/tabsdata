@@ -44,7 +44,7 @@ def test_dest_plugin_write_out_appends_rows(
             PluginDestCtx(work),
             conn,
             MSSQLDest(tables=[table], if_table_exists="replace"),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
         assert db.read_table(table).height == rows
 
@@ -52,7 +52,7 @@ def test_dest_plugin_write_out_appends_rows(
             PluginDestCtx(work),
             conn,
             MSSQLDest(tables=[table], if_table_exists="append"),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
         assert db.read_table(table).height == 2 * rows
     finally:
@@ -81,7 +81,7 @@ def test_dest_plugin_write_out_replace_clears_existing(
             PluginDestCtx(work),
             conn,
             MSSQLDest(tables=[table], if_table_exists="replace"),
-            [first],
+            [pl.scan_parquet(first)],
         )
         assert db.read_table(table).height == pl.read_parquet(first).height
 
@@ -89,7 +89,7 @@ def test_dest_plugin_write_out_replace_clears_existing(
             PluginDestCtx(work),
             conn,
             MSSQLDest(tables=[table], if_table_exists="replace"),
-            [second],
+            [pl.scan_parquet(second)],
         )
         got = db.read_table(table)
         assert got.height == expected.height
