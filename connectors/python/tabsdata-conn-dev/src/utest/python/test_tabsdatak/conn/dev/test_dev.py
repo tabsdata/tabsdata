@@ -133,8 +133,13 @@ def _read(ctx, src) -> list:
     slots = plugin.DataGenSrcPlugin().read_in(ctx, DataGenSrcConn(), src)
     out = []
     for slot in slots:
-        out.append(None if not slot else pl.read_parquet(slot[0].file))
+        tables = list(slot)
+        out.append(None if not tables else tables[0].frame.collect())
     return out
+
+
+def test_datagen_returns_lazy_frame_inputs():
+    assert SourceContract(plugin.DataGenSrcPlugin).frames()
 
 
 def test_read_in_unchunked_emits_whole_frame_every_run(tmp_path):

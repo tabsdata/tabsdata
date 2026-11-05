@@ -9,9 +9,9 @@ system. Imported from `tabsdatak.conn.dev`:
 
 * `DataGenSrcConn` / `DataGenSrc` -- a `@publisher` source that
   emits in-line `Data` (a Polars or Pandas dataframe), one output
-  slot per `Data`, handed over as local parquet files.
-* `DevFrameSrcConn` / `DevFrameSrc` -- the same source, handing its
-  `Data` over as `LazyFrame`\\ s.
+  slot per `Data`, handed over as `LazyFrame`\\ s.
+* `DevFrameSrcConn` / `DevFrameSrc` -- the same source as
+  `DataGenSrc`, under a type of its own.
 * `TrashDestConn` / `TrashDest` -- a `@subscriber` sink to
   nowhere; the frame is discarded.
 * `DevFrameDestConn` / `DevFrameDest` -- a `@subscriber` destination
@@ -94,9 +94,9 @@ class Data:
     On the wire a `Data` serialises to `{"parquet": <base64>,
     "chunk_size": <int|null>}`: the dataframe is written to parquet and
     base64-encoded on serialisation, and decoded back to a Polars frame
-    on deserialisation so the plugin can materialise it to parquet for
-    its output. Like `Secret`, it round-trips via its own pydantic
-    core schema rather than the descriptor envelope.
+    on deserialisation so the plugin can hand it over as its output. Like
+    `Secret`, it round-trips via its own pydantic core schema rather than
+    the descriptor envelope.
 
     Args:
         df: A Polars or Pandas `DataFrame` to emit.
@@ -302,8 +302,7 @@ class DevFrameSrc(Src):
 
     :categories: source
 
-    Emits what `DataGenSrc` emits, chunking included, through the frame
-    handoff instead of local parquet files.
+    Emits what `DataGenSrc` emits, chunking included.
 
     Args:
         data: The `Data` entries to emit, one output slot each. Their

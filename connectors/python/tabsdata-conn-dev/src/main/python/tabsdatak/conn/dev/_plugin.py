@@ -11,7 +11,6 @@ from pathlib import Path
 import polars as pl
 
 from tabsdatak.conn.dev import (
-    Data,
     DataGenSrc,
     DataGenSrcConn,
     DevFrameDest,
@@ -30,7 +29,6 @@ from tabsdatak.spi import (
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
-    TableFileInput,
     TableFileSpec,
     TableMode,
 )
@@ -42,23 +40,15 @@ class DataGenSrcPlugin(SrcPlugin[DataGenSrcConn, DataGenSrc]):
         ctx: SrcPluginCtx,
         conn: DataGenSrcConn,
         src: DataGenSrc,
-    ) -> list[list[TableFileInput]]:
-        slots: list[list[TableFileInput]] = []
+    ) -> list[Iterable[LazyFrameInput]]:
+        tables: list[Iterable[LazyFrameInput]] = []
         for i, data in enumerate(src.data):
             try:
-                slots.append(self._read_slot(ctx, i, data))
+                chunk = data._next_chunk(ctx, i)
             except Exception as exc:
                 raise DevErrorCode.DEV_8.exception(cause=exc, slot=i)
-        return slots
-
-    @staticmethod
-    def _read_slot(ctx: SrcPluginCtx, i: int, data: Data) -> list[TableFileInput]:
-        chunk = data._next_chunk(ctx, i)
-        if chunk is None:
-            return []
-        path = ctx.work_dir / f"datagen_{i}.parquet"
-        chunk.write_parquet(path)
-        return [TableFileInput(file=path)]
+            tables.append([] if chunk is None else [LazyFrameInput(chunk.lazy())])
+        return tables
 
 
 class DevFrameSrcPlugin(SrcPlugin[DevFrameSrcConn, DevFrameSrc]):
