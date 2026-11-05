@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import logging.config
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,8 @@ logging.Logger.trace = _trace  # type: ignore[attr-defined]
 
 
 class NoFormatFormatter(logging.Formatter):
+    converter = time.gmtime
+
     def format(self, record: logging.LogRecord) -> str:
         if getattr(record, "noformat", False):
             return record.getMessage()
