@@ -27,6 +27,7 @@ pub mod status;
 pub mod str;
 pub mod summary;
 pub mod task_group;
+pub mod testbuild;
 pub mod testdir;
 pub mod time;
 pub mod worker;

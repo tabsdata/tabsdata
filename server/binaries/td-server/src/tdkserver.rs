@@ -15,6 +15,7 @@ use td_common::logging::{
 };
 use td_common::os::TD_DETACHED_SUBPROCESSES;
 use td_common::settings::TRUE;
+use td_common::testbuild::{TEST_FEATURES, is_test_build};
 use td_kubernetes::base::constants::{
     ENV_TD_KUBE_UV_MODE, ENV_TD_KUBE_UV_MODE_NOWARN, LOG_SIZE_WARNING, UV_MODE_LINKED,
 };
@@ -22,7 +23,7 @@ use td_kubernetes::base::privacy::mask_command_line;
 use td_kubernetes::base::trace;
 use td_kubernetes::client::registry::tdkserver_log_file;
 use td_kubernetes::client::tdkserver;
-use td_kubernetes::client::tdkserver::widgets::{show_banner, show_caution};
+use td_kubernetes::client::tdkserver::widgets::{show_alert, show_banner, show_caution};
 use te_system::license::{
     ACCEPT_TERMS_ARGUMENT, ACCEPT_TERMS_N, ACCEPT_TERMS_NO, ACCEPT_TERMS_Y, ACCEPT_TERMS_YES,
     LicenseAcceptance, TabsdataLicense,
@@ -205,6 +206,27 @@ fn warn_on_uv_mode() {
     );
 }
 
+fn test_build_alert(features: &[&str]) -> String {
+    let named = match features {
+        [] => String::new(),
+        [only] => format!("feature {only}"),
+        [first @ .., last] => format!("features {} and {last}", first.join(", ")),
+    };
+    format!(
+        "This tdkserver is a test build, compiled with the test {named}, which changes \
+         how it behaves: with mock-env, for example, it keeps its working and home \
+         folders under the target folder of the workspace it was built in. Instances it \
+         handles may fail in unexpected ways. Rebuild it with 'cargo make build' before \
+         using it."
+    )
+}
+
+fn warn_on_test_build() {
+    if is_test_build() {
+        show_alert(&test_build_alert(TEST_FEATURES), 80, true);
+    }
+}
+
 fn warn_on_log_size() {
     if cautions_muted() {
         return;
@@ -258,6 +280,7 @@ fn check_polars() {
 #[tokio::main]
 #[attach(signal = "tdkserver")]
 async fn main() {
+    warn_on_test_build();
     let full_help = full_help_requested();
     let previous_rust_log = env::var_os(RUST_LOG);
     unsafe {
@@ -298,4 +321,18 @@ async fn main() {
         env::set_var(TD_DETACHED_SUBPROCESSES, TRUE);
     }
     tdkserver::start().await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_build_alert;
+
+    #[test]
+    fn the_test_build_alert_names_one_feature_or_several() {
+        assert!(test_build_alert(&["mock-env"]).contains("test feature mock-env,"));
+        assert!(
+            test_build_alert(&["mock-env", "dummy", "test-utils"])
+                .contains("test features mock-env, dummy and test-utils,")
+        );
+    }
 }

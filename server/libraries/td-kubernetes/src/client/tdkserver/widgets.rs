@@ -26,6 +26,35 @@ const BORDER_YELLOW: (u8, u8, u8) = (215, 175, 0);
 const BODY_YELLOW: (u8, u8, u8) = (255, 215, 95);
 const BORDER_RED: (u8, u8, u8) = (225, 75, 75);
 const BODY_RED: (u8, u8, u8) = (255, 95, 95);
+const BORDER_MAGENTA: (u8, u8, u8) = (215, 95, 215);
+const BODY_MAGENTA: (u8, u8, u8) = (255, 135, 255);
+
+struct Frame {
+    top_left: &'static str,
+    top_right: &'static str,
+    bottom_left: &'static str,
+    bottom_right: &'static str,
+    horizontal: &'static str,
+    vertical: &'static str,
+}
+
+const ROUNDED: Frame = Frame {
+    top_left: "╭",
+    top_right: "╮",
+    bottom_left: "╰",
+    bottom_right: "╯",
+    horizontal: "─",
+    vertical: "│",
+};
+
+const DOUBLE: Frame = Frame {
+    top_left: "╔",
+    top_right: "╗",
+    bottom_left: "╚",
+    bottom_right: "╝",
+    horizontal: "═",
+    vertical: "║",
+};
 
 pub fn show_standout(lines: &[String]) {
     let (red, green, blue) = BODY_YELLOW;
@@ -40,6 +69,7 @@ pub fn show_box(text: &str, min: usize, spaced: bool) {
     show_colored_box(
         text,
         min,
+        &ROUNDED,
         BORDER_GREEN,
         BODY_GREEN,
         true,
@@ -53,6 +83,7 @@ pub fn show_notice(text: &str, min: usize, spaced: bool) {
     show_colored_box(
         text,
         min,
+        &ROUNDED,
         BORDER_ORANGE,
         BODY_ORANGE,
         false,
@@ -66,6 +97,7 @@ pub fn show_hint(text: &str, min: usize, spaced: bool) {
     show_colored_box(
         text,
         min,
+        &ROUNDED,
         BORDER_YELLOW,
         BODY_YELLOW,
         false,
@@ -77,13 +109,27 @@ pub fn show_hint(text: &str, min: usize, spaced: bool) {
 
 pub fn show_caution(text: &str, min: usize, spaced: bool, emphasized: &[&str]) {
     show_colored_box(
-        text, min, BORDER_RED, BODY_RED, false, false, spaced, emphasized,
+        text, min, &ROUNDED, BORDER_RED, BODY_RED, false, false, spaced, emphasized,
+    )
+}
+
+pub fn show_alert(text: &str, min: usize, spaced: bool) {
+    show_colored_box(
+        text,
+        min,
+        &DOUBLE,
+        BORDER_MAGENTA,
+        BODY_MAGENTA,
+        false,
+        false,
+        spaced,
+        &[],
     )
 }
 
 pub fn show_caution_in_lines(text: &str, min: usize, spaced: bool, emphasized: &[&str]) {
     show_colored_box(
-        text, min, BORDER_RED, BODY_RED, false, true, spaced, emphasized,
+        text, min, &ROUNDED, BORDER_RED, BODY_RED, false, true, spaced, emphasized,
     )
 }
 
@@ -120,6 +166,7 @@ fn emphasize(line: &str, body: (u8, u8, u8), emphasized: &[&str]) -> String {
 fn show_colored_box(
     text: &str,
     min: usize,
+    frame: &Frame,
     border: (u8, u8, u8),
     body: (u8, u8, u8),
     centered: bool,
@@ -161,21 +208,22 @@ fn show_colored_box(
         .max()
         .unwrap_or(0)
         .min(width);
-    let top_border = if use_colors {
-        format!("╭{}╮", "─".repeat(width + 2))
-            .truecolor(border.0, border.1, border.2)
-            .bold()
-            .to_string()
+    let rule = frame.horizontal.repeat(width + 2);
+    let top_border = format!("{}{rule}{}", frame.top_left, frame.top_right);
+    let bottom_border = format!("{}{rule}{}", frame.bottom_left, frame.bottom_right);
+    let (top_border, bottom_border) = if use_colors {
+        (
+            top_border
+                .truecolor(border.0, border.1, border.2)
+                .bold()
+                .to_string(),
+            bottom_border
+                .truecolor(border.0, border.1, border.2)
+                .bold()
+                .to_string(),
+        )
     } else {
-        format!("╭{}╮", "─".repeat(width + 2))
-    };
-    let bottom_border = if use_colors {
-        format!("╰{}╯", "─".repeat(width + 2))
-            .truecolor(border.0, border.1, border.2)
-            .bold()
-            .to_string()
-    } else {
-        format!("╰{}╯", "─".repeat(width + 2))
+        (top_border, bottom_border)
     };
     let render = || {
         if spaced {
@@ -189,7 +237,10 @@ fn show_colored_box(
                 format!("{line:<width$}")
             };
             if use_colors {
-                let edge = "│".truecolor(border.0, border.1, border.2).bold();
+                let edge = frame
+                    .vertical
+                    .truecolor(border.0, border.1, border.2)
+                    .bold();
                 println!(
                     "{} {} {}",
                     edge,
@@ -197,7 +248,7 @@ fn show_colored_box(
                     edge
                 );
             } else {
-                println!("│ {padded_line} │");
+                println!("{} {padded_line} {}", frame.vertical, frame.vertical);
             }
         }
         println!("{bottom_border}\n");
@@ -212,6 +263,7 @@ pub fn show_banner() {
     show_colored_box(
         BANNER,
         80,
+        &ROUNDED,
         BORDER_GREEN,
         BODY_GREEN,
         true,
