@@ -91,6 +91,11 @@ configs:
           child: UV_HTTP_CONNECT_TIMEOUT
           value: 60
         - op: insert-sibling-if-existing
+          leaf: pods.global.envs
+          sibling: ttl_seconds_after_finished
+          placement: after
+          value: null
+        - op: insert-sibling-if-existing
           leaf: pods.service.apiserver.placement
           sibling: service_account
           placement: after
@@ -148,6 +153,11 @@ configs:
           child: UV_HTTP_CONNECT_TIMEOUT
           value: 60
         - op: insert-sibling-if-existing
+          leaf: pods.global.envs
+          sibling: ttl_seconds_after_finished
+          placement: after
+          value: null
+        - op: insert-sibling-if-existing
           leaf: pods.function.placement
           sibling: dataflow
           placement: after
@@ -187,6 +197,11 @@ configs:
           leaf: pods.global.envs
           child: UV_HTTP_CONNECT_TIMEOUT
           value: 60
+        - op: insert-sibling-if-existing
+          leaf: pods.global.envs
+          sibling: ttl_seconds_after_finished
+          placement: after
+          value: null
         - op: insert-sibling-if-existing
           leaf: pods.service.apiserver.placement
           sibling: service_account
@@ -250,6 +265,11 @@ configs:
           child: UV_HTTP_CONNECT_TIMEOUT
           value: 60
         - op: insert-sibling-if-existing
+          leaf: pods.global.envs
+          sibling: ttl_seconds_after_finished
+          placement: after
+          value: null
+        - op: insert-sibling-if-existing
           leaf: pods.function.placement
           sibling: dataflow
           placement: after
@@ -289,6 +309,11 @@ configs:
           leaf: pods.global.envs
           child: UV_HTTP_CONNECT_TIMEOUT
           value: 60
+        - op: insert-sibling-if-existing
+          leaf: pods.global.envs
+          sibling: ttl_seconds_after_finished
+          placement: after
+          value: null
         - op: insert-sibling-if-existing
           leaf: pods.service.apiserver.placement
           sibling: service_account
@@ -347,6 +372,11 @@ configs:
           leaf: pods.global.envs
           child: UV_HTTP_CONNECT_TIMEOUT
           value: 60
+        - op: insert-sibling-if-existing
+          leaf: pods.global.envs
+          sibling: ttl_seconds_after_finished
+          placement: after
+          value: null
         - op: insert-sibling-if-existing
           leaf: pods.function.placement
           sibling: dataflow

@@ -15,6 +15,13 @@ pods:
       UV_HTTP_TIMEOUT: 60
       UV_HTTP_CONNECT_TIMEOUT: 60
 
+    # Seconds a finished job is kept, with its pods and their logs, before
+    # the cluster removes it, for every job and cron job tabsdata creates.
+    # It sets spec.ttlSecondsAfterFinished of the job descriptors under pods
+    # (spec.jobTemplate.spec.ttlSecondsAfterFinished for cron jobs); empty
+    # keeps the value each descriptor sets there.
+    ttl_seconds_after_finished:
+
   # Sizing and placement. These values are what tabsdata applies: the pod
   # descriptors carry none of their own, so what is written here is what the
   # cluster receives.

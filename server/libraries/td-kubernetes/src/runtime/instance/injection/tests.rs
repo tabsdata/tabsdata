@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 
 use chrono::Utc;
 use indoc::indoc;
+use k8s_openapi::api::batch::v1::{CronJobSpec, JobTemplateSpec};
 use k8s_openapi::api::core::v1::{
     ConfigMapProjection, Container, ProjectedVolumeSource, Volume, VolumeProjection,
 };
@@ -1119,4 +1120,77 @@ fn an_azure_identity_labels_the_deployment_pod_template() {
     let template = deployment.spec.template.metadata.expect("metadata");
     assert_eq!(use_label(&template), Some("true"));
     assert_eq!(use_label(&deployment.metadata), None);
+}
+
+const JOB_TTL_CONFIG: &str = indoc! {"
+    pods:
+      global:
+        ttl_seconds_after_finished: 86400
+"};
+
+fn job_with_ttl(ttl: Option<i32>) -> JobSpec {
+    JobSpec {
+        ttl_seconds_after_finished: ttl,
+        template: PodTemplateSpec {
+            metadata: None,
+            spec: Some(build_pod_spec_with(&["worker"])),
+        },
+        ..Default::default()
+    }
+}
+
+#[test]
+fn the_global_job_ttl_replaces_the_template_one() {
+    let mut job_spec = job_with_ttl(Some(0));
+    apply_job_ttl(JOB_TTL_CONFIG, &mut job_spec).expect("applies");
+    assert_eq!(job_spec.ttl_seconds_after_finished, Some(86400));
+}
+
+#[test]
+fn an_empty_global_job_ttl_keeps_the_template_one() {
+    let mut job_spec = job_with_ttl(Some(600));
+    apply_job_ttl(
+        indoc! {"
+            pods:
+              global:
+                ttl_seconds_after_finished:
+        "},
+        &mut job_spec,
+    )
+    .expect("applies");
+    assert_eq!(job_spec.ttl_seconds_after_finished, Some(600));
+}
+
+#[test]
+fn the_global_job_ttl_reaches_jobs_and_cron_jobs() {
+    let profile = build_profile(&[(TABSDATA_FILE, JOB_TTL_CONFIG)]);
+    let mut job = Job {
+        spec: Some(job_with_ttl(Some(0))),
+        ..Default::default()
+    };
+    inject_into_job(&profile, "job.yaml", &mut job, &BTreeSet::new()).expect("injects");
+    assert_eq!(
+        job.spec.and_then(|spec| spec.ttl_seconds_after_finished),
+        Some(86400)
+    );
+
+    let mut cronjob = CronJob {
+        spec: CronJobSpec {
+            job_template: JobTemplateSpec {
+                metadata: None,
+                spec: Some(job_with_ttl(None)),
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    inject_into_cronjob(&profile, "cronjob.yaml", &mut cronjob, &BTreeSet::new()).expect("injects");
+    assert_eq!(
+        cronjob
+            .spec
+            .job_template
+            .spec
+            .and_then(|spec| spec.ttl_seconds_after_finished),
+        Some(86400)
+    );
 }

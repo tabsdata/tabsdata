@@ -33,6 +33,7 @@ pub struct PodsConfig {
 #[serde(default)]
 pub struct GlobalPodConfig {
     pub envs: BTreeMap<String, EnvValue>,
+    pub ttl_seconds_after_finished: Option<i32>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

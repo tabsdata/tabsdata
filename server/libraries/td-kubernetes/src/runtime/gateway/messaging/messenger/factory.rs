@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use k8s_openapi::api::batch::v1::{CronJob, Job};
+use k8s_openapi::api::batch::v1::{CronJob, Job, JobSpec};
 use k8s_openapi::api::core::v1::{Pod, PodSpec};
 use serde_yaml::Value;
 use td_bridge::messaging::{OrchestratorMessagePayload, QueueError};
@@ -30,7 +30,7 @@ use crate::runtime::gateway::messaging::messenger::template::{
     PodTemplate, PodTemplateIndex, TemplateKind,
 };
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues, WorkerSettings};
-use crate::runtime::instance::injection::{apply_dataflow_envs, apply_global_envs};
+use crate::runtime::instance::injection::{apply_dataflow_envs, apply_global_envs, apply_job_ttl};
 use crate::runtime::instance::ports::apply_ports;
 use crate::runtime::instance::sizing::{PodPlacement, apply_sizing};
 use crate::runtime::provider::ClusterProvider;
@@ -100,6 +100,7 @@ impl WorkloadFactory {
             }
             TemplateKind::Job => {
                 let mut job = self.manifest_job(template, name, kit.as_ref()).await?;
+                self.apply_job_ttl(job.spec.as_mut())?;
                 let (configmaps, secrets, latch) = match kit {
                     Some(kit) => {
                         inject_common_envfrom_into_job(&mut job, &kit.common_envfrom);
@@ -120,6 +121,7 @@ impl WorkloadFactory {
             }
             TemplateKind::CronJob => {
                 let mut cronjob = self.manifest_cronjob(template, name, kit.as_ref()).await?;
+                self.apply_job_ttl(cronjob.spec.job_template.spec.as_mut())?;
                 let (configmaps, secrets, latch) = match kit {
                     Some(kit) => {
                         inject_common_envfrom_into_cronjob(&mut cronjob, &kit.common_envfrom);
@@ -186,6 +188,16 @@ impl WorkloadFactory {
             return Ok(());
         };
         self.apply_tabsdata_config(&placement, spec)
+    }
+
+    fn apply_job_ttl(&self, job_spec: Option<&mut JobSpec>) -> Result<(), QueueError> {
+        let (Some(config_yaml), Some(job_spec)) = (self.templates.tabsdata_config(), job_spec)
+        else {
+            return Ok(());
+        };
+        apply_job_ttl(config_yaml, job_spec).map_err(|error| QueueError::BackendError {
+            cause: error.to_string(),
+        })
     }
 
     fn apply_tabsdata_config(

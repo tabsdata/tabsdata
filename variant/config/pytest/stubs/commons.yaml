@@ -3,3 +3,4 @@
 #
 
 apiserver.service:jwt.access_token_expiration: 31622400
+tabsdata:pods.global.ttl_seconds_after_finished: 86400

@@ -5,7 +5,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use k8s_openapi::api::apps::v1::Deployment;
-use k8s_openapi::api::batch::v1::{CronJob, Job};
+use k8s_openapi::api::batch::v1::{CronJob, Job, JobSpec};
 use k8s_openapi::api::core::v1::{
     Container, EnvVar, EnvVarSource, Pod, PodSpec, PodTemplateSpec, SecretKeySelector,
 };
@@ -80,6 +80,7 @@ pub fn inject_into_job(
     job: &mut Job,
     available_secrets: &BTreeSet<String>,
 ) -> Result<(), LauncherError> {
+    inject_job_ttl(profile, pod_template_key, job.spec.as_mut())?;
     let placement = PodPlacement::of(job.metadata.labels.as_ref());
     let delivery = SecretDelivery::of(
         job.spec
@@ -105,6 +106,11 @@ pub fn inject_into_cronjob(
     cronjob: &mut CronJob,
     available_secrets: &BTreeSet<String>,
 ) -> Result<(), LauncherError> {
+    inject_job_ttl(
+        profile,
+        pod_template_key,
+        cronjob.spec.job_template.spec.as_mut(),
+    )?;
     let placement = PodPlacement::of(cronjob.metadata.labels.as_ref());
     let delivery = SecretDelivery::of(
         cronjob
@@ -170,6 +176,31 @@ fn template_parts(template: &mut PodTemplateSpec) -> Option<(&mut ObjectMeta, &m
         template.metadata.get_or_insert_with(ObjectMeta::default),
         spec,
     ))
+}
+
+pub fn inject_job_ttl(
+    profile: &Profile,
+    pod_template_key: &str,
+    job_spec: Option<&mut JobSpec>,
+) -> Result<(), LauncherError> {
+    let (Some(config_yaml), Some(job_spec)) = (profile.configs.get(TABSDATA_FILE), job_spec) else {
+        return Ok(());
+    };
+    apply_job_ttl(config_yaml, job_spec).map_err(|cause| {
+        LauncherError::ComponentSettingsConfigParseFailed {
+            config: TABSDATA_FILE.to_owned(),
+            pod: pod_template_key.to_owned(),
+            cause: cause.to_string(),
+        }
+    })
+}
+
+pub fn apply_job_ttl(config_yaml: &str, job_spec: &mut JobSpec) -> Result<(), serde_yaml::Error> {
+    let config = TabsdataConfig::parse(config_yaml)?;
+    if let Some(ttl) = config.pods.global.ttl_seconds_after_finished {
+        job_spec.ttl_seconds_after_finished = Some(ttl);
+    }
+    Ok(())
 }
 
 pub fn inject_component_settings(
