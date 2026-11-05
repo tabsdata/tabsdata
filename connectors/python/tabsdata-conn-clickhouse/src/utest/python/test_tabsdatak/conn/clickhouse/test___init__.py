@@ -9,16 +9,10 @@ import typing
 import pytest
 
 from tabsdatak.api import Secret
-from tabsdatak.conn.common.types import (
-    AwsAccessSecretKey,
-    CfgSpec,
-    GCPHmac,
-    GCPJson,
-    UserPassword,
-)
 from tabsdatak.conn.clickhouse import (
-    ClickHouseDestConn,
+    BoolSpec,
     ClickHouseDest,
+    ClickHouseDestConn,
     ClickHouseTableNamesSpec,
     CloudLocation,
     CredentialsSpec,
@@ -30,10 +24,16 @@ from tabsdatak.conn.clickhouse import (
     PortSpec,
     S3Location,
     SchemaEvolutionSpec,
-    BoolSpec,
 )
 from tabsdatak.conn.clickhouse.error import ClickHouseErrorCode
-
+from tabsdatak.conn.common.error import ConnInitException
+from tabsdatak.conn.common.types import (
+    AwsAccessSecretKey,
+    CfgSpec,
+    GCPHmac,
+    GCPJson,
+    UserPassword,
+)
 
 pytestmark = pytest.mark.clickhouse
 
@@ -243,3 +243,13 @@ def test_clickhouse_conn_rejects_missing_required_fields():
             ),
         )
     assert ei.value.api_error is ClickHouseErrorCode.CLICKHOUSE_1
+
+
+@pytest.mark.parametrize("tables", [['db.t', 'db.t'], ['db.t', '`db`.`t`']])
+def test_clickhouse_dest_rejects_a_table_listed_twice(tables):
+    with pytest.raises(ConnInitException, match="CONN-37"):
+        ClickHouseDest(tables=tables)
+
+
+def test_clickhouse_dest_keeps_names_its_backend_tells_apart():
+    assert ClickHouseDest(tables=['db.t', 'db.T']).tables == ['db.t', 'db.T']

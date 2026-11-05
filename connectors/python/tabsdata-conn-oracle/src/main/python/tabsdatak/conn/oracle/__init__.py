@@ -94,8 +94,12 @@ OracleTableNameSpec: TypeAlias = Annotated[
 two dot-separated parts). Parts may be double-quoted; Oracle has no way
 to embed a literal double-quote inside a quoted identifier."""
 
-OracleTableNamesSpec: TypeAlias = list[OracleTableNameSpec]
-"""A list of Oracle table names (see `OracleTableNameSpec`)."""
+OracleTableNamesSpec: TypeAlias = Annotated[
+    list[OracleTableNameSpec], _validation.ORACLE_DISTINCT_TABLES_VALIDATION
+]
+"""A list of Oracle table names (see `OracleTableNameSpec`), each at most once:
+names that differ only in quoting, or in the case of an unquoted part
+(upper-cased, as Oracle folds them), are the same table."""
 
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 """Write disposition when the target table exists: `"append"` adds

@@ -8,7 +8,12 @@ from __future__ import annotations
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._validation import FqnDef, name_validate, unfqn
+from tabsdatak.conn.common._validation import (
+    FqnDef,
+    distinct_names_validate,
+    name_validate,
+    unfqn,
+)
 from tabsdatak.conn.snowflake.error import SnowflakeErrorCode
 
 # --- Identifier / Account patterns ----------------------------------
@@ -68,3 +73,8 @@ def merge_column_key(name: str) -> str:
     """
     (part,) = unfqn(name, _SNOWFLAKE_FQN_DEF)
     return part if name.startswith('"') else part.upper()
+
+
+SNOWFLAKE_DISTINCT_TABLES_VALIDATION = distinct_names_validate(
+    _SNOWFLAKE_FQN_DEF, str.upper
+)

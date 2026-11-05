@@ -8,13 +8,12 @@ import pytest
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.conn.mongodb import MongoDBDestConn, MongoDBDest
+from tabsdatak.conn.mongodb import MongoDBDest, MongoDBDestConn
 from tabsdatak.conn.mongodb.error import (
-    MongoDBValidateException,
     MongoDBErrorCode,
+    MongoDBValidateException,
 )
 from tabsdatak.error import TabsdataException
-
 
 pytestmark = pytest.mark.mongodb
 
@@ -164,3 +163,13 @@ def test_mongodb_conn_rejects_missing_uri():
             ),
         )
     assert ei.value.api_error is MongoDBErrorCode.MONGODB_1
+
+
+@pytest.mark.parametrize("collections_with_ids", [[('db.c', None), ('db.c', 'id')]])
+def test_mongodb_dest_rejects_a_table_listed_twice(collections_with_ids):
+    with pytest.raises(ConnInitException, match="CONN-37"):
+        MongoDBDest(collections_with_ids=collections_with_ids)
+
+
+def test_mongodb_dest_keeps_names_its_backend_tells_apart():
+    assert MongoDBDest(collections_with_ids=[('db.c', None), ('db.C', None)]).collections_with_ids == [('db.c', None), ('db.C', None)]

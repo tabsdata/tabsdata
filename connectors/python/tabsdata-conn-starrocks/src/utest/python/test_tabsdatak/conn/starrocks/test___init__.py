@@ -9,6 +9,7 @@ import typing
 import pytest
 
 from tabsdatak.api import Secret
+from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     CfgSpec,
@@ -20,16 +21,14 @@ from tabsdatak.conn.starrocks import (
     DestCfgSpec,
     HostSpec,
     IfTableExistsSpec,
-    S3Location,
     PortSpec,
+    S3Location,
     SchemaEvolutionSpec,
-    StarRocksDestConn,
     StarRocksDest,
+    StarRocksDestConn,
     StarRocksTableNamesSpec,
 )
 from tabsdatak.conn.starrocks.error import StarRocksErrorCode
-from tabsdatak.conn.common.error import ConnInitException
-
 
 pytestmark = pytest.mark.starrocks
 
@@ -172,3 +171,13 @@ def test_starrocks_conn_rejects_missing_required_fields():
             ),
         )
     assert ei.value.api_error is StarRocksErrorCode.STARROCKS_1
+
+
+@pytest.mark.parametrize("tables", [['db.t', 'db.t'], ['db.t', '`db`.`t`']])
+def test_starrocks_dest_rejects_a_table_listed_twice(tables):
+    with pytest.raises(ConnInitException, match="CONN-37"):
+        StarRocksDest(tables=tables)
+
+
+def test_starrocks_dest_keeps_names_its_backend_tells_apart():
+    assert StarRocksDest(tables=['db.t', 'db.T']).tables == ['db.t', 'db.T']

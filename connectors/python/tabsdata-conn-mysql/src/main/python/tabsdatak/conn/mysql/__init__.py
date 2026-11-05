@@ -210,8 +210,12 @@ MySQLTableNameSpec: TypeAlias = Annotated[str, _validation.MYSQL_TABLE_FQN_VALID
 two dot-separated parts). Parts may be backtick-quoted, using the
 doubled-backtick convention to embed a literal backtick."""
 
-MySQLTableNamesSpec: TypeAlias = list[MySQLTableNameSpec]
-"""A list of MySQL table names (see `MySQLTableNameSpec`)."""
+MySQLTableNamesSpec: TypeAlias = Annotated[
+    list[MySQLTableNameSpec], _validation.MYSQL_DISTINCT_TABLES_VALIDATION
+]
+"""A list of MySQL table names (see `MySQLTableNameSpec`), each at most once:
+names that differ only in quoting, or in the case of an unquoted part
+(unchanged, as MySQL keeps the case it is given), are the same table."""
 
 MySQLCdcTableNamesSpec: TypeAlias = Annotated[
     list[MySQLTableNameSpec], _validation.MYSQL_DISTINCT_TABLES_VALIDATION

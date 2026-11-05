@@ -9,7 +9,11 @@ import tabsdatak._api as _api
 from tabsdatak.conn.clickhouse.error import ClickHouseErrorCode
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._validation import FqnDef, name_validate
+from tabsdatak.conn.common._validation import (
+    FqnDef,
+    distinct_names_validate,
+    name_validate,
+)
 
 # --- Table FQN ------------------------------------------------------
 
@@ -35,3 +39,5 @@ IDENTIFIER_PATTERN = r"^(?:[A-Za-z_][A-Za-z0-9_]*)$"
 IDENTIFIER_VALIDATION = _api.ValueConstraints(
     _api.Rule.matches(IDENTIFIER_PATTERN, ClickHouseErrorCode.CLICKHOUSE_11)
 )
+
+CLICKHOUSE_DISTINCT_TABLES_VALIDATION = distinct_names_validate(CLICKHOUSE_FQN_DEF)

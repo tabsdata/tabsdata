@@ -119,8 +119,12 @@ Db2TableNameSpec: TypeAlias = Annotated[
 dot-separated parts). Parts may be double-quoted, using the doubled
 double-quote convention to embed a literal quote."""
 
-Db2TableNamesSpec: TypeAlias = list[Db2TableNameSpec]
-"""A list of Db2 table names (see `Db2TableNameSpec`)."""
+Db2TableNamesSpec: TypeAlias = Annotated[
+    list[Db2TableNameSpec], _validation.DB2_DISTINCT_TABLES_VALIDATION
+]
+"""A list of Db2 table names (see `Db2TableNameSpec`), each at most once:
+names that differ only in quoting, or in the case of an unquoted part
+(upper-cased, as Db2 folds them), are the same table."""
 
 Db2CdcTableNamesSpec: TypeAlias = Annotated[
     list[Db2TableNameSpec], _validation.DB2_DISTINCT_TABLES_VALIDATION

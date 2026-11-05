@@ -451,3 +451,13 @@ def test_postgres_cdc_stream_src_rejects_a_table_listed_twice(tables):
 def test_postgres_cdc_stream_src_keeps_a_quoted_name_in_another_case():
     src = _cdc_stream_src(tables=["public.users", 'public."Users"'])
     assert src.tables == ["public.users", 'public."Users"']
+
+
+@pytest.mark.parametrize("tables", [['s.users', 's.users'], ['s.users', 'S.Users'], ['s.users', '"s"."users"']])
+def test_postgres_dest_rejects_a_table_listed_twice(tables):
+    with pytest.raises(ConnInitException, match="CONN-37"):
+        PostgresDest(tables=tables)
+
+
+def test_postgres_dest_keeps_names_its_backend_tells_apart():
+    assert PostgresDest(tables=['s.users', 's."Users"']).tables == ['s.users', 's."Users"']

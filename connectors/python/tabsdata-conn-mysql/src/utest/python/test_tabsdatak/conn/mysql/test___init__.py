@@ -490,3 +490,13 @@ def test_mysql_cdc_stream_src_rejects_a_table_listed_twice(tables):
 def test_mysql_cdc_stream_src_keeps_tables_differing_in_case():
     src = MySQLCdcStreamSrc(tables=["app.city", "app.City"], start_from="tail")
     assert src.tables == ["app.city", "app.City"]
+
+
+@pytest.mark.parametrize("tables", [['db.t', 'db.t'], ['db.t', '`db`.`t`']])
+def test_mysql_dest_rejects_a_table_listed_twice(tables):
+    with pytest.raises(ConnInitException, match="CONN-37"):
+        MySQLDest(tables=tables)
+
+
+def test_mysql_dest_keeps_names_its_backend_tells_apart():
+    assert MySQLDest(tables=['db.t', 'db.T']).tables == ['db.t', 'db.T']

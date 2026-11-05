@@ -96,7 +96,12 @@ ClickHouseTableNameSpec: TypeAlias = Annotated[
     str,
     _validation.CLICKHOUSE_TABLE_FQN_VALIDATION,
 ]
-ClickHouseTableNamesSpec: TypeAlias = list[ClickHouseTableNameSpec]
+ClickHouseTableNamesSpec: TypeAlias = Annotated[
+    list[ClickHouseTableNameSpec], _validation.CLICKHOUSE_DISTINCT_TABLES_VALIDATION
+]
+"""A list of ClickHouse table names (see `ClickHouseTableNameSpec`), each at most once:
+names that differ only in quoting, or in the case of an unquoted part
+(unchanged, as ClickHouse names are case-sensitive), are the same table."""
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 SchemaEvolutionSpec: TypeAlias = Literal["strict", "iceberg"]
 

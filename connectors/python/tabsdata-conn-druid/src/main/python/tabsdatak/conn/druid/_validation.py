@@ -6,6 +6,9 @@ from __future__ import annotations
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._validation import FqnDef, distinct_names_validate
 from tabsdatak.conn.druid.error import DruidErrorCode
 
 # --- Datasource (Druid's per-table identifier) ----------------------
@@ -22,6 +25,8 @@ DATASOURCE_VALIDATION = _api.ValueConstraints(
     ),
     _api.Rule.forbids("/\\\x00", DruidErrorCode.DRUID_5),
 )
+
+DRUID_DISTINCT_DATASOURCES_VALIDATION = distinct_names_validate(FqnDef(separator="."))
 
 
 # --- Broker URL -----------------------------------------------------

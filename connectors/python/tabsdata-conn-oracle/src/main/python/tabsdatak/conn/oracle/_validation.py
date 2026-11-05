@@ -8,7 +8,11 @@ from __future__ import annotations
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._validation import FqnDef, name_validate
+from tabsdatak.conn.common._validation import (
+    FqnDef,
+    distinct_names_validate,
+    name_validate,
+)
 from tabsdatak.conn.oracle.error import OracleErrorCode
 
 # --- URI -------------------------------------------------------------
@@ -34,3 +38,5 @@ _ORACLE_FQN_DEF = FqnDef(separator=".", quote='"', escape=None)
 ORACLE_TABLE_FQN_VALIDATION = name_validate(
     _ORACLE_FQN_DEF, max_parts=2, syntax="Oracle"
 )
+
+ORACLE_DISTINCT_TABLES_VALIDATION = distinct_names_validate(_ORACLE_FQN_DEF, str.upper)

@@ -15,7 +15,6 @@ from tabsdatak.conn.common.sql.error import (
     SqlCommonValidateException,
 )
 from tabsdatak.conn.common.types import CfgSpec, UserPassword
-
 from tabsdatak.conn.snowflake import (
     AccountSpec,
     CredentialsSpec,
@@ -28,15 +27,14 @@ from tabsdatak.conn.snowflake import (
     MergeColumnsSpec,
     NameSpec,
     SchemaEvolutionSpec,
-    SnowflakeDestConn,
     SnowflakeDest,
+    SnowflakeDestConn,
     SnowflakeTableNamesSpec,
 )
 from tabsdatak.conn.snowflake.error import (
     SnowflakeErrorCode,
     SnowflakeValidateException,
 )
-
 
 pytestmark = pytest.mark.snowflake
 
@@ -584,3 +582,13 @@ def test_merge_cfg_requires_an_op_column():
     with pytest.raises(ConnInitException) as ei:
         MergeCfg(on=["order_id"])
     assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_11
+
+
+@pytest.mark.parametrize("tables", [['s.t', 's.t'], ['s.t', 'S.T'], ['s.t', '"S"."T"']])
+def test_snowflake_dest_rejects_a_table_listed_twice(tables):
+    with pytest.raises(ConnInitException, match="CONN-37"):
+        SnowflakeDest(tables=tables)
+
+
+def test_snowflake_dest_keeps_names_its_backend_tells_apart():
+    assert SnowflakeDest(tables=['s.t', 's."t"']).tables == ['s.t', 's."t"']

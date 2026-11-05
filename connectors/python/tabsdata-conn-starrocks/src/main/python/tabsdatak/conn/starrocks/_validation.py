@@ -8,7 +8,11 @@ from __future__ import annotations
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._validation import FqnDef, name_validate
+from tabsdatak.conn.common._validation import (
+    FqnDef,
+    distinct_names_validate,
+    name_validate,
+)
 from tabsdatak.conn.starrocks.error import StarRocksErrorCode
 
 # --- Identifier ----------------------------------------------------
@@ -32,3 +36,5 @@ _STARROCKS_FQN_DEF = FqnDef(separator=".", quote="`", escape="`")
 STARROCKS_TABLE_FQN_VALIDATION = name_validate(
     _STARROCKS_FQN_DEF, max_parts=2, syntax="StarRocks"
 )
+
+STARROCKS_DISTINCT_TABLES_VALIDATION = distinct_names_validate(_STARROCKS_FQN_DEF)

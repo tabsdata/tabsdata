@@ -5,7 +5,14 @@
 from __future__ import annotations
 
 # noinspection PyProtectedMember
+from typing import Any
+
+from pydantic import AfterValidator
+
 import tabsdatak._api as _api
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._validation import FqnDef, distinct_names_validate
 from tabsdatak.conn.mongodb.error import MongoDBErrorCode
 
 # --- Collection ------------------------------------------------------
@@ -53,3 +60,14 @@ URI_PATTERN = r"(?i)mongodb(?:\+srv)?://.*"
 URI_VALIDATION = _api.ValueConstraints(
     _api.Rule.matches(URI_PATTERN, MongoDBErrorCode.MONGODB_6)
 )
+
+
+_DISTINCT_COLLECTIONS = distinct_names_validate(FqnDef(separator="."))
+
+
+def _distinct_collections(values: list[tuple[str, Any]]) -> list[tuple[str, Any]]:
+    _DISTINCT_COLLECTIONS.func([collection for collection, _ in values])
+    return values
+
+
+COLLECTIONS_DISTINCT_VALIDATION = AfterValidator(_distinct_collections)

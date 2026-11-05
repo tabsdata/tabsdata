@@ -15,13 +15,12 @@ from tabsdatak.conn.common.sql.error import (
     SqlCommonValidateException,
 )
 from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec
-
 from tabsdatak.conn.databricks import (
     CredentialsSpec,
-    DatabricksDestConn,
-    DatabricksSrcConn,
     DatabricksDest,
+    DatabricksDestConn,
     DatabricksSrc,
+    DatabricksSrcConn,
     DatabricksTableNamesSpec,
     DestCfgSpec,
     HostUrlSpec,
@@ -42,7 +41,6 @@ from tabsdatak.conn.databricks.error import (
     DatabricksErrorCode,
     DatabricksValidateException,
 )
-
 
 pytestmark = pytest.mark.databricks
 
@@ -456,7 +454,7 @@ def test_databricks_dest_hands_its_merge_cfgs_over_untouched():
     # configs are broadcast rather than rewritten.
     a, b = _merge_cfg(), _merge_cfg(on=["item_id"])
     dest = DatabricksDest(
-        tables=["c.s.t", "c.s.t"],
+        tables=["c.s.t", "c.s.u"],
         if_table_exists="merge",
         merge_cfg=[a, b],
         watermark_column=_WATERMARK,
@@ -529,3 +527,13 @@ def test_databricks_merge_cfg_has_no_watermark_of_its_own():
     # Named on the destination, and gone from the shared base too.
     assert "watermark_column" not in MergeCfg.__annotations__
     assert not hasattr(_merge_cfg(), "watermark_column")
+
+
+@pytest.mark.parametrize("tables", [['c.s.t', 'c.s.t'], ['c.s.t', 'C.S.T'], ['c.s.t', '`c`.`s`.`T`']])
+def test_databricks_dest_rejects_a_table_listed_twice(tables):
+    with pytest.raises(ConnInitException, match="CONN-37"):
+        DatabricksDest(tables=tables)
+
+
+def test_databricks_dest_keeps_names_its_backend_tells_apart():
+    assert DatabricksDest(tables=['c.s.t', 's.t']).tables == ['c.s.t', 's.t']

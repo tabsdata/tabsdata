@@ -8,7 +8,11 @@ from __future__ import annotations
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._validation import FqnDef, name_validate
+from tabsdatak.conn.common._validation import (
+    FqnDef,
+    distinct_names_validate,
+    name_validate,
+)
 from tabsdatak.conn.mssql.error import MssqlErrorCode
 
 # --- URI / ODBC connection string -----------------------------------
@@ -46,3 +50,7 @@ _MSSQL_FQN_DEF = FqnDef(
 
 # Validator for the ``MSSQLTableNameSpec`` field.
 MSSQL_TABLE_FQN_VALIDATION = name_validate(_MSSQL_FQN_DEF, max_parts=3, syntax="MSSQL")
+
+MSSQL_DISTINCT_TABLES_VALIDATION = distinct_names_validate(
+    _MSSQL_FQN_DEF, str.lower, fold_quoted=True
+)

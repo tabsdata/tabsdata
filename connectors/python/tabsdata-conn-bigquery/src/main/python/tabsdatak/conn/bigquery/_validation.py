@@ -9,7 +9,12 @@ import tabsdatak._api as _api
 from tabsdatak.conn.bigquery.error import BigQueryErrorCode
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._validation import FqnDef, name_validate, unfqn
+from tabsdatak.conn.common._validation import (
+    FqnDef,
+    distinct_names_validate,
+    name_validate,
+    unfqn,
+)
 
 # --- Project / dataset patterns -------------------------------------
 
@@ -92,3 +97,6 @@ def merge_column_key(name: str) -> str:
     """
     (part,) = unfqn(name, _BIGQUERY_COLUMN_FQN_DEF)
     return str(part).lower()
+
+
+BIGQUERY_DISTINCT_TABLES_VALIDATION = distinct_names_validate(_BIGQUERY_FQN_DEF)

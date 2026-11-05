@@ -8,7 +8,12 @@ from __future__ import annotations
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._validation import FqnDef, name_validate, unfqn
+from tabsdatak.conn.common._validation import (
+    FqnDef,
+    distinct_names_validate,
+    name_validate,
+    unfqn,
+)
 from tabsdatak.conn.databricks.error import DatabricksErrorCode
 
 # --- Identifier / warehouse patterns --------------------------------
@@ -96,3 +101,8 @@ def merge_column_key(name: str) -> str:
     """
     (part,) = unfqn(name, _DATABRICKS_FQN_DEF)
     return str(part).lower()
+
+
+DATABRICKS_DISTINCT_TABLES_VALIDATION = distinct_names_validate(
+    _DATABRICKS_FQN_DEF, str.lower, fold_quoted=True
+)

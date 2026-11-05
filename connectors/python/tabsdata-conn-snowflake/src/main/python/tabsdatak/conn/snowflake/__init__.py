@@ -89,7 +89,12 @@ SnowflakeTableNameSpec: TypeAlias = Annotated[
     str,
     _validation.SNOWFLAKE_TABLE_FQN_VALIDATION,
 ]
-SnowflakeTableNamesSpec: TypeAlias = list[SnowflakeTableNameSpec]
+SnowflakeTableNamesSpec: TypeAlias = Annotated[
+    list[SnowflakeTableNameSpec], _validation.SNOWFLAKE_DISTINCT_TABLES_VALIDATION
+]
+"""A list of Snowflake table names (see `SnowflakeTableNameSpec`), each at most once:
+names that differ only in quoting, or in the case of an unquoted part
+(upper-cased, as Snowflake folds them), are the same table."""
 IfTableExistsSpec: TypeAlias = Literal["append", "replace", "merge"]
 
 SchemaEvolutionSpec: TypeAlias = Literal["update", "strict"]

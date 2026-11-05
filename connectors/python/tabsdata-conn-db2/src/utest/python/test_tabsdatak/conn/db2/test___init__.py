@@ -458,3 +458,13 @@ def test_db2_cdc_stream_src_rejects_a_table_listed_twice(tables):
 def test_db2_cdc_stream_src_keeps_a_quoted_name_in_another_case():
     src = _cdc_stream_src(tables=["CDSCHEMA.USERS_CD", '"CDSCHEMA"."users_cd"'])
     assert src.tables == ["CDSCHEMA.USERS_CD", '"CDSCHEMA"."users_cd"']
+
+
+@pytest.mark.parametrize("tables", [['s.t', 's.t'], ['s.t', 'S.T'], ['s.t', '"S"."T"']])
+def test_db2_dest_rejects_a_table_listed_twice(tables):
+    with pytest.raises(ConnInitException, match="CONN-37"):
+        Db2Dest(tables=tables)
+
+
+def test_db2_dest_keeps_names_its_backend_tells_apart():
+    assert Db2Dest(tables=['s.t', '"s"."t"']).tables == ['s.t', '"s"."t"']

@@ -9,6 +9,7 @@ import typing
 import pytest
 
 from tabsdatak.api import Secret
+from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     CfgSpec,
@@ -16,21 +17,17 @@ from tabsdatak.conn.common.types import (
 )
 from tabsdatak.conn.druid import (
     CloudLocation,
-    S3Location,
-)
-from tabsdatak.conn.druid import (
     CredentialsSpec,
     DestCfgSpec,
-    DruidDestConn,
     DruidDest,
+    DruidDestConn,
     DruidTableNamesSpec,
     IfTableExistsSpec,
+    S3Location,
     SegmentGranularitySpec,
     UrlSpec,
 )
 from tabsdatak.conn.druid.error import DruidErrorCode
-from tabsdatak.conn.common.error import ConnInitException
-
 
 pytestmark = pytest.mark.druid
 
@@ -154,3 +151,13 @@ def test_druid_conn_rejects_missing_overlord_url():
             ),
         )
     assert ei.value.api_error is DruidErrorCode.DRUID_1
+
+
+@pytest.mark.parametrize("tables", [['events', 'events']])
+def test_druid_dest_rejects_a_table_listed_twice(tables):
+    with pytest.raises(ConnInitException, match="CONN-37"):
+        DruidDest(tables=tables)
+
+
+def test_druid_dest_keeps_names_its_backend_tells_apart():
+    assert DruidDest(tables=['events', 'Events']).tables == ['events', 'Events']

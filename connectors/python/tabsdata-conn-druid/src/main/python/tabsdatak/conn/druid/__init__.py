@@ -78,7 +78,11 @@ UrlSpec: TypeAlias = Annotated[
 ]
 DatasourceSpec: TypeAlias = Annotated[str, _validation.DATASOURCE_VALIDATION]
 DruidTableNameSpec: TypeAlias = DatasourceSpec
-DruidTableNamesSpec: TypeAlias = list[DruidTableNameSpec]
+DruidTableNamesSpec: TypeAlias = Annotated[
+    list[DruidTableNameSpec], _validation.DRUID_DISTINCT_DATASOURCES_VALIDATION
+]
+"""A list of Druid datasources (see `DruidTableNameSpec`), each at most once;
+datasource names are case-sensitive."""
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 # Druid's accepted segment-granularity tokens (subset, the most-used
 # values; the engine accepts more but these cover the common cases).

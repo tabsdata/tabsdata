@@ -62,7 +62,12 @@ UriSpec: TypeAlias = Annotated[
 ]
 CollectionSpec: TypeAlias = Annotated[str, _validation.COLLECTION_NAME_VALIDATION]
 ColumnNameSpec: TypeAlias = Annotated[str, _validation.FIELD_NAME_VALIDATION]
-CollectionsWithIdsSpec: TypeAlias = list[tuple[CollectionSpec, ColumnNameSpec | None]]
+CollectionsWithIdsSpec: TypeAlias = Annotated[
+    list[tuple[CollectionSpec, ColumnNameSpec | None]],
+    _validation.COLLECTIONS_DISTINCT_VALIDATION,
+]
+"""The collections a MongoDB destination writes, each with its optional id
+field, each collection at most once; collection names are case-sensitive."""
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 
 

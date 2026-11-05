@@ -919,7 +919,7 @@ def test_dest_plugin_gives_each_merge_table_its_own_staging_table(
     monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
 
     dest = BigQueryDest(
-        tables=["`p.ds.users`", "`p.ds.users`"],
+        tables=["`p.ds.users`", "`p.ds.orders`"],
         if_table_exists="merge",
         merge_cfg=[MergeCfg(on=["id"], op_column="op")] * 2,
         dest_cfg=_ICEBERG,

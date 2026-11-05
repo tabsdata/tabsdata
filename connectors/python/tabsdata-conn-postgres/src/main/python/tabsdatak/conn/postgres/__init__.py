@@ -122,8 +122,12 @@ PostgresTableNameSpec: TypeAlias = Annotated[
 be double-quoted, using the doubled double-quote convention to embed a
 literal quote."""
 
-PostgresTableNamesSpec: TypeAlias = list[PostgresTableNameSpec]
-"""A list of Postgres table names (see `PostgresTableNameSpec`)."""
+PostgresTableNamesSpec: TypeAlias = Annotated[
+    list[PostgresTableNameSpec], _validation.POSTGRES_DISTINCT_TABLES_VALIDATION
+]
+"""A list of Postgres table names (see `PostgresTableNameSpec`), each at most once:
+names that differ only in quoting, or in the case of an unquoted part
+(lower-cased, as Postgres folds them), are the same table."""
 
 PostgresCdcTableNamesSpec: TypeAlias = Annotated[
     list[PostgresTableNameSpec], _validation.POSTGRES_DISTINCT_TABLES_VALIDATION

@@ -109,7 +109,12 @@ DatabricksTableNameSpec: TypeAlias = Annotated[
     str,
     _validation.DATABRICKS_TABLE_FQN_VALIDATION,
 ]
-DatabricksTableNamesSpec: TypeAlias = list[DatabricksTableNameSpec]
+DatabricksTableNamesSpec: TypeAlias = Annotated[
+    list[DatabricksTableNameSpec], _validation.DATABRICKS_DISTINCT_TABLES_VALIDATION
+]
+"""A list of Databricks table names (see `DatabricksTableNameSpec`), each at most
+once: names that differ only in quoting or in case are the same table,
+as Databricks ignores the case of a name, quoted or not."""
 IfTableExistsSpec: TypeAlias = Literal["append", "replace", "merge"]
 SchemaEvolutionSpec: TypeAlias = Literal["update", "strict"]
 

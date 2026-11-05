@@ -494,24 +494,28 @@ def name_validate(
 def distinct_names_validate(
     fqn_def: FqnDef,
     fold: Callable[[str], str] = str,
+    *,
+    fold_quoted: bool = False,
 ) -> AfterValidator:
     """Build the validator rejecting a list of FQN-shaped names that names
     the same object twice (``CONN_37``).
 
     Two names are the same when their parts are: quoting is dropped, and
     each unquoted part goes through ``fold``, the case folding the target
-    system applies to unquoted identifiers. An unqualified name is never
-    the same as a qualified one, since the level it defaults to is only
-    known to the system.
+    system applies to unquoted identifiers -- quoted ones too when the system
+    ignores case whatever the quoting. An unqualified name is never the same
+    as a qualified one, since the level it defaults to is only known to the
+    system.
 
     Args:
         fqn_def: the FQN syntax the names are written in.
         fold: the folding of an unquoted part; unchanged by default.
+        fold_quoted: whether a quoted part is folded as well.
     """
 
     def identity(value: str) -> tuple[str, ...]:
         return tuple(
-            part if quoted else fold(part)
+            fold(part) if fold_quoted or not quoted else part
             for part, quoted in marked_parts(value, fqn_def)
         )
 

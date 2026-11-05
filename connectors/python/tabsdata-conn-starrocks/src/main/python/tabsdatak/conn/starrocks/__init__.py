@@ -93,7 +93,12 @@ StarRocksTableNameSpec: TypeAlias = Annotated[
     str,
     _validation.STARROCKS_TABLE_FQN_VALIDATION,
 ]
-StarRocksTableNamesSpec: TypeAlias = list[StarRocksTableNameSpec]
+StarRocksTableNamesSpec: TypeAlias = Annotated[
+    list[StarRocksTableNameSpec], _validation.STARROCKS_DISTINCT_TABLES_VALIDATION
+]
+"""A list of StarRocks table names (see `StarRocksTableNameSpec`), each at most once:
+names that differ only in quoting, or in the case of an unquoted part
+(unchanged, as StarRocks table names are case-sensitive), are the same table."""
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 SchemaEvolutionSpec: TypeAlias = Literal["strict", "iceberg"]
 

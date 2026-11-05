@@ -9,7 +9,6 @@ import typing
 import pytest
 
 from tabsdatak.api import Secret
-from tabsdatak.error import TabsdataException
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import CfgSpec, UserPassword
@@ -17,21 +16,22 @@ from tabsdatak.conn.mssql import (
     CredentialsSpec,
     DestCfgSpec,
     IfTableExistsSpec,
-    MSSQLDestConn,
-    MSSQLSrcConn,
     MSSQLDest,
+    MSSQLDestConn,
     MSSQLSrc,
+    MSSQLSrcConn,
     MSSQLTableNamesSpec,
     QueriesSpec,
     SrcCfgSpec,
     UriSpec,
 )
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.mssql.error import (
-    MSSQLValidateException,
     MssqlErrorCode,
+    MSSQLValidateException,
 )
-
+from tabsdatak.error import TabsdataException
 
 pytestmark = pytest.mark.mssql
 
@@ -281,3 +281,13 @@ def test_mssql_conn_rejects_missing_credentials(cls):
     with pytest.raises(ConnInitException) as ei:
         cls(uri="mssql+pyodbc://h/d")  # type: ignore[call-arg]
     assert ei.value.api_error is MssqlErrorCode.MSSQL_1
+
+
+@pytest.mark.parametrize("tables", [['dbo.t', 'dbo.t'], ['dbo.t', 'DBO.T'], ['dbo.t', '[dbo].[T]']])
+def test_mssql_dest_rejects_a_table_listed_twice(tables):
+    with pytest.raises(ConnInitException, match="CONN-37"):
+        MSSQLDest(tables=tables)
+
+
+def test_mssql_dest_keeps_names_its_backend_tells_apart():
+    assert MSSQLDest(tables=['dbo.t', 't']).tables == ['dbo.t', 't']

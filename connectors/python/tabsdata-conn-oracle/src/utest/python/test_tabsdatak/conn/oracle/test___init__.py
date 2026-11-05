@@ -9,7 +9,6 @@ import typing
 import pytest
 
 from tabsdatak.api import Secret
-from tabsdatak.error import TabsdataException
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import CfgSpec, UserPassword
@@ -17,21 +16,22 @@ from tabsdatak.conn.oracle import (
     CredentialsSpec,
     DestCfgSpec,
     IfTableExistsSpec,
-    OracleDestConn,
-    OracleSrcConn,
     OracleDest,
+    OracleDestConn,
     OracleSrc,
+    OracleSrcConn,
     OracleTableNamesSpec,
     QueriesSpec,
     SrcCfgSpec,
     UriSpec,
 )
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.oracle.error import (
-    OracleValidateException,
     OracleErrorCode,
+    OracleValidateException,
 )
-
+from tabsdatak.error import TabsdataException
 
 pytestmark = pytest.mark.oracle
 
@@ -254,3 +254,13 @@ def test_oracle_conn_rejects_missing_credentials(cls):
     with pytest.raises(ConnInitException) as ei:
         cls(uri="oracle+oracledb://h:1521/db")  # type: ignore[call-arg]
     assert ei.value.api_error is OracleErrorCode.ORACLE_1
+
+
+@pytest.mark.parametrize("tables", [['s.t', 's.t'], ['s.t', 'S.T'], ['s.t', '"S"."T"']])
+def test_oracle_dest_rejects_a_table_listed_twice(tables):
+    with pytest.raises(ConnInitException, match="CONN-37"):
+        OracleDest(tables=tables)
+
+
+def test_oracle_dest_keeps_names_its_backend_tells_apart():
+    assert OracleDest(tables=['s.t', 's."t"']).tables == ['s.t', 's."t"']

@@ -79,7 +79,13 @@ MSSQLTableNameSpec: TypeAlias = Annotated[
     str,
     _validation.MSSQL_TABLE_FQN_VALIDATION,
 ]
-MSSQLTableNamesSpec: TypeAlias = list[MSSQLTableNameSpec]
+MSSQLTableNamesSpec: TypeAlias = Annotated[
+    list[MSSQLTableNameSpec], _validation.MSSQL_DISTINCT_TABLES_VALIDATION
+]
+"""A list of MSSQL table names (see `MSSQLTableNameSpec`), each at most
+once: names that differ only in quoting or in case are the same table,
+as SQL Server's default collation ignores the case of a name, quoted
+or not."""
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 
 

@@ -10,12 +10,13 @@ import pytest
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.bigquery import (
-    BigQueryDestConn,
     BigQueryDest,
+    BigQueryDestConn,
     BigQueryTableNamesSpec,
     CredentialsSpec,
     DatasetSpec,
     DestCfgSpec,
+    GCSLocation,
     IfTableExistsSpec,
     MergeCfg,
     MergeCfgSpec,
@@ -24,19 +25,16 @@ from tabsdatak.conn.bigquery import (
     ProjectSpec,
     SchemaEvolutionSpec,
 )
-from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.bigquery.error import (
-    BigQueryValidateException,
     BigQueryErrorCode,
+    BigQueryValidateException,
 )
-from tabsdatak.conn.bigquery import GCSLocation
-
+from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.sql.error import (
     SqlCommonErrorCode,
     SqlCommonValidateException,
 )
 from tabsdatak.conn.common.types import CfgSpec, GCPJson
-
 
 pytestmark = pytest.mark.bigquery
 
@@ -396,7 +394,7 @@ def test_bigquery_dest_hands_its_merge_cfgs_over_untouched():
     # configs are broadcast rather than rewritten.
     a, b = _merge_cfg(), _merge_cfg(on=["item_id"])
     dest = BigQueryDest(
-        tables=["`p.ds.t`", "`p.ds.t`"],
+        tables=["`p.ds.t`", "`p.ds.u`"],
         if_table_exists="merge",
         merge_cfg=[a, b],
         watermark_column=_WATERMARK,
@@ -476,3 +474,13 @@ def test_bigquery_merge_cfg_has_no_watermark_of_its_own():
     # Named on the destination, and gone from the shared base too.
     assert "watermark_column" not in MergeCfg.__annotations__
     assert not hasattr(_merge_cfg(), "watermark_column")
+
+
+@pytest.mark.parametrize("tables", [['`p.ds.t`', '`p.ds.t`']])
+def test_bigquery_dest_rejects_a_table_listed_twice(tables):
+    with pytest.raises(ConnInitException, match="CONN-37"):
+        BigQueryDest(tables=tables)
+
+
+def test_bigquery_dest_keeps_names_its_backend_tells_apart():
+    assert BigQueryDest(tables=['`p.ds.t`', '`p.ds.T`']).tables == ['`p.ds.t`', '`p.ds.T`']

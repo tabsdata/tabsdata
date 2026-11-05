@@ -87,7 +87,11 @@ DatasetSpec: TypeAlias = Annotated[
 BigQueryTableNameSpec: TypeAlias = Annotated[
     str, _validation.BIGQUERY_TABLE_FQN_VALIDATION
 ]
-BigQueryTableNamesSpec: TypeAlias = list[BigQueryTableNameSpec]
+BigQueryTableNamesSpec: TypeAlias = Annotated[
+    list[BigQueryTableNameSpec], _validation.BIGQUERY_DISTINCT_TABLES_VALIDATION
+]
+"""A list of BigQuery table names (see `BigQueryTableNameSpec`), each at most
+once; table names are case-sensitive."""
 IfTableExistsSpec: TypeAlias = Literal["append", "replace", "merge"]
 SchemaEvolutionSpec: TypeAlias = Literal["update", "strict"]
 
