@@ -8,10 +8,11 @@
 //! loop, and FR and TDV rows are bulk-inserted.
 
 use td_database::access::LockInstant;
-use td_database::access::{InProject, WriteMode};
+use td_database::access::{Holds, InProject, ProjectLock};
 
 use crate::function::topology::{RunnableVersion, latest_patch_or_head_batch};
 use crate::logical::mint::{build_function_run, build_output_table_data_versions};
+use crate::scheduler::partial::{Parked, Partial};
 use std::collections::{HashMap, HashSet};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
@@ -40,6 +41,12 @@ pub struct MintedDispatch {
     pub tdvs: Vec<PhysicalTableDataVersionInsertDB>,
 }
 
+/// The runs minted, and those whose attempt cannot be minted from their plan.
+pub struct Dispatch {
+    pub minted: Vec<MintedDispatch>,
+    pub unmintable: Vec<Parked<LogicalFunctionRunDB>>,
+}
+
 #[instrument(
     name = "scheduler.mint_function_runs_on_dispatch",
     skip_all,
@@ -47,12 +54,15 @@ pub struct MintedDispatch {
     err(Debug, level = "debug")
 )]
 pub async fn mint_function_runs_on_dispatch(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     ready_lfrs: &[LogicalFunctionRunDB],
     at: LockInstant,
-) -> Result<Vec<MintedDispatch>, TdError> {
+) -> Result<Dispatch, TdError> {
     if ready_lfrs.is_empty() {
-        return Ok(Vec::new());
+        return Ok(Dispatch {
+            minted: Vec::new(),
+            unmintable: Vec::new(),
+        });
     }
 
     let lfr_ids: Vec<LogicalFunctionRunId> = ready_lfrs.iter().map(|f| f.id.clone()).collect();
@@ -132,7 +142,7 @@ pub async fn mint_function_runs_on_dispatch(
             .scd2()
             .as_of(&topology.interval.valid_from)
             .chunked()
-            .fetch_all(&function_ids, ())
+            .fetch_all(&function_ids, TableDB::active())
             .await?;
         for t in tables {
             tables_by_run
@@ -161,7 +171,7 @@ pub async fn mint_function_runs_on_dispatch(
     let mut all_tdvs: Vec<PhysicalTableDataVersionInsertDB> = Vec::new();
     let mut per_lfr: Vec<(LogicalFunctionRunDB, usize)> = Vec::with_capacity(ready_lfrs.len());
 
-    for lfr in ready_lfrs.iter() {
+    let partial = Partial::build(ready_lfrs.iter().cloned(), |lfr| {
         let runnable = runnable_by_fvid
             .get(&lfr.function_version_id)
             .ok_or_else(|| {
@@ -194,11 +204,14 @@ pub async fn mint_function_runs_on_dispatch(
             &base_path,
             &logical_by_table,
         )?;
-        let tdv_count = tdvs.len();
+        Ok((lfr.clone(), fr, tdvs))
+    });
+    for (lfr, fr, tdvs) in partial.built {
+        per_lfr.push((lfr, tdvs.len()));
         all_tdvs.extend(tdvs);
         frs.push(fr);
-        per_lfr.push((lfr.clone(), tdv_count));
     }
+    let unmintable = partial.parked;
 
     if !frs.is_empty() {
         conn.scd2().chunked().open(&frs, at).await?;
@@ -240,9 +253,13 @@ pub async fn mint_function_runs_on_dispatch(
 
     debug!(
         minted = output.len(),
+        unmintable = unmintable.len(),
         "scheduler.dispatch: minted FR + TDVs"
     );
-    Ok(output)
+    Ok(Dispatch {
+        minted: output,
+        unmintable,
+    })
 }
 
 #[cfg(test)]
@@ -254,15 +271,18 @@ mod tests {
     use td_database::access::Grant;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt;
+    use td_objects::and;
     use td_objects::dxo::collection::{CollectionDB, CollectionParam};
     use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::execution::ExecutionRequest;
     use td_objects::dxo::function::{FunctionDB, FunctionParam, FunctionUpdate};
     use td_objects::types::basic::{
-        AccessTokenId, CollectionIdName, CollectionName, FunctionIdName, LogicalFunctionRunStatus,
-        PhysicalFunctionRunId, ProjectId, TransactionKey, UserId,
+        AccessTokenId, CollectionIdName, CollectionName, FunctionIdName, FunctionOnly,
+        LogicalFunctionRunStatus, OverrideDisabledTrigger, PhysicalFunctionRunId, ProjectId,
+        SkipIfRunning, TableStatus, TransactionKey, UserId,
     };
     use td_queries::Queries;
-    use td_queries::test_utils::{SeedEntry, begin_exclusive};
+    use td_queries::test_utils::{SeedEntry, begin_locked};
 
     /// An identity that already ran (the recover re-run case).
     async fn seed_run_lfr(
@@ -322,6 +342,7 @@ mod tests {
             .await?;
         let update = FunctionUpdate {
             snippet: Some("s2".try_into()?),
+            tables: register("fr", None).tables,
             ..Default::default()
         };
         services
@@ -373,12 +394,100 @@ mod tests {
             .fetch_one::<LogicalFunctionRunDB>(&pfr.logical_function_run_id)
             .await?;
 
-        let mut trx = begin_exclusive(&db, p.project_id).await?;
+        let mut trx = begin_locked(&db, p.project_id).await?;
         let at = trx.locked_at();
         let conn = trx.get(Grant::asserted("dispatch mint test"));
-        let minted = mint_function_runs_on_dispatch(conn, &[lfr], at).await?;
+        let minted = mint_function_runs_on_dispatch(conn, &[lfr], at)
+            .await?
+            .minted;
         assert_eq!(minted.len(), 1);
         assert_eq!(minted[0].tdvs.len(), tables.len());
+        Ok(())
+    }
+
+    /// An update that drops a table freezes it on the function; a run planned
+    /// after that has no logical version for it, and dispatch mints only what
+    /// the plan has.
+    #[td_test::test(db)]
+    async fn test_dispatch_skips_a_table_a_later_version_dropped(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let coll = db
+            .scoped(p.project_id)
+            .seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .await?;
+        let services = Services::with_defaults(db.clone());
+        let context = || RequestContext::with(AccessTokenId::default(), UserId::admin());
+        let collection_param = || CollectionParam {
+            collection: CollectionIdName::from_str(&format!("~{}", coll.collection_id)).unwrap(),
+        };
+        let function_param = || FunctionParam {
+            function: FunctionIdName::from_str("fr").unwrap(),
+        };
+        services
+            .register_function(
+                context()
+                    .create(collection_param(), register("fr", None))
+                    .in_project(p.project_id),
+            )
+            .await?;
+        services
+            .update_function(
+                context()
+                    .update(
+                        (collection_param(), function_param()),
+                        FunctionUpdate {
+                            tables: Some(vec![]),
+                            ..Default::default()
+                        },
+                    )
+                    .in_project(p.project_id),
+            )
+            .await?;
+        let tables: Vec<TableDB> = db
+            .scd2()
+            .fetch_all::<TableDB>(and!(coll.collection_id, TableStatus::Frozen))
+            .await?;
+        assert_eq!(tables.len(), 1, "the dropped user table is frozen");
+
+        let execution = services
+            .execute_function(
+                context()
+                    .create(
+                        (collection_param(), function_param()),
+                        ExecutionRequest {
+                            name: None,
+                            function_only: FunctionOnly::default(),
+                            override_disabled_trigger: OverrideDisabledTrigger::default(),
+                            skip_if_running: SkipIfRunning::default(),
+                            external_uid: None,
+                        },
+                    )
+                    .in_project(p.project_id),
+            )
+            .await?
+            .data;
+        let planned: Vec<LogicalFunctionRunDB> = db.fetch_all(&execution.id).await?;
+        assert_eq!(planned.len(), 1);
+        let logical: Vec<LogicalTableDataVersionDB> = db
+            .timeline()
+            .fetch_all(&Some(planned[0].id.clone()))
+            .await?;
+
+        let mut trx = begin_locked(&db, p.project_id).await?;
+        let at = trx.locked_at();
+        let conn = trx.get(Grant::asserted("dispatch mint test"));
+        let minted = mint_function_runs_on_dispatch(conn, &planned, at)
+            .await?
+            .minted;
+        assert_eq!(minted.len(), 1);
+        assert_eq!(
+            minted[0].tdvs.len(),
+            logical.len(),
+            "one output per planned logical version, none for the frozen table"
+        );
         Ok(())
     }
 
@@ -393,11 +502,13 @@ mod tests {
             .await?;
         let (lfr, previous_pfr) = seed_run_lfr(&db, p.project_id, &coll, "fr").await?;
 
-        let mut trx = begin_exclusive(&db, p.project_id).await?;
+        let mut trx = begin_locked(&db, p.project_id).await?;
         let at = trx.locked_at();
         let conn = trx.get(Grant::asserted("dispatch mint test"));
         let ready = vec![lfr.clone()];
-        let minted = mint_function_runs_on_dispatch(conn, &ready, at).await?;
+        let minted = mint_function_runs_on_dispatch(conn, &ready, at)
+            .await?
+            .minted;
 
         assert_eq!(minted.len(), 1, "the LFR is re-minted");
         assert_ne!(
