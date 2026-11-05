@@ -35,6 +35,9 @@ from tabsdatak.conn.common.sql._merge.dialect import (
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._schema.evolution import evolve_with_iceberg
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.policy import SchemaEvolution
 from tabsdatak.conn.snowflake import _iceberg
 from tabsdatak.conn.snowflake._evolution import (
     WATERMARK_TYPE,
@@ -209,7 +212,9 @@ class SnowflakeMergeDialect(MergeDialect):
     def execute(self, statement: str) -> None:
         self._cursor.execute(statement)
 
-    def evolve(self, target: str, staged: Staged, marker: str) -> list[str]:
+    def evolve(
+        self, target: str, staged: Staged, marker: str, evolution: SchemaEvolution
+    ) -> list[str]:
         """Add the columns the batch has and the target does not, and widen a
         column whose type the batch has outgrown.
 
@@ -230,8 +235,9 @@ class SnowflakeMergeDialect(MergeDialect):
             renderer=_iceberg.SnowflakeRenderer(),
             widening_map=_iceberg.SNOWFLAKE_TYPE_WIDENING_MAP,
             can_safely_widen=_iceberg.can_widen,
+            same_base=_iceberg.same_base,
             align_type=aligned_type,
-            strict=True,
+            evolution=evolution,
         )
 
     def ensure_watermark_column(

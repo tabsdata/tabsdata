@@ -27,6 +27,9 @@ from tabsdatak.conn.bigquery import _iceberg
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._schema.evolution import evolve_with_iceberg
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.policy import SchemaEvolution
+
 logger = logging.getLogger(__name__)
 
 
@@ -194,7 +197,9 @@ class BigQuerySchemaEvolver:
         logger.debug("bigquery: executing %s", statement)
         self._bq_client.query_and_wait(statement)
 
-    def evolve(self, columns: list[tuple[str, str]]) -> list[str]:
+    def evolve(
+        self, columns: list[tuple[str, str]], evolution: SchemaEvolution
+    ) -> list[str]:
         """``ALTER`` the target to meet ``columns``, returning what changed.
 
         A target that does not exist yet is left alone: the load job creates it
@@ -226,5 +231,6 @@ class BigQuerySchemaEvolver:
             renderer=_iceberg.BigQueryRenderer(),
             widening_map=_iceberg.BIGQUERY_TYPE_WIDENING_MAP,
             can_safely_widen=_iceberg.can_widen,
-            strict=True,
+            same_base=_iceberg.same_base,
+            evolution=evolution,
         )

@@ -41,6 +41,7 @@ from tabsdatak.conn.common.sql._merge._statement import render_merge, render_rep
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge.dialect import Staged
+from tabsdatak.conn.common.sql.error import SqlCommonRuntimeException
 
 pytestmark = pytest.mark.bigquery
 
@@ -357,7 +358,7 @@ def test_ensure_target_does_nothing_when_only_the_marker_was_staged():
 
 def _evolve(target: list, staging: list, marker: str = "op"):
     client = _field_client({_TARGET: target})
-    evolved = _dialect(client).evolve(_QUOTED_TARGET, _staged(staging), marker)
+    evolved = _dialect(client).evolve(_QUOTED_TARGET, _staged(staging), marker, "update")
     return client, evolved
 
 
@@ -454,8 +455,6 @@ def test_evolve_widens_a_numeric_by_its_parameters():
         # Two bases with no widening between them, in both directions.
         ("INTEGER", "STRING"),
         ("STRING", "INTEGER"),
-        # A narrowing.
-        ("NUMERIC", "INTEGER"),
     ],
 )
 def test_evolve_refuses_a_change_bigquery_cannot_make(stored, staged):
@@ -463,25 +462,32 @@ def test_evolve_refuses_a_change_bigquery_cannot_make(stored, staged):
     rather than at the MERGE. Both sides' types are read the same way, so a
     reported retype is a real one.
     """
-    from tabsdatak.conn.common.sql._schema.delta import UnsafeSchemaChangeError
-
     client = _field_client({_TARGET: [_field("total", stored)]})
-    with pytest.raises(UnsafeSchemaChangeError):
+    with pytest.raises(SqlCommonRuntimeException):
         _dialect(client).evolve(
-            _QUOTED_TARGET, _staged([_field("total", staged)]), "op"
+            _QUOTED_TARGET, _staged([_field("total", staged)]), "op", "update"
         )
+    assert _statements(client) == []
+
+
+def test_evolve_takes_a_narrower_type_as_it_is():
+    """The column already holds every value the batch's type can: nothing to
+    change and nothing to refuse."""
+    client = _field_client({_TARGET: [_field("total", "NUMERIC")]})
+    evolved = _dialect(client).evolve(
+        _QUOTED_TARGET, _staged([_field("total", "INTEGER")]), "op", "update"
+    )
+    assert evolved == []
     assert _statements(client) == []
 
 
 def test_evolve_refuses_before_it_alters_anything():
     """The check covers the whole delta, so a column that could have been added
     is not added when another column's retype is refused."""
-    from tabsdatak.conn.common.sql._schema.delta import UnsafeSchemaChangeError
-
     client = _field_client({_TARGET: [_field("total", "INTEGER")]})
     staged = _staged([_field("total", "STRING"), _field("note", "STRING")])
-    with pytest.raises(UnsafeSchemaChangeError):
-        _dialect(client).evolve(_QUOTED_TARGET, staged, "op")
+    with pytest.raises(SqlCommonRuntimeException):
+        _dialect(client).evolve(_QUOTED_TARGET, staged, "op", "update")
     assert _statements(client) == []
 
 

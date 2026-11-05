@@ -171,6 +171,7 @@ def test_dest_plugin_write_out_resolves_table_name_spelling(
 # A MERGE does not read ENABLE_SCHEMA_EVOLUTION, so the connector evolves its
 # target with ALTER statements or not at all -- and the write has to say so.
 _ICEBERG = {"snowflake.schema_evolution_engine": "iceberg"}
+_NATIVE = {"snowflake.schema_evolution_engine": "native"}
 
 
 def _batch(path: Path, columns: dict[str, list | pl.Series]) -> Path:
@@ -775,7 +776,7 @@ def test_dest_plugin_write_out_native_engine_leaves_the_width_alone(
     db.create_typed_table(table, "ORDER_ID NUMBER(38,0), STATUS VARCHAR(10)")
     batch = _batch(tmp_path / "short.parquet", {"order_id": [1], "status": ["new"]})
     try:
-        _load_out(conn, work, table, batch)
+        _load_out(conn, work, table, batch, dest_cfg=_NATIVE)
         assert db.column_types(table)["status"] == ("TEXT", 10, None)
     finally:
         db.drop_table(table)
@@ -860,17 +861,14 @@ def test_dest_plugin_write_out_iceberg_engine_does_nothing_under_strict(
 
 @pytest.mark.parametrize("if_table_exists", ["append", "replace"])
 @snowflake_domain("snowflake")
-def test_dest_plugin_write_out_ignores_a_new_column_on_strict(
+def test_dest_plugin_write_out_refuses_a_new_column_on_strict(
     domain_snowflake: SnowflakeDomain,
     if_table_exists: str,
     tmp_path: Path,
 ):
-    # The counterpart of ..._takes_a_new_column_on_update, and the proof that
-    # strict is more than "no ALTER": the write clears ENABLE_SCHEMA_EVOLUTION,
-    # so a target an earlier update-mode run had marked stops evolving rather
-    # than widening behind the flow's back. Unmarked, MATCH_BY_COLUMN_NAME simply
-    # drops the column the table has no home for -- the rows still land, which is
-    # the half that would break if "ignored" ever became "rejected".
+    # The counterpart of ..._takes_a_new_column_on_update. MATCH_BY_COLUMN_NAME
+    # would drop the column the table has no home for, losing its values, so
+    # strict refuses the batch before the COPY -- and before a replace truncates.
     db = store(domain_snowflake)
     table = f"TD_DEST_STRICT_WIDENED_{if_table_exists.upper()}"
     work = work_dir(tmp_path)
@@ -898,17 +896,12 @@ def test_dest_plugin_write_out_ignores_a_new_column_on_strict(
 
     try:
         write(narrow)
-        write(widened)
-        got = db.read_table(table)
-        assert set(got.columns) == {"order_id", "status"}
-        # replace truncates before the COPY, so only the widened row survives.
-        order_ids = [3] if if_table_exists == "replace" else [1, 2, 3]
+        with pytest.raises(SnowflakeRuntimeException) as raised:
+            write(widened)
+        assert "new column 'PRIORITY'" in str(raised.value)
         assert_frames_match(
-            got,
-            pl.DataFrame({
-                "order_id": order_ids,
-                "status": ["new"] * len(order_ids),
-            }),
+            db.read_table(table),
+            pl.DataFrame({"order_id": [1, 2], "status": ["new", "new"]}),
         )
     finally:
         db.drop_table(table)
@@ -951,15 +944,13 @@ def test_dest_plugin_write_out_merge_keeps_the_target_schema_on_strict(
 
 
 @snowflake_domain("snowflake")
-def test_dest_plugin_write_out_merge_ignores_a_new_column_on_strict(
+def test_dest_plugin_write_out_merge_refuses_a_new_column_on_strict(
     domain_snowflake: SnowflakeDomain,
     tmp_path: Path,
 ):
-    # The counterpart of ..._merge_takes_a_new_column_on_update: strict adds
-    # nothing, so the column the batch carries has nowhere to land in the target
-    # so it is not among the columns the merge writes. What must still happen is
-    # the merge itself: the rows land, only the schema is held still, and this
-    # fails either if the column appeared or if the rows did not move.
+    # The counterpart of ..._merge_takes_a_new_column_on_update: the column the
+    # batch carries has nowhere to land, so strict refuses the batch before the
+    # MERGE rather than merging the rest and losing its values.
     db = store(domain_snowflake)
     table = "TD_DEST_MERGE_STRICT_WIDENED"
     work = work_dir(tmp_path)
@@ -980,15 +971,12 @@ def test_dest_plugin_write_out_merge_ignores_a_new_column_on_strict(
     )
     try:
         _merge_out(conn, work, table, seed, merge_cfg, schema_evolution="strict")
-        _merge_out(conn, work, table, widened, merge_cfg, schema_evolution="strict")
-        got = db.read_table(table)
-        assert set(got.columns) == {"order_id", "status"}
+        with pytest.raises(SnowflakeRuntimeException) as raised:
+            _merge_out(conn, work, table, widened, merge_cfg, schema_evolution="strict")
+        assert "new column 'PRIORITY'" in str(raised.value)
         assert_frames_match(
-            got,
-            pl.DataFrame({
-                "order_id": [1, 2, 3],
-                "status": ["new", "shipped", "new"],
-            }),
+            db.read_table(table),
+            pl.DataFrame({"order_id": [1, 2], "status": ["new", "new"]}),
         )
     finally:
         db.drop_table(table)
@@ -1045,8 +1033,8 @@ def test_dest_plugin_write_out_stops_evolving_when_switched_back_to_strict(
 ):
     # ENABLE_SCHEMA_EVOLUTION persists on the table, so strict has to clear what
     # an earlier update-mode run set -- otherwise a flow that once evolved keeps
-    # evolving no matter what it asks for afterwards. The same widened file is
-    # written twice, once per setting, and only the first may reach the schema.
+    # evolving no matter what it asks for afterwards. After the update run, a
+    # strict run with yet another column is refused and the schema stays put.
     db = store(domain_snowflake)
     table = "TD_DEST_EVOLVE_THEN_STRICT"
     work = work_dir(tmp_path)
@@ -1081,10 +1069,11 @@ def test_dest_plugin_write_out_stops_evolving_when_switched_back_to_strict(
         write(widened, "update")
         assert "priority" in db.read_table(table).columns
 
-        write(wider, "strict")
+        with pytest.raises(SnowflakeRuntimeException):
+            write(wider, "strict")
         got = db.read_table(table)
         assert set(got.columns) == {"order_id", "status", "priority"}
-        assert got.height == 3
+        assert got.height == 2
     finally:
         db.drop_table(table)
 
@@ -1422,18 +1411,21 @@ def test_dest_plugin_write_out_merge_adds_only_the_watermark_on_strict(
     domain_snowflake: SnowflakeDomain,
     tmp_path: Path,
 ):
-    # The watermark is an exception to strict, not a hole in it: the rest of a
-    # widened batch is still held back, so `priority` has nowhere to land and
-    # goes unwritten while `wm` is added.
+    # The watermark is an exception to strict, not a hole in it: it is added,
+    # and a batch widened beyond it is still refused.
     db = store(domain_snowflake)
     table = "TD_DEST_MERGE_WATERMARK_STRICT_WIDENED"
     work = work_dir(tmp_path)
     conn = dest_conn(domain_snowflake)
     db.create_typed_table(table, "ORDER_ID NUMBER(38,0), STATUS VARCHAR(16777216)")
+    plain = _batch(
+        tmp_path / "plain.parquet",
+        {"order_id": [1], "status": ["new"], "op": ["i"]},
+    )
     widened = _batch(
         tmp_path / "widened.parquet",
         {
-            "order_id": [1],
+            "order_id": [2],
             "status": ["new"],
             "priority": ["high"],
             "op": ["i"],
@@ -1444,11 +1436,21 @@ def test_dest_plugin_write_out_merge_adds_only_the_watermark_on_strict(
             conn,
             work,
             table,
-            widened,
+            plain,
             _watermark_cfg(),
             transaction_id="TRX_A",
             watermark_column=_WATERMARK,
         )
+        with pytest.raises(SnowflakeRuntimeException):
+            _merge_out(
+                conn,
+                work,
+                table,
+                widened,
+                _watermark_cfg(),
+                transaction_id="TRX_B",
+                watermark_column=_WATERMARK,
+            )
         assert set(db.read_table(table).columns) == {"order_id", "status", _WATERMARK}
         assert_frames_match(
             db.read_table(table),

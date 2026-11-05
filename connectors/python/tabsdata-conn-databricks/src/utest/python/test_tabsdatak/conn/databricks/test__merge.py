@@ -504,7 +504,7 @@ class TestEvolve:
         runs -- so there is no ALTER pass and nothing to report back."""
         cursor = _RecordingCursor()
         evolved = _dialect(cursor).evolve(
-            _TARGET, _staged([("order_id", "BIGINT")]), "op"
+            _TARGET, _staged([("order_id", "BIGINT")]), "op", "update"
         )
         assert evolved == []
         assert cursor.statements == []

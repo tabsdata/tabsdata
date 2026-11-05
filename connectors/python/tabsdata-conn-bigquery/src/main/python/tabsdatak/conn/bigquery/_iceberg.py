@@ -171,6 +171,13 @@ def _domain(base, p, s):
     return (p,) if base in _LENGTH else (p - s, s)
 
 
+def same_base(old: str, new: str) -> bool:
+    try:
+        return _parse(old)[0] == _parse(new)[0]
+    except ValueError:
+        return False
+
+
 def can_widen(old: str, new: str) -> bool:
     """True if `old` can be widened to `new` via ALTER COLUMN SET DATA TYPE."""
     ob, op, os_ = _parse(old)

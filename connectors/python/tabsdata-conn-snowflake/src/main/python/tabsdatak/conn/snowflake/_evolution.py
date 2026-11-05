@@ -24,6 +24,9 @@ from tabsdatak.conn.common._validation import fqn, unfqn
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._schema.evolution import evolve_with_iceberg
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.policy import SchemaEvolution
 from tabsdatak.conn.snowflake import _iceberg
 
 # noinspection PyProtectedMember
@@ -179,14 +182,21 @@ class SnowflakeSchemaEvolver:
     def execute(self, statement: str) -> None:
         self._cursor.execute(statement)
 
-    def evolve(self, target: str, columns: list[tuple[str, str]]) -> list[str]:
-        """``ALTER`` ``target`` to meet ``columns``, returning what changed.
+    def evolve(
+        self,
+        target: str,
+        columns: list[tuple[str, str]],
+        evolution: SchemaEvolution,
+    ) -> list[str]:
+        """``ALTER`` ``target`` to meet ``columns`` as far as ``evolution``
+        allows, returning what changed.
 
-        ``strict``: a retype Snowflake cannot make refuses the whole write
-        rather than staging rows into a column that cannot hold them. That is
-        only safe because :func:`aligned_type` has already folded away the
-        differences that are not real ones -- without it the two vocabularies
-        would refuse nearly every write.
+        A change the policy refuses -- or, under ``"update"``, a retype
+        Snowflake cannot make -- refuses the whole write rather than letting the
+        COPY drop or mangle the column. That is only safe because
+        :func:`aligned_type` has already folded away the differences that are
+        not real ones -- without it the two vocabularies would refuse nearly
+        every write.
         """
         return evolve_with_iceberg(
             self,
@@ -195,6 +205,7 @@ class SnowflakeSchemaEvolver:
             renderer=_iceberg.SnowflakeRenderer(),
             widening_map=_iceberg.SNOWFLAKE_TYPE_WIDENING_MAP,
             can_safely_widen=_iceberg.can_widen,
+            same_base=_iceberg.same_base,
             align_type=aligned_type,
-            strict=True,
+            evolution=evolution,
         )

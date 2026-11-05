@@ -168,6 +168,13 @@ def _parse(t):
     return base, p, s
 
 
+def same_base(old: str, new: str) -> bool:
+    try:
+        return _parse(old)[0] == _parse(new)[0]
+    except ParseError:
+        return False
+
+
 def can_widen(old: str, new: str) -> bool:
     """True if `old` -> `new` is a legal Snowflake ALTER COLUMN ... SET DATA TYPE.
 

@@ -24,7 +24,9 @@ def governed(delta: SchemaDelta, evolution: SchemaEvolution) -> SchemaDelta:
     changes = [
         change
         for change in delta.changes
-        if change.action in GOVERNED and not change.detail.get("fits")
+        if change.action in GOVERNED
+        and not change.detail.get("fits")
+        and not (evolution == STRICT and _resized(change))
     ]
     refused = [change for change in changes if _refused(change, evolution)]
     if refused:
@@ -34,6 +36,14 @@ def governed(delta: SchemaDelta, evolution: SchemaEvolution) -> SchemaDelta:
             changes="; ".join(_described(change) for change in refused),
         )
     return SchemaDelta(table_name=delta.table_name, is_create=False, changes=changes)
+
+
+def _resized(change: SchemaChange) -> bool:
+    return (
+        change.action is Action.ALTER_TYPE
+        and change.safe
+        and bool(change.detail.get("same_base"))
+    )
 
 
 def _refused(change: SchemaChange, evolution: SchemaEvolution) -> bool:

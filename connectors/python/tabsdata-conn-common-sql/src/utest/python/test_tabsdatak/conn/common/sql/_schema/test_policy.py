@@ -26,7 +26,7 @@ pytestmark = pytest.mark.sql_common
 WIDENING = {"BIGINT": {"INT"}}
 
 
-def _delta(current: list[tuple] | None, batch: list[tuple]):
+def _delta(current: list[tuple] | None, batch: list[tuple], same_base=None):
     def schema(columns):
         return TableSchema(
             table_name="t",
@@ -34,8 +34,15 @@ def _delta(current: list[tuple] | None, batch: list[tuple]):
         )
 
     return compute_delta(
-        None if current is None else schema(current), schema(batch), WIDENING
+        None if current is None else schema(current),
+        schema(batch),
+        WIDENING,
+        same_base=same_base,
     )
+
+
+def _same_base(old: str, new: str) -> bool:
+    return old.split("(")[0] == new.split("(")[0]
 
 
 TABLE = [("id", "BIGINT"), ("name", "STRING"), ("score", "INT")]
@@ -114,3 +121,29 @@ def test_update_makes_a_required_column_nullable():
     table = [("id", "BIGINT", False)]
     [change] = governed(_delta(table, [("id", "BIGINT", True)]), UPDATE).changes
     assert (change.action, change.column) == (Action.SET_NULLABLE, "id")
+
+
+def _resize():
+    table = [("id", "BIGINT"), ("name", "VARCHAR(10)")]
+    batch = [("id", "BIGINT"), ("name", "VARCHAR(20)")]
+    return table, batch
+
+
+def test_strict_leaves_a_longer_length_of_the_same_type_to_the_load():
+    table, batch = _resize()
+    widening = {"VARCHAR(20)": {"VARCHAR(10)"}}
+    delta = compute_delta(
+        TableSchema("t", [ColumnDef(*c) for c in table]),
+        TableSchema("t", [ColumnDef(*c) for c in batch]),
+        widening,
+        same_base=_same_base,
+    )
+    assert governed(delta, STRICT).changes == []
+    [change] = governed(delta, UPDATE).changes
+    assert (change.action, change.column) == (Action.ALTER_TYPE, "name")
+
+
+def test_strict_still_refuses_a_change_of_type():
+    batch = [("id", "BIGINT"), ("name", "STRING"), ("score", "BIGINT")]
+    with pytest.raises(SqlCommonRuntimeException):
+        governed(_delta(TABLE, batch, same_base=_same_base), STRICT)

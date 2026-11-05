@@ -12,6 +12,7 @@ import pytest
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
+from tabsdatak.conn.common.sql.error import SqlCommonRuntimeException
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.snowflake import SnowflakeDestConn
 
@@ -695,7 +696,7 @@ def test_iceberg_engine_refuses_a_change_snowflake_cannot_make(
     fake = _evolving_connection(
         monkeypatch, [("AMOUNT", "NUMBER(38,0)")], [("AMOUNT", "TEXT")]
     )
-    with pytest.raises(_iceberg.UnsafeSchemaChangeError):
+    with pytest.raises(SqlCommonRuntimeException):
         impl.write_all_tables(_iceberg_cfg(), [_parquet(tmp_path / "in.parquet")])
     assert _alters(fake.log) == []
     assert not any(s.startswith("COPY INTO") for s in fake.log)
@@ -719,16 +720,18 @@ def test_iceberg_engine_evolves_before_it_truncates_a_replace(
     assert alter < truncate < copy
 
 
-def test_iceberg_engine_does_nothing_under_strict(monkeypatch, tmp_path):
-    """Strict pins the target's schema; the engine only says *how* a schema that
-    is allowed to move is moved."""
+@pytest.mark.parametrize("engine", ["iceberg", "native"])
+def test_strict_refuses_a_new_column_on_either_engine(monkeypatch, tmp_path, engine):
+    """A COPY matching by name would drop the column without a word; strict
+    refuses the batch instead, before anything is loaded."""
     fake = _evolving_connection(
         monkeypatch, ["ID"], [("ID", "NUMBER(38,0)"), ("NOTE", "TEXT")]
     )
-    impl.write_all_tables(
-        _iceberg_cfg(schema_evolution="strict"), [_parquet(tmp_path / "in.parquet")]
-    )
+    cfg = _iceberg_cfg(schema_evolution="strict", schema_evolution_engine=engine)
+    with pytest.raises(SqlCommonRuntimeException):
+        impl.write_all_tables(cfg, [_parquet(tmp_path / "in.parquet")])
     assert _alters(fake.log) == []
+    assert not any(s.startswith("COPY INTO") for s in fake.log)
     assert [s for s in fake.log if "ENABLE_SCHEMA_EVOLUTION" in s] == [
         _evolution_mark(False)
     ]
@@ -844,7 +847,7 @@ def test_write_all_tables_merges_a_column_it_just_added(monkeypatch, tmp_path):
     assert columns == ['"C"', '"EXTRA"']
 
 
-def test_write_all_tables_does_not_add_columns_before_merging_on_strict(
+def test_write_all_tables_refuses_a_new_column_before_merging_on_strict(
     monkeypatch, tmp_path
 ):
     fake = _evolving_connection(
@@ -858,13 +861,10 @@ def test_write_all_tables_does_not_add_columns_before_merging_on_strict(
         schema_evolution="strict",
         merge_cfgs=_merge_cfgs("c"),
     )
-    impl.write_all_tables(cfg, [parquet])
+    with pytest.raises(SqlCommonRuntimeException):
+        impl.write_all_tables(cfg, [parquet])
     assert not any("ADD COLUMN" in s for s in fake.log)
-    # The merge itself still runs; the column the target lacks is simply not
-    # among the columns written, and neither is the marker.
-    merge = next(s for s in fake.log if s.startswith("MERGE INTO"))
-    columns, _ = _insert_lists(merge)
-    assert columns == ['"C"']
+    assert not any(s.startswith("MERGE INTO") for s in fake.log)
 
 
 @pytest.mark.parametrize("enabled", [True, False])

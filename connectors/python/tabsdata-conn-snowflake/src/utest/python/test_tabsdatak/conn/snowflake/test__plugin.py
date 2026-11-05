@@ -103,9 +103,9 @@ class ProgrammingError(Exception):
 # ---------------------------------------------------------------------------
 
 
-def test_dest_plugin_defaults_to_the_native_engine(work_dir):
+def test_dest_plugin_defaults_to_the_iceberg_engine(work_dir):
     cfg = plugin._resolve_dest_cfg(None)
-    assert cfg.schema_evolution_engine == "native"
+    assert cfg.schema_evolution_engine == "iceberg"
 
 
 @pytest.mark.parametrize("engine", ["native", "iceberg"])
@@ -115,8 +115,8 @@ def test_dest_plugin_reads_the_engine_off_dest_cfg(engine):
 
 
 def test_dest_plugin_rejects_an_unknown_engine():
-    """A typo would otherwise fall back to native evolution and lose the
-    widening the write asked for, with nothing said about it."""
+    """A typo would otherwise fall back to the default engine, with nothing
+    said about it."""
     with pytest.raises(SnowflakeValidateException) as ei:
         plugin._resolve_dest_cfg({"snowflake.schema_evolution_engine": "icebrg"})
     assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_21
@@ -160,7 +160,7 @@ def test_dest_plugin_write_out_calls_write_all_tables(monkeypatch, work_dir):
     assert cfg.target_tables == ["ANALYTICS.PUBLIC.USERS"]
     assert cfg.if_table_exists == "replace"
     assert cfg.schema_evolution == "strict"
-    assert cfg.schema_evolution_engine == "native"
+    assert cfg.schema_evolution_engine == "iceberg"
     assert cfg.merge_cfgs is None
     assert captured["tables"] == [src]
 

@@ -33,7 +33,7 @@ _KEY_DEST_SCHEMA_EVOLUTION_ENGINE: DestCfgKey = "snowflake.schema_evolution_engi
 
 _DEST_CFGS_DEFAULTS: dict[DestCfgKey, Any] = {
     _KEY_DEST_LOGGING_LEVEL: logging.ERROR,
-    _KEY_DEST_SCHEMA_EVOLUTION_ENGINE: "native",
+    _KEY_DEST_SCHEMA_EVOLUTION_ENGINE: "iceberg",
 }
 
 _SCHEMA_EVOLUTION_ENGINES = ("native", "iceberg")
@@ -59,8 +59,8 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
 
     engine = _get(_KEY_DEST_SCHEMA_EVOLUTION_ENGINE)
     if engine not in _SCHEMA_EVOLUTION_ENGINES:
-        # A typo here would otherwise fall back to native evolution and lose
-        # the widening the write asked for, with nothing said about it.
+        # A typo here would otherwise fall back to the default engine, with
+        # nothing said about it.
         # noinspection PyProtectedMember
         raise SnowflakeErrorCode.SNOWFLAKE_21.exception(
             value=engine,

@@ -32,6 +32,7 @@ from tabsdatak.conn.bigquery.error import (
 )
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.file._store import FileStore
+from tabsdatak.conn.common.sql.error import SqlCommonRuntimeException
 from tabsdatak.conn.common.types import GCPJson
 
 pytestmark = pytest.mark.bigquery
@@ -213,7 +214,7 @@ def test_dest_plugin_iceberg_engine_refuses_a_change_bigquery_cannot_make(
     monkeypatch, work_dir
 ):
     bq_client = _evolving_clients(monkeypatch, [("id", "NUMERIC")], [("id", "STRING")])
-    with pytest.raises(BigQueryRuntimeException):
+    with pytest.raises(SqlCommonRuntimeException):
         _write(work_dir, _ICEBERG_ENGINE)
     assert _alters(bq_client) == []
 
@@ -1031,19 +1032,22 @@ def test_dest_plugin_evolves_the_target_before_merging(monkeypatch, work_dir):
     assert "`op`" not in alter
 
 
-def test_dest_plugin_does_not_evolve_the_target_in_strict_mode(monkeypatch, work_dir):
+def test_dest_plugin_refuses_a_new_column_in_strict_mode(monkeypatch, work_dir):
     bq_client = _widening_client()
     monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
 
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "note": "n", "op": "i"}])
-    plugin._BigQueryDestPlugin().write_out(
-        _dest_ctx(work_dir), _bare_conn(), _merge_dest("strict"), [pl.scan_parquet(src)]
-    )
+    with pytest.raises(SqlCommonRuntimeException) as ei:
+        plugin._BigQueryDestPlugin().write_out(
+            _dest_ctx(work_dir),
+            _bare_conn(),
+            _merge_dest("strict"),
+            [pl.scan_parquet(src)],
+        )
 
+    assert "new column 'note'" in str(ei.value)
     assert _statements(bq_client, "ALTER TABLE") == []
-    (merge,) = _statements(bq_client, "MERGE INTO")
-    # The staged column the target does not have is simply not written.
-    assert "`note`" not in merge
+    assert _statements(bq_client, "MERGE INTO") == []
 
 
 def _uploaded_rows(staging: _LocalStaging) -> list[dict]:

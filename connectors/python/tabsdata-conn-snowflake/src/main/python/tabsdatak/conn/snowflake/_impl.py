@@ -411,12 +411,16 @@ def _write_one(
             # target an earlier native run set would otherwise go on evolving
             # underneath the Iceberg pass -- or after the write asked for strict.
             _set_copy_into_schema_evolution(cursor, evolving and natively, sql_table)
-            if evolving and not natively:
+            if not (evolving and natively):
+                # Under "strict" too: a COPY matching by name drops a column the
+                # target lacks without a word, so the pass is what refuses it.
                 # Reads the staged file before the COPY purges it, and runs before
                 # the TRUNCATE so a replace still evolves the table it is about to
                 # refill.
                 SnowflakeSchemaEvolver(cursor).evolve(
-                    sql_table, inferred_columns(cursor, stage, first_part(folder))
+                    sql_table,
+                    inferred_columns(cursor, stage, first_part(folder)),
+                    cfg.schema_evolution,
                 )
 
             if cfg.if_table_exists == "replace":

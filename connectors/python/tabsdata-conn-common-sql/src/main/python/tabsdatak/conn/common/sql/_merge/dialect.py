@@ -21,6 +21,9 @@ from typing import TYPE_CHECKING, Literal
 
 from tabsdatak.conn.common.sql._merge import WatermarkCfg
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.policy import SchemaEvolution
+
 if TYPE_CHECKING:
     import polars as pl
 
@@ -208,16 +211,18 @@ class MergeDialect(ABC):
     def execute(self, statement: str) -> None:
         """Run one statement against the destination."""
 
-    def evolve(self, target: str, staged: Staged, marker: str) -> list[str]:
-        """Bring ``target``'s schema up to what the batch wants, returning the
-        columns changed.
+    def evolve(
+        self, target: str, staged: Staged, marker: str, evolution: SchemaEvolution
+    ) -> list[str]:
+        """Bring ``target``'s schema up to what the batch wants under
+        ``evolution``, returning the columns changed.
 
-        Called only under ``schema_evolution="update"``. The default does
+        Called under both settings: under ``"strict"`` it changes nothing and
+        refuses a batch the target cannot take as it is. The default does
         nothing and reports nothing, which is right for an engine that evolves
         the target from inside the ``MERGE`` -- such a dialect carries its
         modifier in :attr:`MergeSyntax.evolution_modifier` instead. A dialect
-        that evolves with ``ALTER`` statements overrides this, and owns the
-        policy for a change the engine cannot make safely.
+        that evolves with ``ALTER`` statements overrides this.
         """
         return []
 
@@ -227,13 +232,12 @@ class MergeDialect(ABC):
         """Give ``target`` the watermark column if it has not got one, returning
         the columns added.
 
-        Called in :meth:`evolve`'s place under ``schema_evolution="strict"``,
+        Called ahead of :meth:`evolve` under ``schema_evolution="strict"``,
         where the flow has asked for the target's schema to be held still. The
         watermark is the one exception the flow did ask for: without the column
         nothing is ever stamped, so the rerun guard could never fire and naming
-        a watermark would quietly do nothing. Under ``"update"`` there is
-        nothing to do here -- :meth:`evolve` already sees the column among the
-        staged ones.
+        a watermark would quietly do nothing. Under ``"update"`` it is not
+        called -- :meth:`evolve` already sees the column among the staged ones.
 
         The default does nothing, which is right for an engine whose ``MERGE``
         brings the column with it.

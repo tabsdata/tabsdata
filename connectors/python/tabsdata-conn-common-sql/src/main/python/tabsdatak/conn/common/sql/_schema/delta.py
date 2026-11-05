@@ -104,6 +104,7 @@ def compute_delta(
     s2: TableSchema,
     widen_map: TypeWideningMap,
     can_safely_widen: Callable[[str, str], bool] | None = None,
+    same_base: Callable[[str, str], bool] | None = None,
 ) -> SchemaDelta:
     """Compute the schema delta between ``s1`` (current) and ``s2``
     (desired).
@@ -113,6 +114,10 @@ def compute_delta(
     parameters, say, so that the safe conversions are not a fixed list -- passes
     ``can_safely_widen`` as well, called ``(old_type, new_type)`` and consulted
     only when the map has not already said yes. Either saying so is enough.
+
+    ``same_base``, called ``(old_type, new_type)``, says whether a retype only
+    changes the parameters of one base type -- a length or a precision -- which
+    the change records for the policy to tell apart from a change of type.
     """
     delta = SchemaDelta(table_name=s2.table_name)
 
@@ -203,6 +208,7 @@ def compute_delta(
                         "new_type": new.type,
                         "nullable": new.nullable,
                         "fits": fits,
+                        "same_base": bool(same_base and same_base(old.type, new.type)),
                     },
                 )
             )

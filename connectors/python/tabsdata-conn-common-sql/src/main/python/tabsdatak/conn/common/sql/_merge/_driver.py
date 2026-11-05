@@ -121,8 +121,8 @@ def merge_batch(
     ``MergeCfg`` -- it belongs to the write, not to the way one table's rows are
     matched. That column reaches the target under either evolution setting --
     through the evolution pass on ``"update"``, and through
-    :meth:`MergeDialect.ensure_watermark_column` on ``"strict"``, since a
-    watermark nothing can be stamped in is no watermark at all.
+    :meth:`MergeDialect.ensure_watermark_column` ahead of it on ``"strict"``,
+    since a watermark nothing can be stamped in is no watermark at all.
     """
     watermark_cfg = (
         WatermarkCfg(column=watermark_column, transaction_id=ctx.transaction_id)
@@ -147,10 +147,10 @@ def merge_batch(
         marker = cfg._op_column()
         dialect.ensure_target(target, staged, marker)
         evolved = (
-            dialect.evolve(target, staged, marker)
-            if schema_evolution == "update"
-            else dialect.ensure_watermark_column(target, watermark_cfg)
-        )
+            dialect.ensure_watermark_column(target, watermark_cfg)
+            if schema_evolution == "strict"
+            else []
+        ) + dialect.evolve(target, staged, marker, schema_evolution)
         # Read after the ALTERs above, so a column just added counts as
         # written rather than being left out of the merge.
         written = write_columns(dialect, target, staged, cfg)

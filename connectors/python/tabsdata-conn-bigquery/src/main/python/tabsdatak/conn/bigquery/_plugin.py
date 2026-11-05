@@ -291,7 +291,8 @@ class _BigQueryDestPlugin(
                     # table it is about to refill.
                     try:
                         BigQuerySchemaEvolver(bq_client, table_fqn).evolve(
-                            batch_columns(bq_client, uri, table_fqn)
+                            batch_columns(bq_client, uri, table_fqn),
+                            write_cfg.schema_evolution,
                         )
                     except ConnException:
                         raise

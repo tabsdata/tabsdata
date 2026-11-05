@@ -138,12 +138,17 @@ def test_snowflake_dest_accepts_known_dest_cfg_keys():
 # ---------------------------------------------------------------------------
 
 
-def test_snowflake_dest_requires_iceberg_for_a_merge():
+def test_snowflake_dest_merges_on_the_default_engine():
+    SnowflakeDest(tables=["DB.S.T"], if_table_exists="merge", merge_cfg=[_merge_cfg()])
+
+
+def test_snowflake_dest_refuses_the_native_engine_for_a_merge():
     with pytest.raises(SnowflakeValidateException) as ei:
         SnowflakeDest(
             tables=["DB.S.T"],
             if_table_exists="merge",
             merge_cfg=[_merge_cfg()],
+            dest_cfg={"snowflake.schema_evolution_engine": "native"},
         )
     assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_22
 

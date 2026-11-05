@@ -36,6 +36,7 @@ from tabsdatak.conn.common.sql._merge._statement import render_merge, render_rep
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge.dialect import Staged
 from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
+from tabsdatak.conn.common.sql.error import SqlCommonRuntimeException
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.snowflake import MergeCfg, _iceberg
@@ -101,7 +102,7 @@ def _alters(log: list[str]) -> list[str]:
 def _evolve(table_columns, file_columns, target=_TARGET):
     """Evolve ``target`` against a batch, returning ``(fake, changed)``."""
     fake = column_fakes(table_columns, file_columns)
-    changed = _dialect(fake).evolve(target, _staged(file_columns), "OP")
+    changed = _dialect(fake).evolve(target, _staged(file_columns), "OP", "update")
     return fake, changed
 
 
@@ -242,7 +243,6 @@ def test_evolve_still_adds_beside_a_base_it_cannot_alter():
     [
         ("NUMBER(38,0)", "TEXT"),
         ("NUMBER(38,0)", "FLOAT"),
-        ("VARCHAR(20)", "VARCHAR(10)"),
         ("NUMBER(20,2)", "NUMBER(20,4)"),
         ("DATE", "TIMESTAMP_NTZ(9)"),
     ],
@@ -251,8 +251,19 @@ def test_evolve_refuses_a_change_snowflake_cannot_make(stored, inferred):
     # A narrowing, or a conversion between two bases: the batch's values have
     # nowhere to land, so the write stops here rather than at the MERGE.
     fake = column_fakes([("AMOUNT", stored)], [("AMOUNT", inferred)])
-    with pytest.raises(_iceberg.UnsafeSchemaChangeError):
-        _dialect(fake).evolve(_TARGET, _staged([("AMOUNT", inferred)]), "OP")
+    with pytest.raises(SqlCommonRuntimeException):
+        _dialect(fake).evolve(_TARGET, _staged([("AMOUNT", inferred)]), "OP", "update")
+    assert _alters(fake.log) == []
+
+
+def test_evolve_takes_a_narrower_type_as_it_is():
+    # The column already holds every value the batch's type can: nothing to
+    # change and nothing to refuse.
+    fake = column_fakes([("NAME", "VARCHAR(20)")], [("NAME", "VARCHAR(10)")])
+    changed = _dialect(fake).evolve(
+        _TARGET, _staged([("NAME", "VARCHAR(10)")]), "OP", "update"
+    )
+    assert changed == []
     assert _alters(fake.log) == []
 
 
@@ -262,8 +273,8 @@ def test_evolve_refuses_before_it_alters_anything():
     # change is worse than none.
     columns = [("AMOUNT", "FLOAT"), ("NOTE", "TEXT")]
     fake = column_fakes([("AMOUNT", "NUMBER(38,0)")], columns)
-    with pytest.raises(_iceberg.UnsafeSchemaChangeError):
-        _dialect(fake).evolve(_TARGET, _staged(columns), "OP")
+    with pytest.raises(SqlCommonRuntimeException):
+        _dialect(fake).evolve(_TARGET, _staged(columns), "OP", "update")
     assert _alters(fake.log) == []
 
 
@@ -960,12 +971,12 @@ def test_incoming_column_rejects_an_ambiguous_match():
 # ---------------------------------------------------------------------------
 
 
-def test_merge_batch_refuses_a_target_sharing_no_column(tmp_path):
-    """Nothing to write means the merge would be a no-op, and the likely cause
-    -- a frame aimed at the wrong table -- deserves saying."""
+def test_merge_batch_refuses_a_target_sharing_no_column_on_strict(tmp_path):
+    """A frame aimed at the wrong table brings only columns the target lacks,
+    and strict names each of them before anything is merged."""
     batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"])
     fake = column_fakes(["OTHER"], [("C", "NUMBER(38,0)"), ("OP", "TEXT")])
-    with pytest.raises(SnowflakeRuntimeException) as ei:
+    with pytest.raises(SqlCommonRuntimeException) as ei:
         merge_batch(
             _dialect(fake),
             target=_TARGET,
@@ -974,25 +985,34 @@ def test_merge_batch_refuses_a_target_sharing_no_column(tmp_path):
             schema_evolution="strict",
             ctx=_FakeCtx(),
         )
-    assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_16
-    assert _TARGET in str(ei.value)
+    assert "new column 'C'" in str(ei.value)
     assert not any(s.startswith("MERGE") for s in fake.log)
 
 
 def test_merge_batch_evolves_only_on_update(tmp_path):
     batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"], v=[10])
     columns = [("C", "NUMBER(38,0)"), ("OP", "TEXT"), ("V", "NUMBER(38,0)")]
-    for evolution, expected in (("strict", []), ("update", ["V"])):
-        fake = column_fakes(["C"], columns)
-        result = merge_batch(
+    fake = column_fakes(["C"], columns)
+    result = merge_batch(
+        _dialect(fake),
+        target=_TARGET,
+        batch=batch,
+        cfg=_cfg(),
+        schema_evolution="update",
+        ctx=_FakeCtx(),
+    )
+    assert result.evolved == ["V"]
+    fake = column_fakes(["C"], columns)
+    with pytest.raises(SqlCommonRuntimeException):
+        merge_batch(
             _dialect(fake),
             target=_TARGET,
             batch=batch,
             cfg=_cfg(),
-            schema_evolution=evolution,
+            schema_evolution="strict",
             ctx=_FakeCtx(),
         )
-        assert result.evolved == expected
+    assert _alters(fake.log) == []
 
 
 def _merge(fake, batch, schema_evolution="update", watermark_column=None, **cfg_kwargs):
@@ -1071,15 +1091,14 @@ def test_merge_batch_writes_the_watermark_on_strict_too(tmp_path):
     assert 'ALTER TABLE "DB"."S"."T" ADD COLUMN IF NOT EXISTS "WM" STRING' in fake.log
 
 
-def test_merge_batch_adds_nothing_else_on_strict(tmp_path):
-    # The rest of the widened batch is still held back -- the exception is the
-    # watermark alone, not evolution creeping into strict.
-    batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"], v=[10])
-    columns = [("C", "NUMBER(38,0)"), ("OP", "TEXT"), ("V", "NUMBER(38,0)")]
+def test_merge_batch_adds_nothing_but_the_watermark_on_strict(tmp_path):
+    # The watermark is the one column strict adds: a widened batch is still
+    # refused, so evolution does not creep into strict through it.
+    batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"])
+    columns = [("C", "NUMBER(38,0)"), ("OP", "TEXT")]
     fake = column_fakes(["C"], columns, watermark_answers(has_column=False))
     result = _merge(fake, batch, schema_evolution="strict", watermark_column="WM")
     assert result.evolved == ["WM"]
-    assert "V" not in result.written
 
 
 def test_merge_batch_adds_no_watermark_on_strict_without_one(tmp_path):

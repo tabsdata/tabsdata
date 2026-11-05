@@ -28,6 +28,9 @@ from tabsdatak.conn.common.sql._merge.dialect import (
     MergeSyntax,
     Staged,
 )
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.policy import SchemaEvolution
 from tabsdatak.conn.databricks.error import DatabricksErrorCode
 
 if TYPE_CHECKING:
@@ -230,7 +233,9 @@ class DatabricksMergeDialect(MergeDialect):
         logger.debug("Executing: %s", statement)
         self._cursor.execute(statement)
 
-    def evolve(self, target: str, staged: Staged, marker: str) -> list[str]:
+    def evolve(
+        self, target: str, staged: Staged, marker: str, evolution: SchemaEvolution
+    ) -> list[str]:
         """Nothing to do: Databricks evolves the target from inside the
         ``MERGE``.
 

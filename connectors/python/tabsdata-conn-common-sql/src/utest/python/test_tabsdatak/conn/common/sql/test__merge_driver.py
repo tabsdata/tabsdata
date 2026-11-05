@@ -270,3 +270,34 @@ class TestMergeBatch:
         dialect, result = _merge(tmp_path, [("A", "i", 1)], MergeSyntax())
         assert not result.replaced
         assert len(dialect.executed) == 1
+
+
+class _Evolving(_FakeDialect):
+    def __init__(self) -> None:
+        super().__init__(_MERGE, ["pk", "v"])
+        self.calls: list[tuple[str, str]] = []
+
+    def evolve(self, target, staged, marker, evolution):
+        self.calls.append(("evolve", evolution))
+        return []
+
+    def ensure_watermark_column(self, target, watermark_cfg):
+        self.calls.append(("watermark", "strict"))
+        return []
+
+
+@pytest.mark.parametrize("evolution", ["strict", "update"])
+def test_the_evolution_pass_runs_under_either_setting(tmp_path, evolution):
+    dialect = _Evolving()
+    merge_batch(
+        dialect,
+        target=_TARGET,
+        batch=_batch(tmp_path, [("a", "i", 1)]),
+        cfg=_cfg(),
+        schema_evolution=evolution,
+        ctx=SimpleNamespace(transaction_id="trx"),
+    )
+    expected = [("evolve", evolution)]
+    if evolution == "strict":
+        expected.insert(0, ("watermark", "strict"))
+    assert dialect.calls == expected

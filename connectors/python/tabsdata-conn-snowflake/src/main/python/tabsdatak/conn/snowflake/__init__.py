@@ -337,18 +337,17 @@ class SnowflakeDest(Dest):
             behind.
         dest_cfg: Optional connector config. Supported keys:
             `snowflake.logging_level`, and
-            `snowflake.schema_evolution_engine` -- `"native"` (the default
-            when unset) or `"iceberg"`. Native schema evolution is performed with
-            Snowflake's
+            `snowflake.schema_evolution_engine` -- `"iceberg"` (the default
+            when unset) or `"native"`. `"iceberg"` diffs the target against
+            the incoming file and runs the `ALTER` statements itself: it adds
+            a column and widens one whose type the batch has outgrown, and
+            refuses a change Snowflake could not make. `"native"` leaves
+            `schema_evolution="update"` to Snowflake's
             `ENABLE_SCHEMA_EVOLUTION`, which `COPY INTO` honours and which
-            only ever adds a column. `"iceberg"` diffs the
-            target against the incoming file instead, which also widens a
-            column whose type the batch has outgrown and refuses a change
-            Snowflake could not make. It applies only where the schema is
-            allowed to move, so it does nothing under
-            `schema_evolution="strict"`; `if_table_exists="merge"` requires
-            `snowflake.schema_evolution_engine="iceberg"`, since a `MERGE` does not read
-            the native mark at all.
+            only ever adds a column, never widens one; a `MERGE` does not read
+            it at all, so `if_table_exists="merge"` refuses `"native"`.
+            Under `schema_evolution="strict"` both engines refuse a batch
+            with a new column or a wider type.
 
     Examples:
         Append rows to a table -- the default disposition, which
@@ -422,8 +421,8 @@ class SnowflakeDest(Dest):
     def validate(self) -> None:
         """Cross-field validation: `merge_cfg` and `if_table_exists="merge"`
         require each other, a list of configs must line up with `tables`,
-        `watermark_column` is not a replace's to name, and merging requires
-        `schema_evolution_engine="iceberg"`.
+        `watermark_column` is not a replace's to name, and merging refuses
+        `schema_evolution_engine="native"`.
 
         Called by the framework; raises `SnowflakeValidateException`.
         """
@@ -451,6 +450,6 @@ class SnowflakeDest(Dest):
         # Last, so a merge that is malformed in a more basic way reports that
         # instead: a missing merge_cfg is the thing to fix first.
         engine = (self.dest_cfg or {}).get("snowflake.schema_evolution_engine")
-        if merging and engine != "iceberg":
+        if merging and engine == "native":
             # noinspection PyProtectedMember
             raise SnowflakeErrorCode.SNOWFLAKE_22.exception()

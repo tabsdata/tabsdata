@@ -44,6 +44,9 @@ from tabsdatak.conn.common.sql._merge.dialect import (
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._schema.evolution import evolve_with_iceberg
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.policy import SchemaEvolution
+
 if TYPE_CHECKING:
     import polars as pl
 
@@ -243,7 +246,9 @@ class BigQueryMergeDialect(MergeDialect):
         logger.debug("bigquery: executing %s", statement)
         self._bq_client.query_and_wait(statement)
 
-    def evolve(self, target: str, staged: Staged, marker: str) -> list[str]:
+    def evolve(
+        self, target: str, staged: Staged, marker: str, evolution: SchemaEvolution
+    ) -> list[str]:
         """``ALTER TABLE`` the target to add every column the batch has and it
         does not, and to widen a column whose type the batch has outgrown.
 
@@ -266,7 +271,8 @@ class BigQueryMergeDialect(MergeDialect):
             renderer=_iceberg.BigQueryRenderer(),
             widening_map=_iceberg.BIGQUERY_TYPE_WIDENING_MAP,
             can_safely_widen=_iceberg.can_widen,
-            strict=True,
+            same_base=_iceberg.same_base,
+            evolution=evolution,
         )
 
     def check_watermark_column(self, target: str, watermark_cfg: WatermarkCfg) -> bool:

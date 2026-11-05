@@ -135,11 +135,11 @@ class SnowflakeErrorCode(ErrorCode):
     )  # _resolve_dest_cfg
     SNOWFLAKE_22 = ErrorDef(
         SnowflakeValidateException,
-        'SnowflakeDest.if_table_exists="merge" requires'
-        " dest_cfg={{'snowflake.schema_evolution_engine': 'iceberg'}}."
+        'SnowflakeDest.if_table_exists="merge" does not take'
+        " dest_cfg={{'snowflake.schema_evolution_engine': 'native'}}."
         " A MERGE does not read ENABLE_SCHEMA_EVOLUTION, so the connector"
-        " evolves a merge target with ALTER statements or not at all -- which"
-        " the write has to say out loud",
+        " evolves a merge target with ALTER statements: leave the engine unset"
+        " or set it to 'iceberg'",
     )  # SnowflakeDest.validate()
 
     # --- watermark_column (tabsdatak.conn.snowflake) ----------------

@@ -22,6 +22,10 @@ from testi_tabsdatak.conn.common.sql.plugin_io import provisioned_parquet, work_
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import BigQueryDest, MergeCfg, _plugin as plugin
 from tabsdatak.conn.bigquery.error import BigQueryErrorCode, BigQueryRuntimeException
+from tabsdatak.conn.common.sql.error import (
+    SqlCommonErrorCode,
+    SqlCommonRuntimeException,
+)
 
 pytestmark = pytest.mark.bigquery
 
@@ -768,9 +772,9 @@ def test_dest_plugin_write_out_iceberg_engine_refuses_an_impossible_retype(
         {"order_id": [1], "amount": ["not a number"]},
     )
     try:
-        with pytest.raises(BigQueryRuntimeException) as ei:
+        with pytest.raises(SqlCommonRuntimeException) as ei:
             _load_out(conn, work, table, batch, dest_cfg=_ICEBERG)
-        assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_23
+        assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_10
         assert db.column_types(table) == before
         assert db.count(table) == 0
     finally:
@@ -998,14 +1002,12 @@ def test_dest_plugin_write_out_merge_widens_a_numeric_by_its_parameters(
 
 
 @bigquery_domain("bigquery")
-def test_dest_plugin_write_out_merge_refuses_a_batch_that_would_narrow(
+def test_dest_plugin_write_out_merge_takes_a_narrower_type_as_it_is(
     domain_bigquery: BigQueryDomain,
     tmp_path: Path,
 ):
-    # The mirror of the widening case, and it does not go quietly: FLOAT64 down
-    # to INT64 is no widening, so nothing is altered and the MERGE would write
-    # the batch's column into an incompatible one. The delta is refused before
-    # the statement is built, so the target is left as the seed made it.
+    # The mirror of the widening case: a FLOAT64 column already holds every
+    # INT64 the batch can carry, so nothing is altered and the rows merge.
     db = store(domain_bigquery)
     table = "td_dest_merge_narrow_type"
     work = work_dir(tmp_path)
@@ -1028,14 +1030,12 @@ def test_dest_plugin_write_out_merge_refuses_a_batch_that_would_narrow(
     )
     try:
         _seed_target(conn, work, table, seed)
-        with pytest.raises(BigQueryRuntimeException) as ei:
-            _merge_out(conn, work, table, narrowed, merge_cfg, "update")
-        assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_18
+        _merge_out(conn, work, table, narrowed, merge_cfg, "update")
 
         assert db.column_types(table)["amount"][0] == "FLOAT"
         assert_frames_match(
             db.read_table(table),
-            pl.DataFrame({"order_id": [1], "amount": [10.5]}),
+            pl.DataFrame({"order_id": [1], "amount": [11.0]}),
         )
     finally:
         db.drop_table(table)
@@ -1046,10 +1046,9 @@ def test_dest_plugin_write_out_merge_refuses_a_widened_batch_on_strict(
     domain_bigquery: BigQueryDomain,
     tmp_path: Path,
 ):
-    # Strict does not evolve, so a batch whose column widened is written into
-    # the target's narrower one -- which BigQuery will not do. A type change in
-    # the batch is therefore a hard failure under strict, not a no-op: the same
-    # batch merges cleanly under "update", where the column is retyped first.
+    # Strict does not evolve, so a batch whose column widened is refused before
+    # the MERGE: the same batch merges cleanly under "update", where the column
+    # is retyped first.
     db = store(domain_bigquery)
     table = "td_dest_merge_strict_type"
     work = work_dir(tmp_path)
@@ -1072,22 +1071,22 @@ def test_dest_plugin_write_out_merge_refuses_a_widened_batch_on_strict(
     )
     try:
         _seed_target(conn, work, table, seed)
-        with pytest.raises(BigQueryRuntimeException) as ei:
+        with pytest.raises(SqlCommonRuntimeException) as ei:
             _merge_out(conn, work, table, widened, merge_cfg, "strict")
-        assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_18
+        assert "column 'amount' from INT64 to FLOAT64" in str(ei.value)
         assert db.column_types(table)["amount"][0] == "INTEGER"
     finally:
         db.drop_table(table)
 
 
 @bigquery_domain("bigquery")
-def test_dest_plugin_write_out_merge_keeps_the_target_schema_on_strict(
+def test_dest_plugin_write_out_merge_refuses_a_new_column_on_strict(
     domain_bigquery: BigQueryDomain,
     tmp_path: Path,
 ):
-    # The mirror of the evolving case: with no diff pass the write lists cover
-    # the columns both sides share, so a batch carrying a new one merges what it
-    # can and leaves the target's schema as the seed made it.
+    # The mirror of the evolving case: a batch carrying a new column is refused
+    # before the MERGE rather than merged without it, and the target is left as
+    # the seed made it.
     db = store(domain_bigquery)
     table = "td_dest_merge_strict_column"
     work = work_dir(tmp_path)
@@ -1102,12 +1101,12 @@ def test_dest_plugin_write_out_merge_keeps_the_target_schema_on_strict(
         _seed_target(conn, work, table, seed)
         before = set(db.read_table(table).columns)
 
-        _merge_out(conn, work, table, widened, merge_cfg, "strict")
+        with pytest.raises(SqlCommonRuntimeException) as ei:
+            _merge_out(conn, work, table, widened, merge_cfg, "strict")
+        assert "new column 'carrier'" in str(ei.value)
         got = db.read_table(table)
-        assert "carrier" not in got.columns
         assert set(got.columns) == before
-        # The columns both sides share still merge.
-        assert_frames_match(got, pl.DataFrame({"order_id": [1], "status": ["shipped"]}))
+        assert_frames_match(got, pl.DataFrame({"order_id": [1], "status": ["new"]}))
     finally:
         db.drop_table(table)
 
@@ -1117,9 +1116,9 @@ def test_dest_plugin_write_out_merge_evolves_only_while_update_is_asked_for(
     domain_bigquery: BigQueryDomain,
     tmp_path: Path,
 ):
-    # The diff runs per write, so a target an earlier "update" run widened stops
-    # taking new columns as soon as a run asks for "strict" -- and the column the
-    # earlier run added stays.
+    # The diff runs per write, so a target an earlier "update" run widened
+    # refuses new columns as soon as a run asks for "strict" -- and the column
+    # the earlier run added stays.
     db = store(domain_bigquery)
     table = "td_dest_merge_evolution_off"
     work = work_dir(tmp_path)
@@ -1145,15 +1144,16 @@ def test_dest_plugin_write_out_merge_evolves_only_while_update_is_asked_for(
         _merge_out(conn, work, table, first, merge_cfg, "update")
         assert "carrier" in db.read_table(table).columns
 
-        _merge_out(conn, work, table, second, merge_cfg, "strict")
+        with pytest.raises(SqlCommonRuntimeException):
+            _merge_out(conn, work, table, second, merge_cfg, "strict")
         got = db.read_table(table)
         assert "eta" not in got.columns
         assert_frames_match(
             got,
             pl.DataFrame({
                 "order_id": [1],
-                "status": ["shipped"],
-                "carrier": ["dhl"],
+                "status": ["packed"],
+                "carrier": ["ups"],
             }),
         )
     finally:
@@ -1394,19 +1394,22 @@ def test_dest_plugin_write_out_merge_adds_only_the_watermark_on_strict(
     domain_bigquery: BigQueryDomain,
     tmp_path: Path,
 ):
-    # The watermark is an exception to strict, not a hole in it: the rest of a
-    # widened batch is still held back, so `priority` has nowhere to land and
-    # goes unwritten while `wm` is added.
+    # The watermark is an exception to strict, not a hole in it: it is added,
+    # and a batch widened beyond it is still refused.
     db = store(domain_bigquery)
     table = "td_dest_merge_watermark_strict_widened"
     work = work_dir(tmp_path)
     conn = dest_conn(domain_bigquery)
     seed = _batch(tmp_path / "seed.parquet", {"order_id": [1], "status": ["new"]})
+    plain = _batch(
+        tmp_path / "plain.parquet",
+        {"order_id": [1], "status": ["shipped"], "op": ["u"]},
+    )
     widened = _batch(
         tmp_path / "widened.parquet",
         {
             "order_id": [1],
-            "status": ["shipped"],
+            "status": ["lost"],
             "priority": ["high"],
             "op": ["u"],
         },
@@ -1417,12 +1420,23 @@ def test_dest_plugin_write_out_merge_adds_only_the_watermark_on_strict(
             conn,
             work,
             table,
-            widened,
+            plain,
             _watermark_cfg(),
             watermark_column=_WATERMARK,
             schema_evolution="strict",
             transaction_id="TRX_A",
         )
+        with pytest.raises(SqlCommonRuntimeException):
+            _merge_out(
+                conn,
+                work,
+                table,
+                widened,
+                _watermark_cfg(),
+                watermark_column=_WATERMARK,
+                schema_evolution="strict",
+                transaction_id="TRX_B",
+            )
         assert "priority" not in db.column_types(table)
         assert_frames_match(
             db.read_table(table),

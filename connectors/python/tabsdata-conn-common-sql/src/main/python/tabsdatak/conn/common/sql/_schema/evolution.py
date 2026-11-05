@@ -33,8 +33,10 @@ from tabsdatak.conn.common.sql._schema.delta import (
     TableSchema,
     TypeWideningMap,
     compute_delta,
-    validate_delta,
 )
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.policy import SchemaEvolution, governed
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +70,8 @@ def evolve_with_iceberg(
     widening_map: TypeWideningMap,
     can_safely_widen: Callable[[str, str], bool] | None = None,
     align_type: Callable[[str | None, str], str] | None = None,
-    strict: bool = True,
+    same_base: Callable[[str, str], bool] | None = None,
+    evolution: SchemaEvolution,
 ) -> list[str]:
     """``ALTER`` ``target`` to meet the batch where the engine allows it,
     returning the columns changed.
@@ -90,14 +93,16 @@ def evolve_with_iceberg(
     inference speak different vocabularies needs it, or a column nobody touched
     reads as a retype.
 
-    Only the safe changes the renderer supports are run, and they are lifted
-    into a delta of their own first: that drops what the dialect does not do --
-    a dropped or moved column is reported and ignored -- and pins ``is_create``
-    to False, so the ALTER path is the only path a target can take through here.
-
-    ``strict`` refuses the whole write when a change is one the engine cannot
-    make, rather than staging rows into a column that cannot hold them. It is
-    the caller's policy: an engine that tolerates drift passes False.
+    ``evolution`` decides what the diff may do, through
+    :func:`~tabsdatak.conn.common.sql._schema.policy.governed`: under
+    ``"strict"`` a new column or a wider type refuses the whole write, under
+    ``"update"`` only a change the engine cannot make safely does, and a column
+    the batch lacks is never dropped. ``same_base`` lets ``"strict"`` leave a
+    longer length or a larger precision of the same type to the load, which
+    fails only on a value that does not fit: a batch's inferred type is often
+    the unbounded one whatever its values are. What is left and the renderer supports is
+    run, lifted into a delta of its own with ``is_create`` pinned to False, so
+    the ALTER path is the only path a target can take through here.
     """
     align = align_type or (lambda stored, inferred: inferred)
     folded_marker = engine.fold(marker) if marker is not None else None
@@ -121,11 +126,16 @@ def evolve_with_iceberg(
         ],
     )
 
-    delta = compute_delta(
-        current, desired, widening_map, can_safely_widen=can_safely_widen
+    delta = governed(
+        compute_delta(
+            current,
+            desired,
+            widening_map,
+            can_safely_widen=can_safely_widen,
+            same_base=same_base,
+        ),
+        evolution,
     )
-    if strict:
-        validate_delta(delta, strict=True)
 
     evolving = SchemaDelta(
         table_name=delta.table_name,
@@ -133,7 +143,7 @@ def evolve_with_iceberg(
         changes=[
             change
             for change in delta.changes
-            if change.safe and change.action in renderer.SUPPORTED_ACTIONS
+            if change.action in renderer.SUPPORTED_ACTIONS
         ],
     )
     for statement in renderer.render_sql(evolving):
