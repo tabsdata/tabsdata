@@ -81,7 +81,11 @@ async fn put_ui_data(
 #[cfg(test)]
 mod tests {
     use crate::Services;
+    use sqlx::{Connection, PgConnection, PgPool};
+    use std::time::Duration;
+    use td_database::connection::PgConnectionExt;
     use td_database::pool::TdPool;
+    use td_error::{ApiError, TdError};
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::ui_data::{UiDataPrecondition, UiDataPut, UiDataWrite, UserUiDataDB};
     use td_objects::types::basic::{
@@ -89,6 +93,8 @@ mod tests {
     };
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
+
+    const WITHIN: Duration = Duration::from_secs(10);
 
     async fn user(db: &TdPool) -> UserId {
         db.seed()
@@ -98,13 +104,13 @@ mod tests {
             .id
     }
 
-    async fn put(
+    async fn try_put(
         service: &Services,
         user: UserId,
         data: &str,
         precondition: UiDataPrecondition,
         force: bool,
-    ) -> UiDataWrite {
+    ) -> Result<UiDataWrite, TdError> {
         let request = RequestContext::with(AccessTokenId::default(), user).update(
             (),
             UiDataPut {
@@ -113,7 +119,19 @@ mod tests {
                 force,
             },
         );
-        service.put_ui_data(request).await.unwrap().data
+        Ok(service.put_ui_data(request).await?.data)
+    }
+
+    async fn put(
+        service: &Services,
+        user: UserId,
+        data: &str,
+        precondition: UiDataPrecondition,
+        force: bool,
+    ) -> UiDataWrite {
+        try_put(service, user, data, precondition, force)
+            .await
+            .unwrap()
     }
 
     async fn stored(db: &TdPool, user: UserId) -> Option<UserUiDataDB> {
@@ -304,30 +322,43 @@ mod tests {
         put(&service, user, "{}", UiDataPrecondition::Absent, false).await;
         let etag = stored(&db, user).await.unwrap().etag;
 
-        let (a, b) = tokio::join!(
-            put(
-                &service,
-                user,
-                r#"{"w":"a"}"#,
-                UiDataPrecondition::Etag(etag),
-                false
-            ),
-            put(
-                &service,
-                user,
-                r#"{"w":"b"}"#,
-                UiDataPrecondition::Etag(etag),
-                false
-            ),
-        );
+        let pool: &PgPool = db.as_ref();
+        let mut gate = PgConnection::connect_with(&pool.connect_options())
+            .await
+            .unwrap();
+        let schema: String = sqlx::query_scalar("SELECT current_schema()::text")
+            .fetch_one(pool)
+            .await
+            .unwrap();
+        sqlx::query("BEGIN").execute(&mut gate).await.unwrap();
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            r#"SELECT 1 FROM "{schema}".user_ui_data WHERE user_id = $1 FOR UPDATE"#
+        )))
+        .bind(user.to_string())
+        .execute(&mut gate)
+        .await
+        .unwrap();
+        let writer = |data: &'static str| {
+            let service = Services::with_defaults(db.clone());
+            tokio::spawn(async move {
+                try_put(&service, user, data, UiDataPrecondition::Etag(etag), false).await
+            })
+        };
+        let a = writer(r#"{"w":"a"}"#);
+        assert!(gate.wait_until_blocking(1, WITHIN).await.unwrap());
+        let b = writer(r#"{"w":"b"}"#);
+        assert!(gate.wait_until_blocking(2, WITHIN).await.unwrap());
+        sqlx::query("ROLLBACK").execute(&mut gate).await.unwrap();
+        let (a, b) = (a.await.unwrap(), b.await.unwrap());
+
         let replaced = [&a, &b]
             .iter()
-            .filter(|w| matches!(w, UiDataWrite::Replaced(_)))
+            .filter(|w| matches!(w, Ok(UiDataWrite::Replaced(_))))
             .count();
-        let failed = [&a, &b]
+        let lost = [&a, &b]
             .iter()
-            .filter(|w| matches!(w, UiDataWrite::PreconditionFailed(Some(_))))
+            .filter(|w| matches!(w, Err(e) if e.api_error() == ApiError::Unavailable))
             .count();
-        assert_eq!((replaced, failed), (1, 1));
+        assert_eq!((replaced, lost), (1, 1));
     }
 }

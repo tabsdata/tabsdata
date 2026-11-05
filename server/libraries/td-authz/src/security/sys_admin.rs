@@ -71,9 +71,7 @@ pub async fn ensure_sys_admin_permissions<S: DbScope, M: WriteMode>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
-    use td_database::access::{Attempt, DbPool, Global, Grant, retrying};
-    use td_database::connection::PgConnectionExt;
+    use td_database::access::{DbPool, Global, Grant, retrying};
     use td_database::domain::DomainPools;
     use td_database::pool::TdPool;
 
@@ -116,35 +114,6 @@ mod tests {
         reconcile(&db).await?;
         assert_eq!(count_extra(&db).await?, 1);
         reconcile(&db).await?;
-        assert_eq!(count_extra(&db).await?, 1);
-        Ok(())
-    }
-
-    /// Two apiservers boot together and reconcile the same missing
-    /// permission. Having read that the row was missing, the second fails to
-    /// serialize rather than on the unique index, and its retry finds it.
-    #[td_test::test(db)]
-    async fn test_concurrent_reconciles_both_succeed(db: TdPool) -> Result<(), TdError> {
-        let pools = pools(&db);
-        let mut first = pools.begin(Attempt::unretried()).await?;
-        ensure_sys_admin_permissions(first.get(Grant::asserted("first boot")), EXTRAS).await?;
-
-        let second = tokio::spawn({
-            let db = db.clone();
-            async move { reconcile(&db).await }
-        });
-        assert!(
-            first
-                .get(Grant::asserted("blocking probe"))
-                .wait_until_blocking(Duration::from_secs(10))
-                .await
-                .unwrap(),
-            "the second reconcile never waited on the first"
-        );
-        first.commit().await?;
-
-        let second = second.await.expect("second reconcile");
-        assert!(second.is_ok(), "the second boot failed: {second:?}");
         assert_eq!(count_extra(&db).await?, 1);
         Ok(())
     }

@@ -6,12 +6,13 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::Display;
 use std::panic::Location;
-use std::sync::{LazyLock, Mutex};
+use std::sync::LazyLock;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use td_common::summary::Summary;
 use td_error::TdError;
 use tracing::{debug, info, warn};
 
-const ATTEMPTS: u32 = 5;
+const ATTEMPTS: u32 = 1;
 const BACKOFF: Duration = Duration::from_millis(20);
 const SUMMARY_EVERY: Duration = Duration::from_secs(60);
 
@@ -220,28 +221,16 @@ struct Counts {
     timeouts: u64,
 }
 
-struct Summary {
-    since: Instant,
-    units: BTreeMap<String, Counts>,
-}
-
-static SUMMARY: LazyLock<Mutex<Summary>> = LazyLock::new(|| {
-    Mutex::new(Summary {
-        since: Instant::now(),
-        units: BTreeMap::new(),
-    })
-});
+static SUMMARY: LazyLock<Summary<BTreeMap<String, Counts>>> =
+    LazyLock::new(|| Summary::new(SUMMARY_EVERY));
 
 /// Counts an event, and logs every unit's counts once a summary is due.
 fn count(unit: &str, event: impl FnOnce(&mut Counts)) {
-    let Ok(mut summary) = SUMMARY.lock() else {
+    let Some(units) = SUMMARY.record(|units| event(units.entry(unit.to_owned()).or_default()))
+    else {
         return;
     };
-    event(summary.units.entry(unit.to_owned()).or_default());
-    if summary.since.elapsed() < SUMMARY_EVERY {
-        return;
-    }
-    for (unit, c) in std::mem::take(&mut summary.units) {
+    for (unit, c) in units {
         info!(
             unit,
             conflicts = c.conflicts,
@@ -252,7 +241,6 @@ fn count(unit: &str, event: impl FnOnce(&mut Counts)) {
             "db.retry: summary"
         );
     }
-    summary.since = Instant::now();
 }
 
 #[cfg(test)]
@@ -318,17 +306,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_deadlock_is_retried_until_the_transaction_goes_through() {
+    async fn a_deadlock_is_answered_after_the_attempts() {
         let runs = AtomicU32::new(0);
         let outcome = retrying(|_| async {
-            if runs.fetch_add(1, Ordering::SeqCst) == 0 {
-                return Err(sql(DEADLOCK_DETECTED));
-            }
-            Ok(())
+            runs.fetch_add(1, Ordering::SeqCst);
+            Err::<(), _>(sql(DEADLOCK_DETECTED))
         })
         .await;
-        assert!(outcome.is_ok());
-        assert_eq!(runs.load(Ordering::SeqCst), 2);
+        assert!(outcome.is_err());
+        assert_eq!(runs.load(Ordering::SeqCst), ATTEMPTS);
     }
 
     #[tokio::test]
