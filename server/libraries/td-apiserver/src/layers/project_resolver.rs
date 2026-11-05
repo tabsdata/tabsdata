@@ -28,6 +28,7 @@ use td_objects::dxo::project::ProjectDB;
 use td_objects::errors::SqlError;
 use td_objects::types::basic::{ProjectId, ProjectIdName};
 use td_queries::Queries;
+use tracing::Span;
 
 /// Path-param key used by the `/projects/{project}/...` URLs.
 const PROJECT_PARAM: &str = "project";
@@ -60,6 +61,7 @@ pub async fn project_resolver_layer(
         id
     };
 
+    Span::current().record("project_id", tracing::field::display(&resolved_id));
     let mut request = request;
     request.extensions_mut().insert(resolved_id);
     Ok(next.run(request).await)

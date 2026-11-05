@@ -93,6 +93,7 @@ fn log_span<B>(id: &impl Display, request: &Request<B>) -> Span {
         version = ?request.version(),
         host = %header(request, http::header::HOST),
         user_agent = %header(request, http::header::USER_AGENT),
+        project_id = tracing::field::Empty,
     )
 }
 

@@ -7,15 +7,24 @@
 
 use crate::status::error_status::{ErrorResponse, ErrorStatus};
 use http::StatusCode;
+use std::error::Error;
 use td_error::{ApiError, TdError};
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 impl From<TdError> for ErrorStatus {
     fn from(error: TdError) -> Self {
         // Internal/server-side failures are logged in full and masked from the client;
-        // everything else is a client-visible error logged at debug level.
+        // an unavailable answer is logged with what made it so, to trace a burst back to
+        // its cause; everything else is a client-visible error logged at debug level.
         if error.api_error().is_internal() {
             error!("{error:#?}");
+        } else if error.api_error() == ApiError::Unavailable {
+            warn!(
+                code = error.code(),
+                domain = error.domain(),
+                cause = causes(&error),
+                "request: unavailable"
+            );
         } else {
             debug!("{}", error);
         }
@@ -29,6 +38,17 @@ impl From<TdError> for ErrorStatus {
         }
         .into()
     }
+}
+
+/// Every error in `error`'s source chain, outermost first.
+fn causes(error: &TdError) -> String {
+    let mut causes = Vec::new();
+    let mut cause: Option<&dyn Error> = error.source();
+    while let Some(current) = cause {
+        causes.push(current.to_string());
+        cause = current.source();
+    }
+    causes.join(": ")
 }
 
 /// Maps an [`ApiError`] class to its HTTP status. [`ApiError::Any`] passes through any
