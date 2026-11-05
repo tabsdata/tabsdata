@@ -53,6 +53,7 @@ UNUSED_STAGING = S3Location(
 
 # The polars types the tests load, in StarRocks spelling.
 _COLUMN_TYPES = {
+    pl.Int32: "INT",
     pl.Int64: "BIGINT",
     pl.String: "VARCHAR(255)",
     pl.Date: "DATE",
