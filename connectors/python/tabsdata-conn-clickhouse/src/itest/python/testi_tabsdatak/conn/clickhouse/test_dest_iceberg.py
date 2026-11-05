@@ -248,3 +248,28 @@ def test_columns_land_by_name_whatever_their_order(
         ]
     finally:
         db.drop_table(table)
+
+
+@clickhouse_domain("clickhouse")
+@s3_domain("s3")
+def test_a_backtick_in_a_column_name_creates_and_evolves(
+    domain_clickhouse: ClickhouseDomain,
+    domain_s3: S3Domain,
+    tmp_path: Path,
+):
+    db = store(domain_clickhouse)
+    table = "td_iceberg_backtick_column"
+    work = work_dir(tmp_path)
+    seed = _parquet(tmp_path / "seed.parquet", pl.DataFrame({"we`ird": [1]}))
+    evolved = _parquet(
+        tmp_path / "evolved.parquet", pl.DataFrame({"we`ird": [2], "ne`w": ["x"]})
+    )
+    conn = dest_conn(domain_clickhouse, domain_s3)
+    try:
+        _write(conn, work, seed, table, if_table_exists="replace")
+        _write(conn, work, evolved, table, schema_evolution="iceberg")
+        got = db.read_table(table).sort("we`ird")
+        assert got.columns == ["we`ird", "ne`w"]
+        assert got.rows() == [(1, None), (2, "x")]
+    finally:
+        db.drop_table(table)

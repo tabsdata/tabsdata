@@ -767,3 +767,26 @@ class TestAlterTypePreservesNullable:
             "MODIFY COLUMN `v` String DEFAULT 'x'" in stmts[0]
         )
         assert "Nullable" not in stmts[0]
+
+
+def test_column_names_with_a_backtick_are_escaped():
+    current = TableSchema(
+        table_name="`db`.`t`",
+        columns=[ColumnDef(name="i`d", type="Int64", nullable=False)],
+    )
+    desired = TableSchema(
+        table_name="`db`.`t`",
+        columns=[
+            ColumnDef(name="i`d", type="Int64", nullable=False),
+            ColumnDef(name="n`ew", type="String", nullable=True),
+        ],
+    )
+    created = render_clickhouse_sql(
+        compute_delta(None, desired, CLICKHOUSE_TYPE_WIDENING_MAP)
+    )
+    added = render_clickhouse_sql(
+        compute_delta(current, desired, CLICKHOUSE_TYPE_WIDENING_MAP)
+    )
+    assert "`i``d` Int64" in created[0]
+    assert "`n``ew` Nullable(String)" in created[0]
+    assert any("ADD COLUMN `n``ew` Nullable(String)" in stmt for stmt in added)

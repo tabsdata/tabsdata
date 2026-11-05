@@ -12,6 +12,7 @@ from tabsdatak.conn.clickhouse.error import ClickHouseErrorCode
 from tabsdatak.conn.common._validation import (
     FqnDef,
     distinct_names_validate,
+    fqn,
     name_validate,
 )
 
@@ -41,3 +42,7 @@ IDENTIFIER_VALIDATION = _api.ValueConstraints(
 )
 
 CLICKHOUSE_DISTINCT_TABLES_VALIDATION = distinct_names_validate(CLICKHOUSE_FQN_DEF)
+
+
+def quote_column(name: str) -> str:
+    return fqn([name], CLICKHOUSE_FQN_DEF)

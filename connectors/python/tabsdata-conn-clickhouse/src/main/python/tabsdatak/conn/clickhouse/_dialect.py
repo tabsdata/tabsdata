@@ -32,7 +32,7 @@ from tabsdatak.conn.clickhouse._results import BulkLoadResult
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._statuses import BulkLoadStatus
-from tabsdatak.conn.clickhouse._validation import CLICKHOUSE_FQN_DEF
+from tabsdatak.conn.clickhouse._validation import CLICKHOUSE_FQN_DEF, quote_column
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._validation import complete_levels, fqn, unfqn
@@ -370,7 +370,9 @@ class ClickHouseDialect(Dialect):
         column_nulls: dict[str, bool | None] | None = None,
     ) -> None:
         col_defs = schema_to_clickhouse_columns(arrow_schema, column_nulls)
-        columns = ",\n    ".join(f"`{name}` {typ}" for name, typ in col_defs)
+        columns = ",\n    ".join(
+            f"{quote_column(name)} {typ}" for name, typ in col_defs
+        )
         fq = self._fqn(table_name)
         ddl = (
             f"CREATE TABLE IF NOT EXISTS {fq} (\n"

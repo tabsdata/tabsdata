@@ -13,6 +13,8 @@ ClickHouse-specific pieces consumed by ``_dialect.py``.
 from __future__ import annotations
 
 # noinspection PyProtectedMember
+# noinspection PyProtectedMember
+from tabsdatak.conn.clickhouse._validation import quote_column
 from tabsdatak.conn.common.sql._iceberg import (
     Action,
     ColumnDef,
@@ -77,7 +79,7 @@ class ClickHouseRenderer(DialectRenderer):
         default: str | None,
     ) -> str:
         effective_type = f"Nullable({type_})" if nullable else type_
-        col = f"`{name}` {effective_type}"
+        col = f"{quote_column(name)} {effective_type}"
         if default is not None:
             col += f" DEFAULT {default}"
         return col
@@ -89,29 +91,28 @@ class ClickHouseRenderer(DialectRenderer):
     ) -> str | None:
         d = change.detail
         t = table_name
+        column = quote_column(change.column)
 
         if change.action == Action.ADD_COLUMN:
             effective_type = (
                 f"Nullable({d['type']})" if d.get("nullable", True) else d["type"]
             )
-            stmt = f"ALTER TABLE {t} ADD COLUMN `{change.column}` {effective_type}"
+            stmt = f"ALTER TABLE {t} ADD COLUMN {column} {effective_type}"
             if d.get("default") is not None:
                 stmt += f" DEFAULT {d['default']}"
             return stmt
 
         if change.action == Action.DROP_COLUMN:
-            return f"ALTER TABLE {t} DROP COLUMN `{change.column}`"
+            return f"ALTER TABLE {t} DROP COLUMN {column}"
 
         if change.action == Action.ALTER_TYPE:
             new_type = d["new_type"]
             if d.get("nullable", False):
                 new_type = f"Nullable({new_type})"
-            return f"ALTER TABLE {t} MODIFY COLUMN `{change.column}` {new_type}"
+            return f"ALTER TABLE {t} MODIFY COLUMN {column} {new_type}"
 
         if change.action == Action.SET_NULLABLE:
-            return (
-                f"ALTER TABLE {t} MODIFY COLUMN `{change.column}` Nullable({d['type']})"
-            )
+            return f"ALTER TABLE {t} MODIFY COLUMN {column} Nullable({d['type']})"
 
         if change.action == Action.SET_DEFAULT:
             effective_type = d["type"]
@@ -119,12 +120,12 @@ class ClickHouseRenderer(DialectRenderer):
                 effective_type = f"Nullable({effective_type})"
             return (
                 f"ALTER TABLE {t} MODIFY COLUMN "
-                f"`{change.column}` {effective_type} "
+                f"{column} {effective_type} "
                 f"DEFAULT {d['new_default']}"
             )
 
         if change.action == Action.DROP_DEFAULT:
-            return f"ALTER TABLE {t} MODIFY COLUMN `{change.column}` REMOVE DEFAULT"
+            return f"ALTER TABLE {t} MODIFY COLUMN {column} REMOVE DEFAULT"
 
         if change.action == Action.REORDER_COLUMN:
             effective_type = (
@@ -132,13 +133,10 @@ class ClickHouseRenderer(DialectRenderer):
             )
             after = d.get("after_column")
             if after is None:
-                return (
-                    f"ALTER TABLE {t} MODIFY COLUMN "
-                    f"`{change.column}` {effective_type} FIRST"
-                )
+                return f"ALTER TABLE {t} MODIFY COLUMN {column} {effective_type} FIRST"
             return (
                 f"ALTER TABLE {t} MODIFY COLUMN "
-                f"`{change.column}` {effective_type} AFTER `{after}`"
+                f"{column} {effective_type} AFTER {quote_column(after)}"
             )
 
         return None

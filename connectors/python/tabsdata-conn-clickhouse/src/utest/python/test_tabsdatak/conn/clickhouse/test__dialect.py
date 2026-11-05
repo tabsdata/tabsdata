@@ -206,6 +206,17 @@ class TestDialectCreateTable:
         assert "CREATE TABLE IF NOT EXISTS `analytics`.`some``tbl`" in ddl
 
 
+class TestDialectCreateTableColumns:
+    def test_a_backtick_in_a_column_name_is_escaped(self, captured_client):
+        import pyarrow as pa
+
+        d = ClickHouseDialect(_config("analytics"), MagicMock())
+        d.create_table(
+            MagicMock(), "t", pa.schema([pa.field("we`ird", pa.int64(), False)])
+        )
+        assert "`we``ird` Int64" in captured_client.commands[0]
+
+
 class TestDialectAlterTable:
     """Verify the FQN baked into the schema-evolution delta is
     correctly assembled.
