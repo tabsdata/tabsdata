@@ -6,54 +6,113 @@
 //! one parent from different children's changes never both commit.
 //! Transactions first: an execution rolls up from its transactions.
 
+use std::collections::BTreeSet;
+
 use crate::primitives::chunked::{MAX_QUERY_CONDITIONS, warn_if_chunked};
+use sea_query::{Expr, ExprTrait, IntoIden, Query, SelectStatement};
+use ta_objects::Dao;
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
 use td_database::access::{InProject, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::dxo::execution::ExecutionDB;
+use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunDBIden};
+use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunctionRunDBIden};
 use td_objects::dxo::transaction::TransactionDB;
-use td_objects::types::basic::{LogicalFunctionRunId, PhysicalFunctionRunId};
-use td_schema::schema::current::{Changed, execution_rollup, transaction_rollup};
+use td_objects::types::basic::{
+    ExecutionId, LogicalFunctionRunId, PhysicalFunctionRunId, TransactionId,
+};
+use td_schema::schema::current::{RollupDef, execution_rollup, transaction_rollup};
 
 pub(crate) async fn logical_runs_changed(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     lfr_ids: &[LogicalFunctionRunId],
 ) -> Result<(), SqlError> {
-    recompute(conn, Changed::LogicalRuns, lfr_ids).await
+    let parents = |ids| {
+        parents_of(
+            LogicalFunctionRunDBIden::Table,
+            LogicalFunctionRunDBIden::Id,
+            LogicalFunctionRunDBIden::TransactionId,
+            LogicalFunctionRunDBIden::ExecutionId,
+            ids,
+        )
+    };
+    recompute::<LogicalFunctionRunDB>(conn, parents, lfr_ids).await
 }
 
 pub(crate) async fn physical_runs_changed(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     pfr_ids: &[PhysicalFunctionRunId],
 ) -> Result<(), SqlError> {
-    recompute(conn, Changed::PhysicalRuns, pfr_ids).await
+    let parents = |ids| {
+        parents_of(
+            PhysicalFunctionRunDBIden::Table,
+            PhysicalFunctionRunDBIden::Id,
+            PhysicalFunctionRunDBIden::TransactionId,
+            PhysicalFunctionRunDBIden::ExecutionId,
+            ids,
+        )
+    };
+    recompute::<PhysicalFunctionRunDB>(conn, parents, pfr_ids).await
 }
 
-async fn recompute(
+fn parents_of(
+    runs: impl IntoIden,
+    id: impl IntoIden,
+    transaction: impl IntoIden,
+    execution: impl IntoIden,
+    ids: Vec<Expr>,
+) -> SelectStatement {
+    Query::select()
+        .distinct()
+        .column(transaction)
+        .column(execution)
+        .from(runs)
+        .and_where(Expr::col(id).is_in(ids))
+        .to_owned()
+}
+
+async fn recompute<R: Dao>(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
-    changed: Changed,
+    parents_of: impl Fn(Vec<Expr>) -> SelectStatement,
     ids: &[impl SeaValue],
 ) -> Result<(), SqlError> {
     if ids.is_empty() {
         return Ok(());
     }
     warn_if_chunked::<ExecutionDB>(ids.len());
+    let mut transactions = BTreeSet::new();
+    let mut executions = BTreeSet::new();
     for chunk in ids.chunks(MAX_QUERY_CONDITIONS) {
-        let values = || chunk.iter().map(SeaValue::as_sea_expr);
-        transaction_rollup()
-            .recompute_for(changed, values())
+        let parents: Vec<(TransactionId, ExecutionId)> =
+            parents_of(chunk.iter().map(SeaValue::as_sea_expr).collect())
+                .build_query_as()
+                .fetch_all(&mut *conn)
+                .await
+                .map_err(SqlError::on_read::<R>)?;
+        for (transaction, execution) in parents {
+            transactions.insert(transaction);
+            executions.insert(execution);
+        }
+    }
+    roll_up::<TransactionDB>(conn, transaction_rollup(), &transactions).await?;
+    roll_up::<ExecutionDB>(conn, execution_rollup(), &executions).await
+}
+
+async fn roll_up<D: Dao>(
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    rollup: RollupDef,
+    parents: &BTreeSet<impl SeaValue>,
+) -> Result<(), SqlError> {
+    let parents: Vec<_> = parents.iter().collect();
+    for chunk in parents.chunks(MAX_QUERY_CONDITIONS) {
+        rollup
+            .recompute(chunk.iter().map(|parent| parent.as_sea_expr()))
             .build_query()
             .execute(&mut *conn)
             .await
-            .map_err(|e| SqlError::on_write::<TransactionDB>(e, &[]))?;
-        execution_rollup()
-            .recompute_for(changed, values())
-            .build_query()
-            .execute(&mut *conn)
-            .await
-            .map_err(|e| SqlError::on_write::<ExecutionDB>(e, &[]))?;
+            .map_err(|e| SqlError::on_write::<D>(e, &[]))?;
     }
     Ok(())
 }
@@ -68,9 +127,7 @@ mod tests {
     use td_database::test_utils::generated;
     use td_error::TdError;
     use td_objects::types::basic::{ExecutionStatus, LogicalFunctionRunStatus, TransactionStatus};
-    use td_schema::schema::current::{
-        Children, Instants, Parent, Physical, RollupArm, RollupDef, Runs,
-    };
+    use td_schema::schema::current::{Children, Instants, Parent, Physical, RollupArm, RollupDef};
 
     fn check_ladder<P: FromStr, C: FromStr>(rollup: &RollupDef)
     where
@@ -143,14 +200,8 @@ mod tests {
                 parent: iden("parent_id"),
                 status: iden("status"),
             },
-            runs: Runs {
-                table: iden("ladder_children"),
-                id: iden("id"),
-                parent: iden("parent_id"),
-            },
             physical: Physical {
                 table: iden("ladder_attempts"),
-                id: iden("id"),
                 parent: iden("parent_id"),
                 started_on: iden("started_on"),
                 ended_on: iden("ended_on"),

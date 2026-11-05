@@ -2,9 +2,9 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! The status roll-ups under the tenant policy: estimates within a bound, and
-//! no aggregate, sort, hash or full scan re-run per outer row. Row counts and
-//! loops, not timings.
+//! The status roll-ups under the tenant policy: estimates within a bound
+//! wherever statistics exist, and no aggregate, sort, hash or full scan re-run
+//! per outer row. Row counts and loops, not timings.
 
 use sea_query::{Expr, PostgresQueryBuilder};
 use serde_json::Value;
@@ -15,7 +15,7 @@ use td_error::TdError;
 use td_objects::dxo::project::ProjectDB;
 use td_queries::Queries;
 use td_queries::test_utils::begin_exclusive;
-use td_schema::schema::current::{Changed, RollupDef, execution_rollup, transaction_rollup};
+use td_schema::schema::current::{RollupDef, execution_rollup, transaction_rollup};
 
 use crate::dataset;
 use crate::harness::analyze;
@@ -38,6 +38,8 @@ const PROBES: &[&str] = &[
     "Bitmap Index Scan",
     "Bitmap Heap Scan",
     "Memoize",
+    "Materialize",
+    "CTE Scan",
 ];
 
 struct Node {
@@ -72,11 +74,11 @@ async fn ids(conn: &mut PgConnection, table: &str) -> Vec<i64> {
 async fn offenders(
     conn: &mut PgConnection,
     rollup: &RollupDef,
-    changed: Changed,
-    ids: &[i64],
+    parents: &[i64],
+    statistics: bool,
 ) -> Vec<String> {
     let sql = rollup
-        .recompute_for(changed, ids.iter().map(|id| Expr::val(*id)))
+        .recompute(parents.iter().map(|id| Expr::val(*id)))
         .to_string(PostgresQueryBuilder);
     let explained: Value = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         "EXPLAIN (ANALYZE, FORMAT JSON) {sql}"
@@ -88,7 +90,8 @@ async fn offenders(
     nodes(&explained[0]["Plan"], &mut all);
     let mut off = Vec::new();
     for node in all {
-        if SCANS.contains(&node.kind.as_str())
+        if statistics
+            && SCANS.contains(&node.kind.as_str())
             && node.actual >= MIN_ROWS
             && node.actual > node.estimated.max(1.0) * UNDERESTIMATE
         {
@@ -104,31 +107,26 @@ async fn offenders(
     off
 }
 
-async fn assert_rollups_plan(db: &TdPool, project: &ProjectDB) -> Result<(), TdError> {
+async fn assert_rollups_plan(
+    db: &TdPool,
+    project: &ProjectDB,
+    statistics: bool,
+) -> Result<(), TdError> {
     let mut trx = begin_exclusive(db, project.project_id).await?;
     let conn: &mut PgConnection = trx.get(Grant::asserted("plan guard"));
-    let runs = ids(conn, "logical_function_runs").await;
-    let attempts = ids(conn, "physical_function_runs").await;
-    assert!(
-        !runs.is_empty() && !attempts.is_empty(),
-        "the project seeded no runs"
-    );
-    for (name, rollup) in [
-        ("transactions", transaction_rollup()),
-        ("executions", execution_rollup()),
+    for (name, rollup, parents) in [
+        ("transactions", transaction_rollup(), "transactions"),
+        ("executions", execution_rollup(), "executions"),
     ] {
-        for (changed, ids) in [
-            (Changed::LogicalRuns, &runs),
-            (Changed::PhysicalRuns, &attempts),
-        ] {
-            let off = offenders(conn, &rollup, changed, ids).await;
-            assert!(
-                off.is_empty(),
-                "{name} roll-up in {} from {} changed rows: {off:?}",
-                project.name,
-                ids.len()
-            );
-        }
+        let parents = ids(conn, parents).await;
+        assert!(!parents.is_empty(), "the project seeded no {name}");
+        let off = offenders(conn, &rollup, &parents, statistics).await;
+        assert!(
+            off.is_empty(),
+            "{name} roll-up in {} of {} parents: {off:?}",
+            project.name,
+            parents.len()
+        );
     }
     Ok(())
 }
@@ -157,7 +155,7 @@ async fn rollups_plan_from_estimates_within_a_project(db: TdPool) -> Result<(), 
     let projects: Vec<ProjectDB> = db.scd2().fetch_all::<ProjectDB>(()).await?;
     assert!(projects.len() >= PROJECTS);
     for project in &projects[..PROJECTS] {
-        assert_rollups_plan(&db, project).await?;
+        assert_rollups_plan(&db, project, true).await?;
     }
     Ok(())
 }
@@ -175,5 +173,18 @@ async fn rollups_plan_from_estimates_for_a_project_the_statistics_have_not_seen(
         .iter()
         .find(|p| p.name.to_string() == "test_p1")
         .expect("the second dataset seeds test_p1");
-    assert_rollups_plan(&db, unseen).await
+    assert_rollups_plan(&db, unseen, true).await
+}
+
+#[td_test::test(db)]
+async fn rollups_plan_without_statistics(db: TdPool) -> Result<(), TdError> {
+    analyze(&db, "empty tables").await;
+    dataset::metrics_dataset(&db, knobs(1)).await?;
+
+    let projects: Vec<ProjectDB> = db.scd2().fetch_all::<ProjectDB>(()).await?;
+    let project = projects
+        .iter()
+        .find(|p| p.name.to_string() == "test_p0")
+        .expect("the dataset seeds test_p0");
+    assert_rollups_plan(&db, project, false).await
 }

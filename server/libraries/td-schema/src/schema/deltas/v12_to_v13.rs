@@ -24,9 +24,9 @@
 
 use sea_query::{ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, IntoIden, Query, Table};
 
+use crate::schema::archive::sql::rollup_v13::{Changed, Children, Instants, Parent, Physical, RollupArm, RollupDef, Runs};
 use crate::schema::render::{render_query, render_schema, update_db_version};
 use crate::schema::sql::id_column;
-use crate::schema::sql::{Changed, Children, Instants, Parent, Physical, RollupArm, RollupDef, Runs};
 use crate::schema::version::SchemaDelta;
 
 const DERIVATION_WORK_MEM: &str = "64MB";

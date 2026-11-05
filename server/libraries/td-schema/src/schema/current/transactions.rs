@@ -17,7 +17,7 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::sql::scd2::{closed_version, label_of, last_version_of};
-use crate::schema::sql::{Children, Instants, Parent, Physical, RollupArm, RollupDef, Runs, ViewDef};
+use crate::schema::sql::{Children, Instants, Parent, Physical, RollupArm, RollupDef, ViewDef};
 use crate::schema::sql::{id_column, logical_id_column};
 
 #[derive(Iden, Clone, Copy)]
@@ -230,14 +230,8 @@ pub fn rollup() -> RollupDef {
             parent: LogicalFunctionRuns::TransactionId.into_iden(),
             status: LogicalFunctionRuns::Status.into_iden(),
         },
-        runs: Runs {
-            table: LogicalFunctionRuns::Table.into_iden(),
-            id: LogicalFunctionRuns::Id.into_iden(),
-            parent: LogicalFunctionRuns::TransactionId.into_iden(),
-        },
         physical: Physical {
             table: PhysicalFunctionRuns::Table.into_iden(),
-            id: PhysicalFunctionRuns::Id.into_iden(),
             parent: PhysicalFunctionRuns::TransactionId.into_iden(),
             started_on: PhysicalFunctionRuns::StartedOn.into_iden(),
             ended_on: PhysicalFunctionRuns::EndedOn.into_iden(),

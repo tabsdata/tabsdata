@@ -16,7 +16,7 @@ pub mod trigger;
 pub(crate) mod view;
 
 pub(crate) use partial_index::PartialIndexDef;
-pub use rollup::{Changed, Children, Instants, Parent, Physical, RollupArm, RollupDef, Runs};
+pub use rollup::{Children, Instants, Parent, Physical, RollupArm, RollupDef};
 pub(crate) use statistics::StatisticsDef;
 pub(crate) use trigger::{
     ImmutableColumnsTriggerDef, Scd2PendingTriggerDef, Scd2TriggerDef, SupersedeEndedTriggerDef, Transitions, TransitionsTriggerDef,

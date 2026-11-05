@@ -16,9 +16,10 @@ use super::projects::{LastProject, Projects};
 use super::transactions::{TRANSACTION_TERMINALS, Transactions};
 use super::users::Users;
 use crate::schema::Entity;
+use crate::schema::archive::sql::rollup_v13::{Children, Instants, Parent, Physical, RollupArm, RollupDef, Runs};
 use crate::schema::render::name_or_id;
+use crate::schema::sql::ViewDef;
 use crate::schema::sql::scd2::{closed_version, label_of, last_version_of};
-use crate::schema::sql::{Children, Instants, Parent, Physical, RollupArm, RollupDef, Runs, ViewDef};
 use crate::schema::sql::{id_column, logical_id_column};
 
 #[derive(Iden, Clone, Copy)]
