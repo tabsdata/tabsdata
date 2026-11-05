@@ -23,11 +23,6 @@ if TYPE_CHECKING:
 # Unity Catalog quotes identifiers with backticks.
 DELIMITERS = ("`", "`")
 
-# The connector creates a table with ``CREATE ... AS SELECT * FROM read_files(...)``,
-# and read_files contributes its own schema-rescue column -- so every table the
-# write path creates carries one column the loaded parquet did not.
-RESCUED_DATA = "_rescued_data"
-
 
 def _conn_fields(domain: DatabricksDomain) -> dict[str, Secret]:
     """Databricks authenticates with a workspace URL plus a personal access token,

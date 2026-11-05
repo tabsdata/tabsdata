@@ -654,7 +654,7 @@ class TestCreateTempTableFromVolumeSchema:
         name, sql = _staged("main.analytics.orders")
         assert sql == (
             f"CREATE TABLE {name} USING DELTA AS SELECT * FROM "
-            f"read_files('/Volumes/c/s/v/in.parquet', format => 'parquet') LIMIT 0"
+            f"read_files('/Volumes/c/s/v/in.parquet', format => 'parquet', schemaEvolutionMode => 'none') LIMIT 0"
         )
 
     def test_is_not_temporary(self):
@@ -671,7 +671,7 @@ class TestCreateTempTableFromVolumeSchema:
 
     def test_reads_the_file_the_caller_named(self):
         _, sql = _staged("c.s.t", path="/Volumes/x/y/z/other.parquet")
-        assert "read_files('/Volumes/x/y/z/other.parquet', format => 'parquet')" in sql
+        assert "read_files('/Volumes/x/y/z/other.parquet', format => 'parquet', schemaEvolutionMode => 'none')" in sql
 
     def test_returns_the_name_it_created(self):
         name, sql = _staged("c.s.t")

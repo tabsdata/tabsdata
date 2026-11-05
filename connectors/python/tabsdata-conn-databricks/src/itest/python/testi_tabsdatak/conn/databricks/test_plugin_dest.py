@@ -19,7 +19,7 @@ from tabsdatax.itest.fixture.functions.files import PluginDestCtx
 from tabsdatax.itest.fixture.functions.harness import assert_frames_match
 from testi_tabsdatak.conn.common.sql.employees_model import DEPARTMENTS, DEPT_MANAGER
 from testi_tabsdatak.conn.common.sql.plugin_io import provisioned_parquet, work_dir
-from testi_tabsdatak.conn.databricks.backend import RESCUED_DATA, dest_conn, store
+from testi_tabsdatak.conn.databricks.backend import dest_conn, store
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.databricks import DatabricksDest, MergeCfg, _plugin as plugin
@@ -94,7 +94,7 @@ def test_dest_plugin_write_out_replace_clears_existing(
         )
         got = db.read_table(table)
         assert got.height == expected.height
-        assert set(got.columns) - {RESCUED_DATA} == set(expected.columns)
+        assert set(got.columns) == set(expected.columns)
     finally:
         db.drop_table(table)
 
@@ -122,13 +122,7 @@ def _batch(path: Path, columns: dict[str, list | pl.Series]) -> Path:
 
 
 def _types(db, table: str) -> dict[str, str]:
-    """The target's column types, less the schema-rescue column ``read_files``
-    contributes to every table the write path creates."""
-    return {
-        name: type_
-        for name, type_ in db.column_types(table).items()
-        if name != RESCUED_DATA
-    }
+    return db.column_types(table)
 
 
 class _TransactionCtx(PluginDestCtx):
@@ -435,7 +429,7 @@ def test_dest_plugin_write_out_merge_keeps_the_marker_out_of_the_target(
         _merge_out(conn, work, table, delta, merge_cfg, schema_evolution)
         got = db.read_table(table)
         assert "op" not in got.columns
-        assert set(got.columns) - {RESCUED_DATA} == {"order_id", "status"}
+        assert set(got.columns) == {"order_id", "status"}
     finally:
         db.drop_table(table)
 
@@ -1285,5 +1279,33 @@ def test_dest_plugin_write_out_append_leaves_the_batch_columns_untouched(
             watermark_column=_WATERMARK,
         )
         assert pl.read_parquet(batch).columns == ["order_id", "status"]
+    finally:
+        db.drop_table(table)
+
+
+@pytest.mark.parametrize("mode", ["append", "replace", "merge"])
+@databricks_domain("databricks")
+def test_dest_plugin_write_out_creates_no_rescue_column(
+    domain_databricks: DatabricksDomain,
+    tmp_path: Path,
+    mode: str,
+):
+    """A table the connector creates carries only the batch's columns, without
+    the ``_rescued_data`` column ``read_files`` would add."""
+    db = store(domain_databricks)
+    table = f"td_dest_no_rescue_{mode}"
+    frame = pl.LazyFrame({"id": [1], "v": ["a"]})
+    dest_kwargs: dict = {}
+    if mode == "merge":
+        frame = frame.with_columns(pl.lit("i").alias("op"))
+        dest_kwargs = {"merge_cfg": [MergeCfg(on=["id"], op_column="op")]}
+    try:
+        plugin._DatabricksDestPlugin().write_out(
+            PluginDestCtx(work_dir(tmp_path)),
+            dest_conn(domain_databricks),
+            DatabricksDest(tables=[table], if_table_exists=mode, **dest_kwargs),
+            [frame],
+        )
+        assert db.read_table(table).columns == ["id", "v"]
     finally:
         db.drop_table(table)

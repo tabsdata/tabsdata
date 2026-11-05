@@ -84,6 +84,9 @@ _DOWNLOAD_RETRY_ATTEMPTS = 12
 _DOWNLOAD_RETRY_WAIT_SECONDS = 5
 # Delta's only timestamp width: it has no nanosecond type.
 _DELTA_TIME_UNIT: Final = "us"
+# ``read_files`` otherwise adds its own ``_rescued_data`` column to the schema
+# it infers -- always NULL here, since the schema comes from the same file.
+_READ_FILES_OPTIONS = "format => 'parquet', schemaEvolutionMode => 'none'"
 _COPY_INTO_RETRY_ATTEMPTS = 6
 _COPY_INTO_RETRY_WAIT_SECONDS = 5
 
@@ -725,7 +728,7 @@ def _create_temp_table_from_volume_schema(
     _execute_volume_statement(
         cursor,
         f"CREATE TABLE {temp_table} USING DELTA AS SELECT * FROM "
-        f"read_files('{file_in_volume}', format => 'parquet') LIMIT 0",
+        f"read_files('{file_in_volume}', {_READ_FILES_OPTIONS}) LIMIT 0",
         {},
     )
     return temp_table
@@ -882,7 +885,7 @@ def copy_into_table(
         create_stmt = (
             f"CREATE OR REPLACE TABLE {sql_fq} "
             f"USING DELTA AS SELECT * FROM read_files("
-            f"'{file_in_volume}', format => 'parquet') LIMIT 0"
+            f"'{file_in_volume}', {_READ_FILES_OPTIONS}) LIMIT 0"
         )
         copy_stmt = (
             f"COPY INTO {sql_fq} FROM '{file_in_volume}' "
@@ -901,7 +904,7 @@ def copy_into_table(
         create_stmt = (
             f"CREATE TABLE IF NOT EXISTS {sql_fq} "
             f"USING DELTA AS SELECT * FROM read_files("
-            f"'{file_in_volume}', format => 'parquet') LIMIT 0"
+            f"'{file_in_volume}', {_READ_FILES_OPTIONS}) LIMIT 0"
         )
         copy_stmt = (
             f"COPY INTO {sql_fq} FROM '{file_in_volume}' "
