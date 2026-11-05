@@ -13,9 +13,11 @@ import sys
 import sysconfig
 import tarfile
 import tempfile
+import threading
 import time
 import traceback
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, NoReturn
 
@@ -106,6 +108,8 @@ PRUNED_BIN_FILES_FN: list[str] = PRUNED_BIN_FILES + [
 
 STARTED: float = time.monotonic()
 
+LANE = threading.local()
+
 
 def die(description: str, cause: BaseException | None = None) -> NoReturn:
     if cause is None:
@@ -129,7 +133,9 @@ def die(description: str, cause: BaseException | None = None) -> NoReturn:
 
 def trace(message: str) -> None:
     elapsed = time.monotonic() - STARTED
-    print(f">> [{elapsed:8.2f}s] {message}", flush=True)
+    lane = getattr(LANE, "venv", None)
+    tag = f"[{lane}] " if lane else ""
+    print(f">> [{elapsed:8.2f}s] {tag}{message}", flush=True)
     sys.stderr.flush()
 
 
@@ -659,23 +665,6 @@ def install_one_set_of_packages(
     run(command)
 
 
-def install_packages(arguments: argparse.Namespace, workspace: dict[str, str]) -> None:
-    install_one_set_of_packages(
-        arguments,
-        workspace,
-        workspace["virtual_environment_td"],
-        pinned(PACKAGES_TD, arguments.version),
-        arguments.requirements_td,
-    )
-    install_one_set_of_packages(
-        arguments,
-        workspace,
-        workspace["virtual_environment_fn"],
-        pinned(PACKAGES_FN, arguments.version),
-        arguments.requirements_fn,
-    )
-
-
 def prune_one_file(folder: str, name: str) -> bool:
     target = os.path.join(folder, name)
     if not os.path.lexists(target):
@@ -701,17 +690,6 @@ def prune_one_virtual_environment(
         )
 
 
-def prune_virtual_environment(workspace: dict[str, str]) -> None:
-    prune_one_virtual_environment(
-        workspace["virtual_environment_td"],
-        PRUNED_BIN_FILES,
-    )
-    prune_one_virtual_environment(
-        workspace["virtual_environment_fn"],
-        PRUNED_BIN_FILES_FN,
-    )
-
-
 def compile_one_virtual_environment(virtual_environment: str) -> None:
     command = [
         venv_python(virtual_environment),
@@ -730,22 +708,6 @@ def compile_one_virtual_environment(virtual_environment: str) -> None:
         trace(f"Precompiling {virtual_environment} failed ({error}); skipping")
         return
     trace(f"Compiled {virtual_environment} in {time.monotonic() - started:.2f}s")
-
-
-def compile_virtual_environment(workspace: dict[str, str]) -> None:
-    compile_one_virtual_environment(workspace["virtual_environment_td"])
-    compile_one_virtual_environment(workspace["virtual_environment_fn"])
-
-
-def verify_image(workspace: dict[str, str]) -> None:
-    for folder in (
-        workspace["uv_python_home"],
-        workspace["virtual_environment_td"],
-        workspace["virtual_environment_fn"],
-    ):
-        if not os.path.isdir(folder):
-            print(f"Expected folder is missing: {folder}", file=sys.stderr)
-            sys.exit(1)
 
 
 COMPRESS_SCRIPT = """
@@ -799,35 +761,82 @@ def write_one_image(
     )
 
 
-def write_image(arguments: argparse.Namespace, workspace: dict[str, str]) -> None:
+def send_one_image(
+    arguments: argparse.Namespace, workspace: dict[str, str], target: str
+) -> None:
+    if not arguments.storage_config:
+        trace(f"Skipping the upload of {target}; no storage configuration given")
+        return
+    size = os.path.getsize(target)
+    trace(f"Sending {target}: {human_size(size)} ({size} bytes)")
+    run([
+        venv_python(workspace["virtual_environment_td"]),
+        "-m",
+        ARCHIVE_MODULE,
+        "--image",
+        target,
+        "--storage-config",
+        arguments.storage_config,
+    ])
+
+
+def lanes(
+    arguments: argparse.Namespace,
+) -> list[tuple[str, list[str], str, list[str]]]:
+    return [
+        (VENV_TD, PACKAGES_TD, arguments.requirements_td, PRUNED_BIN_FILES),
+        (VENV_FN, PACKAGES_FN, arguments.requirements_fn, PRUNED_BIN_FILES_FN),
+    ]
+
+
+def build_one_image(
+    arguments: argparse.Namespace,
+    workspace: dict[str, str],
+    script: str,
+    venv: str,
+    packages: list[str],
+    requirements: str,
+    pruned_bin_files: list[str],
+) -> None:
+    LANE.venv = venv
+    started = time.monotonic()
+    virtual_environment = workspace[f"virtual_environment_{venv}"]
+    target = workspace[f"output_image_{venv}"]
+    install_one_set_of_packages(
+        arguments,
+        workspace,
+        virtual_environment,
+        pinned(packages, arguments.version),
+        requirements,
+    )
+    prune_one_virtual_environment(virtual_environment, pruned_bin_files)
+    compile_one_virtual_environment(virtual_environment)
+    if not os.path.isdir(virtual_environment):
+        raise FileNotFoundError(f"Expected folder is missing: {virtual_environment}")
+    write_one_image(workspace, script, venv, target)
+    send_one_image(arguments, workspace, target)
+    trace(f"Built and sent the image in {time.monotonic() - started:.2f}s")
+
+
+def build_images(arguments: argparse.Namespace, workspace: dict[str, str]) -> None:
+    if not os.path.isdir(workspace["uv_python_home"]):
+        raise FileNotFoundError(
+            f"Expected folder is missing: {workspace['uv_python_home']}"
+        )
     os.makedirs(arguments.output, exist_ok=True)
     script = os.path.join(workspace["work"], "compress.py")
-    with open(script, "w") as writer:
+    with open(script, "w", encoding="utf-8") as writer:
         writer.write(COMPRESS_SCRIPT)
-    write_one_image(workspace, script, VENV_TD, workspace["output_image_td"])
-    write_one_image(workspace, script, VENV_FN, workspace["output_image_fn"])
+    planned = lanes(arguments)
+    with ThreadPoolExecutor(max_workers=len(planned)) as executor:
+        futures = [
+            executor.submit(build_one_image, arguments, workspace, script, *lane)
+            for lane in planned
+        ]
+    failures = [future.exception() for future in futures if future.exception()]
     shutil.rmtree(workspace["work"], ignore_errors=True)
-
-
-def send_image(arguments: argparse.Namespace, workspace: dict[str, str]) -> None:
-    if not arguments.storage_config:
-        print(">> Skipping the image upload; no storage configuration given")
-        return
-    for target in (
-        workspace["output_image_td"],
-        workspace["output_image_fn"],
-    ):
-        size = os.path.getsize(target)
-        trace(f"Sending {target}: {human_size(size)} ({size} bytes)")
-        run([
-            venv_python(workspace["virtual_environment_td"]),
-            "-m",
-            ARCHIVE_MODULE,
-            "--image",
-            target,
-            "--storage-config",
-            arguments.storage_config,
-        ])
+    if failures:
+        raise failures[0]
 
 
 def main() -> None:
@@ -854,12 +863,7 @@ def main() -> None:
         arguments,
         workspace,
     )
-    step("Installing packages", install_packages, arguments, workspace)
-    step("Pruning the virtual environments", prune_virtual_environment, workspace)
-    step("Compiling the virtual environments", compile_virtual_environment, workspace)
-    step("Verifying the image", verify_image, workspace)
-    step("Writing the image", write_image, arguments, workspace)
-    step("Sending the image", send_image, arguments, workspace)
+    step("Building and sending the images", build_images, arguments, workspace)
 
     hours = (time.monotonic() - start) / 3600
     print(
