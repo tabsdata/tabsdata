@@ -13,6 +13,8 @@ from typing import Any
 import polars as pl
 
 # noinspection PyProtectedMember
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._engine.initial_values import resolve_initial_values
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.databricks import (
     DatabricksDest,
@@ -65,31 +67,6 @@ _SRC_CFGS_DEFAULTS: dict[SrcCfgKey, Any] = {
 _DEST_CFGS_DEFAULTS: dict[DestCfgKey, Any] = {
     _KEY_DEST_LOGGING_LEVEL: logging.ERROR,
 }
-
-
-def _resolve_initial_values(ctx: SrcPluginCtx, src: DatabricksSrc) -> dict | None:
-    """Look up the active bind dict for this run.
-
-    Walks ``src.initial_values`` (the user's first-run seed) bind
-    name by bind name. For each, prefers ``ctx.get_attr(name)`` --
-    that's where the previous run's persisted value lands -- and
-    falls back to the seed when the ctx attributes have no entry for
-    that name.
-
-    Returns ``None`` when ``src.initial_values`` is None (no
-    placeholders in any query), signalling no substitution is needed.
-
-    Uses ``is not None`` rather than truthiness so a legitimately
-    falsy value stored last run (``0``, ``False``, ``""``) isn't
-    silently shadowed by the seed.
-    """
-    if src.initial_values is None:
-        return None
-    out: dict[str, Any] = {}
-    for name, seed in src.initial_values.items():
-        from_ctx = ctx.get_attr(name)
-        out[name] = from_ctx if from_ctx is not None else seed
-    return out
 
 
 @dataclass(frozen=True)
@@ -238,7 +215,7 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrcConn, DatabricksSrc]):
         read_cfg = _impl.DatabricksReadCfg(
             conn=conn,
             queries=list(src.queries),
-            initial_values=_resolve_initial_values(ctx, src),
+            initial_values=resolve_initial_values(ctx, src.initial_values),
         )
         host = _convert(conn.host_url, str)
         inputs: list[Iterable[LazyFrameInput]] = []

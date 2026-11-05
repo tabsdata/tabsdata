@@ -55,7 +55,7 @@ class _Ctx:
     """Duck-typed SrcPluginCtx for unit tests.
 
     Exposes ``work_dir`` plus a minimal in-memory attribute store so
-    tests for the ctx-vs-Src-field fallback (see ``_resolve_initial_values``)
+    tests for the ctx-vs-Src-field fallback (see ``resolve_initial_values``)
     can drive ``get_attr`` / ``set_attr`` without instantiating
     a real :class:`tabsdatak.spi.SrcPluginCtx`.
     """
@@ -499,96 +499,9 @@ def test_databricks_dest_cardinality_uses_tables_length():
 
 
 # ---------------------------------------------------------------------------
-# _resolve_initial_values -- per-bind-name ctx lookup with Src field fallback
+# read_in resolves the initial values -- per-bind-name ctx lookup with Src
+# field fallback
 # ---------------------------------------------------------------------------
-
-
-def test_resolve_initial_values_returns_none_when_src_has_no_seed(work_dir):
-    """No Src seed → ``None``. Connector skips substitution entirely
-    (no placeholders, no work to do)."""
-    ctx = _Ctx(work_dir)
-    src = _src()  # initial_values defaults to None
-    assert plugin._resolve_initial_values(ctx, src) is None
-
-
-def test_resolve_initial_values_returns_seed_when_ctx_empty(work_dir):
-    """First run for a flow: ctx attributes have no entry for any bind
-    name, fall back to the user-supplied Src seed for each."""
-    ctx = _Ctx(work_dir)
-    src = DatabricksSrc(
-        queries=["SELECT 1"],
-        initial_values={"last_modified": "2026-01-01T00:00:00Z", "min_id": 0},
-    )
-    out = plugin._resolve_initial_values(ctx, src)
-    assert out == {"last_modified": "2026-01-01T00:00:00Z", "min_id": 0}
-
-
-def test_resolve_initial_values_prefers_ctx_per_bind_name(work_dir):
-    """Subsequent run: each bind name independently picks up its
-    most recent value via ``ctx.get_attr(name)``. Seed is only
-    used for the names ctx doesn't have."""
-    ctx = _Ctx(
-        work_dir,
-        attributes={
-            "last_modified": "2026-05-28T00:00:00Z",
-            "min_id": 1234,
-        },
-    )
-    src = DatabricksSrc(
-        queries=["SELECT 1"],
-        initial_values={"last_modified": "from-seed", "min_id": 0},
-    )
-    out = plugin._resolve_initial_values(ctx, src)
-    assert out == {
-        "last_modified": "2026-05-28T00:00:00Z",
-        "min_id": 1234,
-    }
-
-
-def test_resolve_initial_values_partial_ctx_falls_back_per_name(work_dir):
-    """If ctx has one bind name set but not another, the missing
-    name falls back to the seed -- per-name granularity."""
-    ctx = _Ctx(work_dir, attributes={"last_modified": "2026-05-28T00:00:00Z"})
-    src = DatabricksSrc(
-        queries=["SELECT 1"],
-        initial_values={"last_modified": "seed-ts", "min_id": 42},
-    )
-    out = plugin._resolve_initial_values(ctx, src)
-    assert out == {"last_modified": "2026-05-28T00:00:00Z", "min_id": 42}
-
-
-def test_resolve_initial_values_preserves_falsy_ctx_values(work_dir):
-    """Uses ``is not None`` (not truthiness): a legitimately falsy
-    value persisted last run (``0``, ``False``, ``""``) isn't
-    silently shadowed by the seed."""
-    ctx = _Ctx(work_dir, attributes={"min_id": 0, "flag": False, "label": ""})
-    src = DatabricksSrc(
-        queries=["SELECT 1"],
-        initial_values={"min_id": 999, "flag": True, "label": "default"},
-    )
-    out = plugin._resolve_initial_values(ctx, src)
-    assert out == {"min_id": 0, "flag": False, "label": ""}
-
-
-def test_resolve_initial_values_heterogeneous_primitive_values(work_dir):
-    """The realistic SQL use case: bind values of mixed primitive
-    types (str + int). The new flat-key model round-trips them
-    cleanly."""
-    ctx = _Ctx(
-        work_dir,
-        attributes={
-            "last_modified": "2026-01-15T00:00:00Z",
-            "min_id": 1234,
-        },
-    )
-    src = DatabricksSrc(
-        queries=["SELECT 1"],
-        initial_values={"last_modified": "seed", "min_id": 0},
-    )
-    out = plugin._resolve_initial_values(ctx, src)
-    assert isinstance(out["last_modified"], str)
-    assert isinstance(out["min_id"], int)
-    assert out == {"last_modified": "2026-01-15T00:00:00Z", "min_id": 1234}
 
 
 def test_read_in_uses_resolved_initial_values(work_dir, monkeypatch):
