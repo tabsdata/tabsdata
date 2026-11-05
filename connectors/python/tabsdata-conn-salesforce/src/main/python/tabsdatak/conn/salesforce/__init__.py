@@ -197,7 +197,9 @@ class SalesforceSrcConn(Conn):
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
 
-    def _instance_url(self) -> str:
+    def _instance_url(self) -> str | None:
+        if self.instance_url is None:
+            return None
         return _convert(self.instance_url, str)
 
 
@@ -262,6 +264,11 @@ class SalesforceReportSrc(Src):
     """Salesforce report source for `@publisher` -- Tabular reports
     only.
 
+    Salesforce's Reports API returns at most 2,000 detail rows per run; a
+    report that holds more fails the read rather than landing part of it.
+    Narrow it with `filter` or `last_modified_column`, or read the object
+    with `SalesforceSrc`.
+
     :categories: source
 
     Every table this source publishes automatically carries two
@@ -290,10 +297,13 @@ class SalesforceReportSrc(Src):
             `within` or `between`.
         filter_logic: Optional boolean expression over the `filter`
             entries, e.g. `"(1 AND 2) OR 3"`.
-        last_modified_column: Optional column for incremental
-            last-modified filtering; requires `initial_last_modified`
-            (and vice versa).
-        initial_last_modified: Cutoff datetime; requires
+        last_modified_column: Optional column, named per
+            `column_name_strategy`, for incremental reads: only rows whose
+            value is after `initial_last_modified` are read, filtered on
+            the server and ANDed onto `filter` / `filter_logic`. Requires
+            `initial_last_modified` (and vice versa).
+        initial_last_modified: Cutoff datetime, sent to Salesforce in
+            UTC (a naive value is taken as UTC); requires
             `last_modified_column`.
         src_cfg: Optional connector config over the keys
             `salesforce.logging_level` and

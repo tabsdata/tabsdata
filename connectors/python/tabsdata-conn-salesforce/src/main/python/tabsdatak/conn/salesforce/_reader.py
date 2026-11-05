@@ -90,7 +90,15 @@ _SFR_PASSTHROUGH = {
     SalesforceErrorCode.SALESFORCE_13,
     SalesforceErrorCode.SALESFORCE_14,
     SalesforceErrorCode.SALESFORCE_15,
+    SalesforceErrorCode.SALESFORCE_19,
+    SalesforceErrorCode.SALESFORCE_20,
+    SalesforceErrorCode.SALESFORCE_21,
 }
+_SFR_FILTER_DATE_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+_SFR_GREATER_THAN = "greaterThan"
+_SFR_ALL_DATA_KEY = "allData"
+_SFR_CONNECT_SECONDS = 30
+_SFR_READ_SECONDS = 300
 
 
 # --- Salesforce client login ----------------------------------------------
@@ -110,7 +118,7 @@ def login(conn: SalesforceSrcConn, api_version: str | None = None) -> Any:
         raise SalesforceErrorCode.SALESFORCE_12.exception(
             kind=type(credentials).__name__,
         )
-    instance_url = conn._instance_url() if conn.instance_url else None
+    instance_url = conn._instance_url() or None
     version = api_version or sf_api.DEFAULT_API_VERSION
     try:
         return Salesforce(
@@ -360,24 +368,12 @@ def _run_one_report(
         col_sys_meta,
     ) = _obtain_report_metadata(sf, report_id, report)
 
-    # Apply the user's filter list -- map user-supplied column
-    # references through the requested naming strategy.
-    sf_filters = None
-    if src.filter:
-        sf_filters = [
-            (
-                reverse_lookup[src.column_name_strategy][column],
-                operator,
-                value,
-            )
-            for column, operator, value in src.filter
-        ]
-
+    sf_filters, filter_logic = _report_filters(src, report_id, reverse_lookup)
     instance_id = _launch_report_instance(
         sf=sf,
         report_id=report_id,
         filters=sf_filters,
-        filter_logic=src.filter_logic,
+        filter_logic=filter_logic,
     )
     response = _await_report_stream(
         sf=sf,
@@ -401,6 +397,7 @@ def _run_one_report(
     ]
     try:
         for batch in _report_batches(
+            report_id=report_id,
             raw_stream=_report_body(response),
             ordered_col_types=ordered_col_types,
             column_names=column_names,
@@ -408,6 +405,46 @@ def _run_one_report(
             yield LazyFrameInput(batch.lazy(), metadata=metadata)
     finally:
         response.close()
+
+
+def _report_filters(
+    src: SalesforceReportSrc,
+    report_id: str,
+    reverse_lookup: dict[str, dict[str, str]],
+) -> tuple[list[tuple[str, str, str]] | None, str | None]:
+    """The report filters to run with, in the report's own column names, and
+    their boolean logic. The last-modified cutoff becomes one more filter,
+    ANDed onto whatever logic the user gave."""
+    names = reverse_lookup[src.column_name_strategy]
+
+    def column(name: str) -> str:
+        if name not in names:
+            raise SalesforceErrorCode.SALESFORCE_19.exception(
+                report_id=report_id,
+                column=name,
+                strategy=src.column_name_strategy,
+            )
+        return names[name]
+
+    filters: list[tuple[str, str, str]] = [
+        (column(name), operator, value) for name, operator, value in src.filter or []
+    ]
+    logic = src.filter_logic
+    if src.last_modified_column and src.initial_last_modified is not None:
+        filters.append((
+            column(src.last_modified_column),
+            _SFR_GREATER_THAN,
+            _report_datetime(src.initial_last_modified),
+        ))
+        if logic:
+            logic = f"({logic}) AND {len(filters)}"
+    return (filters or None), logic
+
+
+def _report_datetime(dt: datetime) -> str:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).strftime(_SFR_FILTER_DATE_FORMAT)
 
 
 def _resolve_report_id(
@@ -473,7 +510,9 @@ def _obtain_report_metadata(
     report_name: str,
 ) -> tuple[list[str], dict[str, dict[str, str]], list[str], dict[str, dict[str, str]]]:
     url = f"{sf.base_url}analytics/reports/{report_id}/describe"
-    response = sf.session.get(url, headers=sf.headers)
+    response = sf.session.get(
+        url, headers=sf.headers, timeout=(_SFR_CONNECT_SECONDS, _SFR_READ_SECONDS)
+    )
     response.raise_for_status()
     s = response.json()
 
@@ -542,8 +581,8 @@ def _await_report_stream(
     import requests
 
     url = f"analytics/reports/{report_id}/instances/{instance_id}"
-    start = time.time()
-    while time.time() - start < maximum_wait_time:
+    deadline = time.monotonic() + maximum_wait_time
+    while True:
         response = sf.restful(url)
         status = response.get("attributes", {}).get("status")
         if status == "Success":
@@ -551,13 +590,24 @@ def _await_report_stream(
         if status == "Error":
             msg = response.get("attributes", {}).get("errorMessage", "<unknown>")
             raise RuntimeError(f"Report generation failed: {msg}")
+        if time.monotonic() >= deadline:
+            raise SalesforceErrorCode.SALESFORCE_20.exception(
+                report_id=report_id, seconds=maximum_wait_time
+            )
         time.sleep(poll_interval)
 
-    return requests.get(
+    result = requests.get(
         f"{sf.base_url}{url}",
         headers={"Authorization": f"Bearer {sf.session_id}"},
         stream=True,
+        timeout=(_SFR_CONNECT_SECONDS, _SFR_READ_SECONDS),
     )
+    try:
+        result.raise_for_status()
+    except BaseException:
+        result.close()
+        raise
+    return result
 
 
 def _report_body(response: Any) -> Any:
@@ -568,6 +618,7 @@ def _report_body(response: Any) -> Any:
 
 def _report_batches(
     *,
+    report_id: str,
     raw_stream: Any,
     ordered_col_types: list[str],
     column_names: list[str],
@@ -582,6 +633,8 @@ def _report_batches(
 
     parser = ijson.parse(raw_stream)
     for prefix, event, value in parser:
+        if prefix == _SFR_ALL_DATA_KEY and value is False:
+            raise SalesforceErrorCode.SALESFORCE_21.exception(report_id=report_id)
         # Compute current pointers (column type + matching value field).
         if len(current_row) < len(ordered_col_types):
             current_type = ordered_col_types[len(current_row)]

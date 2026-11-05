@@ -120,3 +120,18 @@ class SalesforceErrorCode(ErrorCode):
     SALESFORCE_18 = ErrorDef(
         SalesforceValidateException, "Cannot create SalesforceReportingEntity"
     )
+    SALESFORCE_19 = ErrorDef(
+        SalesforceRuntimeException,
+        "Salesforce report {report_id!r} has no column {column!r}"
+        " (column_name_strategy={strategy!r})",
+    )  # _run_one_report: filter / last-modified column not in the report
+    SALESFORCE_20 = ErrorDef(
+        SalesforceRuntimeException,
+        "Salesforce report {report_id!r} did not finish within {seconds}s",
+    )  # _await_report_stream: the instance never reached Success
+    SALESFORCE_21 = ErrorDef(
+        SalesforceRuntimeException,
+        "Salesforce report {report_id!r} returned only part of its rows: the"
+        " Reports API caps a run at 2,000 detail rows. Narrow it with filter"
+        " (or last_modified_column), or read the object with SalesforceSrc",
+    )  # _report_batches: allData is false

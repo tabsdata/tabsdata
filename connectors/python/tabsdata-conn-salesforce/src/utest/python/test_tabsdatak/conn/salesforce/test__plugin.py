@@ -478,8 +478,9 @@ def test_report_plugin_wraps_other_failures_as_salesforce_16(monkeypatch, work_d
 
 
 class _Response:
-    def __init__(self, rows: list[list[Any]]) -> None:
+    def __init__(self, rows: list[list[Any]], all_data: bool = True) -> None:
         body = {
+            "allData": all_data,
             "factMap": {
                 "T!T": {
                     "rows": [
@@ -591,7 +592,8 @@ def test_report_plugin_reports_resolved_id_and_cutoff_as_metadata(
 ):
     _, _, src = _report(
         monkeypatch,
-        [["a"]],
+        [["a", None]],
+        [("C", "string"), ("LastModifiedDate", "datetime")],
         # Named by name -- the metadata must carry the *resolved* id.
         reports=["Quarterly Pipeline"],
         find_report_by="name",
@@ -760,3 +762,157 @@ def test_resolve_src_cfg_warns_on_unknown_key_via_raw_dict(caplog):
     with caplog.at_level("WARNING", logger=plugin.logger.name):
         plugin._resolve_src_cfg({"bogus.key": "value"})
     assert any("Unknown src_cfg key" in r.getMessage() for r in caplog.records)
+
+
+def _launches(monkeypatch) -> list[dict]:
+    launched: list[dict] = []
+
+    def launch(**kwargs):
+        launched.append(kwargs)
+        return "instance-1"
+
+    monkeypatch.setattr(reader, "_launch_report_instance", launch)
+    return launched
+
+
+_STAMPED = [("C", "string"), ("LastModifiedDate", "datetime")]
+_CUTOFF = datetime(2026, 1, 1, 12, 30, tzinfo=timezone.utc)
+
+
+def test_report_last_modified_column_filters_on_the_server(monkeypatch, work_dir):
+    _, _, src = _report(
+        monkeypatch,
+        [["a", None]],
+        _STAMPED,
+        last_modified_column="LastModifiedDate",
+        initial_last_modified=_CUTOFF,
+    )
+    launched = _launches(monkeypatch)
+    _drained(
+        plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    )
+    [launch] = launched
+    assert launch["filters"] == [
+        ("LastModifiedDate", "greaterThan", "2026-01-01T12:30:00Z")
+    ]
+    assert launch["filter_logic"] is None
+
+
+def test_report_last_modified_filter_is_anded_onto_the_user_logic(
+    monkeypatch, work_dir
+):
+    _, _, src = _report(
+        monkeypatch,
+        [["a", None]],
+        _STAMPED,
+        filter=[("C", "equals", "x"), ("C", "equals", "y")],
+        filter_logic="1 OR 2",
+        last_modified_column="LastModifiedDate",
+        initial_last_modified=_CUTOFF,
+    )
+    launched = _launches(monkeypatch)
+    _drained(
+        plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    )
+    [launch] = launched
+    assert launch["filters"][-1][0] == "LastModifiedDate"
+    assert launch["filter_logic"] == "(1 OR 2) AND 3"
+
+
+def test_report_cutoff_is_sent_in_utc():
+    from datetime import timedelta
+
+    madrid = timezone(timedelta(hours=1))
+    assert (
+        reader._report_datetime(datetime(2026, 1, 1, 13, 30, tzinfo=madrid))
+        == "2026-01-01T12:30:00Z"
+    )
+    assert reader._report_datetime(datetime(2026, 1, 1, 12, 30)) == (
+        "2026-01-01T12:30:00Z"
+    )
+
+
+def test_report_unknown_column_is_named(monkeypatch, work_dir):
+    _, _, src = _report(
+        monkeypatch,
+        [["a"]],
+        last_modified_column="Missing",
+        initial_last_modified=_CUTOFF,
+    )
+    out = plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    with pytest.raises(SalesforceRuntimeException) as ei:
+        _drained(out)
+    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_19
+    assert "Missing" in str(ei.value)
+
+
+def test_report_truncated_by_the_api_is_refused(monkeypatch, work_dir):
+    _, _, src = _report(monkeypatch, [["a"]])
+    monkeypatch.setattr(
+        reader, "_await_report_stream", lambda **_kw: _Response([["a"]], False)
+    )
+    out = plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    with pytest.raises(SalesforceRuntimeException) as ei:
+        _drained(out)
+    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_21
+
+
+class _PollingSF:
+    base_url = "https://example.my.salesforce.com/services/data/v60.0/"
+    session_id = "token"
+
+    def __init__(self, status: str) -> None:
+        self.status = status
+
+    def restful(self, url):
+        return {"attributes": {"status": self.status}}
+
+
+def test_report_that_never_finishes_times_out():
+    with pytest.raises(SalesforceRuntimeException) as ei:
+        reader._await_report_stream(
+            sf=_PollingSF("Running"),
+            report_id="00O000000000001",
+            instance_id="i",
+            maximum_wait_time=0,
+            poll_interval=0,
+        )
+    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_20
+
+
+class _Fetched:
+    def __init__(self, failing: bool) -> None:
+        self.failing = failing
+        self.closed = False
+
+    def raise_for_status(self):
+        if self.failing:
+            raise RuntimeError("403")
+
+    def close(self):
+        self.closed = True
+
+
+@pytest.mark.parametrize("failing", [False, True])
+def test_report_result_is_fetched_with_a_timeout_and_checked(monkeypatch, failing):
+    import requests
+
+    calls: list[dict] = []
+    fetched = _Fetched(failing)
+
+    def get(url, **kwargs):
+        calls.append(kwargs)
+        return fetched
+
+    monkeypatch.setattr(requests, "get", get)
+    if failing:
+        with pytest.raises(RuntimeError, match="403"):
+            reader._await_report_stream(
+                sf=_PollingSF("Success"), report_id="r", instance_id="i"
+            )
+        assert fetched.closed
+    else:
+        reader._await_report_stream(
+            sf=_PollingSF("Success"), report_id="r", instance_id="i"
+        )
+    assert calls[0]["timeout"] == (reader._SFR_CONNECT_SECONDS, reader._SFR_READ_SECONDS)

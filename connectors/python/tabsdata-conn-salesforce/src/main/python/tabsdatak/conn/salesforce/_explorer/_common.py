@@ -16,7 +16,7 @@ def connect(conn: SalesforceSrcConn) -> Salesforce:
         username=conn.credentials.username.value(),
         password=conn.credentials.password.value(),
         security_token=conn.credentials.security_token.value(),
-        instance_url=conn._instance_url() if conn.instance_url is not None else None,
+        instance_url=conn._instance_url(),
     )
 
 
