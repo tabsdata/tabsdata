@@ -40,7 +40,7 @@ def _write(conn, work: Path, parquet: Path, table: str, **dest_kwargs) -> None:
         PluginDestCtx(work),
         conn,
         ClickHouseDest(tables=[table], **dest_kwargs),
-        [parquet],
+        [pl.scan_parquet(parquet)],
     )
 
 

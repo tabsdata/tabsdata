@@ -5,7 +5,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
+
+import polars as pl
 
 from tabsdatak.conn.clickhouse import (
     AzBlobLocation,
@@ -116,11 +117,11 @@ class ClickHouseWriteCfg:
 
 def write_via_bulk_loader(
     cfg: ClickHouseWriteCfg,
-    tables: list[Path],
+    tables: list[pl.LazyFrame],
 ) -> None:
     """Drive the private :class:`CloudStagedBulkLoader` for ClickHouse.
 
-    Parquet files at ``tables[i]`` are loaded into
+    ``tables[i]`` is staged as Parquet and loaded into
     ``cfg.target_tables[i]`` via the connection's staging location.
     The caller is expected to have validated the lengths match.
     """
@@ -169,7 +170,7 @@ def write_via_bulk_loader(
         upload_id=upload_id,
     )
 
-    table_files: dict[str, list[Path]] = {
-        name: [path] for name, path in zip(cfg.target_tables, tables)
-    }
-    loader.load(table_files)
+    table_frames: dict[str, list[tuple[str, pl.LazyFrame]]] = {}
+    for position, (name, frame) in enumerate(zip(cfg.target_tables, tables)):
+        table_frames.setdefault(name, []).append((f"{position}.parquet", frame))
+    loader.load(table_frames)

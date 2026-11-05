@@ -77,7 +77,7 @@ def test_dest_plugin_write_out_appends_rows(
             PluginDestCtx(work),
             conn,
             ClickHouseDest(tables=[table], if_table_exists="replace"),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
         assert db.count(table) == rows
 
@@ -85,7 +85,7 @@ def test_dest_plugin_write_out_appends_rows(
             PluginDestCtx(work),
             conn,
             ClickHouseDest(tables=[table], if_table_exists="append"),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
         assert db.count(table) == 2 * rows
     finally:
@@ -124,7 +124,7 @@ def test_dest_plugin_write_out_replace_clears_existing(
             PluginDestCtx(work),
             conn,
             ClickHouseDest(tables=[table], if_table_exists="replace"),
-            [first],
+            [pl.scan_parquet(first)],
         )
         assert db.count(table) == pl.read_parquet(first).height
 
@@ -132,7 +132,7 @@ def test_dest_plugin_write_out_replace_clears_existing(
             PluginDestCtx(work),
             conn,
             ClickHouseDest(tables=[table], if_table_exists="replace"),
-            [second],
+            [pl.scan_parquet(second)],
         )
         got = db.read_table(table)
         assert got.height == expected.height
@@ -167,7 +167,7 @@ def test_dest_plugin_write_out_resolves_table_name_spelling(
             PluginDestCtx(work),
             conn,
             ClickHouseDest(tables=[table], if_table_exists="replace"),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
         plugin._ClickHouseDestPlugin().write_out(
             PluginDestCtx(work),
@@ -176,7 +176,7 @@ def test_dest_plugin_write_out_resolves_table_name_spelling(
                 tables=[template.format(db=domain_clickhouse.database, table=table)],
                 if_table_exists="append",
             ),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
         assert db.count(table) == 2 * rows
     finally:

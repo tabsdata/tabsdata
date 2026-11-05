@@ -6,12 +6,12 @@ from __future__ import annotations
 
 import logging
 import time
-from pathlib import Path
 
+import polars as pl
 import pyarrow.parquet as pq
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.clickhouse._cloud_storage import CloudStorage
+from tabsdatak.conn.clickhouse._cloud_storage import CloudStorage, StagedFile
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._dialect_base import Dialect
@@ -68,49 +68,69 @@ class CloudStagedBulkLoader:
 
     # --- Main entry point --------------------------------------------
 
-    def load(self, tables: dict[str, list[Path]]) -> None:
+    def load(self, tables: dict[str, list[tuple[str, pl.LazyFrame]]]) -> None:
         """Execute the full cloud-staged bulk loading pattern.
 
-        ``tables`` is a mapping of table_name -> list of local Parquet
-        file paths.
+        ``tables`` maps each table name to the ``(filename, frame)`` pairs
+        staged for it. The staged files are cleaned up however the load
+        ends.
         """
         logger.info("Starting cloud-staged bulk load")
-        self.phase_validate_and_prepare(tables)
-        staged_files = self.phase_upload(tables)
-        self.phase_bulk_load(staged_files)
-        self.phase_cleanup()
+        try:
+            staged_files = self.phase_upload(tables)
+            self.phase_validate_and_prepare(staged_files)
+            self.phase_bulk_load({
+                table: [staged.ref for staged in files]
+                for table, files in staged_files.items()
+            })
+        finally:
+            self.phase_cleanup()
         logger.info("Cloud-staged bulk load complete")
 
-    # --- Phase 1: Validate & Prepare ---------------------------------
+    # --- Phase 1: Upload to Storage ----------------------------------
 
-    def phase_validate_and_prepare(self, tables: dict[str, list[Path]]) -> None:
-        """Phase 1 -- Validate all tables and prepare them
-        (create/evolve). Fails fast before any data movement."""
-        logger.info("Phase 1: Validate & Prepare")
+    def phase_upload(
+        self, tables: dict[str, list[tuple[str, pl.LazyFrame]]]
+    ) -> dict[str, list[StagedFile]]:
+        """Phase 1 -- Stage every table's frames as Parquet in cloud
+        storage."""
+        logger.info("Phase 1: Upload to Storage")
+        staged_files: dict[str, list[StagedFile]] = {}
+        for table_name, frames in tables.items():
+            staged_files[table_name] = self.cloud_storage.upload(self.upload_id, frames)
+        total = sum(len(files) for files in staged_files.values())
+        logger.info("Phase 1 complete: all files staged (%d).", total)
+        return staged_files
+
+    # --- Phase 2: Validate & Prepare ---------------------------------
+
+    def phase_validate_and_prepare(
+        self, staged_files: dict[str, list[StagedFile]]
+    ) -> None:
+        """Phase 2 -- Validate all tables against their staged files'
+        footers and prepare them (create/evolve), before any load."""
+        logger.info("Phase 2: Validate & Prepare")
         # 'replace' drops the target up front so it is recreated fresh from the
         # incoming schema (honouring a changed schema too); the create path below
         # then sees no table and rebuilds it.
         if self.write_mode == WriteMode.REPLACE:
-            table_names = list(tables.keys())
+            table_names = list(staged_files.keys())
             logger.debug(f"Dropping tables for replace: {table_names}")
             self.dialect.drop_tables(self.load_mode, table_names)
 
-        for table_name, parquet_paths in tables.items():
-            self.validate_and_prepare_table(table_name, parquet_paths)
+        for table_name, files in staged_files.items():
+            footers = [self.cloud_storage.footer(staged.key) for staged in files]
+            self.validate_and_prepare_table(table_name, footers)
 
-        logger.info("Phase 1 complete: all tables validated and prepared.")
+        logger.info("Phase 2 complete: all tables validated and prepared.")
 
     def validate_and_prepare_table(
-        self, table_name: str, parquet_paths: list[Path]
+        self, table_name: str, footers: list[pq.FileMetaData]
     ) -> None:
         """Validate and prepare a single table."""
-        for parquet_path in parquet_paths:
-            if not parquet_path.exists():
-                raise FileNotFoundError(f"Parquet file not found: {parquet_path}")
-
         # Read schema from the first file (all files for the same table
         # share the same schema).
-        arrow_schema = pq.read_schema(parquet_paths[0])
+        arrow_schema = footers[0].schema.to_arrow_schema()
 
         # Detect per-column nullability from parquet stats only when
         # schema evolution is enabled. For NONE mode we preserve the
@@ -118,7 +138,7 @@ class CloudStagedBulkLoader:
         # ``verify_schema`` -- which also uses the Arrow flag -- stays
         # consistent.
         if self.schema_evolution != SchemaEvolutionMode.NONE:
-            column_nulls = self._detect_nullability(parquet_paths)
+            column_nulls = self._detect_nullability(footers)
         else:
             column_nulls = None
 
@@ -179,11 +199,11 @@ class CloudStagedBulkLoader:
 
     @staticmethod
     def _detect_nullability(
-        parquet_paths: list[Path],
+        footers: list[pq.FileMetaData],
     ) -> dict[str, bool | None]:
         """Detect per-column nullability from Parquet file statistics.
 
-        Reads row-group-level statistics from all provided Parquet files
+        Reads row-group-level statistics from all provided Parquet footers
         to determine whether each column actually contains null values,
         rather than relying on Arrow's schema-level nullable flag (which
         is always ``True`` for Polars-produced files).
@@ -197,9 +217,8 @@ class CloudStagedBulkLoader:
         stats_missing: set[str] = set()
         all_columns: dict[str, None] = {}  # insertion-ordered set
 
-        for path in parquet_paths:
-            meta = pq.read_metadata(path)
-            schema = pq.read_schema(path)
+        for meta in footers:
+            schema = meta.schema.to_arrow_schema()
 
             for i in range(len(schema)):
                 all_columns[schema.field(i).name] = None
@@ -222,20 +241,6 @@ class CloudStagedBulkLoader:
             else:
                 result[name] = null_counts.get(name, 0) > 0
         return result
-
-    # --- Phase 2: Upload to Storage ----------------------------------
-
-    def phase_upload(self, tables: dict[str, list[Path]]) -> dict[str, list[str]]:
-        """Phase 2 -- Upload all Parquet files to cloud storage."""
-        logger.info("Phase 2: Upload to Storage")
-        staged_files: dict[str, list[str]] = {}
-        total_files = 0
-        for table_name, local_paths in tables.items():
-            staged_uris = self.cloud_storage.upload(self.upload_id, local_paths)
-            staged_files[table_name] = staged_uris
-            total_files += len(staged_uris)
-        logger.info("Phase 2 complete: all files staged (%d).", total_files)
-        return staged_files
 
     # --- Phase 3: Bulk Load ------------------------------------------
 

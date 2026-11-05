@@ -8,6 +8,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+import polars as pl
+
 from tabsdatak.conn.clickhouse import (
     ClickHouseDest,
     ClickHouseDestConn,
@@ -23,7 +25,6 @@ from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    TableFileSpec,
 )
 
 logger = logging.getLogger(__name__)
@@ -78,13 +79,15 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
 # classes, not the runtime IO stack).
 
 
-class _ClickHouseDestPlugin(DestPlugin[ClickHouseDestConn, ClickHouseDest]):
+class _ClickHouseDestPlugin(
+    DestPlugin[ClickHouseDestConn, ClickHouseDest, list[pl.LazyFrame]],
+):
     def write_out(
         self,
         ctx: DestContext,
         conn: ClickHouseDestConn,
         dest: ClickHouseDest,
-        tables: list[TableFileSpec],
+        tables: list[pl.LazyFrame],
     ) -> None:
         # noinspection PyProtectedMember
         from tabsdatak.conn.clickhouse import _impl
@@ -95,7 +98,7 @@ class _ClickHouseDestPlugin(DestPlugin[ClickHouseDestConn, ClickHouseDest]):
             "clickhouse: write_out starting (%d table(s))", len(dest.tables or [])
         )
 
-        # Verifies that the number of incoming parquet files
+        # Verifies that the number of incoming tables
         # matches the destination's declared ``tables``
         # (CLICKHOUSE_4).
         if len(dest.tables) != len(tables):

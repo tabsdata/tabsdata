@@ -6,7 +6,19 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from pathlib import Path
+from dataclasses import dataclass
+
+import polars as pl
+import pyarrow.parquet as pq
+
+from tabsdatak.common._storage.transfer import (
+    AWS_ACCESS_KEY_ID_OPTION,
+    AWS_REGION_OPTION,
+    AWS_SECRET_ACCESS_KEY_OPTION,
+    AZURE_STORAGE_ACCOUNT_KEY_OPTION,
+    AZURE_STORAGE_ACCOUNT_NAME_OPTION,
+    GOOGLE_SERVICE_ACCOUNT_KEY_OPTION,
+)
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._storage_config import (
@@ -14,6 +26,7 @@ from tabsdatak.conn.clickhouse._storage_config import (
     GCSConfig,
     S3Config,
 )
+from tabsdatak.conn.common.file._store import FileStore
 from tabsdatak.conn.common.types import cloud_full_path, normalize_dir_path
 
 logger = logging.getLogger(__name__)
@@ -39,6 +52,15 @@ def _list_prefix(base_path: str) -> str:
 # --- Generic CloudStorage --------------------------------------------
 
 
+@dataclass(frozen=True)
+class StagedFile:
+    """A staged Parquet object: ``ref`` is what the dialect loads from,
+    ``key`` the object's key in :meth:`CloudStorage.store`."""
+
+    ref: str
+    key: str
+
+
 class CloudStorage(ABC):
     """Abstract interface for cloud storage operations.
 
@@ -47,11 +69,42 @@ class CloudStorage(ABC):
     both forms.
     """
 
+    @property
     @abstractmethod
-    def upload(self, upload_id: str, local_paths: list[Path]) -> list[str]:
-        """Upload files to storage. Returns a list of storage URIs (or
-        logical paths), one per input file, in the same order as
-        ``local_paths``."""
+    def base_path(self) -> str:
+        """The key prefix staged objects go under."""
+
+    @abstractmethod
+    def store(self) -> FileStore:
+        """The object store rooted at the bucket or container."""
+
+    @abstractmethod
+    def staged_ref(self, key: str) -> str:
+        """The reference the dialect loads the object at ``key`` from."""
+
+    def upload(
+        self, upload_id: str, frames: list[tuple[str, pl.LazyFrame]]
+    ) -> list[StagedFile]:
+        """Write each ``(filename, frame)`` as Parquet under
+        ``<base_path>/<upload_id>/<filename>``, in order."""
+        store = self.store()
+        staged = []
+        for filename, frame in frames:
+            key = _make_key(self.base_path, upload_id, filename)
+            logger.debug("Staging %s at %s", filename, store.uri(key))
+            writer = store.open_writer(key)
+            frame.sink_parquet(writer)
+            writer.close()
+            staged.append(StagedFile(self.staged_ref(key), key))
+        return staged
+
+    def footer(self, key: str) -> pq.FileMetaData:
+        """The Parquet footer of the staged object at ``key``."""
+        source = self.store().ranged(key)
+        try:
+            return pq.read_metadata(source)
+        finally:
+            source.close()
 
     @abstractmethod
     def delete(self, up_to_id: str) -> None:
@@ -62,7 +115,7 @@ class CloudStorage(ABC):
 class S3Storage(CloudStorage):
     """Stages Parquet files in Amazon S3.
 
-    Requires ``boto3`` (``pip install boto3``).
+    The cleanup sweep requires ``boto3``.
 
     Upload path layout::
 
@@ -91,19 +144,25 @@ class S3Storage(CloudStorage):
             aws_secret_access_key=self._config.secret_access_key,
         )
 
-    def upload(self, upload_id: str, local_paths: list[Path]) -> list[str]:
-        s3 = self._client()
-        uris = []
-        for path in local_paths:
-            key = _make_key(self._config.base_path, upload_id, path.name)
-            logger.debug("Uploading %s to s3://%s/%s", path, self._config.bucket, key)
-            s3.upload_file(str(path), self._config.bucket, key)
-            uri = (
-                f"https://{self._config.bucket}"
-                f".s3.{self._config.region}.amazonaws.com/{key}"
-            )
-            uris.append(uri)
-        return uris
+    @property
+    def base_path(self) -> str:
+        return self._config.base_path
+
+    def store(self) -> FileStore:
+        return FileStore(
+            f"s3://{self._config.bucket}",
+            {
+                AWS_ACCESS_KEY_ID_OPTION: self._config.access_key_id,
+                AWS_SECRET_ACCESS_KEY_OPTION: self._config.secret_access_key,
+                AWS_REGION_OPTION: self._config.region,
+            },
+        )
+
+    def staged_ref(self, key: str) -> str:
+        return (
+            f"https://{self._config.bucket}"
+            f".s3.{self._config.region}.amazonaws.com/{key}"
+        )
 
     def delete(self, up_to_id: str) -> None:
         s3 = self._client()
@@ -129,8 +188,8 @@ class S3Storage(CloudStorage):
 
 
 class GCSStorage(CloudStorage):
-    """Stages Parquet files in Google Cloud Storage via the native
-    GCS API (``google-cloud-storage`` SDK).
+    """Stages Parquet files in Google Cloud Storage; the cleanup sweep
+    uses the ``google-cloud-storage`` SDK.
 
     Upload path layout::
 
@@ -172,21 +231,18 @@ class GCSStorage(CloudStorage):
             ) from e
         return gcs.Client(credentials=self._credentials())
 
-    def upload(self, upload_id: str, local_paths: list[Path]) -> list[str]:
-        bucket = self._client().bucket(self._config.bucket)
-        uris = []
-        for path in local_paths:
-            key = _make_key(self._config.base_path, upload_id, path.name)
-            logger.debug(
-                "Uploading %s to gs://%s/%s",
-                path,
-                self._config.bucket,
-                key,
-            )
-            bucket.blob(key).upload_from_filename(str(path))
-            uri = f"{self._ENDPOINT}/{self._config.bucket}/{key}"
-            uris.append(uri)
-        return uris
+    @property
+    def base_path(self) -> str:
+        return self._config.base_path
+
+    def store(self) -> FileStore:
+        return FileStore(
+            f"gs://{self._config.bucket}",
+            {GOOGLE_SERVICE_ACCOUNT_KEY_OPTION: self._config.service_account_json},
+        )
+
+    def staged_ref(self, key: str) -> str:
+        return f"{self._ENDPOINT}/{self._config.bucket}/{key}"
 
     def delete(self, up_to_id: str) -> None:
         """Delete every staged object with ``upload_id <= up_to_id``.
@@ -254,7 +310,7 @@ class GCSStorage(CloudStorage):
 class AzureStorage(CloudStorage):
     """Stages Parquet files in Azure Blob Storage.
 
-    Requires ``azure-storage-blob``.
+    The cleanup sweep requires ``azure-storage-blob``.
 
     Upload path layout::
 
@@ -286,21 +342,21 @@ class AzureStorage(CloudStorage):
             ) from e
         return BlobServiceClient.from_connection_string(self._connection_string())
 
-    def upload(self, upload_id: str, local_paths: list[Path]) -> list[str]:
-        container = self._service().get_container_client(self._config.container)
-        blob_paths = []
-        for path in local_paths:
-            blob_name = _make_key(self._config.base_path, upload_id, path.name)
-            logger.debug(
-                "Uploading %s to azure://%s/%s",
-                path,
-                self._config.container,
-                blob_name,
-            )
-            with open(path, "rb") as data:
-                container.upload_blob(name=blob_name, data=data, overwrite=True)
-            blob_paths.append(blob_name)
-        return blob_paths
+    @property
+    def base_path(self) -> str:
+        return self._config.base_path
+
+    def store(self) -> FileStore:
+        return FileStore(
+            f"az://{self._config.container}",
+            {
+                AZURE_STORAGE_ACCOUNT_NAME_OPTION: self._config.account_name,
+                AZURE_STORAGE_ACCOUNT_KEY_OPTION: self._config.account_key,
+            },
+        )
+
+    def staged_ref(self, key: str) -> str:
+        return key
 
     def delete(self, up_to_id: str) -> None:
         container = self._service().get_container_client(self._config.container)
