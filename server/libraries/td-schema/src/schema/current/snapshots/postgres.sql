@@ -754,6 +754,284 @@ CREATE INDEX "metrics_facts___table_version_id__side___idx" ON "metrics_facts" (
 
 CREATE STATISTICS "metrics_facts___grouping___stx" (ndistinct) ON "side", "edge_kind", "from_collection_id", "from_group_id", "collection_id", "group_id", "run_status", "table_id" FROM "metrics_facts"
 
+CREATE STATISTICS "groups___id___dep" (dependencies) ON "id", "project_id" FROM "groups"
+
+CREATE STATISTICS "groups___group_id___dep" (dependencies) ON "group_id", "project_id" FROM "groups"
+
+CREATE STATISTICS "groups___defined_by_id___dep" (dependencies) ON "defined_by_id", "project_id" FROM "groups"
+
+CREATE STATISTICS "project_topologies___id___dep" (dependencies) ON "id", "project_id" FROM "project_topologies"
+
+CREATE STATISTICS "tags___id___dep" (dependencies) ON "id", "project_id" FROM "tags"
+
+CREATE STATISTICS "tags___tag_id___dep" (dependencies) ON "tag_id", "project_id" FROM "tags"
+
+CREATE STATISTICS "tags___entity_id___dep" (dependencies) ON "entity_id", "project_id" FROM "tags"
+
+CREATE STATISTICS "tags___defined_by_id___dep" (dependencies) ON "defined_by_id", "project_id" FROM "tags"
+
+CREATE STATISTICS "connections___id___dep" (dependencies) ON "id", "project_id" FROM "connections"
+
+CREATE STATISTICS "connections___created_by_id___dep" (dependencies) ON "created_by_id", "project_id" FROM "connections"
+
+CREATE STATISTICS "connections___modified_by_id___dep" (dependencies) ON "modified_by_id", "project_id" FROM "connections"
+
+CREATE STATISTICS "collections___id___dep" (dependencies) ON "id", "project_id" FROM "collections"
+
+CREATE STATISTICS "collections___collection_id___dep" (dependencies) ON "collection_id", "project_id" FROM "collections"
+
+CREATE STATISTICS "collections___group_id___dep" (dependencies) ON "group_id", "project_id" FROM "collections"
+
+CREATE STATISTICS "collections___connection_id___dep" (dependencies) ON "connection_id", "project_id" FROM "collections"
+
+CREATE STATISTICS "collections___defined_by_id___dep" (dependencies) ON "defined_by_id", "project_id" FROM "collections"
+
+CREATE STATISTICS "connection_catalogs___connection_id___dep" (dependencies) ON "connection_id", "project_id" FROM "connection_catalogs"
+
+CREATE STATISTICS "connection_catalogs___collection_id___dep" (dependencies) ON "collection_id", "project_id" FROM "connection_catalogs"
+
+CREATE STATISTICS "connection_catalogs___last_probe_id___dep" (dependencies) ON "last_probe_id", "project_id" FROM "connection_catalogs"
+
+CREATE STATISTICS "connection_entities___id___dep" (dependencies) ON "id", "project_id" FROM "connection_entities"
+
+CREATE STATISTICS "connection_entities___connection_id___dep" (dependencies) ON "connection_id", "project_id" FROM "connection_entities"
+
+CREATE STATISTICS "connection_probes___id___dep" (dependencies) ON "id", "project_id" FROM "connection_probes"
+
+CREATE STATISTICS "connection_probes___connection_id___dep" (dependencies) ON "connection_id", "project_id" FROM "connection_probes"
+
+CREATE STATISTICS "connection_probes___requested_by_id___dep" (dependencies) ON "requested_by_id", "project_id" FROM "connection_probes"
+
+CREATE STATISTICS "bundles___id___dep" (dependencies) ON "id", "project_id" FROM "bundles"
+
+CREATE STATISTICS "bundles___collection_id___dep" (dependencies) ON "collection_id", "project_id" FROM "bundles"
+
+CREATE STATISTICS "bundles___created_by_id___dep" (dependencies) ON "created_by_id", "project_id" FROM "bundles"
+
+CREATE STATISTICS "functions___id___dep" (dependencies) ON "id", "project_id" FROM "functions"
+
+CREATE STATISTICS "functions___collection_id___dep" (dependencies) ON "collection_id", "project_id" FROM "functions"
+
+CREATE STATISTICS "functions___function_id___dep" (dependencies) ON "function_id", "project_id" FROM "functions"
+
+CREATE STATISTICS "functions___stage_id___dep" (dependencies) ON "stage_id", "project_id" FROM "functions"
+
+CREATE STATISTICS "functions___bundle_id___dep" (dependencies) ON "bundle_id", "project_id" FROM "functions"
+
+CREATE STATISTICS "functions___defined_by_id___dep" (dependencies) ON "defined_by_id", "project_id" FROM "functions"
+
+CREATE STATISTICS "function_patches___id___dep" (dependencies) ON "id", "project_id" FROM "function_patches"
+
+CREATE STATISTICS "function_patches___parent_function_version_id___dep" (dependencies) ON "parent_function_version_id", "project_id" FROM "function_patches"
+
+CREATE STATISTICS "function_patches___function_id___dep" (dependencies) ON "function_id", "project_id" FROM "function_patches"
+
+CREATE STATISTICS "function_patches___collection_id___dep" (dependencies) ON "collection_id", "project_id" FROM "function_patches"
+
+CREATE STATISTICS "function_patches___bundle_id___dep" (dependencies) ON "bundle_id", "project_id" FROM "function_patches"
+
+CREATE STATISTICS "function_patches___defined_by_id___dep" (dependencies) ON "defined_by_id", "project_id" FROM "function_patches"
+
+CREATE STATISTICS "tables___id___dep" (dependencies) ON "id", "project_id" FROM "tables"
+
+CREATE STATISTICS "tables___collection_id___dep" (dependencies) ON "collection_id", "project_id" FROM "tables"
+
+CREATE STATISTICS "tables___table_id___dep" (dependencies) ON "table_id", "project_id" FROM "tables"
+
+CREATE STATISTICS "tables___function_id___dep" (dependencies) ON "function_id", "project_id" FROM "tables"
+
+CREATE STATISTICS "tables___function_version_id___dep" (dependencies) ON "function_version_id", "project_id" FROM "tables"
+
+CREATE STATISTICS "tables___defined_by_id___dep" (dependencies) ON "defined_by_id", "project_id" FROM "tables"
+
+CREATE STATISTICS "dependencies___id___dep" (dependencies) ON "id", "project_id" FROM "dependencies"
+
+CREATE STATISTICS "dependencies___collection_id___dep" (dependencies) ON "collection_id", "project_id" FROM "dependencies"
+
+CREATE STATISTICS "dependencies___dependency_id___dep" (dependencies) ON "dependency_id", "project_id" FROM "dependencies"
+
+CREATE STATISTICS "dependencies___function_id___dep" (dependencies) ON "function_id", "project_id" FROM "dependencies"
+
+CREATE STATISTICS "dependencies___table_collection_id___dep" (dependencies) ON "table_collection_id", "project_id" FROM "dependencies"
+
+CREATE STATISTICS "dependencies___table_function_id___dep" (dependencies) ON "table_function_id", "project_id" FROM "dependencies"
+
+CREATE STATISTICS "dependencies___table_id___dep" (dependencies) ON "table_id", "project_id" FROM "dependencies"
+
+CREATE STATISTICS "dependencies___defined_by_id___dep" (dependencies) ON "defined_by_id", "project_id" FROM "dependencies"
+
+CREATE STATISTICS "triggers___id___dep" (dependencies) ON "id", "project_id" FROM "triggers"
+
+CREATE STATISTICS "triggers___collection_id___dep" (dependencies) ON "collection_id", "project_id" FROM "triggers"
+
+CREATE STATISTICS "triggers___trigger_id___dep" (dependencies) ON "trigger_id", "project_id" FROM "triggers"
+
+CREATE STATISTICS "triggers___function_id___dep" (dependencies) ON "function_id", "project_id" FROM "triggers"
+
+CREATE STATISTICS "triggers___trigger_by_collection_id___dep" (dependencies) ON "trigger_by_collection_id", "project_id" FROM "triggers"
+
+CREATE STATISTICS "triggers___trigger_by_function_id___dep" (dependencies) ON "trigger_by_function_id", "project_id" FROM "triggers"
+
+CREATE STATISTICS "triggers___trigger_by_table_id___dep" (dependencies) ON "trigger_by_table_id", "project_id" FROM "triggers"
+
+CREATE STATISTICS "triggers___defined_by_id___dep" (dependencies) ON "defined_by_id", "project_id" FROM "triggers"
+
+CREATE STATISTICS "executions___id___dep" (dependencies) ON "id", "project_id" FROM "executions"
+
+CREATE STATISTICS "executions___collection_id___dep" (dependencies) ON "collection_id", "project_id" FROM "executions"
+
+CREATE STATISTICS "executions___function_version_id___dep" (dependencies) ON "function_version_id", "project_id" FROM "executions"
+
+CREATE STATISTICS "executions___triggered_by_id___dep" (dependencies) ON "triggered_by_id", "project_id" FROM "executions"
+
+CREATE STATISTICS "executions___function_id___dep" (dependencies) ON "function_id", "project_id" FROM "executions"
+
+CREATE STATISTICS "executions___topology_version_id___dep" (dependencies) ON "topology_version_id", "project_id" FROM "executions"
+
+CREATE STATISTICS "transactions___id___dep" (dependencies) ON "id", "project_id" FROM "transactions"
+
+CREATE STATISTICS "transactions___collection_id___dep" (dependencies) ON "collection_id", "project_id" FROM "transactions"
+
+CREATE STATISTICS "transactions___execution_id___dep" (dependencies) ON "execution_id", "project_id" FROM "transactions"
+
+CREATE STATISTICS "transactions___triggered_by_id___dep" (dependencies) ON "triggered_by_id", "project_id" FROM "transactions"
+
+CREATE STATISTICS "transactions___group_id___dep" (dependencies) ON "group_id", "project_id" FROM "transactions"
+
+CREATE STATISTICS "logical_function_runs___id___dep" (dependencies) ON "id", "project_id" FROM "logical_function_runs"
+
+CREATE STATISTICS "logical_function_runs___collection_id___dep" (dependencies) ON "collection_id", "project_id" FROM "logical_function_runs"
+
+CREATE STATISTICS "logical_function_runs___execution_id___dep" (dependencies) ON "execution_id", "project_id" FROM "logical_function_runs"
+
+CREATE STATISTICS "logical_function_runs___transaction_id___dep" (dependencies) ON "transaction_id", "project_id" FROM "logical_function_runs"
+
+CREATE STATISTICS "logical_function_runs___function_id___dep" (dependencies) ON "function_id", "project_id" FROM "logical_function_runs"
+
+CREATE STATISTICS "logical_function_runs___function_version_id___dep" (dependencies) ON "function_version_id", "project_id" FROM "logical_function_runs"
+
+CREATE STATISTICS "logical_function_runs___triggered_by_id___dep" (dependencies) ON "triggered_by_id", "project_id" FROM "logical_function_runs"
+
+CREATE STATISTICS "logical_function_runs___group_id___dep" (dependencies) ON "group_id", "project_id" FROM "logical_function_runs"
+
+CREATE STATISTICS "ltdv___id___dep" (dependencies) ON "id", "project_id" FROM "logical_table_data_versions"
+
+CREATE STATISTICS "ltdv___collection_id___dep" (dependencies) ON "collection_id", "project_id" FROM "logical_table_data_versions"
+
+CREATE STATISTICS "ltdv___execution_id___dep" (dependencies) ON "execution_id", "project_id" FROM "logical_table_data_versions"
+
+CREATE STATISTICS "ltdv___transaction_id___dep" (dependencies) ON "transaction_id", "project_id" FROM "logical_table_data_versions"
+
+CREATE STATISTICS "ltdv___table_id___dep" (dependencies) ON "table_id", "project_id" FROM "logical_table_data_versions"
+
+CREATE STATISTICS "ltdv___producer_logical_function_run_id___dep" (dependencies) ON "producer_logical_function_run_id", "project_id" FROM "logical_table_data_versions"
+
+CREATE STATISTICS "ltdv___triggered_by_id___dep" (dependencies) ON "triggered_by_id", "project_id" FROM "logical_table_data_versions"
+
+CREATE STATISTICS "ltdv___group_id___dep" (dependencies) ON "group_id", "project_id" FROM "logical_table_data_versions"
+
+CREATE STATISTICS "pfr___id___dep" (dependencies) ON "id", "project_id" FROM "physical_function_runs"
+
+CREATE STATISTICS "pfr___collection_id___dep" (dependencies) ON "collection_id", "project_id" FROM "physical_function_runs"
+
+CREATE STATISTICS "pfr___function_version_id___dep" (dependencies) ON "function_version_id", "project_id" FROM "physical_function_runs"
+
+CREATE STATISTICS "pfr___function_version_patch_id___dep" (dependencies) ON "function_version_patch_id", "project_id" FROM "physical_function_runs"
+
+CREATE STATISTICS "pfr___execution_id___dep" (dependencies) ON "execution_id", "project_id" FROM "physical_function_runs"
+
+CREATE STATISTICS "pfr___transaction_id___dep" (dependencies) ON "transaction_id", "project_id" FROM "physical_function_runs"
+
+CREATE STATISTICS "pfr___triggered_by_id___dep" (dependencies) ON "triggered_by_id", "project_id" FROM "physical_function_runs"
+
+CREATE STATISTICS "pfr___function_id___dep" (dependencies) ON "function_id", "project_id" FROM "physical_function_runs"
+
+CREATE STATISTICS "pfr___logical_function_run_id___dep" (dependencies) ON "logical_function_run_id", "project_id" FROM "physical_function_runs"
+
+CREATE STATISTICS "ptdv___id___dep" (dependencies) ON "id", "project_id" FROM "physical_table_data_versions"
+
+CREATE STATISTICS "ptdv___collection_id___dep" (dependencies) ON "collection_id", "project_id" FROM "physical_table_data_versions"
+
+CREATE STATISTICS "ptdv___table_id___dep" (dependencies) ON "table_id", "project_id" FROM "physical_table_data_versions"
+
+CREATE STATISTICS "ptdv___table_version_id___dep" (dependencies) ON "table_version_id", "project_id" FROM "physical_table_data_versions"
+
+CREATE STATISTICS "ptdv___function_version_id___dep" (dependencies) ON "function_version_id", "project_id" FROM "physical_table_data_versions"
+
+CREATE STATISTICS "ptdv___function_version_patch_id___dep" (dependencies) ON "function_version_patch_id", "project_id" FROM "physical_table_data_versions"
+
+CREATE STATISTICS "ptdv___execution_id___dep" (dependencies) ON "execution_id", "project_id" FROM "physical_table_data_versions"
+
+CREATE STATISTICS "ptdv___transaction_id___dep" (dependencies) ON "transaction_id", "project_id" FROM "physical_table_data_versions"
+
+CREATE STATISTICS "ptdv___physical_function_run_id___dep" (dependencies) ON "physical_function_run_id", "project_id" FROM "physical_table_data_versions"
+
+CREATE STATISTICS "ptdv___with_data_table_data_version_id___dep" (dependencies) ON "with_data_table_data_version_id", "project_id" FROM "physical_table_data_versions"
+
+CREATE STATISTICS "ptdv___logical_table_data_version_id___dep" (dependencies) ON "logical_table_data_version_id", "project_id" FROM "physical_table_data_versions"
+
+CREATE STATISTICS "table_partitions___id___dep" (dependencies) ON "id", "project_id" FROM "table_partitions"
+
+CREATE STATISTICS "table_partitions___collection_id___dep" (dependencies) ON "collection_id", "project_id" FROM "table_partitions"
+
+CREATE STATISTICS "table_partitions___table_id___dep" (dependencies) ON "table_id", "project_id" FROM "table_partitions"
+
+CREATE STATISTICS "table_partitions___table_version_id___dep" (dependencies) ON "table_version_id", "project_id" FROM "table_partitions"
+
+CREATE STATISTICS "table_partitions___function_version_id___dep" (dependencies) ON "function_version_id", "project_id" FROM "table_partitions"
+
+CREATE STATISTICS "table_partitions___table_data_version_id___dep" (dependencies) ON "table_data_version_id", "project_id" FROM "table_partitions"
+
+CREATE STATISTICS "workers___id___dep" (dependencies) ON "id", "project_id" FROM "workers"
+
+CREATE STATISTICS "workers___collection_id___dep" (dependencies) ON "collection_id", "project_id" FROM "workers"
+
+CREATE STATISTICS "workers___execution_id___dep" (dependencies) ON "execution_id", "project_id" FROM "workers"
+
+CREATE STATISTICS "workers___transaction_id___dep" (dependencies) ON "transaction_id", "project_id" FROM "workers"
+
+CREATE STATISTICS "workers___function_version_id___dep" (dependencies) ON "function_version_id", "project_id" FROM "workers"
+
+CREATE STATISTICS "workers___physical_function_run_id___dep" (dependencies) ON "physical_function_run_id", "project_id" FROM "workers"
+
+CREATE STATISTICS "lfri___id___dep" (dependencies) ON "id", "project_id" FROM "logical_function_run_inputs"
+
+CREATE STATISTICS "lfri___collection_id___dep" (dependencies) ON "collection_id", "project_id" FROM "logical_function_run_inputs"
+
+CREATE STATISTICS "lfri___execution_id___dep" (dependencies) ON "execution_id", "project_id" FROM "logical_function_run_inputs"
+
+CREATE STATISTICS "lfri___transaction_id___dep" (dependencies) ON "transaction_id", "project_id" FROM "logical_function_run_inputs"
+
+CREATE STATISTICS "lfri___logical_function_run_id___dep" (dependencies) ON "logical_function_run_id", "project_id" FROM "logical_function_run_inputs"
+
+CREATE STATISTICS "lfri___requirement_logical_table_data_version_id___dep" (dependencies) ON "requirement_logical_table_data_version_id", "project_id" FROM "logical_function_run_inputs"
+
+CREATE STATISTICS "lfri___requirement_table_version_id___dep" (dependencies) ON "requirement_table_version_id", "project_id" FROM "logical_function_run_inputs"
+
+CREATE STATISTICS "metrics_facts___from_group_id___dep" (dependencies) ON "from_group_id", "project_id" FROM "metrics_facts"
+
+CREATE STATISTICS "metrics_facts___from_collection_id___dep" (dependencies) ON "from_collection_id", "project_id" FROM "metrics_facts"
+
+CREATE STATISTICS "metrics_facts___group_id___dep" (dependencies) ON "group_id", "project_id" FROM "metrics_facts"
+
+CREATE STATISTICS "metrics_facts___collection_id___dep" (dependencies) ON "collection_id", "project_id" FROM "metrics_facts"
+
+CREATE STATISTICS "metrics_facts___execution_id___dep" (dependencies) ON "execution_id", "project_id" FROM "metrics_facts"
+
+CREATE STATISTICS "metrics_facts___transaction_id___dep" (dependencies) ON "transaction_id", "project_id" FROM "metrics_facts"
+
+CREATE STATISTICS "metrics_facts___function_id___dep" (dependencies) ON "function_id", "project_id" FROM "metrics_facts"
+
+CREATE STATISTICS "metrics_facts___function_run_id___dep" (dependencies) ON "function_run_id", "project_id" FROM "metrics_facts"
+
+CREATE STATISTICS "metrics_facts___attempt_id___dep" (dependencies) ON "attempt_id", "project_id" FROM "metrics_facts"
+
+CREATE STATISTICS "metrics_facts___table_id___dep" (dependencies) ON "table_id", "project_id" FROM "metrics_facts"
+
+CREATE STATISTICS "metrics_facts___table_version_id___dep" (dependencies) ON "table_version_id", "project_id" FROM "metrics_facts"
+
+CREATE STATISTICS "metrics_facts___id___dep" (dependencies) ON "id", "project_id" FROM "metrics_facts"
+
 INSERT INTO "tabsdata_system" ("name", "value") VALUES ('tabsdata_version', '2')
 
 INSERT INTO "tabsdata_system" ("name", "value") VALUES ('instance_id', gen_random_uuid()::text)

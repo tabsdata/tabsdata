@@ -42,7 +42,8 @@ use crate::schema::deltas;
 use crate::schema::render::{render_query, render_schema};
 use crate::schema::source::{Delta, Derived, SchemaSource, index_derived, install_script};
 use crate::schema::sql::rls::policy_statements;
-use sea_query::{DynIden, IntoIden};
+use crate::schema::sql::{StatisticsDef, created_table, is_id_column};
+use sea_query::{Alias, DynIden, IntoIden};
 
 /// Schema revision within the current major; resets to 1 at each major bump
 /// (cross-major upgrade is refused via `tabsdata_version`). To evolve the
@@ -164,6 +165,34 @@ pub fn build() -> Vec<String> {
     install_script(&Source)
 }
 
+fn project_dependencies() -> Vec<StatisticsDef> {
+    let scoped: Vec<String> = project_scoped_tables().iter().map(|t| t.to_string()).collect();
+    let mut out = Vec::new();
+    for stmt in ENTITIES.iter().flat_map(|e| e.create_tables()) {
+        let table = created_table(&stmt);
+        if !scoped.contains(&table) {
+            continue;
+        }
+        let columns: Vec<String> =
+            stmt.get_columns().iter().map(|c| c.get_column_name()).filter(|c| is_id_column(c) && c != "project_id").collect();
+        let prefix = match table.as_str() {
+            "logical_function_run_inputs" => "lfri",
+            "logical_table_data_versions" => "ltdv",
+            "physical_function_runs" => "pfr",
+            "physical_table_data_versions" => "ptdv",
+            other => other,
+        };
+        for column in columns {
+            out.push(StatisticsDef::project_dependency(
+                format!("{prefix}___{column}___dep"),
+                Alias::new(table.as_str()).into_iden(),
+                Alias::new(column.as_str()).into_iden(),
+            ));
+        }
+    }
+    out
+}
+
 /// [`SchemaSource`] for the live schema, over `ENTITIES` plus [`deltas`].
 /// Re-exported as `CurrentSource`. An archive copy of this module keeps the
 /// struct, dropping only the `delta` override (archives install fresh).
@@ -203,7 +232,7 @@ impl SchemaSource for Source {
     }
 
     fn statistics(&self) -> Vec<Derived> {
-        ENTITIES.iter().flat_map(|e| e.create_statistics()).map(|s| s.render()).collect()
+        ENTITIES.iter().flat_map(|e| e.create_statistics()).chain(project_dependencies()).map(|s| s.render()).collect()
     }
 
     fn seeds(&self) -> Vec<String> {

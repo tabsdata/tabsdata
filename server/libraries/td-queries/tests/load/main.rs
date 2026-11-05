@@ -19,6 +19,7 @@ mod connection_catalog_cases;
 mod dataset;
 mod dataversion_cases;
 mod default_write_cases;
+mod estimate_cases;
 mod harness;
 mod history_cases;
 mod indexes;

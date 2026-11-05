@@ -62,6 +62,20 @@ UUIDv7 stamped at `instant`, and drops it before it ends: the schema keeps no
 functions. `td_mint_id_mints_application_ids_postgres` holds it to
 `td_common::id`.
 
+## Row-level security and the planner
+
+Every project-scoped table carries `project_id`, and its RLS policy filters on
+it. The planner estimates that filter like any other, so the schema keeps its
+estimates from collapsing; when they collapse, it picks per-row nested loops
+that scan a whole project per row:
+
+- Within a table: `current/` derives a `(dependencies)` statistic on
+  `(column, project_id)` for each table's `id`, `collection_id` and references,
+  so a filter on a key is not multiplied by the tenant filter it implies.
+
+The td-queries load suite's `estimate_cases` check the result on multi-project
+data under the tenant role.
+
 ## Major versions and upgradeability
 
 Tabsdata 2.0 is **not** in-place upgradeable from any earlier release. A 2.0

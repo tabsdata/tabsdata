@@ -37,6 +37,17 @@ nothing about the code, or directly:
 cargo nextest run -p td-queries --test load --run-ignored ignored-only --test-threads 1 report_scaling
 ```
 
+## Plan guard
+
+`estimate_cases.rs` plans the status roll-ups under each project's tenant
+policy over a multi-project dataset with real statistics, and fails when a scan
+is underestimated past 4x or an aggregate, sort, hash or full scan runs once per
+outer row. Row counts and loops, so it runs in the normal test path.
+
+The other cases here run through the cross-project role, whose policy is
+`USING (true)`: they cannot see how the tenant filter is estimated, so plan
+checks belong under the tenant role, as in `estimate_cases.rs`.
+
 ## Regression vs baseline
 
 `report_regression` compares the latest run against `baseline.jsonl`, a

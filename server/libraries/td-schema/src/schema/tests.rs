@@ -584,6 +584,28 @@ fn test_project_scoped_tables_match_project_id_columns() {
     );
 }
 
+#[test]
+fn test_project_scoped_id_columns_carry_a_project_dependency() {
+    let scoped: HashSet<String> = current::project_scoped_tables().iter().map(|t| t.to_string()).collect();
+    let created: Vec<String> = CurrentSource.statistics().into_iter().flat_map(|s| s.create).collect();
+    let mut names = HashSet::new();
+    for sql in &created {
+        let name = sql.split('"').nth(1).expect("a quoted statistics name");
+        assert!(name.len() <= 63, "statistics name past PostgreSQL's 63-byte limit: {name}");
+        assert!(names.insert(name.to_string()), "statistics name declared twice: {name}");
+    }
+    let mut missing: Vec<String> = Vec::new();
+    for (table, cols) in COLS_BY_TABLE.iter().filter(|(t, _)| scoped.contains(t.as_str())) {
+        for col in cols.iter().filter(|c| is_id_column(c) && c.as_str() != "project_id") {
+            let on = format!("(dependencies) ON \"{col}\", \"project_id\" FROM \"{table}\"");
+            if !created.iter().any(|sql| sql.ends_with(&on)) {
+                missing.push(format!("{table}.{col}"));
+            }
+        }
+    }
+    assert!(missing.is_empty(), "project-scoped id columns without a project dependency: {missing:?}");
+}
+
 /// PostgreSQL truncates identifiers at `NAMEDATALEN - 1` = 63 bytes, silently:
 /// a longer index name is created under its truncated form, so two names that
 /// agree in their first 63 bytes collide and the second `CREATE` fails.
