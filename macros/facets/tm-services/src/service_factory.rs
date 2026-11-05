@@ -352,7 +352,7 @@ fn expand(args: FactoryArgs, mut func: ItemFn) -> Result<TokenStream, syn::Error
                 &self,
                 __request: #req_ty,
             ) -> Result<::ta_services::ctx_service::CtxResponse<#res_ty>, td_error::TdError> {
-                #run
+                ::ta_services::factory::in_service(#unit, async move { #run }).await
             }
         }
     }))

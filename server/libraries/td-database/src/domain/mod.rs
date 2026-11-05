@@ -7,7 +7,7 @@
 //! serves one ([`Domained`]); the `td-queries` surfaces require them to
 //! match, so a query cannot compile against the wrong pool.
 //!
-//! * [`DbDomain`] / [`Supports`] / [`ScopedBy`] / the domain markers (here).
+//! * [`DbDomain`] / [`ScopedBy`] / the domain markers (here).
 //! * [`DomainConnection`] — a service's connection to one domain
 //!   ([`connection`]).
 //! * [`DomainPools`] — the per-domain pool registry ([`pools`]).
@@ -15,9 +15,8 @@
 mod connection;
 mod pools;
 
-use crate::access::{AccessMode, AcrossProjects, DbScope, Global, InProject, RO, RW, XW};
+use crate::access::{AccessMode, AcrossProjects, DbScope, Global, InProject, ProjectLock, RW};
 use crate::components::APISERVER_COMPONENT_KEY;
-use crate::pool::PoolKind;
 use crate::pool::TdPool;
 use crate::pool::scoped::Scoped;
 pub use connection::DomainConnection;
@@ -27,19 +26,10 @@ use sqlx::postgres::PgConnection;
 
 /// One schema component's database, as a zero-sized marker type.
 pub trait DbDomain: Send + Sync + Copy + 'static {
-    /// The component key its pools register under (see
+    /// The component key its pool registers under (see
     /// [`ServingPools`](crate::components::ServingPools)).
     const SCHEMA_KEY: &'static str;
-    /// The pools this component uses — declared explicitly, mirrored by the
-    /// [`Supports`] impls beside it; its config entry must carry exactly these
-    /// `pool:` blocks.
-    const POOLS: &'static [PoolKind];
 }
-
-/// Compile-time counterpart of [`DbDomain::POOLS`]: a `GatedConnection<M, S, D>` (and
-/// any pool lookup) requires `D: Supports<M>`, so a mode whose pool a domain
-/// does not declare cannot be reached from service code.
-pub trait Supports<M: AccessMode>: DbDomain {}
 
 /// The row-level-security scopes a domain's tables live under. A domain whose
 /// tables carry no project is `Global` only: `app.project_id` would scope
@@ -53,19 +43,14 @@ pub trait Supports<M: AccessMode>: DbDomain {}
 pub trait ScopedBy<S: DbScope>: DbDomain {}
 
 /// The apiserver component's database; the default domain of every DAO. The
-/// one component with an exclusive pool, so the one that serializes. Its
-/// tables are project-partitioned, so both scopes apply.
+/// one component whose units lock, so the one that serializes. Its tables are
+/// project-partitioned, so both scopes apply.
 #[derive(Debug, Clone, Copy)]
 pub struct Apiserver;
 
 impl DbDomain for Apiserver {
     const SCHEMA_KEY: &'static str = APISERVER_COMPONENT_KEY;
-    const POOLS: &'static [PoolKind] = &[PoolKind::Regular, PoolKind::Exclusive];
 }
-
-impl Supports<RO> for Apiserver {}
-impl Supports<RW> for Apiserver {}
-impl Supports<XW> for Apiserver {}
 
 impl ScopedBy<Global> for Apiserver {}
 impl ScopedBy<AcrossProjects> for Apiserver {}
@@ -86,7 +71,6 @@ pub struct NoDomain;
 
 impl DbDomain for NoDomain {
     const SCHEMA_KEY: &'static str = "!none";
-    const POOLS: &'static [PoolKind] = &[];
 }
 
 /// What plain executors serve: `Apiserver` in test builds only (the `db` test
@@ -101,9 +85,9 @@ type PlainExecutorDomain = NoDomain;
 /// Outside test builds it is paired with `NoDomain`, so nothing typechecks.
 type PlainExecutorScope = InProject;
 
-/// A bare pool's connection comes from the regular pool and holds no lock,
-/// which is what `RW` says.
-type PlainExecutorMode = RW;
+/// A bare pool is a test's whole server, so it holds every project's lock.
+/// Outside test builds it pairs with `NoDomain`, so nothing typechecks.
+type PlainExecutorMode = RW<ProjectLock>;
 
 impl Domained for &'_ mut PgConnection {
     type Domain = PlainExecutorDomain;

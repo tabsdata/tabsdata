@@ -4,6 +4,7 @@
 
 use std::time::Instant;
 use td_error::TdError;
+use tracing::Instrument;
 
 pub use tm_services::{FieldAccessors, service_factory};
 
@@ -32,6 +33,13 @@ pub trait FieldAccessor<T> {
 )]
 pub trait Extract<Srv, Req>: Sized {
     fn extract(srv: &Srv, req: &Req) -> impl Future<Output = Result<Self, TdError>> + Send;
+}
+
+/// Runs a service in its own span, so every event it logs names it.
+pub async fn in_service<F: Future>(name: &'static str, service: F) -> F::Output {
+    service
+        .instrument(tracing::info_span!("service", name))
+        .await
 }
 
 /// One run of a service by its wrapper.

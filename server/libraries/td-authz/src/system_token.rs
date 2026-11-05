@@ -114,14 +114,16 @@ mod tests {
     }
 
     async fn held(db: &TdPool, owner: &UserId) -> Vec<ServiceTokenDB> {
-        let mut conn = DomainConnection::<Apiserver, Global, RW>::new(db.begin().await.unwrap());
+        let mut conn =
+            DomainConnection::<Apiserver, Global, RW>::asserted(db.begin().await.unwrap());
         conn.fetch_all(and!(owner, &TokenSystem::TRUE))
             .await
             .unwrap()
     }
 
     async fn seed(db: &TdPool, configured: Option<&ServiceToken>) {
-        let mut conn = DomainConnection::<Apiserver, Global, RW>::new(db.begin().await.unwrap());
+        let mut conn =
+            DomainConnection::<Apiserver, Global, RW>::asserted(db.begin().await.unwrap());
         seed_system_token(&mut conn, &UserId::admin(), configured, &comment())
             .await
             .unwrap();
@@ -188,7 +190,8 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_seed_refuses_a_slot_held_by_a_delegated_token(db: TdPool) {
-        let mut conn = DomainConnection::<Apiserver, Global, RW>::new(db.begin().await.unwrap());
+        let mut conn =
+            DomainConnection::<Apiserver, Global, RW>::asserted(db.begin().await.unwrap());
         conn.insert(
             &ServiceTokenDB::new(
                 UserId::admin(),

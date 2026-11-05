@@ -104,7 +104,8 @@ mod tests {
         // The bootstrap seeds the `admin` user into the `sys_admin` and
         // `default` roles; its effective grants are the union of both.
         let source = SqlRbacSource::default();
-        let mut slot = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+        let mut slot =
+            DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
 
         let grants = source.user_grants(&mut slot, &UserId::admin()).await?;
         // sys_admin role -> all system permissions
@@ -124,7 +125,8 @@ mod tests {
     async fn test_is_current_follows_project_delete(db: TdPool) -> Result<(), TdError> {
         let project = db.seed().project(ProjectName::try_from("doomed")?).await?;
         let source = SqlRbacSource::default();
-        let mut slot = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+        let mut slot =
+            DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
 
         assert!(
             source

@@ -21,7 +21,7 @@
 //! `RequestContext` authorization inserts, so one mounted without it fails
 //! rather than running unauthenticated.
 
-use crate::apiserver::server::{Server, ServerBuilder, ServerError};
+use crate::apiserver::server::{Server, ServerBuilder, ServerError, serve};
 use crate::apiserver::{ApiServerCtx, BASE_API_URL, V1};
 use crate::layers::authorization::{AuthorizationState, authorization_layer};
 use crate::layers::client_version::client_version_layer;
@@ -30,14 +30,16 @@ use crate::layers::{catch_panic, compression, timeout, trace};
 use axum::middleware::from_fn_with_state;
 use ta_apiserver::router::{AuthClass, Position, RouterStates, Scope, Server as Listener, Version};
 use ta_apiserver::status::error_status::ErrorStatus;
+use td_common::task_group::{BoxError, GroupTask};
 use td_error::{ApiError, api_error};
+use tokio_util::sync::CancellationToken;
 use tower::ServiceBuilder;
 
-pub struct ApiServerV1 {
-    pub inner: Box<dyn Server>,
+pub struct ApiServer {
+    inner: Box<dyn Server>,
 }
 
-impl ApiServerV1 {
+impl ApiServer {
     pub async fn new(context: &ApiServerCtx) -> Result<Self, ServerError> {
         async fn api_not_found_handler() -> ErrorStatus {
             api_error!(ApiError::NotFound, "API endpoint not found").into()
@@ -143,7 +145,15 @@ impl ApiServerV1 {
                 .await
         }?;
 
-        Ok(ApiServerV1 { inner })
+        Ok(ApiServer { inner })
+    }
+}
+
+impl GroupTask for ApiServer {
+    const NAME: &'static str = "apiserver";
+
+    async fn run(self, shutdown: CancellationToken) -> Result<(), BoxError> {
+        serve(self.inner, shutdown).await
     }
 }
 

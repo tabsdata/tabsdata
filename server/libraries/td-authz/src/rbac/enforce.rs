@@ -849,7 +849,8 @@ mod tests {
         );
         let request = request(user_id);
         let scope = Scope::<Project>(On::Entity(p));
-        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+        let mut conn =
+            DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
 
         // develop_project on p: allowed
         Enforce::<FixedRbacSource, Project, DevelopProject>::authorize(
@@ -896,7 +897,8 @@ mod tests {
         let request = request(user_id);
         let scope = Scope::<Project>(On::Entity(p));
 
-        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+        let mut conn =
+            DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
         Enforce::<FixedRbacSource, Project, DevelopProject>::authorize(
             &source, &mut conn, &request, &scope,
         )
@@ -921,7 +923,8 @@ mod tests {
                 ProjectRole::Dev.grants(developed),
             ],
         );
-        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+        let mut conn =
+            DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
 
         let develop =
             VisibleProjectsResolver::<FixedRbacSource>::resolve_at::<DevelopProject, _, _>(
@@ -965,7 +968,8 @@ mod tests {
             .with_user_roles(dev_id, [ProjectRole::Dev.grants(p)])
             .with_gone::<Project>(p);
         let scope = Scope::<Project>(On::Entity(p));
-        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+        let mut conn =
+            DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
 
         let err = Enforce::<FixedRbacSource, Project, ViewProject>::authorize(
             &source,
@@ -1029,7 +1033,8 @@ mod tests {
             .with_user_roles(admin_id, [SystemRole::SysAdmin.grants()])
             .with_user_roles(dev_id, [ProjectRole::Dev.grants(p)]);
         let scope = Scope::<Project>(On::Entity(p));
-        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+        let mut conn =
+            DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
 
         for user in [admin_id, dev_id] {
             let err = Enforce::<FixedRbacSource, Project, ManageProject>::authorize(
@@ -1077,7 +1082,8 @@ mod tests {
         let internal_request = RequestContext::internal();
         let source = FixedRbacSource::new(); // empty: system has no grants
         let scope = Scope::<Project>(On::Entity(p));
-        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+        let mut conn =
+            DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
 
         Enforce::<FixedRbacSource, Project, DevelopProject>::authorize(
             &source,
@@ -1110,7 +1116,8 @@ mod tests {
         let system_session = request(UserId::system());
         let source = FixedRbacSource::new();
         let scope = Scope::<Project>(On::Entity(p));
-        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+        let mut conn =
+            DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
 
         let err = Enforce::<FixedRbacSource, Project, ViewProject>::authorize(
             &source,

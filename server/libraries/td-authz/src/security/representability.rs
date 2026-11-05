@@ -387,7 +387,8 @@ mod tests {
     /// A fresh bootstrap (only the built-in roles) is representable.
     #[td_test::test(db)]
     async fn test_fresh_bootstrap_is_representable(db: TdPool) -> Result<(), TdError> {
-        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+        let mut conn =
+            DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
         let reasons = check_representability(&mut conn, &[]).await?;
         assert!(
             reasons.is_empty(),
@@ -401,7 +402,8 @@ mod tests {
     async fn test_with_project_is_representable(db: TdPool) -> Result<(), TdError> {
         let project = db.seed().project(ProjectName::try_from("foo")?).await?;
         seed_per_project_roles(&db, &project).await?;
-        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+        let mut conn =
+            DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
         let reasons = check_representability(&mut conn, &[]).await?;
         assert!(
             reasons.is_empty(),
@@ -432,7 +434,8 @@ mod tests {
         };
         db.insert::<RoleDB>(&role).await?;
 
-        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+        let mut conn =
+            DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
         let reasons = check_representability(&mut conn, &[]).await?;
         assert!(
             reasons
@@ -459,7 +462,8 @@ mod tests {
             )
             .await?;
 
-        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+        let mut conn =
+            DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
         let reasons = check_representability(&mut conn, &[]).await?;
         assert!(
             reasons
@@ -486,7 +490,8 @@ mod tests {
             )
             .await?;
 
-        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+        let mut conn =
+            DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
         let reasons = check_representability(&mut conn, &[]).await?;
         assert!(
             reasons
@@ -559,7 +564,8 @@ mod tests {
             .permission(PermissionType::manage_access(), None, None, &default_role)
             .await?;
 
-        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+        let mut conn =
+            DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
         let reasons = check_representability(&mut conn, &[]).await?;
         assert!(
             reasons

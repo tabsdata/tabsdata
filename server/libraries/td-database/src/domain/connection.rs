@@ -6,8 +6,8 @@
 //! DomainConnection<D, S, M>` IS the domain's executor: query it directly
 //! (`conn...`). Opening and closing the transaction it runs in belong to
 //! its [`AccessMode`] `M`, which the type keeps: a write needs a
-//! [`WriteMode`](crate::access::WriteMode), and work that must run under
-//! the project's lock spells `XW`.
+//! [`WriteMode`](crate::access::WriteMode), and work that must run under a
+//! lock asks for it with [`Holds`](crate::access::Holds).
 
 use crate::access::{AccessMode, DbScope};
 use crate::domain::{DbDomain, Domained};
@@ -29,15 +29,21 @@ pub struct DomainConnection<D: DbDomain, S: DbScope, M: AccessMode> {
 }
 
 impl<D: DbDomain, S: DbScope, M: AccessMode> DomainConnection<D, S, M> {
-    /// The caller asserts `conn` is pointed at `D`'s schema, in scope `S`,
-    /// opened as `M`.
-    pub fn new(conn: Transaction<'static, Postgres>) -> Self {
+    /// Only the access layer opens one, so its mode is what the unit holds.
+    pub(crate) fn new(conn: Transaction<'static, Postgres>) -> Self {
         Self {
             conn,
             _d: PhantomData,
             _s: PhantomData,
             _m: PhantomData,
         }
+    }
+
+    /// Tests stand in for the access layer: the caller asserts `conn` is
+    /// pointed at `D`'s schema, in scope `S`, opened as `M`.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn asserted(conn: Transaction<'static, Postgres>) -> Self {
+        Self::new(conn)
     }
 
     pub async fn commit(self) -> Result<(), Error> {

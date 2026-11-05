@@ -2,8 +2,6 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::apiserver::server::{ServerError, serve};
-use crate::apiserver::v1::ApiServerV1;
 use crate::config::Config;
 use crate::router::internal::internal_routes;
 use std::sync::Arc;
@@ -13,25 +11,24 @@ use td_authz::AuthzContext;
 use td_authz::rbac::AuthzRegistry;
 use td_authz::token_provider::ServiceTokens;
 use td_bridge::BridgeProviderHandle;
-use td_common::task_group::{BoxError, GroupTask};
 use td_database::components::ServingPools;
 use td_error::TdError;
-use td_execution::{RecoveryConfig, SchedulerConfig, SchedulerNotify};
+use td_execution::{ProjectWakes, RecoveryConfig, SchedulerConfig};
 use td_objects::types::addresses::InternalServerEndpoint;
 use td_objects::types::basic::InstanceId;
 use td_services::Services;
 use td_services::connection_catalog::ConnectionCatalog;
 use td_services::execution::services::runtime_info::RuntimeContext;
 use td_services::internal_api::InternalApi;
-use td_services::scheduler::cursor::TickCursor;
 use td_services::table::sample::TableSampler;
 use td_storage::Storage;
 use te_services::{ContextExt, ExtendedServices};
-use tokio_util::sync::CancellationToken;
 
 pub mod internal;
+mod public;
 mod server;
-pub mod v1;
+
+pub use public::ApiServer;
 
 /// Where the API mounts. Nested in two steps so `/api/<anything else>` still
 /// answers with an API-shaped 404 while non-`/api` paths fall through.
@@ -76,7 +73,6 @@ impl ApiServerCtx {
         storage: Ctx<Storage>,
         runtime_context: Ctx<RuntimeContext>,
         instance_id: Ctx<InstanceId>,
-        scheduler_notify: Ctx<SchedulerNotify>,
         bridge: Ctx<BridgeProviderHandle>,
         authz_registry: Arc<AuthzRegistry>,
         internal_endpoint: Arc<InternalServerEndpoint>,
@@ -109,8 +105,7 @@ impl ApiServerCtx {
             runtime_context: runtime_context.clone(),
             instance_id,
             transaction_by: Ctx::new(config.transaction_by.clone()),
-            scheduler_notify: scheduler_notify.clone(),
-            tick_cursor: Ctx::new(TickCursor::default()),
+            wakes: Ctx::new(ProjectWakes::default()),
             scheduler_config: Ctx::new(SchedulerConfig {
                 check_frequency: config.check_frequency,
                 max_functions_per_tick: config.max_functions_per_tick,
@@ -140,26 +135,6 @@ impl ApiServerCtx {
             extended_services,
             routes,
         })
-    }
-}
-
-pub enum ApiServer {
-    V1(ApiServerV1),
-}
-
-impl ApiServer {
-    pub async fn new(context: &ApiServerCtx) -> Result<Self, ServerError> {
-        Ok(ApiServer::V1(ApiServerV1::new(context).await?))
-    }
-}
-
-impl GroupTask for ApiServer {
-    const NAME: &'static str = "apiserver";
-
-    async fn run(self, shutdown: CancellationToken) -> Result<(), BoxError> {
-        match self {
-            ApiServer::V1(server) => serve(server.inner, shutdown).await,
-        }
     }
 }
 

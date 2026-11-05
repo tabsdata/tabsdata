@@ -20,7 +20,6 @@ use td_common::status::ExitStatus;
 use td_common::task_group::TaskGroup;
 use td_database::access::{DbPool, Global};
 use td_error::TdError;
-use td_execution::SchedulerNotify;
 use td_objects::types::basic::InstanceId;
 use td_process::launcher::cli::Cli;
 use td_queries::initialize_logical_ids;
@@ -102,12 +101,7 @@ pub fn run(edition: Edition) {
                     error!("Error resolving apiserver database pool: {e:#?}");
                     ExitStatus::GeneralError
                 })?
-                .regular
-                .clone()
-                .ok_or_else(|| {
-                    error!("Error resolving apiserver database pool: regular pool not connected");
-                    ExitStatus::GeneralError
-                })?;
+                .clone();
 
             initialize_logical_ids(&db).await.map_err(|e| {
                 error!("Error initializing logical IDs: {e:#?}");
@@ -155,8 +149,6 @@ pub fn run(edition: Edition) {
                     })?;
             let runtime_context = Ctx::new(runtime_context);
 
-            let scheduler_notify = Ctx::new(SchedulerNotify::new());
-
             // Bring the authz subsystem online behind one call so run() stays
             // free of authz wiring: build the (extension-augmented) registry,
             // reconcile sys_admin, seed any extension identities and system
@@ -194,7 +186,6 @@ pub fn run(edition: Edition) {
                 storage.clone(),
                 runtime_context.clone(),
                 instance_id,
-                scheduler_notify.clone(),
                 bridge.clone(),
                 authz_registry.clone(),
                 Arc::new(internal_endpoint),
