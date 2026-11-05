@@ -20,7 +20,7 @@ babel==2.18.0
 black==26.10.1
 boolean-py==5.0
 boto3==1.43.123
-botocore==1.43.123
+botocore==1.43.124
 build==1.6.1
 cachecontrol==0.14.4
 cattrs==26.2.1
@@ -33,7 +33,7 @@ colorama==0.4.6
 colorlog==6.12.0
 configurator==3.2.0
 contourpy==1.4.0
-coverage==7.17.1
+coverage==7.17.2
 cryptography==50.0.2
 csvkit==2.2.0
 cycler==0.12.1
@@ -111,12 +111,12 @@ msgpack==1.2.4
 mypy==2.4.1
 mypy-extensions==1.1.0
 mysql-connector-python==26.10.0
-nab==0.0.25
-nab-index==0.0.25
-nab-markersets==0.0.25
-nab-project==0.0.25
-nab-provider==0.0.25
-nab-resolver==0.0.25
+nab==0.0.26
+nab-index==0.0.26
+nab-markersets==0.0.26
+nab-project==0.0.26
+nab-provider==0.0.26
+nab-resolver==0.0.26
 nh3==0.3.7
 numpy==2.5.4
 olefile==0.47
@@ -218,7 +218,7 @@ url-normalize==3.1.0
 urllib3==2.8.0
 uvicorn==0.54.0
 virtualenv==21.15.2
-watchdog==7.0.0
+watchdog==7.1.0
 wcwidth==0.9.4
 wheel==0.48.0
 wheel-filename==2.1.0

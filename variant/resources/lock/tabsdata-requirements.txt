@@ -27,8 +27,8 @@ backports-zstd==1.8.0 ; python_full_version < '3.14'
 base32hex==1.0.2
 boto3==1.43.123
 boto3-stubs==1.43.123
-botocore==1.43.123
-botocore-stubs==1.43.123
+botocore==1.43.124
+botocore-stubs==1.43.124
 build==1.6.1
 cachetools==7.2.8
 certifi==2026.10.23
