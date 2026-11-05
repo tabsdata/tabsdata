@@ -702,18 +702,17 @@ def _temp_table_name(fq_table: str) -> str:
     return fqn(parts, _DATABRICKS_FQN_DEF)
 
 
-def _create_temp_table_from_volume_schema(
+def _create_scratch_table(
     cursor,
     file_in_volume: str,
     fq_table: str,
 ) -> str:
-    """``CREATE TABLE`` beside ``fq_table`` carrying the volume file's own schema
-    and no rows, and return its quoted ``catalog.schema.table`` name.
+    """``CREATE TABLE`` beside ``fq_table`` holding the volume file's schema and
+    rows, and return its quoted ``catalog.schema.table`` name.
 
-    ``read_files`` reads the parquet footer, so the temp table holds every column
-    the file has -- including any the target does not, which a merge predicate
-    may still need to read. ``LIMIT 0`` takes the schema without the rows; the
-    caller loads them with :func:`copy_into_table`.
+    ``read_files`` reads the parquet footer, so the table holds every column the
+    file has -- including any the target does not, which a merge predicate may
+    still need to read. One statement takes the schema and loads the rows.
 
     A real catalog table, not a session relation: it outlives the connection, so
     **the caller must pass it to :func:`drop_temp_table` when the merge is
@@ -728,14 +727,14 @@ def _create_temp_table_from_volume_schema(
     _execute_volume_statement(
         cursor,
         f"CREATE TABLE {temp_table} USING DELTA AS SELECT * FROM "
-        f"read_files('{file_in_volume}', {_READ_FILES_OPTIONS}) LIMIT 0",
+        f"read_files('{file_in_volume}', {_READ_FILES_OPTIONS})",
         {},
     )
     return temp_table
 
 
 def drop_temp_table(cursor, temp_table: str) -> None:
-    """Drop a table :func:`_create_temp_table_from_volume_schema` made.
+    """Drop a table :func:`_create_scratch_table` made.
 
     ``IF EXISTS`` so this is safe in the ``finally`` it belongs in: it has to run
     whether the merge succeeded, failed, or never got as far as loading the copy.
@@ -1148,8 +1147,6 @@ def _merge_one(
                 cfg.conn,
                 fq_table,
                 schema_evolution=cfg.schema_evolution,
-                copy_options=cfg.support_replace_copy_options,
-                copy_kwargs=cfg.support_replace_copy_into,
             ),
             target=_fq_for_sql(fq_table),
             batch=frame,

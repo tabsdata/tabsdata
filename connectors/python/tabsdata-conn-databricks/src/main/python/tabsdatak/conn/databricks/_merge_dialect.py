@@ -35,6 +35,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_TYPE_WIDENING = "delta.enableTypeWidening"
+
 _ERRORS = MergeErrors(
     marker_absent=DatabricksErrorCode.DATABRICKS_19.exception,
     keys_absent=DatabricksErrorCode.DATABRICKS_20.exception,
@@ -60,8 +62,6 @@ class DatabricksMergeDialect(MergeDialect):
         schema_evolution: ``"update"`` or ``"strict"``. Databricks evolves from
             inside the ``MERGE``, so this decides the statement's own shape as
             well as the property set on the target.
-        copy_options: Extra ``COPY INTO`` options, appended verbatim.
-        copy_kwargs: Extra keyword arguments for the ``COPY INTO`` execute.
     """
 
     def __init__(
@@ -72,16 +72,12 @@ class DatabricksMergeDialect(MergeDialect):
         fq_table: str,
         *,
         schema_evolution: str,
-        copy_options: str = "",
-        copy_kwargs: dict | None = None,
     ) -> None:
         self._cursor = cursor
         self._ws_client = ws_client
         self._conn = conn
         self._fq_table = fq_table
         self._schema_evolution = schema_evolution
-        self._copy_options = copy_options
-        self._copy_kwargs = copy_kwargs or {}
 
     @property
     def _evolving(self) -> bool:
@@ -143,8 +139,8 @@ class DatabricksMergeDialect(MergeDialect):
         batch: pl.LazyFrame,
         watermark_cfg: WatermarkCfg | None = None,
     ) -> Iterator[Staged]:
-        """Upload the batch to the volume, build a table from its schema and
-        ``COPY`` the rows in.
+        """Upload the batch to the volume and build a table holding its schema
+        and rows, in one statement.
 
         The scratch table carries the file's whole schema, marker column and
         all: the clauses read the marker off it. It is a real catalog table
@@ -153,14 +149,12 @@ class DatabricksMergeDialect(MergeDialect):
         it is deleted.
 
         A watermark column is added to the scratch table once the rows are in,
-        not to its schema: the batch does not carry the column, so the ``COPY``
-        would have nothing to fill it from. Stamping it there is what puts the
-        id on the rows the ``MERGE`` goes on to write.
+        as the batch does not carry the column. Stamping it there is what puts
+        the id on the rows the ``MERGE`` goes on to write.
         """
         # noinspection PyProtectedMember
         from tabsdatak.conn.databricks._impl import (
-            _create_temp_table_from_volume_schema,
-            _execute_volume_statement,
+            _create_scratch_table,
             delete_from_volume,
             drop_temp_table,
             upload_frame_to_volume,
@@ -170,17 +164,8 @@ class DatabricksMergeDialect(MergeDialect):
             self._ws_client, self._conn, self._fq_table, batch
         )
         try:
-            scratch = _create_temp_table_from_volume_schema(
-                self._cursor, staged_file, self._fq_table
-            )
+            scratch = _create_scratch_table(self._cursor, staged_file, self._fq_table)
             try:
-                _execute_volume_statement(
-                    self._cursor,
-                    f"COPY INTO {scratch} FROM '{staged_file}' "
-                    f"FILEFORMAT = PARQUET"
-                    f"{self._copy_options}",
-                    self._copy_kwargs,
-                )
                 if watermark_cfg is not None:
                     self._stamp(scratch, watermark_cfg)
                 yield Staged(relation=scratch, columns=self._relation_columns(scratch))
@@ -198,11 +183,13 @@ class DatabricksMergeDialect(MergeDialect):
         target this call brings into being must not carry it either -- nothing
         would ever write it, and every row would read NULL.
 
-        ``delta.enableTypeWidening`` is set on every merge and not only when
+        ``delta.enableTypeWidening`` is checked on every merge and not only when
         evolving: a target an earlier update-mode run marked would otherwise go
-        on widening after a run asked for strict. It is what lets the ``MERGE``
-        land a value the target's column type could not hold -- the type half of
-        what ``WITH SCHEMA EVOLUTION`` does for whole columns.
+        on widening after a run asked for strict. A new target gets it with its
+        ``CREATE``; an existing one is written only when it differs. It is what
+        lets the ``MERGE`` land a value the target's column type could not hold
+        -- the type half of what ``WITH SCHEMA EVOLUTION`` does for whole
+        columns.
         """
         # noinspection PyProtectedMember
         from tabsdatak.conn.databricks._impl import _volume_schema_projection
@@ -210,18 +197,24 @@ class DatabricksMergeDialect(MergeDialect):
         excluded = [
             name for name, _ in staged.columns if self.fold(name) == self.fold(marker)
         ]
+        widening = str(self._evolving).lower()
         logger.debug("Creating target table %s for merge", target)
         self._cursor.execute(
-            f"CREATE TABLE IF NOT EXISTS {target} USING DELTA AS SELECT "
+            f"CREATE TABLE IF NOT EXISTS {target} USING DELTA "
+            f"TBLPROPERTIES ('{_TYPE_WIDENING}' = '{widening}') AS SELECT "
             f"{_volume_schema_projection(excluded)} "
             f"FROM {staged.relation} LIMIT 0"
         )
-        widening = str(self._evolving).lower()
-        logger.debug("Setting delta.enableTypeWidening=%s for %s", widening, target)
-        self._cursor.execute(
-            f"ALTER TABLE {target} "
-            f"SET TBLPROPERTIES ('delta.enableTypeWidening' = '{widening}')"
-        )
+        # Read before writing: a property write is a Delta commit, several times
+        # the cost of the read, and the value rarely changes between merges.
+        self._cursor.execute(f"SHOW TBLPROPERTIES {target} ('{_TYPE_WIDENING}')")
+        current = {row[0]: row[1] for row in self._cursor.fetchall() or []}
+        if current.get(_TYPE_WIDENING) != widening:
+            logger.debug("Setting %s=%s for %s", _TYPE_WIDENING, widening, target)
+            self._cursor.execute(
+                f"ALTER TABLE {target} "
+                f"SET TBLPROPERTIES ('{_TYPE_WIDENING}' = '{widening}')"
+            )
 
     def target_columns(self, target: str) -> list[tuple[str, str]]:
         """``(name, type)`` per column ``target`` currently has.

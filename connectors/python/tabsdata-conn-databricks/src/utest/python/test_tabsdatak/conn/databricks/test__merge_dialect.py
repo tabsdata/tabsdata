@@ -64,8 +64,10 @@ class _RecordingCursor:
         *,
         has_watermark: bool = False,
         stamped: bool = False,
+        widening: str | None = None,
     ) -> None:
         self.log: list[tuple[str, dict]] = []
+        self._widening = widening
         self._columns = columns or []
         self._has_watermark = has_watermark
         self._stamped = stamped
@@ -82,6 +84,14 @@ class _RecordingCursor:
             return
         # The two probes a watermarked merge makes: whether the target has the
         # column, and whether it already carries this trx's id.
+        if statement.startswith("SHOW TBLPROPERTIES"):
+            self.description = [("key",), ("value",)]
+            self._rows = (
+                []
+                if self._widening is None
+                else [("delta.enableTypeWidening", self._widening)]
+            )
+            return
         if statement.startswith("SELECT COUNT(*) > 0"):
             self.description, self._rows = [("stamped",)], [(self._stamped,)]
             return
@@ -334,8 +344,10 @@ class TestReplaceStatement:
 # ---------------------------------------------------------------------------
 
 
-def _ensure_target(op_column: str = "op", schema_evolution: str = "update"):
-    cursor = _RecordingCursor()
+def _ensure_target(
+    op_column: str = "op", schema_evolution: str = "update", widening=None
+):
+    cursor = _RecordingCursor(widening=widening)
     columns = [("order_id", "BIGINT"), ("op", "STRING")]
     _dialect(cursor, schema_evolution=schema_evolution).ensure_target(
         _TARGET,
@@ -350,7 +362,8 @@ class TestEnsureTarget:
         create = _only_starting_with(_ensure_target(), "CREATE TABLE IF NOT EXISTS")
         assert create == (
             "CREATE TABLE IF NOT EXISTS `main`.`analytics`.`orders` "
-            "USING DELTA AS SELECT * EXCEPT (`op`) "
+            "USING DELTA TBLPROPERTIES ('delta.enableTypeWidening' = 'true') "
+            "AS SELECT * EXCEPT (`op`) "
             "FROM `main`.`analytics`.`orders_ab12cd34` LIMIT 0"
         )
 
@@ -386,6 +399,23 @@ class TestEnsureTarget:
             f"SET TBLPROPERTIES ('delta.enableTypeWidening' = '{widening}')"
         )
 
+    @pytest.mark.parametrize(
+        "schema_evolution,widening", [("update", "true"), ("strict", "false")]
+    )
+    def test_leaves_a_property_already_set_alone(self, schema_evolution, widening):
+        """A property write is a Delta commit, several times the cost of reading
+        it, so a target already marked as asked is not written again."""
+        statements = _ensure_target(
+            schema_evolution=schema_evolution, widening=widening
+        )
+        assert not [s for s in statements if s.startswith("ALTER TABLE")]
+
+    def test_changes_a_property_set_the_other_way(self):
+        statements = _ensure_target(schema_evolution="strict", widening="true")
+        assert _only_starting_with(statements, "ALTER TABLE").endswith(
+            "('delta.enableTypeWidening' = 'false')"
+        )
+
     def test_creates_the_target_before_marking_it(self):
         # The mark is an ALTER, so the table has to exist first.
         statements = _ensure_target()
@@ -410,16 +440,16 @@ def _staged_batch():
 
 
 class TestStaging:
-    def test_uploads_builds_and_loads_in_that_order(self, tmp_path):
+    def test_uploads_then_builds_the_scratch_table_with_its_rows(self, tmp_path):
         batch = _staged_batch()
         cursor, ws = _staging_cursor(), _FakeWorkspaceClient()
         with _dialect(cursor, ws_client=ws).staging(_TARGET, batch) as staged:
             assert staged.columns == [("order_id", "BIGINT"), ("op", "STRING")]
         assert len(ws.uploaded) == 1
-        statements = cursor.statements
-        create = _index_starting_with(statements, "CREATE TABLE `main`")
-        copy = _index_starting_with(statements, "COPY INTO")
-        assert create < copy
+        create = _only_starting_with(cursor.statements, "CREATE TABLE `main`")
+        assert "read_files(" in create
+        assert "LIMIT 0" not in create
+        assert not [s for s in cursor.statements if s.startswith("COPY INTO")]
 
     def test_keeps_the_marker_in_the_scratch_table(self, tmp_path):
         """The clauses read the marker off the scratch table, so only the target
@@ -437,9 +467,9 @@ class TestStaging:
         cursor = _staging_cursor()
         with _dialect(cursor).staging(_TARGET, batch):
             pass
-        copy = _only_starting_with(cursor.statements, "COPY INTO")
-        assert copy.startswith("COPY INTO `main`.`analytics`.`orders_")
-        assert not copy.startswith("COPY INTO `main`.`analytics`.`orders` ")
+        create = _only_starting_with(cursor.statements, "CREATE TABLE `main`")
+        assert create.startswith("CREATE TABLE `main`.`analytics`.`orders_")
+        assert not create.startswith("CREATE TABLE `main`.`analytics`.`orders` ")
 
     def test_drops_the_scratch_table_and_the_staged_file_on_the_way_out(self, tmp_path):
         """Both outlive the statement -- a real catalog table and a file on the
@@ -616,13 +646,13 @@ class TestStampingTheScratchTable:
         ]
 
     def test_stamps_after_the_rows_are_in(self, tmp_path):
-        # The batch does not carry the column, so a scratch table built with it
-        # would leave the COPY nothing to fill it from.
+        # The batch does not carry the column, so it is added and stamped once the
+        # scratch table holds the rows.
         cursor = _staging_cursor()
         self._stage(cursor, tmp_path, _watermark())
-        copy = _index_starting_with(cursor.statements, "COPY INTO")
+        create = _index_starting_with(cursor.statements, "CREATE TABLE `main`")
         update = _index_starting_with(cursor.statements, "UPDATE")
-        assert copy < update
+        assert create < update
 
     def test_reports_the_watermark_among_the_staged_columns(self, tmp_path):
         # Read back off DESCRIBE rather than appended by hand, so the column the

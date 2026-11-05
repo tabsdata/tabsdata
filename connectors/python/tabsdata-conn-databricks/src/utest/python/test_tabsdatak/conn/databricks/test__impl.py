@@ -602,7 +602,7 @@ class _RecordingCursor:
 
 def _staged(target: str, path: str = "/Volumes/c/s/v/in.parquet"):
     cursor = _RecordingCursor()
-    name = _impl._create_temp_table_from_volume_schema(cursor, path, target)
+    name = _impl._create_scratch_table(cursor, path, target)
     return name, cursor.log[0][0]
 
 
@@ -649,12 +649,13 @@ class TestTempTableName:
         assert len(_impl.unfqn(name, _impl._DATABRICKS_FQN_DEF)) == 3
 
 
-class TestCreateTempTableFromVolumeSchema:
+class TestCreateScratchTable:
     def test_creates_a_delta_table_from_the_volume_file(self):
         name, sql = _staged("main.analytics.orders")
         assert sql == (
             f"CREATE TABLE {name} USING DELTA AS SELECT * FROM "
-            f"read_files('/Volumes/c/s/v/in.parquet', format => 'parquet', schemaEvolutionMode => 'none') LIMIT 0"
+            f"read_files('/Volumes/c/s/v/in.parquet', format => 'parquet', "
+            f"schemaEvolutionMode => 'none')"
         )
 
     def test_is_not_temporary(self):
@@ -663,15 +664,17 @@ class TestCreateTempTableFromVolumeSchema:
         _, sql = _staged("c.s.t")
         assert "TEMPORARY" not in sql
 
-    def test_takes_the_schema_without_the_rows(self):
-        """``LIMIT 0`` is what makes this a schema copy rather than a load; the
-        rows arrive via COPY INTO."""
+    def test_loads_the_rows_in_the_same_statement(self):
+        """One round trip instead of a schema copy plus a ``COPY INTO``."""
         _, sql = _staged("c.s.t")
-        assert sql.endswith("LIMIT 0")
+        assert "LIMIT 0" not in sql
 
     def test_reads_the_file_the_caller_named(self):
         _, sql = _staged("c.s.t", path="/Volumes/x/y/z/other.parquet")
-        assert "read_files('/Volumes/x/y/z/other.parquet', format => 'parquet', schemaEvolutionMode => 'none')" in sql
+        assert (
+            "read_files('/Volumes/x/y/z/other.parquet', format => 'parquet', schemaEvolutionMode => 'none')"
+            in sql
+        )
 
     def test_returns_the_name_it_created(self):
         name, sql = _staged("c.s.t")
@@ -691,16 +694,14 @@ class TestCreateTempTableFromVolumeSchema:
             calls.append(statement)
 
         monkeypatch.setattr(_impl, "_execute_volume_statement", spy)
-        _impl._create_temp_table_from_volume_schema(
+        _impl._create_scratch_table(
             _RecordingCursor(), "/Volumes/c/s/v/in.parquet", "c.s.t"
         )
         assert len(calls) == 1 and calls[0].startswith("CREATE TABLE ")
 
     def test_passes_no_extra_execute_parameters(self):
         cursor = _RecordingCursor()
-        _impl._create_temp_table_from_volume_schema(
-            cursor, "/Volumes/c/s/v/in.parquet", "c.s.t"
-        )
+        _impl._create_scratch_table(cursor, "/Volumes/c/s/v/in.parquet", "c.s.t")
         assert cursor.log[0][1] == {}
 
 
@@ -721,7 +722,7 @@ class TestDropTempTable:
 
     def test_round_trips_the_created_name(self):
         create = _RecordingCursor()
-        name = _impl._create_temp_table_from_volume_schema(
+        name = _impl._create_scratch_table(
             create, "/Volumes/c/s/v/in.parquet", "c.s.`weird tbl`"
         )
         drop = _RecordingCursor()
