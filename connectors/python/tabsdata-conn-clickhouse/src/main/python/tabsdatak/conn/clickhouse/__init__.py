@@ -103,7 +103,7 @@ ClickHouseTableNamesSpec: TypeAlias = Annotated[
 names that differ only in quoting, or in the case of an unquoted part
 (unchanged, as ClickHouse names are case-sensitive), are the same table."""
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
-SchemaEvolutionSpec: TypeAlias = Literal["strict", "iceberg"]
+SchemaEvolutionSpec: TypeAlias = Literal["strict", "update"]
 
 
 # --- ClickHouseDest.dest_cfg keys ------------------------------------
@@ -341,8 +341,9 @@ class ClickHouseDest(Dest):
             characters.
         if_table_exists: `"append"` (the default) adds rows;
             `"replace"` overwrites the table.
-        schema_evolution: `"strict"` (the default) rejects schema
-            changes; `"iceberg"` applies Iceberg-style schema deltas.
+        schema_evolution: `"strict"` (the default) rejects schema changes;
+            `"update"` adds new columns and widens column types of the target
+            to match the schema of the incoming data.
         dest_cfg: Optional connector config; the only supported key is
             `clickhouse.logging_level`.
 
@@ -372,7 +373,7 @@ class ClickHouseDest(Dest):
                 return rows
 
         Append rows with a wider schema and let ClickHouse evolve the
-        table -- `schema_evolution="iceberg"` adds the new column rather
+        table -- `schema_evolution="update"` adds the new column rather
         than failing on the mismatch (`"strict"` would reject it):
 
         .. code-block:: python
@@ -381,7 +382,7 @@ class ClickHouseDest(Dest):
                 destination=ClickHouseDest(
                     tables=["cap_evolve"],
                     if_table_exists="append",
-                    schema_evolution="iceberg",
+                    schema_evolution="update",
                 ),
                 input_tables=["caps_input/cap_evo_v2"],
             )

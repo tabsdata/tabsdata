@@ -54,14 +54,14 @@ def test_clickhouse_dest_full_round_trip():
     dest = ClickHouseDest(
         tables=["analytics.users", "analytics.orders"],
         if_table_exists="replace",
-        schema_evolution="iceberg",
+        schema_evolution="update",
         dest_cfg={"clickhouse.logging_level": 20},
     )
     loaded = ClickHouseDest.from_json(dest.to_json())
     assert loaded == dest
     assert loaded.tables == ["analytics.users", "analytics.orders"]
     assert loaded.if_table_exists == "replace"
-    assert loaded.schema_evolution == "iceberg"
+    assert loaded.schema_evolution == "update"
     assert loaded.dest_cfg == {"clickhouse.logging_level": 20}
 
 

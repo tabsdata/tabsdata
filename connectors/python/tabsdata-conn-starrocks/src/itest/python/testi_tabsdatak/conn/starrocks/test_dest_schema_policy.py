@@ -15,7 +15,6 @@ from testi_tabsdatak.conn.common.sql.plugin_io import work_dir
 from testi_tabsdatak.conn.common.sql.schema.policy import (
     APPEND_CASES,
     REPLACE,
-    UPDATE,
     Policy,
     run,
     table_for,
@@ -26,8 +25,6 @@ from testi_tabsdatak.conn.starrocks.backend import column_spec, dest_conn, store
 from tabsdatak.conn.starrocks import StarRocksDest, _plugin as plugin
 
 pytestmark = pytest.mark.starrocks
-
-_EVOLUTION = {"strict": "strict", UPDATE: "iceberg"}
 
 
 def _policy(domain: StarrocksDomain, staging: S3Domain, work: Path) -> Policy:
@@ -43,7 +40,7 @@ def _policy(domain: StarrocksDomain, staging: S3Domain, work: Path) -> Policy:
             StarRocksDest(
                 tables=[table],
                 if_table_exists=mode,
-                schema_evolution=_EVOLUTION[evolution],
+                schema_evolution=evolution,
             ),
             [frame],
         )

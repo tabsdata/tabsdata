@@ -18,7 +18,6 @@ from testi_tabsdatak.conn.clickhouse.backend import dest_conn, store
 from testi_tabsdatak.conn.common.sql.plugin_io import work_dir
 from testi_tabsdatak.conn.common.sql.schema.policy import (
     APPEND_CASES,
-    UPDATE,
     Policy,
     run,
     table_for,
@@ -28,8 +27,6 @@ from testi_tabsdatak.conn.common.sql.schema.policy import (
 from tabsdatak.conn.clickhouse import ClickHouseDest, _plugin as plugin
 
 pytestmark = pytest.mark.clickhouse
-
-_EVOLUTION = {"strict": "strict", UPDATE: "iceberg"}
 
 
 def _policy(domain: ClickhouseDomain, staging: S3Domain, work: Path) -> Policy:
@@ -43,7 +40,7 @@ def _policy(domain: ClickhouseDomain, staging: S3Domain, work: Path) -> Policy:
             ClickHouseDest(
                 tables=[table],
                 if_table_exists=mode,
-                schema_evolution=_EVOLUTION[evolution],
+                schema_evolution=evolution,
             ),
             [frame],
         )

@@ -257,7 +257,7 @@ def test_dest_plugin_dispatches_to_bulk_loader(monkeypatch, work_dir):
     dest = ClickHouseDest(
         tables=["users", "orders"],
         if_table_exists="replace",
-        schema_evolution="iceberg",
+        schema_evolution="update",
     )
     plugin._ClickHouseDestPlugin().write_out(
         _dest_ctx(work_dir),
@@ -268,7 +268,7 @@ def test_dest_plugin_dispatches_to_bulk_loader(monkeypatch, work_dir):
     assert captured["tables"] == [src1, src2]
     assert captured["cfg"].target_tables == ["users", "orders"]
     assert captured["cfg"].if_table_exists == "replace"
-    assert captured["cfg"].schema_evolution == "iceberg"
+    assert captured["cfg"].schema_evolution == "update"
 
 
 # ---------------------------------------------------------------------------

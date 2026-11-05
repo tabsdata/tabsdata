@@ -69,7 +69,7 @@ def test_iceberg_adds_nullable_column(
     conn = dest_conn(domain_clickhouse, domain_s3)
     try:
         _write(conn, work, seed, table, if_table_exists="replace")
-        _write(conn, work, evolved, table, schema_evolution="iceberg")
+        _write(conn, work, evolved, table, schema_evolution="update")
 
         columns = db.column_types(table)
         assert columns["region"].startswith("Nullable(")
@@ -96,7 +96,7 @@ def test_iceberg_drops_column(
     conn = dest_conn(domain_clickhouse, domain_s3)
     try:
         _write(conn, work, seed, table, if_table_exists="replace")
-        _write(conn, work, evolved, table, schema_evolution="iceberg")
+        _write(conn, work, evolved, table, schema_evolution="update")
 
         columns = db.column_types(table)
         assert "dept_name" not in columns
@@ -127,7 +127,7 @@ def test_iceberg_widens_int_type(
     conn = dest_conn(domain_clickhouse, domain_s3)
     try:
         _write(conn, work, seed, table, if_table_exists="replace")
-        _write(conn, work, evolved, table, schema_evolution="iceberg")
+        _write(conn, work, evolved, table, schema_evolution="update")
 
         # ClickHouse may wrap the column in Nullable(), so match the inner token.
         assert "Int64" in db.column_types(table)["id"]
@@ -157,7 +157,7 @@ def test_iceberg_rejects_unsafe_narrowing(
     try:
         _write(conn, work, seed, table, if_table_exists="replace")
         with pytest.raises(ClickHouseRuntimeException) as raised:
-            _write(conn, work, narrowed, table, schema_evolution="iceberg")
+            _write(conn, work, narrowed, table, schema_evolution="update")
         assert raised.value.api_error is ClickHouseErrorCode.CLICKHOUSE_6
 
         assert "Int64" in db.column_types(table)["id"]
@@ -193,7 +193,7 @@ def test_iceberg_applies_combined_delta(
     conn = dest_conn(domain_clickhouse, domain_s3)
     try:
         _write(conn, work, seed, table, if_table_exists="replace")
-        _write(conn, work, evolved, table, schema_evolution="iceberg")
+        _write(conn, work, evolved, table, schema_evolution="update")
 
         columns = db.column_types(table)
         assert "old_col" not in columns
@@ -239,7 +239,7 @@ def test_columns_land_by_name_whatever_their_order(
     conn = dest_conn(domain_clickhouse, domain_s3)
     try:
         _write(conn, work, seed, table, if_table_exists="replace")
-        _write(conn, work, reordered, table, schema_evolution="iceberg")
+        _write(conn, work, reordered, table, schema_evolution="update")
 
         got = db.read_table(table).sort("id")
         assert got.select("id", "name", "score").rows() == [
@@ -267,7 +267,7 @@ def test_a_backtick_in_a_column_name_creates_and_evolves(
     conn = dest_conn(domain_clickhouse, domain_s3)
     try:
         _write(conn, work, seed, table, if_table_exists="replace")
-        _write(conn, work, evolved, table, schema_evolution="iceberg")
+        _write(conn, work, evolved, table, schema_evolution="update")
         got = db.read_table(table).sort("we`ird")
         assert got.columns == ["we`ird", "ne`w"]
         assert got.rows() == [(1, None), (2, "x")]

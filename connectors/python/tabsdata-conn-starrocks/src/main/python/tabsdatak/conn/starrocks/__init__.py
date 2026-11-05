@@ -100,7 +100,7 @@ StarRocksTableNamesSpec: TypeAlias = Annotated[
 names that differ only in quoting, or in the case of an unquoted part
 (unchanged, as StarRocks table names are case-sensitive), are the same table."""
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
-SchemaEvolutionSpec: TypeAlias = Literal["strict", "iceberg"]
+SchemaEvolutionSpec: TypeAlias = Literal["strict", "update"]
 
 
 # --- StarRocksDest.dest_cfg keys ------------------------------------
@@ -312,8 +312,9 @@ class StarRocksDest(Dest):
         if_table_exists: `"append"` (the default) issues
             `INSERT INTO`; `"replace"` issues `TRUNCATE` +
             `INSERT INTO` against the existing table.
-        schema_evolution: `"strict"` (the default) rejects schema
-            changes; `"iceberg"` applies Iceberg-style schema deltas.
+        schema_evolution: `"strict"` (the default) rejects schema changes;
+            `"update"` adds new columns and widens column types of the target
+            to match the schema of the incoming data.
         dest_cfg: Optional connector config; the only supported key is
             `starrocks.logging_level`.
 

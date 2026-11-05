@@ -49,14 +49,14 @@ def test_starrocks_dest_full_round_trip():
     dest = StarRocksDest(
         tables=["analytics.users", "analytics.orders"],
         if_table_exists="replace",
-        schema_evolution="iceberg",
+        schema_evolution="update",
         dest_cfg={"starrocks.logging_level": 20},
     )
     loaded = StarRocksDest.from_json(dest.to_json())
     assert loaded == dest
     assert loaded.tables == ["analytics.users", "analytics.orders"]
     assert loaded.if_table_exists == "replace"
-    assert loaded.schema_evolution == "iceberg"
+    assert loaded.schema_evolution == "update"
     assert loaded.dest_cfg == {"starrocks.logging_level": 20}
 
 

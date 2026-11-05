@@ -116,7 +116,7 @@ class ClickHouseWriteCfg:
     conn: ClickHouseDestConn
     target_tables: list[str]
     if_table_exists: str  # "append" | "replace"
-    schema_evolution: str  # "strict" | "iceberg"
+    schema_evolution: str
 
 
 def write_via_bulk_loader(
@@ -155,7 +155,7 @@ def write_via_bulk_loader(
     )
     schema_evo = (
         SchemaEvolutionMode.ICEBERG
-        if cfg.schema_evolution == "iceberg"
+        if cfg.schema_evolution == "update"
         else SchemaEvolutionMode.NONE
     )
 
