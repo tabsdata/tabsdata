@@ -219,9 +219,8 @@ def split_sheet_fragment(path: str, file_format: Any) -> tuple[str, int | None]:
     inside the binary, so a literal ``#`` in an object key is no more
     expressible than it was before this existed.
 
-    Everything downstream -- ``build_location``, AUTO inference, the
-    transporter's own output naming -- reads the path, so this runs before
-    any of them and they never see a fragment.
+    Everything downstream -- AUTO inference and the readers -- reads the
+    path, so this runs before any of them and they never see a fragment.
 
     A fragment is only accepted under ``EXCEL`` or ``AUTO``; under AUTO a
     path that turns out not to be a workbook is caught once the format

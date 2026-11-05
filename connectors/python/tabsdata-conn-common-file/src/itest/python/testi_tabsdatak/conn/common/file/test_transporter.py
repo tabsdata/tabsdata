@@ -13,7 +13,6 @@ handshake (request YAML round-trip + report parsing).
 from __future__ import annotations
 
 # from decimal import Decimal
-from datetime import datetime
 from pathlib import Path
 
 import polars as pl
@@ -27,13 +26,10 @@ from tabsdatak.common._transporter.handler.handler2 import TRANSPORTER_BINARY_NA
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import (
     _output as _output_module,
-    _plugin,
 )
-from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.conn.common.file.typing_ import (
     DestFileFormat,
 )
-from tabsdatak.spi import DestContext
 
 # ---------------------------------------------------------------------------
 # Gate: skip the whole module if the binary isn't available
@@ -59,74 +55,6 @@ pytestmark = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 
 
-class _DestCtx(DestContext):
-    def __init__(self, work_dir: Path) -> None:
-        self._work_dir = work_dir
-
-    @property
-    def work_dir(self) -> Path:
-        return self._work_dir
-
-    @property
-    def project_id(self) -> str:
-        return "test-project-id"
-
-    @property
-    def project(self) -> str:
-        return "test-project"
-
-    @property
-    def collection_id(self) -> str:
-        return "test-collection-id"
-
-    @property
-    def collection(self) -> str:
-        return "test-collection"
-
-    @property
-    def function_id(self) -> str:
-        return "test-function-id"
-
-    @property
-    def function(self) -> str:
-        return "test-function"
-
-    @property
-    def function_version_id(self) -> str:
-        return "test-function-version-id"
-
-    @property
-    def execution_id(self) -> str:
-        return "integ-exec-plan"
-
-    @property
-    def execution(self) -> str | None:
-        return None
-
-    @property
-    def transaction_id(self) -> str:
-        return "integ-trx"
-
-    @property
-    def logical_function_run_id(self) -> str:
-        return "test-logical-function-run-id"
-
-    @property
-    def physical_function_run_id(self) -> str:
-        return "test-physical-function-run-id"
-
-    @property
-    def triggered_on(self) -> datetime:
-        return datetime.fromisoformat("2026-01-01T00:00:00.000000+00:00")
-
-    def get_attr(self, attr):
-        return None
-
-    def set_attr(self, attr, val):
-        pass
-
-    def add_metadata(self, attr, val):
-        pass
 
 
 # ---------------------------------------------------------------------------
@@ -182,52 +110,6 @@ def test_copy_one_local_to_local(tmp_path: Path):
     assert (out_dir / "out.parquet").exists()
     df = pl.read_parquet(out_dir / "out.parquet")
     assert df.to_dicts() == [{"id": 100, "name": "carol"}]
-
-
-# ---------------------------------------------------------------------------
-# _plugin.copy_out (orchestrator end-to-end)
-# ---------------------------------------------------------------------------
-
-
-_INTEG_ERRORS = _plugin.FilePluginErrors(
-    binary_not_found=FileCommonErrorCode.FILE_COMMON_1,
-    read_failed=FileCommonErrorCode.FILE_COMMON_3,
-    write_failed=FileCommonErrorCode.FILE_COMMON_8,
-    report_invalid=FileCommonErrorCode.FILE_COMMON_4,
-)
-
-
-def _local_location(_conn, entry: str, handler):
-    return handler.local_location(handler.local_uri(entry))
-
-
-def test_run_write_out_end_to_end_against_real_binary(tmp_path: Path):
-    src_dir = _input_dir(tmp_path)
-    out_dir = _output_dir(tmp_path)
-    work_dir = tmp_path / "work"
-    work_dir.mkdir()
-
-    _write_input_parquet(
-        src_dir / "data.parquet",
-        [{"id": 7, "name": "z"}],
-    )
-
-    cfg = _plugin.WriterConf(
-        conn=object(),
-        paths=[str(out_dir / "data.parquet")],
-        file_format=DestFileFormat.PARQUET,
-    )
-    _plugin.copy_out(
-        ctx=_DestCtx(work_dir),
-        cfg=cfg,
-        tables=[Path(src_dir / "data.parquet")],
-        build_location=_local_location,
-        errors=_INTEG_ERRORS,
-    )
-
-    assert (out_dir / "data.parquet").exists()
-    df = pl.read_parquet(out_dir / "data.parquet")
-    assert df.to_dicts() == [{"id": 7, "name": "z"}]
 
 
 # EBCDIC fixed-length records. Every field encoding below is built by hand,

@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-import os
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -12,11 +12,13 @@ import polars as pl
 import pytest
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.file import _plugin as _file_plugin
+import tabsdatak.conn.localfile._plugin as plugin
 
 # noinspection PyProtectedMember
-from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
-from tabsdatak.common._transporter.invoker import transporter1
+from tabsdatak.conn.common.file import _plugin as _file_plugin
+from tabsdatak.conn.common.file.constants import FILE_META_PATH
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.localfile import (
     LocalFileDest,
     LocalFileDestConn,
@@ -24,49 +26,17 @@ from tabsdatak.conn.localfile import (
     LocalFileSrcConn,
 )
 from tabsdatak.conn.localfile._explorer import LocalFileExplorer
-from tabsdatak.conn.common.file.constants import FILE_META_PATH
-from tabsdatak.spi import TableFileInput
-
-# noinspection PyProtectedMember
-import tabsdatak.conn.localfile._plugin as plugin
-
 
 pytestmark = pytest.mark.localfile
 
-HANDLER = TransporterHandler1()
 
 
-# ---------------------------------------------------------------------------
-# _build_location
-# ---------------------------------------------------------------------------
 
 
-def test_build_location_joins_base_path_with_entry():
-    conn = LocalFileSrcConn(base_path="/data")
-    loc = plugin.build_location(conn, "users.csv", HANDLER)
-    assert isinstance(loc, transporter1.TransporterLocalFile)
-    assert loc.url.startswith("file:///")
-    assert loc.url.endswith("/data/users.csv")
 
 
-def test_build_location_treats_absolute_path_as_relative_to_base_path():
-    # ``full_path`` strips the leading slash from the entry, so
-    # ``"/sub/x"`` and ``"sub/x"`` produce the same location.
-    conn = LocalFileSrcConn(base_path="/data")
-    abs_loc = plugin.build_location(conn, "/sub/users.csv", HANDLER)
-    rel_loc = plugin.build_location(conn, "sub/users.csv", HANDLER)
-    assert abs_loc.url == rel_loc.url
 
 
-def test_build_location_root_base_path_uses_root():
-    conn = LocalFileSrcConn(base_path="/")
-    loc = plugin.build_location(conn, "users.csv", HANDLER)
-    # `/` + `users.csv` is joined natively then rendered as a file URI; on
-    # POSIX that anchors at the root (`file:///users.csv`), on Windows at
-    # the cwd drive. Compare against the same native resolution the URI
-    # builder performs.
-    expected = Path(os.path.join("/", "users.csv")).resolve().as_uri()
-    assert loc.url == expected
 
 
 # ---------------------------------------------------------------------------
@@ -109,32 +79,17 @@ def test_src_plugin_reads_each_matched_file_lazily_naming_its_path(tmp_path):
     ]
 
 
-def test_dest_plugin_passes_build_location_and_errors(monkeypatch, tmp_path):
-    captured: dict = {}
-
-    def fake(*, ctx, cfg, tables, build_location, errors, run_env=None):
-        captured.update(
-            ctx=ctx,
-            cfg=cfg,
-            tables=tables,
-            build_location=build_location,
-            errors=errors,
-            run_env=run_env,
-        )
-
-    monkeypatch.setattr(_file_plugin, "copy_out", fake)
-
+def test_dest_plugin_writes_each_table_under_the_base_path(tmp_path):
+    ctx = _dest_ctx(tmp_path)
+    ctx.triggered_on = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    ctx.execution_id = "exec"
+    ctx.transaction_id = "trx"
+    conn = LocalFileDestConn(base_path=str(tmp_path))
     dest = LocalFileDest(paths=["out/x.csv"])
-    parquet = Path(tmp_path / "in.parquet")
     plugin.LocalFileDestPlugin().write_out(
-        _dest_ctx(tmp_path), LocalFileDestConn(), dest, [parquet]
+        ctx, conn, dest, [pl.LazyFrame({"a": [1, 2]})]
     )
-
-    assert captured["tables"] == [parquet]
-    assert captured["build_location"] is plugin.build_location
-    assert captured["errors"] is plugin.ERRORS
-    assert captured["run_env"] is None
-    assert captured["cfg"].paths == ["out/x.csv"]
+    assert (tmp_path / "out" / "x.csv").read_text(encoding="utf-8") == "a\n1\n2\n"
 
 
 # ---------------------------------------------------------------------------

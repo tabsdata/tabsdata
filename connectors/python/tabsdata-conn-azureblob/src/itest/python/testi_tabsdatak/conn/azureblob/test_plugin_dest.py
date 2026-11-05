@@ -45,7 +45,7 @@ def _write_out(
     work = tmp_path / f"work-dest-{uuid.uuid4().hex}"
     work.mkdir()
     plugin.AzureBlobDestPlugin().write_out(
-        PluginDestCtx(work), dest_conn(system, prefix), dest, [local]
+        PluginDestCtx(work), dest_conn(system, prefix), dest, [pl.scan_parquet(local)]
     )
 
 

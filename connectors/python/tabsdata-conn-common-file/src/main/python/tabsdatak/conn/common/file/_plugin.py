@@ -7,8 +7,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from tabsdatak._api import path_timestamp
 from tabsdatak._legacy import warn_renamed
@@ -17,27 +16,17 @@ from tabsdatak.common._fileformat.taxonomy import (
     DestFileFormat,
     SrcFileFormat,
 )
-from tabsdatak.common._transporter.facade import make_handler
-from tabsdatak.common._transporter.handler.handler import TransporterHandler
-from tabsdatak.common._transporter.invoker.transporter1 import (
-    TransporterBinaryNotFoundError,
-    TransporterReportError,
-    TransporterRunError,
-)
 from tabsdatak.conn.common.constants import SRC_META_DROP_KEY
-from tabsdatak.conn.common.file import _output
 from tabsdatak.conn.common.file._validation import split_sheet_fragment
-from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.conn.common.file.typing_ import (
     EXEC_PLAN_ID,
     EXEC_PLAN_TS,
     TRIGGERED_ON,
     TRX_ID,
 )
-from tabsdatak.error import ApiException, ErrorCode
+from tabsdatak.error import ErrorCode
 from tabsdatak.spi import (
     DestContext,
-    TableFileSpec,
 )
 
 logger = logging.getLogger(__name__)
@@ -205,11 +194,7 @@ class FilePluginErrors:
     cred_resolution: ErrorCode | None = None  # None when the connector has no creds
 
 
-LocationBuilder = Callable[[Any, str, TransporterHandler], Any]
-RunEnvBuilder = Callable[[Any, TransporterHandler], dict[str, str]]
-
-
-# --- Orchestrators -------------------------------------------------
+# --- Incremental cursor --------------------------------------------
 
 
 # Per-slot incremental cursor key: each slot stores its encoded
@@ -224,63 +209,3 @@ RunEnvBuilder = Callable[[Any, TransporterHandler], dict[str, str]]
 # bookkeeping; see :meth:`tabsdatak.api.TransactionCtx.set_attr` for the
 # reserved-prefix convention.
 _LASTMOD_KEY_PREFIX = "file-lastmod.slot"
-
-
-def copy_out(
-    *,
-    ctx: DestContext,
-    cfg: WriterConf,
-    tables: list[TableFileSpec],
-    build_location: LocationBuilder,
-    errors: FilePluginErrors,
-    run_env: RunEnvBuilder | None = None,
-) -> None:
-    if len(tables) != len(cfg.paths):
-        raise FileCommonErrorCode.FILE_COMMON_16.exception(
-            tables=len(tables),
-            paths=len(cfg.paths),
-        )
-
-    conn = cfg.conn
-    handler = make_handler()
-
-    env: dict[str, str] | None = None
-    if run_env is not None:
-        try:
-            env = run_env(conn, handler)
-        except ApiException as e:
-            raise errors.cred_resolution.exception(cause=e, reason=str(e))
-
-    total = len(cfg.paths)
-    logger.info("file-writer: copy_out starting (%d path(s))", total)
-    pairs: list[tuple[Any, Any]] = []
-    for i, (parquet_path, entry) in enumerate(zip(tables, cfg.paths), 1):
-        logger.info("file-writer: writing path %d/%d: %r", i, total, entry)
-        resolved_entry = resolve_dest_tokens(entry, ctx)
-        source_loc = handler.local_path_location(Path(parquet_path))
-        target_loc = build_location(conn, resolved_entry, handler)
-        pairs.append((source_loc, target_loc))
-
-    try:
-        _output.copy_one(
-            handler=handler,
-            source_target_pairs=pairs,
-            work_dir=ctx.work_dir,
-            file_format=cfg.file_format,
-            paths=cfg.paths,
-            format_cfg=cfg.format_cfg,
-            env=env,
-        )
-    except TransporterBinaryNotFoundError as e:
-        raise errors.binary_not_found.exception(cause=e)
-    except TransporterRunError as e:
-        raise errors.write_failed.exception(
-            cause=e,
-            target=", ".join(cfg.paths),
-        )
-    except TransporterReportError as e:
-        raise errors.report_invalid.exception(
-            cause=e,
-            path=", ".join(cfg.paths),
-        )
-    logger.info("file-writer: copy_out finished (%d path(s))", total)

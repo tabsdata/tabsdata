@@ -94,8 +94,8 @@ class FileCommonErrorCode(ErrorCode):
     )  # validate_format_cfg -- invalid side
     FILE_COMMON_16 = ErrorDef(
         FileRuntimeException,
-        "Slot/path count mismatch: {tables} parquet files vs {paths} target paths",
-    )  # run_write_out -- pre-flight check
+        "Slot/path count mismatch: {tables} tables vs {paths} target paths",
+    )  # write_files -- pre-flight check
     FILE_COMMON_17 = ErrorDef(
         ConnInitException,
         "Source format=AUTO could not be inferred from paths {paths}: {reason}. "

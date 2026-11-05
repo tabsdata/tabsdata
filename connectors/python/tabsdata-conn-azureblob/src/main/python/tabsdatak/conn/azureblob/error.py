@@ -68,7 +68,7 @@ class AzureBlobErrorCode(ErrorCode):
     AZURE_BLOB_8 = ErrorDef(
         AzureBlobRuntimeException,
         "AzureBlob write failed (target={target})",
-    )  # _AzureBlobDestPlugin: copy_one failure
+    )  # _AzureBlobDestPlugin: write failure
     AZURE_BLOB_9 = ErrorDef(
         AzureBlobRuntimeException,
         "AzureBlob transporter report invalid (path={path})",

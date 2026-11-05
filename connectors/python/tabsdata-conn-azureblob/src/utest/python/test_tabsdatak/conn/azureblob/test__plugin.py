@@ -12,16 +12,17 @@ from unittest.mock import MagicMock
 import obstore
 import polars as pl
 import pytest
-from tabsdatax.itest.fixture.backends.azurebloblocal import AzureBlobLocalDomain, azurebloblocal_domain
+from tabsdatax.itest.fixture.backends.azurebloblocal import (
+    AzureBlobLocalDomain,
+    azurebloblocal_domain,
+)
 
 from tabsdatak.api import Secret
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.file import _plugin as _file_plugin
+from tabsdatak.conn.common.file import _plugin as _file_plugin, _target
 
 # noinspection PyProtectedMember
-from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
-from tabsdatak.common._transporter.invoker import transporter1
 from tabsdatak.conn.common.types import AzureAccountKey
 from tabsdatak.conn.azureblob import (
     AzureBlobDest,
@@ -32,14 +33,12 @@ from tabsdatak.conn.azureblob import (
 from tabsdatak.conn.azureblob._explorer import AzureBlobConnectionExplorer
 from tabsdatak.conn.common.file._store import FileStore
 from tabsdatak.conn.common.file.constants import FILE_META_PATH
-from tabsdatak.spi import TableFileInput
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.azureblob._plugin as plugin
 
 pytestmark = pytest.mark.azureblob
 
-HANDLER = TransporterHandler1()
 
 
 def _az_creds() -> AzureAccountKey:
@@ -67,53 +66,21 @@ def _dest_conn(**overrides) -> AzureBlobDestConn:
     return AzureBlobDestConn(**kw)
 
 
-# ---------------------------------------------------------------------------
-# _build_location
-# ---------------------------------------------------------------------------
 
 
-def test_build_location_emits_transporter_azure_with_env_credentials():
-    loc = plugin.build_location(_src_conn(), "raw/users.parquet", HANDLER)
-    assert isinstance(loc, transporter1.TransporterAzure)
-    assert loc.url == "az://my-container/raw/users.parquet"
-    assert loc.account_name == transporter1.TransporterEnv(
-        transporter1.SERVER_SIDE_AZURE_ACCOUNT_NAME,
-    )
-    assert loc.account_key == transporter1.TransporterEnv(
-        transporter1.SERVER_SIDE_AZURE_ACCOUNT_KEY,
-    )
 
 
-def test_build_location_strips_leading_slash_on_path_entry():
-    loc = plugin.build_location(_src_conn(), "/raw/users.parquet", HANDLER)
-    assert loc.url == "az://my-container/raw/users.parquet"
 
 
-def test_build_location_preserves_explicit_az_uri():
-    loc = plugin.build_location(
-        _src_conn(), "az://other-container/x/y.parquet", HANDLER
-    )
-    assert loc.url == "az://other-container/x/y.parquet"
 
 
-def test_build_location_preserves_explicit_abfss_uri():
-    loc = plugin.build_location(
-        _src_conn(), "abfss://other@acct.dfs.core.windows.net/x/y.parquet", HANDLER
-    )
-    assert loc.url == "abfss://other@acct.dfs.core.windows.net/x/y.parquet"
 
 
 # ---------------------------------------------------------------------------
-# _run_env / _credentials
+# credentials
 # ---------------------------------------------------------------------------
 
 
-def test_run_env_resolves_credentials_to_server_side_env_var_names():
-    env = plugin.run_env(_src_conn(), HANDLER)
-    assert env == {
-        transporter1.SERVER_SIDE_AZURE_ACCOUNT_NAME: "acctname",
-        transporter1.SERVER_SIDE_AZURE_ACCOUNT_KEY: "acctkey",
-    }
 
 
 def test_credentials_rejects_non_account_key():
@@ -146,7 +113,10 @@ def _dest_ctx(work: Path):
 def test_a_connection_maps_to_a_store_of_its_container_prefix_and_account():
     conn = _src_conn(
         base_path="/landing/raw",
-        conn_cfg={"obstore.endpoint": "http://127.0.0.1:10000", "obstore.allow_http": True},
+        conn_cfg={
+            "obstore.endpoint": "http://127.0.0.1:10000",
+            "obstore.allow_http": True,
+        },
     )
     store = plugin.file_store(conn)
     assert store.root.endswith("/landing/raw")
@@ -197,29 +167,18 @@ def test_src_plugin_reads_azurebloblocal_objects_lazily_naming_their_uri(
         store.delete(["in/a.parquet", "in/b.parquet"])
 
 
-def test_dest_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_path):
+def test_dest_plugin_writes_through_the_connection_store(monkeypatch, tmp_path):
     captured: dict = {}
-
-    def fake(*, ctx, cfg, tables, build_location, run_env, errors):
-        captured.update(
-            ctx=ctx,
-            cfg=cfg,
-            tables=tables,
-            build_location=build_location,
-            run_env=run_env,
-            errors=errors,
-        )
-
-    monkeypatch.setattr(_file_plugin, "copy_out", fake)
-
+    monkeypatch.setattr(
+        _target, "write_files", lambda **options: captured.update(options)
+    )
     conn = _dest_conn()
-    dest = AzureBlobDest(paths=["out/x.parquet"])
-    parquet = Path(tmp_path / "in.parquet")
-    plugin.AzureBlobDestPlugin().write_out(_dest_ctx(tmp_path), conn, dest, [parquet])
-
-    assert captured["tables"] == [parquet]
-    assert captured["build_location"] is plugin.build_location
-    assert captured["run_env"] is plugin.run_env
+    table = pl.LazyFrame({"a": [1]})
+    plugin.AzureBlobDestPlugin().write_out(
+        _dest_ctx(tmp_path), conn, AzureBlobDest(paths=["out/x.parquet"]), [table]
+    )
+    assert captured["tables"][0] is table
+    assert captured["store"] == plugin.file_store(conn)
     assert captured["errors"] is plugin.ERRORS
     assert captured["cfg"].paths == ["out/x.parquet"]
 

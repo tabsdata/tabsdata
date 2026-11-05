@@ -17,24 +17,20 @@ from tabsdatax.itest.fixture.backends.s3local import S3LocalDomain, s3local_doma
 from tabsdatak.api import Secret
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.file import _plugin as _file_plugin
+from tabsdatak.conn.common.file import _plugin as _file_plugin, _target
 
 # noinspection PyProtectedMember
-from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
-from tabsdatak.common._transporter.invoker import transporter1
 from tabsdatak.conn.common.types import AwsAccessSecretKey
 from tabsdatak.conn.s3 import S3Dest, S3DestConn, S3Src, S3SrcConn
 from tabsdatak.conn.s3._explorer import S3ConnectionExplorer
 from tabsdatak.conn.common.file._store import FileStore
 from tabsdatak.conn.common.file.constants import FILE_META_PATH
-from tabsdatak.spi import TableFileInput
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.s3._plugin as plugin
 
 pytestmark = pytest.mark.s3
 
-HANDLER = TransporterHandler1()
 
 
 def _aws_creds() -> AwsAccessSecretKey:
@@ -64,48 +60,16 @@ def _dest_conn(**overrides) -> S3DestConn:
     return S3DestConn(**kw)
 
 
-# ---------------------------------------------------------------------------
-# _build_location
-# ---------------------------------------------------------------------------
 
 
-def test_build_location_emits_transporter_s3_with_env_credentials():
-    loc = plugin.build_location(_src_conn(), "raw/users.parquet", HANDLER)
-    assert isinstance(loc, transporter1.TransporterS3)
-    assert loc.url == "s3://my-bucket/raw/users.parquet"
-    assert loc.access_key == transporter1.TransporterEnv(
-        transporter1.SERVER_SIDE_AWS_ACCESS_KEY_ID,
-    )
-    assert loc.secret_key == transporter1.TransporterEnv(
-        transporter1.SERVER_SIDE_AWS_SECRET_ACCESS_KEY,
-    )
-    assert loc.region == transporter1.TransporterEnv(
-        transporter1.SERVER_SIDE_AWS_REGION,
-    )
 
 
-def test_build_location_strips_leading_slash_on_path_entry():
-    loc = plugin.build_location(_src_conn(), "/raw/users.parquet", HANDLER)
-    assert loc.url == "s3://my-bucket/raw/users.parquet"
 
 
-def test_build_location_preserves_explicit_s3_uri():
-    loc = plugin.build_location(_src_conn(), "s3://other-bucket/x/y.parquet", HANDLER)
-    assert loc.url == "s3://other-bucket/x/y.parquet"
 
 
-# ---------------------------------------------------------------------------
-# _run_env
-# ---------------------------------------------------------------------------
 
 
-def test_run_env_resolves_credentials_to_server_side_env_var_names():
-    env = plugin.run_env(_src_conn(), HANDLER)
-    assert env == {
-        transporter1.SERVER_SIDE_AWS_ACCESS_KEY_ID: "AKIA0000000000000000",
-        transporter1.SERVER_SIDE_AWS_SECRET_ACCESS_KEY: "secret-value",
-        transporter1.SERVER_SIDE_AWS_REGION: "us-east-1",
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +92,10 @@ def _dest_ctx(work: Path):
 def test_a_connection_maps_to_a_store_of_its_bucket_prefix_and_credentials():
     conn = _src_conn(
         base_path="/landing/raw",
-        conn_cfg={"obstore.endpoint": "http://127.0.0.1:9000", "obstore.allow_http": True},
+        conn_cfg={
+            "obstore.endpoint": "http://127.0.0.1:9000",
+            "obstore.allow_http": True,
+        },
     )
     store = plugin.file_store(conn)
     assert store.root == "s3://my-bucket/landing/raw"
@@ -182,29 +149,18 @@ def test_src_plugin_reads_s3local_objects_lazily_naming_their_uri(
         store.delete(["in/a.parquet", "in/b.parquet"])
 
 
-def test_dest_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_path):
+def test_dest_plugin_writes_through_the_connection_store(monkeypatch, tmp_path):
     captured: dict = {}
-
-    def fake(*, ctx, cfg, tables, build_location, run_env, errors):
-        captured.update(
-            ctx=ctx,
-            cfg=cfg,
-            tables=tables,
-            build_location=build_location,
-            run_env=run_env,
-            errors=errors,
-        )
-
-    monkeypatch.setattr(_file_plugin, "copy_out", fake)
-
+    monkeypatch.setattr(
+        _target, "write_files", lambda **options: captured.update(options)
+    )
     conn = _dest_conn()
-    dest = S3Dest(paths=["out/x.parquet"])
-    parquet = Path(tmp_path / "in.parquet")
-    plugin.S3DestPlugin().write_out(_dest_ctx(tmp_path), conn, dest, [parquet])
-
-    assert captured["tables"] == [parquet]
-    assert captured["build_location"] is plugin.build_location
-    assert captured["run_env"] is plugin.run_env
+    table = pl.LazyFrame({"a": [1]})
+    plugin.S3DestPlugin().write_out(
+        _dest_ctx(tmp_path), conn, S3Dest(paths=["out/x.parquet"]), [table]
+    )
+    assert captured["tables"][0] is table
+    assert captured["store"] == plugin.file_store(conn)
     assert captured["errors"] is plugin.ERRORS
     assert captured["cfg"].paths == ["out/x.parquet"]
 

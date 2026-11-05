@@ -9,8 +9,7 @@ builds its `Src` / `Dest` on the same path and format specs.
 * `SrcFileFormat` / `DestFileFormat` -- the formats the file
   connectors read and write: `AUTO`, `CSV`, `JSON`, `AVRO`,
   `PARQUET` (plus `LOG` and `EXCEL` on the source side, both
-  read-only). `AUTO` lets the transporter infer the format from the
-  file extension.
+  read-only). `AUTO` infers the format from the file extension.
 * `SrcPathsSpec` / `DestPathsSpec` -- the validated `paths` list
   a `Src` / `Dest` takes (one slot per entry).
 * `SrcFormatCfgSpec` / `DestFormatCfgSpec` -- the per-format

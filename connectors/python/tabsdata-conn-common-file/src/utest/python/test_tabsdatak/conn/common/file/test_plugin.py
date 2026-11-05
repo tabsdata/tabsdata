@@ -20,13 +20,11 @@ from tabsdatak.conn.common.constants import SRC_META_DROP_KEY
 from tabsdatak.conn.common.error import ConnException
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.file import _output as _output_module, _plugin
-from tabsdatak.conn.common.file.error import FileCommonErrorCode
+from tabsdatak.conn.common.file import _plugin
 from tabsdatak.conn.common.file.typing_ import (
     DestFileFormat,
     SrcFileFormat,
 )
-from tabsdatak.error import ApiErrorCode
 from tabsdatak.spi import DestContext
 
 # --- transporter1.src_format_to_transporter ----------------------------------
@@ -301,7 +299,7 @@ def test_dest_format_to_transporter_unhandled_raises():
     assert ei.value.api_error is FileFormatErrorCode.FILE_FORMAT_2
 
 
-# --- _plugin.copy_out: slot/path count mismatch --------------------
+# --- destination context ----------------------------------------------
 
 
 class _DestCtx(DestContext):
@@ -384,18 +382,6 @@ class _TriggeredOnDestCtx(_DestCtx):
         return self._triggered_on
 
 
-def _stub_build_location(_conn, _entry, _handler):  # pragma: no cover - never reached
-    raise AssertionError("build_location should not be called on slot-mismatch path")
-
-
-_STUB_ERRORS = _plugin.FilePluginErrors(
-    binary_not_found=FileCommonErrorCode.FILE_COMMON_1,
-    read_failed=FileCommonErrorCode.FILE_COMMON_1,
-    write_failed=FileCommonErrorCode.FILE_COMMON_1,
-    report_invalid=FileCommonErrorCode.FILE_COMMON_1,
-)
-
-
 # --- ReaderConf.from_src / WriterConf.from_dest -----------------------
 
 
@@ -465,196 +451,6 @@ def test_writer_conf_from_dest_handles_none_format_cfg():
     wc = _plugin.WriterConf.from_dest(object(), dest)
     assert wc.file_format is DestFileFormat.CSV
     assert wc.format_cfg is None
-
-
-def test_run_write_out_slot_count_mismatch_raises_file_common_16(tmp_path):
-    cfg = _plugin.WriterConf(
-        conn=None, paths=["a", "b"], file_format=DestFileFormat.PARQUET
-    )
-    parquet = Path(tmp_path / "x.parquet")
-    with pytest.raises(ConnException) as ei:
-        _plugin.copy_out(
-            ctx=_DestCtx(tmp_path),
-            cfg=cfg,
-            tables=[parquet],
-            build_location=_stub_build_location,
-            errors=_STUB_ERRORS,
-        )
-    assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_16
-    assert ei.value.extra == {"tables": 1, "paths": 2}
-
-
-# --- run_write_out orchestrator ----------------------------------------
-#
-# The orchestrator delegates to ``_output.copy_one``, which shells out to
-# the transporter binary. The tests below stub it so the wiring and the
-# error mapping are exercised without the binary.
-
-
-def _location_builder(_conn, entry, _handler):
-    return transporter2.TransporterLocalFile(f"file:///srv/{entry}")
-
-
-_RUN_ERRORS = _plugin.FilePluginErrors(
-    binary_not_found=FileCommonErrorCode.FILE_COMMON_1,
-    read_failed=FileCommonErrorCode.FILE_COMMON_3,
-    write_failed=FileCommonErrorCode.FILE_COMMON_8,
-    report_invalid=FileCommonErrorCode.FILE_COMMON_4,
-    cred_resolution=FileCommonErrorCode.FILE_COMMON_13,
-)
-
-
-def _make_exc(exc_cls):
-    """``TransporterRunError`` takes ``(returncode, stdout, stderr)``;
-    the other two take a single message string."""
-    if exc_cls is transporter1.TransporterRunError:
-        return exc_cls(1, "", "boom")
-    return exc_cls("boom")
-
-
-# --- run_write_out ----------------------------------------------------
-
-
-def test_run_write_out_passes_source_target_pairs(monkeypatch, tmp_path):
-    captured: dict = {}
-
-    def fake_copy_one(
-        *,
-        handler,
-        source_target_pairs,
-        work_dir,
-        file_format,
-        paths,
-        format_cfg=None,
-        env=None,
-    ):
-        captured["pairs"] = source_target_pairs
-        captured["work_dir"] = work_dir
-        captured["env"] = env
-
-    monkeypatch.setattr(_output_module, "copy_one", fake_copy_one)
-
-    parquet_a = Path(tmp_path / "a.parquet")
-    parquet_b = Path(tmp_path / "b.parquet")
-    cfg = _plugin.WriterConf(
-        conn=object(),
-        paths=["x/y", "z"],
-        file_format=DestFileFormat.PARQUET,
-    )
-    _plugin.copy_out(
-        ctx=_DestCtx(tmp_path),
-        cfg=cfg,
-        tables=[parquet_a, parquet_b],
-        build_location=_location_builder,
-        errors=_RUN_ERRORS,
-    )
-    assert captured["work_dir"] == tmp_path
-    assert captured["env"] is None
-    assert len(captured["pairs"]) == 2
-    # Each pair is (source_local_file, target_location)
-    for src_loc, tgt_loc in captured["pairs"]:
-        assert isinstance(src_loc, transporter2.TransporterLocalFile)
-        assert isinstance(tgt_loc, transporter2.TransporterLocalFile)
-
-
-def test_run_write_out_run_env_propagates_to_copy_one(monkeypatch, tmp_path):
-    captured: dict = {}
-
-    def fake_copy_one(
-        *,
-        handler,
-        source_target_pairs,
-        work_dir,
-        file_format,
-        paths,
-        format_cfg=None,
-        env=None,
-    ):
-        captured["env"] = env
-
-    monkeypatch.setattr(_output_module, "copy_one", fake_copy_one)
-
-    cfg = _plugin.WriterConf(
-        conn=object(),
-        paths=["x"],
-        file_format=DestFileFormat.PARQUET,
-    )
-    _plugin.copy_out(
-        ctx=_DestCtx(tmp_path),
-        cfg=cfg,
-        tables=[Path(tmp_path / "a.parquet")],
-        build_location=_location_builder,
-        errors=_RUN_ERRORS,
-        run_env=lambda _c, _h: {"K": "V"},
-    )
-    assert captured["env"] == {"K": "V"}
-
-
-def test_run_write_out_run_env_failure_wraps_as_cred_resolution(monkeypatch, tmp_path):
-    def bad_run_env(_c, _h):
-        raise ApiErrorCode.API_11.exception(name="X")
-
-    monkeypatch.setattr(_output_module, "copy_one", lambda **_kw: None)
-
-    cfg = _plugin.WriterConf(
-        conn=object(),
-        paths=["x"],
-        file_format=DestFileFormat.PARQUET,
-    )
-    with pytest.raises(ConnException) as ei:
-        _plugin.copy_out(
-            ctx=_DestCtx(tmp_path),
-            cfg=cfg,
-            tables=[Path(tmp_path / "a.parquet")],
-            build_location=_location_builder,
-            errors=_RUN_ERRORS,
-            run_env=bad_run_env,
-        )
-    assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_13
-
-
-@pytest.mark.parametrize(
-    ("exc_cls", "expected_code"),
-    [
-        (
-            transporter1.TransporterBinaryNotFoundError,
-            FileCommonErrorCode.FILE_COMMON_1,
-        ),
-        (
-            transporter1.TransporterRunError,
-            FileCommonErrorCode.FILE_COMMON_8,
-        ),
-        (
-            transporter1.TransporterReportError,
-            FileCommonErrorCode.FILE_COMMON_4,
-        ),
-    ],
-)
-def test_run_write_out_wraps_transporter_failures(
-    monkeypatch,
-    tmp_path,
-    exc_cls,
-    expected_code,
-):
-    def fake_copy_one(**_kw):
-        raise _make_exc(exc_cls)
-
-    monkeypatch.setattr(_output_module, "copy_one", fake_copy_one)
-
-    cfg = _plugin.WriterConf(
-        conn=object(),
-        paths=["x"],
-        file_format=DestFileFormat.PARQUET,
-    )
-    with pytest.raises(ConnException) as ei:
-        _plugin.copy_out(
-            ctx=_DestCtx(tmp_path),
-            cfg=cfg,
-            tables=[Path(tmp_path / "a.parquet")],
-            build_location=_location_builder,
-            errors=_RUN_ERRORS,
-        )
-    assert ei.value.api_error is expected_code
 
 
 # --- worksheet fragment split ----------------------------------------

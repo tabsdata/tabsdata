@@ -68,7 +68,7 @@ class S3ErrorCode(ErrorCode):
     S3_8 = ErrorDef(
         S3RuntimeException,
         "S3 write failed (target={target})",
-    )  # _S3DestPlugin: copy_one failure
+    )  # _S3DestPlugin: write failure
     S3_9 = ErrorDef(
         S3RuntimeException,
         "S3 transporter report invalid (path={path})",

@@ -68,7 +68,7 @@ class LocalFileErrorCode(ErrorCode):
     LOCALFILE_8 = ErrorDef(
         LocalFileRuntimeException,
         "LocalFile write failed (target={target})",
-    )  # _LocalFileDestPlugin: copy_one failure
+    )  # _LocalFileDestPlugin: write failure
     LOCALFILE_9 = ErrorDef(
         LocalFileRuntimeException,
         "LocalFile transporter report invalid (path={path})",

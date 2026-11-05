@@ -5,15 +5,15 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any
+
+import polars as pl
 
 from tabsdatak.common._storage.transfer import GOOGLE_SERVICE_ACCOUNT_KEY_OPTION
-from tabsdatak.common._transporter.handler.handler import TransporterHandler
-from tabsdatak.conn.common.file import _plugin, _source
+from tabsdatak.conn.common.file import _plugin, _source, _target
 from tabsdatak.conn.common.file._store import FileStore, forwarded
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import GCPJson, _convert, cloud_full_path
+from tabsdatak.conn.common.types import GCPJson, _convert
 from tabsdatak.conn.gcs import GCSDest, GCSDestConn, GCSSrc, GCSSrcConn
 from tabsdatak.conn.gcs._explorer import GCSConnectionExplorer
 from tabsdatak.conn.gcs.error import GCSErrorCode
@@ -26,33 +26,13 @@ from tabsdatak.spi import (
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
-    TableFileSpec,
     TableMode,
 )
 
 # Conn helpers operate on both Src and Dest variants.
 _AnyGCSConn = GCSSrcConn | GCSDestConn
 
-# --- URI / location builder ---------------------------------------
-
-
-def _gcs_uri(bucket: str, path_entry: str) -> str:
-    if path_entry.startswith("gs://"):
-        return path_entry
-    key = path_entry.lstrip("/")
-    return f"gs://{bucket}/{key}"
-
-
-def build_location(
-    conn: _AnyGCSConn, path_entry: str, handler: TransporterHandler
-) -> Any:
-    bucket = conn._bucket()
-    if not path_entry.startswith("gs://"):
-        path_entry = cloud_full_path(conn._base_path(), path_entry)
-    return handler.gcs_location(
-        uri=_gcs_uri(bucket, path_entry),
-        service_account_key_env=handler.gcp_service_account_json_env,
-    )
+# --- Object store -------------------------------------------------
 
 
 def credentials(conn: _AnyGCSConn) -> GCPJson:
@@ -61,18 +41,12 @@ def credentials(conn: _AnyGCSConn) -> GCPJson:
         raise TypeError(
             f"GCSConn.credentials must be GCPJson; got "
             f"{type(creds).__name__}. Other GCPCredentials variants "
-            f"are not yet supported by the transporter binary."
+            f"are not yet supported."
         )
     return creds
 
 
-def run_env(conn: _AnyGCSConn, handler: TransporterHandler) -> dict[str, str]:
-    return {
-        handler.gcp_service_account_json_env: _convert(credentials(conn).json, str),
-    }
-
-
-def file_store(conn: GCSSrcConn) -> FileStore:
+def file_store(conn: _AnyGCSConn) -> FileStore:
     prefix = conn._base_path().strip("/")
     root = f"gs://{conn._bucket()}/{prefix}" if prefix else f"gs://{conn._bucket()}"
     try:
@@ -114,20 +88,19 @@ class GCSSrcPlugin(SrcPlugin[GCSSrcConn, GCSSrc]):
         )
 
 
-class GCSDestPlugin(DestPlugin[GCSDestConn, GCSDest]):
+class GCSDestPlugin(DestPlugin[GCSDestConn, GCSDest, list[pl.LazyFrame]]):
     def write_out(
         self,
         ctx: DestContext,
         conn: GCSDestConn,
         dest: GCSDest,
-        tables: list[TableFileSpec],
+        tables: list[pl.LazyFrame],
     ) -> None:
-        _plugin.copy_out(
+        _target.write_files(
             ctx=ctx,
             cfg=_plugin.WriterConf.from_dest(conn, dest),
+            store=file_store(conn),
             tables=tables,
-            build_location=build_location,
-            run_env=run_env,
             errors=ERRORS,
         )
 

@@ -301,10 +301,13 @@ class AzureBlobDest(Dest):
 
     Note:
         A timestamp carrying a timezone is written to `CSV` and `JSON` as
-        ISO-8601 in UTC -- `2026-07-14T09:30:15Z` -- whatever zone the
-        column declared: the instant is preserved and only the label is
-        normalised. A timestamp without a timezone is written as-is, with
-        no offset. `PARQUET` and `AVRO` keep the column's own zone.
+        ISO-8601 in UTC -- `2026-07-14T09:30:15.000000+0000` in `CSV`,
+        `2026-07-14T09:30:15+00:00` in `JSON` -- whatever zone the column
+        declared: the instant is preserved and only the label is
+        normalised; the `CSV` `datetime_format` option overrides the
+        layout. A timestamp without a timezone is written as-is, with no
+        offset. `PARQUET` keeps the column's own zone; `AVRO` stores the
+        instant, read back in UTC.
 
     Examples:
         Write a table to a single Parquet file, one slot per path:

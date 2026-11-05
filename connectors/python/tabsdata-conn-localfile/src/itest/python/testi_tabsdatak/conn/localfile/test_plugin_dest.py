@@ -46,7 +46,7 @@ def test_dest_then_src_round_trip(domain_fs: FsDomain, request: pytest.FixtureRe
         PluginDestCtx(work_dest),
         dest_conn(base),
         LocalFileDest(paths=["users.parquet"]),
-        [parquet],
+        [pl.scan_parquet(parquet)],
     )
     assert (base / "users.parquet").exists()
 
@@ -72,7 +72,7 @@ def test_dest_format_csv_writes_csv_file(
         PluginDestCtx(work),
         dest_conn(base),
         LocalFileDest(paths=["users.csv"], format=DestFileFormat.CSV),
-        [parquet],
+        [pl.scan_parquet(parquet)],
     )
 
     out_file = base / "users.csv"
@@ -96,7 +96,7 @@ def test_dest_format_csv_honours_separator_option(
             format=DestFileFormat.CSV,
             format_cfg={DestFileFormat.CSV: {"separator": ";"}},
         ),
-        [parquet],
+        [pl.scan_parquet(parquet)],
     )
 
     raw = (base / "users.csv").read_text()
@@ -116,7 +116,7 @@ def test_dest_format_json_writes_json_file(
         PluginDestCtx(work),
         dest_conn(base),
         LocalFileDest(paths=["users.json"], format=DestFileFormat.JSON),
-        [parquet],
+        [pl.scan_parquet(parquet)],
     )
 
     out_file = base / "users.json"
@@ -138,7 +138,7 @@ def test_dest_format_avro_writes_avro_file(
         PluginDestCtx(work),
         dest_conn(base),
         LocalFileDest(paths=["users.avro"], format=DestFileFormat.AVRO),
-        [parquet],
+        [pl.scan_parquet(parquet)],
     )
 
     out_file = base / "users.avro"
@@ -158,7 +158,7 @@ def test_dest_format_auto_defaults_to_parquet(
         PluginDestCtx(work),
         dest_conn(base),
         LocalFileDest(paths=["users.parquet"], format=DestFileFormat.AUTO),
-        [parquet],
+        [pl.scan_parquet(parquet)],
     )
 
     out_file = base / "users.parquet"

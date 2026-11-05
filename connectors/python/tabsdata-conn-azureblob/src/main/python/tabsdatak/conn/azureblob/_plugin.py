@@ -5,13 +5,13 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any
+
+import polars as pl
 
 from tabsdatak.common._storage.transfer import (
     AZURE_STORAGE_ACCOUNT_KEY_OPTION,
     AZURE_STORAGE_ACCOUNT_NAME_OPTION,
 )
-from tabsdatak.common._transporter.handler.handler import TransporterHandler
 from tabsdatak.conn.azureblob import (
     AzureBlobDest,
     AzureBlobDestConn,
@@ -20,11 +20,11 @@ from tabsdatak.conn.azureblob import (
 )
 from tabsdatak.conn.azureblob._explorer import AzureBlobConnectionExplorer
 from tabsdatak.conn.azureblob.error import AzureBlobErrorCode
-from tabsdatak.conn.common.file import _plugin, _source
+from tabsdatak.conn.common.file import _plugin, _source, _target
 from tabsdatak.conn.common.file._store import FileStore, forwarded
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import AzureAccountKey, _convert, cloud_full_path
+from tabsdatak.conn.common.types import AzureAccountKey, _convert
 from tabsdatak.error import ApiException
 from tabsdatak.spi import (
     DestContext,
@@ -34,34 +34,13 @@ from tabsdatak.spi import (
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
-    TableFileSpec,
     TableMode,
 )
 
 # Conn helpers operate on both Src and Dest variants.
 _AnyAzureBlobConn = AzureBlobSrcConn | AzureBlobDestConn
 
-# --- URI / location builder ---------------------------------------
-
-
-def _az_uri(container: str, path_entry: str) -> str:
-    if path_entry.startswith("az://") or path_entry.startswith("abfss://"):
-        return path_entry
-    key = path_entry.lstrip("/")
-    return f"az://{container}/{key}"
-
-
-def build_location(
-    conn: _AnyAzureBlobConn, path_entry: str, handler: TransporterHandler
-) -> Any:
-    container = conn._container()
-    if not (path_entry.startswith("az://") or path_entry.startswith("abfss://")):
-        path_entry = cloud_full_path(conn._base_path(), path_entry)
-    return handler.azure_location(
-        uri=_az_uri(container, path_entry),
-        account_name_env=handler.azure_account_name_env,
-        account_key_env=handler.azure_account_key_env,
-    )
+# --- Object store -------------------------------------------------
 
 
 def credentials(conn: _AnyAzureBlobConn) -> AzureAccountKey:
@@ -70,20 +49,12 @@ def credentials(conn: _AnyAzureBlobConn) -> AzureAccountKey:
         raise TypeError(
             f"AzureBlob conn credentials must be AzureAccountKey; got "
             f"{type(creds).__name__}. Other AzureCredentials variants "
-            f"are not yet supported by the transporter binary."
+            f"are not yet supported."
         )
     return creds
 
 
-def run_env(conn: _AnyAzureBlobConn, handler: TransporterHandler) -> dict[str, str]:
-    c = credentials(conn)
-    return {
-        handler.azure_account_name_env: _convert(c.account_name, str),
-        handler.azure_account_key_env: _convert(c.account_key, str),
-    }
-
-
-def file_store(conn: AzureBlobSrcConn) -> FileStore:
+def file_store(conn: _AnyAzureBlobConn) -> FileStore:
     container = conn._container()
     prefix = conn._base_path().strip("/")
     root = f"az://{container}/{prefix}" if prefix else f"az://{container}"
@@ -129,20 +100,21 @@ class AzureBlobSrcPlugin(SrcPlugin[AzureBlobSrcConn, AzureBlobSrc]):
         )
 
 
-class AzureBlobDestPlugin(DestPlugin[AzureBlobDestConn, AzureBlobDest]):
+class AzureBlobDestPlugin(
+    DestPlugin[AzureBlobDestConn, AzureBlobDest, list[pl.LazyFrame]]
+):
     def write_out(
         self,
         ctx: DestContext,
         conn: AzureBlobDestConn,
         dest: AzureBlobDest,
-        tables: list[TableFileSpec],
+        tables: list[pl.LazyFrame],
     ) -> None:
-        _plugin.copy_out(
+        _target.write_files(
             ctx=ctx,
             cfg=_plugin.WriterConf.from_dest(conn, dest),
+            store=file_store(conn),
             tables=tables,
-            build_location=build_location,
-            run_env=run_env,
             errors=ERRORS,
         )
 

@@ -33,13 +33,13 @@ ROWS = [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}]
 
 def _write_out(system: GCSSystem, prefix: str, dest: GCSDest, tmp_path: Path) -> None:
     """Write ``ROWS`` as the parquet the plugin is handed, then let it land the
-    object ``dest`` names."""
+    object ``dest`` names from a scan of it."""
     local = tmp_path / f"in-{uuid.uuid4().hex}.parquet"
     pl.DataFrame(ROWS).write_parquet(local, use_pyarrow=True)
     work = tmp_path / f"work-dest-{uuid.uuid4().hex}"
     work.mkdir()
     plugin.GCSDestPlugin().write_out(
-        PluginDestCtx(work), dest_conn(system, prefix), dest, [local]
+        PluginDestCtx(work), dest_conn(system, prefix), dest, [pl.scan_parquet(local)]
     )
 
 

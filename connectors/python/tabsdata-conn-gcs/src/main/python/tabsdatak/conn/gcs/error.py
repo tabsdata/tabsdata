@@ -68,7 +68,7 @@ class GCSErrorCode(ErrorCode):
     GCS_8 = ErrorDef(
         GCSRuntimeException,
         "GCS write failed (target={target})",
-    )  # _GCSDestPlugin: copy_one failure
+    )  # _GCSDestPlugin: write failure
     GCS_9 = ErrorDef(
         GCSRuntimeException,
         "GCS transporter report invalid (path={path})",

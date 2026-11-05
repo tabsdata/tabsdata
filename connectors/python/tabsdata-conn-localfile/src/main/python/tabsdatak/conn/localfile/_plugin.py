@@ -4,15 +4,13 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
 
-from tabsdatak.common._transporter.handler.handler import TransporterHandler
-from tabsdatak.conn.common.file import _plugin as _file_plugin, _source
+import polars as pl
+
+from tabsdatak.conn.common.file import _plugin as _file_plugin, _source, _target
 from tabsdatak.conn.common.file._store import FileStore
-from tabsdatak.conn.common.types import local_full_path
 from tabsdatak.conn.localfile import (
     LocalFileDest,
     LocalFileDestConn,
@@ -31,37 +29,8 @@ from tabsdatak.spi import (
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
-    TableFileSpec,
     TableMode,
 )
-
-# Conn helpers operate on both Src and Dest variants.
-_AnyLocalFileConn = LocalFileSrcConn | LocalFileDestConn
-
-# --- Path resolution + location builder ----------------------------
-
-
-# Only ``*`` is supported as a wildcard. Paths containing it are URI-
-# composed manually because ``Path.as_uri`` would URL-encode ``*`` as
-# ``%2A`` and defeat the transporter's glob expansion.
-
-
-def build_location(
-    conn: _AnyLocalFileConn, entry: str, handler: TransporterHandler
-) -> Any:
-    # ``base_path`` is an absolute local path (POSIX or Windows drive-
-    # absolute); ``entry`` is relative and may use either separator.
-    # ``local_full_path`` joins them into a native path for this OS.
-    resolved = local_full_path(conn._base_path(), entry)
-    if "*" in resolved:
-        # ``as_uri`` would percent-encode the glob ``*``; split the native
-        # path at its last separator so only the glob-free head becomes a
-        # URI and the wildcard basename is appended verbatim.
-        head, _, basename = resolved.rpartition(os.sep)
-        head_uri = handler.local_uri(head + os.sep)
-        return handler.local_location(head_uri + basename)
-    return handler.local_location(handler.local_uri(resolved))
-
 
 # --- Error-code bundle (no creds → no cred_resolution code) --------
 
@@ -94,19 +63,21 @@ class LocalFileSrcPlugin(SrcPlugin[LocalFileSrcConn, LocalFileSrc]):
         )
 
 
-class LocalFileDestPlugin(DestPlugin[LocalFileDestConn, LocalFileDest]):
+class LocalFileDestPlugin(
+    DestPlugin[LocalFileDestConn, LocalFileDest, list[pl.LazyFrame]]
+):
     def write_out(
         self,
         ctx: DestContext,
         conn: LocalFileDestConn,
         dest: LocalFileDest,
-        tables: list[TableFileSpec],
+        tables: list[pl.LazyFrame],
     ) -> None:
-        _file_plugin.copy_out(
+        _target.write_files(
             ctx=ctx,
             cfg=_file_plugin.WriterConf.from_dest(conn, dest),
+            store=FileStore(Path(conn._base_path()).as_uri()),
             tables=tables,
-            build_location=build_location,
             errors=ERRORS,
         )
 
