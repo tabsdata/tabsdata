@@ -14,6 +14,7 @@ delimiters, the URI shape, the ``Conn`` classes) belongs in that connector's own
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 
 import polars as pl
@@ -21,6 +22,8 @@ import pytest
 from tabsdatax.itest.fixture.backends.fs import FsDomain
 from tabsdatax.itest.fixture.functions.files import first_provisioned_file
 from tabsdatax.itest.fixture.functions.sql import read_parquet_slot
+
+from tabsdatak.spi import LazyFrameInput
 
 PARQUET = "parquet"
 
@@ -37,6 +40,14 @@ def slot_frame(out: list[list], index: int = 0) -> pl.DataFrame:
     matched no rows writes no chunk at all, so its slot is empty -- assert on
     ``out[index] == []`` rather than calling this."""
     return pl.concat([read_parquet_slot(p) for p in out[index]])
+
+
+def slot_rows(out: list[Iterable[LazyFrameInput]], index: int = 0) -> pl.DataFrame:
+    """The rows a ``read_in`` input holds, its tables concatenated. Inputs read
+    through one connection, so take them in order. A query that matched no rows
+    yields no table at all -- assert on ``list(out[index]) == []`` rather than
+    calling this."""
+    return pl.concat([table.frame.collect() for table in out[index]])
 
 
 def entity_rows(domain, entity: str) -> int:

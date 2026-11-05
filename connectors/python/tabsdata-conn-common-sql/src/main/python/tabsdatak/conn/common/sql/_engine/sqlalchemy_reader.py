@@ -2,37 +2,35 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+from __future__ import annotations
+
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Iterable, Iterator
 from contextlib import nullcontext
-from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from sqlalchemy import Connection
-from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import Session
-from tenacity import (
-    Retrying,
-    before_sleep_log,
-    retry_if_exception_type,
-    stop_after_delay,
-    wait_fixed,
-)
+import polars as pl
+from sqlalchemy import Connection, Engine
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
+from sqlalchemy.orm import Session, SessionTransaction
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.common.sql._engine.constants as const
+from tabsdatak._handoff import RestartRead
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _config
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._engine.reader import SqlReadCfg, SqlReadEngine
+from tabsdatak.conn.common.sql._engine.reader import (
+    SqlReadCfg,
+    SqlReadEngine,
+    SqlReadFaults,
+)
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.type_convertion import resolve_schema_overrides
-from tabsdatak.spi import TableFileSpec
-
-# --- Retry ----------------------------------------------------------
+from tabsdatak.conn.common.sql._metadata import sql_metadata
+from tabsdatak.spi import FrameMetadata, LazyFrameInput, MetadataSpec
 
 logger = logging.getLogger(__name__)
 
@@ -40,119 +38,144 @@ RETRY_TIMEOUT_S = 5 * 60
 RETRY_WAIT_S = 5
 
 
-def _retry() -> Retrying:
-    return Retrying(
-        stop=stop_after_delay(RETRY_TIMEOUT_S),
-        wait=wait_fixed(RETRY_WAIT_S),
-        retry=retry_if_exception_type(OperationalError),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
-        reraise=True,
-    )
-
-
-ReadLoader = Callable[..., list[Path]]
+ReadLoader = Callable[..., Iterator[pl.DataFrame]]
 
 
 class SqlAlchemyReadEngine(SqlReadEngine, ABC):
     @abstractmethod
     def loader(self) -> ReadLoader: ...
 
-    def read(self, src: SqlReadCfg, work_dir: Path) -> list[list[TableFileSpec]]:
-        read_loader = self.loader()
+    def read(
+        self,
+        cfg: SqlReadCfg,
+        faults: SqlReadFaults,
+        *,
+        drop_metadata: bool = False,
+    ) -> list[Iterable[LazyFrameInput]]:
+        reading = Reading(cfg, self.loader(), faults, drop_metadata)
+        return [reading.slot(index) for index in range(len(cfg.queries))]
 
-        # Empty dict -> None (per the public contract; saves the
-        # loaders from having to special-case the empty case).
-        parameters: Mapping[str, Any] | None = src.initial_values or None
 
-        def _run() -> list[list[TableFileSpec]]:
-            logger.debug("sql-reader: establishing engine")
-            engine = src.create_sql_alchemy_engine()
-            try:
-                results: list[list[TableFileSpec]] = []
-                if src.transactional:
-                    with Session(engine) as session, session.begin():
-                        conn = session.connection()
-                        self._run_queries(
-                            read_loader, conn, src, work_dir, parameters, results
-                        )
-                else:
-                    with engine.connect() as conn:
-                        self._run_queries(
-                            read_loader, conn, src, work_dir, parameters, results
-                        )
-                return results
-            finally:
-                logger.debug("sql-reader: disposing engine")
-                engine.dispose()
-
-        return _retry()(_run)
-
-    @staticmethod
-    def _run_queries(
-        read_loader: Any,
-        conn: Any,
-        src: SqlReadCfg,
-        work_dir: Path,
-        parameters: Mapping[str, Any] | None,
-        results: list[list[TableFileSpec]],
-    ):
-        chunk_size = _config.get_cfg(
-            src.cfg,
+class Reading:
+    def __init__(
+        self,
+        cfg: SqlReadCfg,
+        loader: ReadLoader,
+        faults: SqlReadFaults,
+        drop_metadata: bool,
+    ) -> None:
+        self.cfg = cfg
+        self.loader = loader
+        self.faults = faults
+        self.drop_metadata = drop_metadata
+        self.parameters: Mapping[str, Any] | None = cfg.initial_values or None
+        self.chunk_size = _config.get_cfg(
+            cfg.cfg,
             const.READ_CHUNK_SIZE_KEY,
             const.READ_CHUNK_SIZE_DEFAULT,
         )
-        total = len(src.queries)
-        logger.info("sql-reader: reading %d quer(ies)", total)
-        for i, query in enumerate(src.queries):
-            logger.info("sql-reader: reading query %d/%d", i + 1, total)
-            overrides = (
-                resolve_schema_overrides(src.schema_overrides[i])
-                if src.schema_overrides is not None
-                else None
-            )
-            files = read_loader(
-                connection=conn,
+        self.engine: Engine | None = None
+        self.session: Session | None = None
+        self.transaction: SessionTransaction | None = None
+        self.connection: Connection | None = None
+
+    def open(self) -> Connection:
+        if self.connection is not None:
+            return self.connection
+        logger.debug("sql-reader: establishing engine")
+        self.engine = self.cfg.create_sql_alchemy_engine()
+        if self.cfg.transactional:
+            self.session = Session(self.engine)
+            self.transaction = self.session.begin()
+            self.connection = self.session.connection()
+        else:
+            self.connection = self.engine.connect()
+        return self.connection
+
+    def close(self, completed: bool) -> None:
+        try:
+            if self.session is not None:
+                if completed and self.transaction is not None:
+                    self.transaction.commit()
+                self.session.close()
+            elif self.connection is not None:
+                self.connection.close()
+        finally:
+            if self.engine is not None:
+                logger.debug("sql-reader: disposing engine")
+                self.engine.dispose()
+            self.engine = None
+            self.session = None
+            self.transaction = None
+            self.connection = None
+
+    def metadata(self, query: str) -> FrameMetadata | None:
+        if self.drop_metadata:
+            return None
+        columns: MetadataSpec = {**sql_metadata(query, self.cfg.initial_values)}
+        return FrameMetadata(columns=columns)
+
+    def overrides(self, index: int) -> Mapping[str, Any] | None:
+        if self.cfg.schema_overrides is None:
+            return None
+        return resolve_schema_overrides(self.cfg.schema_overrides[index])
+
+    def slot(self, index: int) -> Iterator[LazyFrameInput]:
+        query = self.cfg.queries[index]
+        total = len(self.cfg.queries)
+        metadata = self.metadata(query)
+        completed = False
+        try:
+            logger.info("sql-reader: reading query %d/%d", index + 1, total)
+            chunks = 0
+            for batch in self.loader(
+                connection=self.open(),
                 query=query,
-                work_dir=work_dir,
-                slot=i,
-                chunk_size=chunk_size,
-                schema_overrides=overrides,
-                parameters=parameters,
-            )
+                chunk_size=self.chunk_size,
+                schema_overrides=self.overrides(index),
+                parameters=self.parameters,
+            ):
+                chunks += 1
+                yield LazyFrameInput(batch.lazy(), metadata=metadata)
             logger.debug(
-                "sql-reader: query %d/%d produced %d chunk(s)", i + 1, total, len(files)
+                "sql-reader: query %d/%d produced %d chunk(s)",
+                index + 1,
+                total,
+                chunks,
             )
-            results.append([Path(p) for p in files])
-        logger.info("sql-reader: finished reading %d quer(ies)", total)
+            completed = True
+        except OperationalError as error:
+            raise RestartRead(
+                self.faults.connection(error),
+                wait=RETRY_WAIT_S,
+                within=RETRY_TIMEOUT_S,
+            ) from error
+        except SQLAlchemyError as error:
+            raise self.faults.query(error, index) from error
+        finally:
+            if not completed or index == total - 1:
+                self.close(completed)
 
 
 def _pandas_read(
     *,
     connection: Connection,
     query: str,
-    work_dir: Path,
-    slot: int,
     chunk_size: int,
     schema_overrides: Mapping[str, Any] | None,
     parameters: Mapping[str, Any] | None = None,
-) -> list[Path]:
+) -> Iterator[pl.DataFrame]:
     import pandas as pd
     from sqlalchemy import text
 
-    files: list[Path] = []
-    iterator = pd.read_sql_query(
+    for frame in pd.read_sql_query(
         text(query),
-        con=connection,
+        con=connection.execution_options(stream_results=True),
         chunksize=chunk_size,
         dtype=dict(schema_overrides) if schema_overrides else None,
         params=dict(parameters) if parameters else None,
-    )
-    for chunk_idx, frame in enumerate(iterator):
-        out = work_dir / f"slot{slot}_chunk{chunk_idx}.parquet"
-        frame.to_parquet(out, engine="pyarrow")
-        files.append(out)
-
-    return files
+    ):
+        yield pl.from_pandas(frame)
 
 
 class PandasReadEngine(SqlAlchemyReadEngine):
@@ -164,20 +187,16 @@ def _polars_read(
     *,
     connection: Any,
     query: str,
-    work_dir: Path,
-    slot: int,
     chunk_size: int,
     schema_overrides: Mapping[str, Any] | None,
     parameters: Mapping[str, Any] | None = None,
-) -> list[Path]:
-    import polars as pl
+) -> Iterator[pl.DataFrame]:
     from sqlalchemy import text
 
     execute_options: dict[str, Any] = {}
     if parameters:
         execute_options["parameters"] = dict(parameters)
 
-    files: list[Path] = []
     streamed_conn = connection.execution_options(stream_results=True)
     # Polars reads an oracledb-backed Connection through a separate raw pool
     # connection, outside this connection's transaction; a Session bound to it
@@ -187,7 +206,7 @@ def _polars_read(
         if streamed_conn.engine.driver == "oracledb"
         else nullcontext(streamed_conn)
     ) as source:
-        batches = pl.read_database(
+        yield from pl.read_database(
             text(query),
             connection=source,
             iter_batches=True,
@@ -195,12 +214,6 @@ def _polars_read(
             schema_overrides=schema_overrides,
             execute_options=execute_options or None,
         )
-        for chunk_idx, batch in enumerate(batches):
-            out = work_dir / f"slot{slot}_chunk{chunk_idx}.parquet"
-            batch.write_parquet(out, use_pyarrow=True)
-            files.append(out)
-
-    return files
 
 
 class PolarsReadEngine(SqlAlchemyReadEngine):

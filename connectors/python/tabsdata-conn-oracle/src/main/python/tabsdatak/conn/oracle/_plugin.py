@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -24,10 +25,10 @@ from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
+    LazyFrameInput,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
-    TableFileInput,
     TableFileSpec,
     TableMode,
 )
@@ -128,9 +129,7 @@ class OracleSrcPlugin(SrcPlugin[OracleSrcConn, OracleSrc]):
         ctx: SrcPluginCtx,
         conn: OracleSrcConn,
         src: OracleSrc,
-    ) -> list[list[TableFileInput]]:
-        from sqlalchemy.exc import OperationalError, SQLAlchemyError
-
+    ) -> list[Iterable[LazyFrameInput]]:
         # noinspection PyProtectedMember
         from tabsdatak.conn.common.sql._engine import factory as factory
 
@@ -138,7 +137,9 @@ class OracleSrcPlugin(SrcPlugin[OracleSrcConn, OracleSrc]):
         from tabsdatak.conn.common.sql._engine.initial_values import (
             resolve_initial_values,
         )
-        from tabsdatak.conn.common.sql._metadata import to_sql_table_file_inputs
+
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.common.sql._engine.reader import SqlReadFaults
         from tabsdatak.conn.oracle._impl import ORACLE_READ_DEFAULTS, OracleReadCfg
 
         cfg = _resolve_src_cfg(src.src_cfg)
@@ -158,23 +159,15 @@ class OracleSrcPlugin(SrcPlugin[OracleSrcConn, OracleSrc]):
             ORACLE_READ_DEFAULTS,
         )
 
-        try:
-            return to_sql_table_file_inputs(
-                engine.read(read_cfg, ctx.work_dir),
-                read_cfg.queries,
-                read_cfg.initial_values,
-                drop_metadata=cfg.drop_metadata,
-            )
-        except OperationalError as e:
-            raise OracleErrorCode.ORACLE_5.exception(
-                cause=e,
+        return engine.read(
+            read_cfg,
+            SqlReadFaults(
+                unreachable=OracleErrorCode.ORACLE_5,
+                failed=OracleErrorCode.ORACLE_6,
                 uri=read_cfg.conn.uri,
-            )
-        except SQLAlchemyError as e:
-            raise OracleErrorCode.ORACLE_6.exception(
-                cause=e,
-                query_index=-1,
-            )
+            ),
+            drop_metadata=cfg.drop_metadata,
+        )
 
 
 class OracleDestPlugin(DestPlugin[OracleDestConn, OracleDest]):

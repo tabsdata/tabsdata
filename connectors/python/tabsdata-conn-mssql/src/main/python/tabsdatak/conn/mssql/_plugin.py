@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -24,10 +25,10 @@ from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
+    LazyFrameInput,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
-    TableFileInput,
     TableFileSpec,
     TableMode,
 )
@@ -128,9 +129,7 @@ class MSSQLSrcPlugin(SrcPlugin[MSSQLSrcConn, MSSQLSrc]):
         ctx: SrcPluginCtx,
         conn: MSSQLSrcConn,
         src: MSSQLSrc,
-    ) -> list[list[TableFileInput]]:
-        from sqlalchemy.exc import OperationalError, SQLAlchemyError
-
+    ) -> list[Iterable[LazyFrameInput]]:
         # noinspection PyProtectedMember
         from tabsdatak.conn.common.sql._engine import factory as factory
 
@@ -138,7 +137,9 @@ class MSSQLSrcPlugin(SrcPlugin[MSSQLSrcConn, MSSQLSrc]):
         from tabsdatak.conn.common.sql._engine.initial_values import (
             resolve_initial_values,
         )
-        from tabsdatak.conn.common.sql._metadata import to_sql_table_file_inputs
+
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.common.sql._engine.reader import SqlReadFaults
         from tabsdatak.conn.mssql._impl import MSSQL_READ_DEFAULTS, MSSQLReadCfg
 
         cfg = _resolve_src_cfg(src.src_cfg)
@@ -158,32 +159,15 @@ class MSSQLSrcPlugin(SrcPlugin[MSSQLSrcConn, MSSQLSrc]):
             MSSQL_READ_DEFAULTS,
         )
 
-        try:
-            return to_sql_table_file_inputs(
-                engine.read(read_cfg, ctx.work_dir),
-                read_cfg.queries,
-                read_cfg.initial_values,
-                drop_metadata=cfg.drop_metadata,
-            )
-        except OperationalError as e:
-            # Engine connect / handshake failures bubble up as
-            # OperationalError both for the initial connect and
-            # for execute(). Tenacity has already retried up to
-            # the deadline; if we got here, retries are exhausted.
-            raise MssqlErrorCode.MSSQL_5.exception(
-                cause=e,
+        return engine.read(
+            read_cfg,
+            SqlReadFaults(
+                unreachable=MssqlErrorCode.MSSQL_5,
+                failed=MssqlErrorCode.MSSQL_6,
                 uri=read_cfg.conn.uri,
-            )
-        except SQLAlchemyError as e:
-            # Anything else from SQLAlchemy is a query failure
-            # (programming error, statement error, integrity, ...).
-            # We don't know which query slot tripped it without
-            # cooperation from the loader; surface -1 as the
-            # placeholder.
-            raise MssqlErrorCode.MSSQL_6.exception(
-                cause=e,
-                query_index=-1,
-            )
+            ),
+            drop_metadata=cfg.drop_metadata,
+        )
 
 
 class MSSQLDestPlugin(DestPlugin[MSSQLDestConn, MSSQLDest]):

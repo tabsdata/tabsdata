@@ -11,15 +11,16 @@ import polars as pl
 import pytest
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
+from tabsdatak._handoff import RestartRead
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine import (
     sqlalchemy_reader as saw_reader,
     sqlalchemy_writer as saw_writer,
 )
-from tabsdatak.conn.common.sql.constants import (
-    SQL_META_INITIAL_VALUES,
-    SQL_META_QUERY,
-)
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._engine.reader import SqlReadFaults
 from tabsdatak.conn.common.types import UserPassword
 
 # noinspection PyProtectedMember
@@ -115,14 +116,18 @@ def _bare_dest_conn() -> MSSQLDestConn:
     )
 
 
-def test_src_plugin_wraps_operational_error_as_mssql_5(monkeypatch, work_dir):
+def test_src_plugin_restarts_on_operational_error_with_mssql_5(monkeypatch, work_dir):
     fake = MagicMock()
     fake.connect.side_effect = OperationalError("conn fail", {}, BaseException("c"))
     monkeypatch.setattr(impl, "build_mssql_engine", lambda *a, **kw: fake)
     src = MSSQLSrc(queries=["SELECT 1"])
-    with pytest.raises(MSSQLRuntimeException) as ei:
-        plugin.MSSQLSrcPlugin().read_in(_src_ctx(work_dir), _bare_src_conn(), src)
-    assert ei.value.api_error is MssqlErrorCode.MSSQL_5
+    [slot] = plugin.MSSQLSrcPlugin().read_in(
+        _src_ctx(work_dir), _bare_src_conn(), src
+    )
+    with pytest.raises(RestartRead) as ei:
+        list(slot)
+    assert isinstance(ei.value.cause, MSSQLRuntimeException)
+    assert ei.value.cause.api_error is MssqlErrorCode.MSSQL_5
     fake.dispose.assert_called()
 
 
@@ -134,9 +139,13 @@ def test_src_plugin_wraps_other_sqlalchemy_error_as_mssql_6(
     fake.connect.side_effect = ProgrammingError("bad sql", {}, BaseException("p"))
     monkeypatch.setattr(impl, "build_mssql_engine", lambda *a, **kw: fake)
     src = MSSQLSrc(queries=["SELECT 1"])
+    [slot] = plugin.MSSQLSrcPlugin().read_in(
+        _src_ctx(work_dir), _bare_src_conn(), src
+    )
     with pytest.raises(MSSQLRuntimeException) as ei:
-        plugin.MSSQLSrcPlugin().read_in(_src_ctx(work_dir), _bare_src_conn(), src)
+        list(slot)
     assert ei.value.api_error is MssqlErrorCode.MSSQL_6
+    assert "query_index=0" in str(ei.value)
 
 
 # ---------------------------------------------------------------------------
@@ -282,7 +291,7 @@ def test_read_in_uses_resolved_initial_values(work_dir, monkeypatch):
     captured: dict = {}
 
     class _FakeEngine:
-        def read(self, read_cfg, work_dir_arg):
+        def read(self, read_cfg, faults, *, drop_metadata=False):
             captured["initial_values"] = read_cfg.initial_values
             # One slot per query, as ``SqlReadEngine.read`` guarantees.
             return [[]]
@@ -301,33 +310,40 @@ def test_read_in_uses_resolved_initial_values(work_dir, monkeypatch):
     assert captured["initial_values"] == {"last_modified": "from-ctx"}
 
 
-def test_read_in_reports_query_and_binds_as_metadata(work_dir, monkeypatch):
+def test_read_in_hands_the_engine_its_error_codes(work_dir, monkeypatch):
+    captured: dict = {}
+
     class _FakeEngine:
-        def read(self, read_cfg, work_dir_arg):
-            return [[work_dir_arg / "slot0_chunk0.parquet"]]
+        def read(self, read_cfg, faults, *, drop_metadata=False):
+            captured["faults"] = faults
+            captured["drop_metadata"] = drop_metadata
+            return [[]]
 
     # noinspection PyProtectedMember
     from tabsdatak.conn.common.sql._engine import factory as _factory
 
     monkeypatch.setattr(_factory, "get_read_engine", lambda *a, **kw: _FakeEngine())
 
-    src = MSSQLSrc(
-        queries=["SELECT * FROM t WHERE ts > :last_modified"],
-        initial_values={"last_modified": "2026-01-01"},
-    )
-    [[table]] = plugin.MSSQLSrcPlugin().read_in(
-        CtxStub(work_dir), _bare_src_conn(), src
-    )
-    assert table.metadata == {
-        SQL_META_QUERY: "SELECT * FROM t WHERE ts > :last_modified",
-        SQL_META_INITIAL_VALUES: '{"last_modified": "2026-01-01"}',
+    conn = _bare_src_conn()
+    src = MSSQLSrc(queries=["SELECT * FROM t"])
+    plugin.MSSQLSrcPlugin().read_in(CtxStub(work_dir), conn, src)
+    assert captured == {
+        "faults": SqlReadFaults(
+            unreachable=MssqlErrorCode.MSSQL_5,
+            failed=MssqlErrorCode.MSSQL_6,
+            uri=conn.uri,
+        ),
+        "drop_metadata": False,
     }
 
 
 def test_read_in_drops_metadata_when_src_cfg_asks(work_dir, monkeypatch):
+    captured: dict = {}
+
     class _FakeEngine:
-        def read(self, read_cfg, work_dir_arg):
-            return [[work_dir_arg / "slot0_chunk0.parquet"]]
+        def read(self, read_cfg, faults, *, drop_metadata=False):
+            captured["drop_metadata"] = drop_metadata
+            return [[]]
 
     # noinspection PyProtectedMember
     from tabsdatak.conn.common.sql._engine import factory as _factory
@@ -338,5 +354,5 @@ def test_read_in_drops_metadata_when_src_cfg_asks(work_dir, monkeypatch):
         queries=["SELECT * FROM t"],
         src_cfg={"tabsdata.src_metadata.drop": True},
     )
-    out = plugin.MSSQLSrcPlugin().read_in(CtxStub(work_dir), _bare_src_conn(), src)
-    assert out[0][0].metadata is None
+    plugin.MSSQLSrcPlugin().read_in(CtxStub(work_dir), _bare_src_conn(), src)
+    assert captured["drop_metadata"] is True
