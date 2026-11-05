@@ -463,7 +463,7 @@ def test_evolve_refuses_a_change_bigquery_cannot_make(stored, staged):
     rather than at the MERGE. Both sides' types are read the same way, so a
     reported retype is a real one.
     """
-    from tabsdatak.conn.common.sql._iceberg import UnsafeSchemaChangeError
+    from tabsdatak.conn.common.sql._schema.delta import UnsafeSchemaChangeError
 
     client = _field_client({_TARGET: [_field("total", stored)]})
     with pytest.raises(UnsafeSchemaChangeError):
@@ -476,7 +476,7 @@ def test_evolve_refuses_a_change_bigquery_cannot_make(stored, staged):
 def test_evolve_refuses_before_it_alters_anything():
     """The check covers the whole delta, so a column that could have been added
     is not added when another column's retype is refused."""
-    from tabsdatak.conn.common.sql._iceberg import UnsafeSchemaChangeError
+    from tabsdatak.conn.common.sql._schema.delta import UnsafeSchemaChangeError
 
     client = _field_client({_TARGET: [_field("total", "INTEGER")]})
     staged = _staged([_field("total", "STRING"), _field("note", "STRING")])

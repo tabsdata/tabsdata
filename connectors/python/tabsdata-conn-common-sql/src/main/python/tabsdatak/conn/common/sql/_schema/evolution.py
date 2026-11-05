@@ -15,7 +15,7 @@ not come through here at all and carries a modifier in its
 :class:`~tabsdatak.conn.common.sql._merge.dialect.MergeSyntax` instead. A
 bulk load reaches it when the destination is asked to evolve the target
 itself rather than leaning on the engine's own schema evolution -- which is
-why this sits beside :mod:`~tabsdatak.conn.common.sql._iceberg` rather than
+why this sits beside :mod:`~tabsdatak.conn.common.sql._schema.delta` rather than
 under ``_merge``.
 """
 
@@ -26,7 +26,7 @@ from collections.abc import Callable
 from typing import Protocol
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._iceberg import (
+from tabsdatak.conn.common.sql._schema.delta import (
     ColumnDef,
     DialectRenderer,
     SchemaDelta,

@@ -23,7 +23,7 @@ import logging
 from tabsdatak.conn.common._validation import fqn, unfqn
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._evolution import evolve_with_iceberg
+from tabsdatak.conn.common.sql._schema.evolution import evolve_with_iceberg
 from tabsdatak.conn.snowflake import _iceberg
 
 # noinspection PyProtectedMember
@@ -160,7 +160,7 @@ class SnowflakeSchemaEvolver:
     """The three operations the Iceberg evolution pass makes against Snowflake.
 
     Satisfies
-    :class:`~tabsdatak.conn.common.sql._evolution.SchemaEvolutionTarget`
+    :class:`~tabsdatak.conn.common.sql._schema.evolution.SchemaEvolutionTarget`
     over a bare cursor, which is what lets a bulk load evolve its target without
     a merge dialect to borrow one from. The merge dialect implements the same
     three methods itself -- they are part of its own contract -- and reads them

@@ -6,7 +6,7 @@
 
 The dialect-agnostic infrastructure (models, delta core,
 :class:`DialectRenderer` abstract base) lives in
-``tabsdatak.conn.common.sql._iceberg``; this module ships only the
+``tabsdatak.conn.common.sql._schema.delta``; this module ships only the
 ClickHouse-specific pieces consumed by ``_dialect.py``.
 """
 
@@ -15,7 +15,7 @@ from __future__ import annotations
 # noinspection PyProtectedMember
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._validation import quote_column
-from tabsdatak.conn.common.sql._iceberg import (
+from tabsdatak.conn.common.sql._schema.delta import (
     Action,
     ColumnDef,
     DialectRenderer,

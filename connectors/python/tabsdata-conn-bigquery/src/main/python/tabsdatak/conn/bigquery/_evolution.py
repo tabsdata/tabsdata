@@ -25,7 +25,7 @@ from typing import Any
 from tabsdatak.conn.bigquery import _iceberg
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._evolution import evolve_with_iceberg
+from tabsdatak.conn.common.sql._schema.evolution import evolve_with_iceberg
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +171,7 @@ class BigQuerySchemaEvolver:
     """The three operations the Iceberg evolution pass makes against BigQuery.
 
     Satisfies
-    :class:`~tabsdatak.conn.common.sql._evolution.SchemaEvolutionTarget` over a
+    :class:`~tabsdatak.conn.common.sql._schema.evolution.SchemaEvolutionTarget` over a
     client and one target, which is what lets a bulk load evolve its target
     without a merge dialect to borrow one from. The merge dialect implements the
     same three methods itself -- they are part of its own contract.

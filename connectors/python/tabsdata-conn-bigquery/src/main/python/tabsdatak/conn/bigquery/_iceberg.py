@@ -6,7 +6,7 @@
 
 The dialect-agnostic infrastructure (models, delta core,
 :class:`DialectRenderer` abstract base) lives in
-``tabsdatak.conn.common.sql._iceberg``; this module ships only the
+``tabsdatak.conn.common.sql._schema.delta``; this module ships only the
 BigQuery-specific pieces consumed by ``_impl.py``.
 
 BigQuery evolves a target in two directions, both of them widening: it
@@ -38,7 +38,7 @@ from tabsdatak.conn.common._validation import fqn
 
 # Re-exported so callers import every iceberg piece from one module.
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._iceberg import (  # noqa: F401
+from tabsdatak.conn.common.sql._schema.delta import (  # noqa: F401
     Action,
     ColumnDef,
     DialectRenderer,

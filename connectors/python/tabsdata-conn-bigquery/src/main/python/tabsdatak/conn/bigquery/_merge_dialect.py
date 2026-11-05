@@ -31,9 +31,6 @@ from tabsdatak.conn.bigquery.error import BigQueryErrorCode
 from tabsdatak.conn.common.file._store import FileStore
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._evolution import evolve_with_iceberg
-
-# noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge import WatermarkCfg
 
 # noinspection PyProtectedMember
@@ -43,6 +40,9 @@ from tabsdatak.conn.common.sql._merge.dialect import (
     MergeSyntax,
     Staged,
 )
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.evolution import evolve_with_iceberg
 
 if TYPE_CHECKING:
     import polars as pl

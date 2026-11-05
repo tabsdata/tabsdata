@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._iceberg import (
+from tabsdatak.conn.common.sql._schema.delta import (
     Action,
     ColumnDef,
     SchemaChange,
@@ -18,7 +18,6 @@ from tabsdatak.conn.common.sql._iceberg import (
     compute_delta,
     validate_delta,
 )
-
 
 WIDEN_MAP: TypeWideningMap = {
     "BIGINT": {"INT", "SMALLINT"},
