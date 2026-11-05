@@ -40,6 +40,10 @@ _CHAINS = (
 _FRAME = re.compile(r'File "(?P<path>[^"]+)", line (?P<line>\d+), in (?P<function>\S+)')
 _EXCEPTION = re.compile(r"(?P<exception>[A-Za-z_][\w.]*)(?::\s?(?P<detail>.*))?")
 _ERROR_LINE = re.compile(r"\bERROR\b")
+_LOG_RECORD = re.compile(
+    r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z "
+    r"(TRACE|DEBUG|INFO|WARNING|ERROR|CRITICAL) "
+)
 _CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 
 
@@ -214,9 +218,17 @@ def _user_frame(frames: Iterable[re.Match]) -> UserFrame | None:
 
 
 def _raised(lines: list[str], start: int) -> int | None:
+    """The line of the exception the traceback at ``start`` raised: its first
+    line that is no frame, no source line and no log record, which the
+    worker's stdout interleaves with its stderr."""
     for index in range(start + 1, len(lines)):
         line = lines[index]
-        if _FRAME.search(line) or not line.strip() or line[0].isspace():
+        if (
+            _FRAME.search(line)
+            or not line.strip()
+            or line[0].isspace()
+            or _LOG_RECORD.match(line)
+        ):
             continue
         return index
     return None

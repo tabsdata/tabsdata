@@ -90,6 +90,23 @@ def test_signature_names_the_short_exception_class():
     assert signature.traceback.startswith("Traceback (most recent call last):")
 
 
+def test_log_records_interleaved_into_a_traceback_are_not_its_exception():
+    log = "\n".join([
+        "Traceback (most recent call last):",
+        '  File "/w/runner.py", line 9, in invoke',
+        "2026-11-03T22:22:48.830Z INFO tabsdatak.server.run: Reporting Failed",
+        "    results = self.call()",
+        '  File "/w/runner.py", line 12, in call',
+        "2026-11-03T22:22:48.830Z INFO tabsdatak.server.run: Posting responder",
+        "    raise RunFunctionErrorCode.RF_12.exception(",
+        'x.UserFunctionFailedError: RF_12: unable to find column "margin_pct"',
+    ])
+    signature = d.extract_error_signature(log)
+    assert signature.message == (
+        'UserFunctionFailedError: RF_12: unable to find column "margin_pct"'
+    )
+
+
 def test_the_last_traceback_wins():
     signature = d.extract_error_signature(_log("nested_during_handling"))
     assert signature.message == "RuntimeError: could not parse the amount column"
@@ -101,9 +118,21 @@ _USER = f"/w/{BUNDLE_USER_CODE_DIRNAME}/fn.py"
 @pytest.mark.parametrize(
     "frame, source, raised",
     [
-        ("line 403, in transform", 'total = df["amount"].sum() / n', "ZeroDivisionError: division by zero"),
-        ("line 12, in transform", "r = requests.get(url, timeout=5).json()", "ValueError: bad json"),
-        ("line 401, in unauthorized_rows", "x = 1", "ZeroDivisionError: division by zero"),
+        (
+            "line 403, in transform",
+            'total = df["amount"].sum() / n',
+            "ZeroDivisionError: division by zero",
+        ),
+        (
+            "line 12, in transform",
+            "r = requests.get(url, timeout=5).json()",
+            "ValueError: bad json",
+        ),
+        (
+            "line 401, in unauthorized_rows",
+            "x = 1",
+            "ZeroDivisionError: division by zero",
+        ),
     ],
 )
 def test_frames_and_source_lines_never_pick_the_category(frame, source, raised):
@@ -175,7 +204,6 @@ def test_excerpt_of_a_short_log_is_the_log():
     assert d.excerpt(text, 7) == (text, False)
 
 
-
 @pytest.mark.parametrize("lines", [200, 20])
 def test_excerpt_keeps_a_repeated_plan_dump_once_and_bounded(lines):
     body, truncated = d.excerpt(_log("polars_plan_repeated"), lines)
@@ -208,6 +236,7 @@ def test_excerpt_of_an_oversized_log_is_bounded():
     assert len(body) <= d.EXCERPT_CHARS
     assert body.startswith("line 0 ")
     assert body.endswith("line 299 " + "x" * 80)
+
 
 def _worker(id: str, run: str, status: str) -> SimpleNamespace:
     return SimpleNamespace(
