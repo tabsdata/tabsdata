@@ -927,12 +927,16 @@ fields, in lists, `get`, `monitor` and `fn trigger` alike:
 - `health`: one of `ok`, `running`, `warning` or `error`.
 - `final`: `true` when the server will not change the status on its own.
 
+Plans and transactions also carry `function_runs_by_status`, the nonzero
+counts of their function runs keyed by status name (`{"On Hold": 1,
+"Scheduled": 3}`), next to the raw `function_run_status_count` keyed by code.
+
 The same code means different things on different entities: `F` is Finished
 (`ok`) on a plan and Failed (`error`) on a function run. On function runs and
 data versions, `E` (Error, retrying automatically) is `warning` and not final;
 `F` (retries used up, needs `recover`) is `error`; `H` (On Hold) and `Y`
-(Yanked) are `warning` and final. On plans, `L` (Stalled) is `warning` and `U`
-is `error`. On transactions, `Y` is `warning`. On workers, `D`, `SP` and `X`
+(Yanked) are `warning` and final. On plans, `L` (Stalled) and `U` are
+`error`. On transactions, `Y` is `warning`. On workers, `D`, `SP` and `X`
 are `ok` and final, and `E` is `warning`. The table view is unchanged.
 
 Every command but `shell` and `auth password-change` takes `-o`, including the ones that

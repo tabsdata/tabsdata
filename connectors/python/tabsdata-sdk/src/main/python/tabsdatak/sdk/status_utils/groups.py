@@ -116,11 +116,23 @@ def is_final(entity: Entity | str, status: str | None) -> bool:
 
 def annotate(entity: Entity | str, row: dict) -> dict:
     """A copy of ``row`` with ``status_name``, ``health`` and ``final`` added
-    next to its ``status``."""
+    next to its ``status``, and, next to a ``function_run_status_count`` keyed
+    by code, ``function_runs_by_status``: its nonzero counts keyed by name."""
     status = row.get("status")
     group = health(entity, status)
+    named = {}
+    counts = row.get("function_run_status_count")
+    if isinstance(counts, dict):
+        named = {
+            "function_runs_by_status": {
+                status_name(Entity.FUNCTION_RUN, code) or code: count
+                for code, count in counts.items()
+                if count
+            }
+        }
     return {
         **row,
+        **named,
         "status_name": status_name(entity, status),
         "health": group.value if group is not None else None,
         "final": is_final(entity, status),

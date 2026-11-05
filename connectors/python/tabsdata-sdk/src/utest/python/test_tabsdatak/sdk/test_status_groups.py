@@ -22,8 +22,8 @@ from tabsdatak.sdk.status_utils.groups import (
     annotate,
     health,
     is_final,
-    status_name,
     status_groups_document,
+    status_name,
 )
 from tabsdatak.sdk.status_utils.transaction import TRANSACTION_STATUS_MAPPING
 from tabsdatak.sdk.status_utils.worker import WORKER_STATUS_MAPPING
@@ -127,6 +127,15 @@ def test_annotate_does_not_mutate():
         "health": "error",
         "final": True,
     }
+
+
+def test_annotate_names_the_run_counts_of_a_plan():
+    row = {"status": "R", "function_run_status_count": {"H": 1, "S": 3, "R": 0}}
+    assert annotate(Entity.EXECUTION, row)["function_runs_by_status"] == {
+        "On Hold": 1,
+        "Scheduled": 3,
+    }
+    assert "function_runs_by_status" not in annotate(Entity.FUNCTION_RUN, {})
 
 
 def test_ui_asset_is_current():
