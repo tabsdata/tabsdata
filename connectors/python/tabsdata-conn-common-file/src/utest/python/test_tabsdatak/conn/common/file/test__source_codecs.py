@@ -36,10 +36,8 @@ from test_tabsdatak.conn.common.file.landed import land
 pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("no_transporter")]
 
 ERRORS = FilePluginErrors(
-    binary_not_found=FileCommonErrorCode.FILE_COMMON_1,
     read_failed=FileCommonErrorCode.FILE_COMMON_1,
     write_failed=FileCommonErrorCode.FILE_COMMON_1,
-    report_invalid=FileCommonErrorCode.FILE_COMMON_1,
 )
 
 FRAME = pl.DataFrame({"id": [1, 2, 3], "name": ["alice", "bob", "carol"]})

@@ -11,7 +11,6 @@ import pytest
 
 from tabsdatax.itest.fixture.transporter import (
     TransporterUsedError,
-    transporter_allowed,
     transporter_forbidden,
 )
 
@@ -49,10 +48,6 @@ def test_other_programs_start():
     assert completed.returncode == 0
 
 
-def test_an_allowed_step_reaches_the_program(transporter):
-    with transporter_forbidden(), transporter_allowed():
-        with pytest.raises(FileNotFoundError):
-            subprocess.Popen([transporter, "copy"])
 
 
 def test_the_guard_is_lifted_afterwards(transporter):

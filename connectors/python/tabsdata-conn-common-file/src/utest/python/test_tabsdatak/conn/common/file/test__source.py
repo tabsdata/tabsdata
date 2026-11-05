@@ -31,10 +31,8 @@ from tabsdatak.spi import LazyFrameInput
 pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("no_transporter")]
 
 ERRORS = FilePluginErrors(
-    binary_not_found=FileCommonErrorCode.FILE_COMMON_1,
     read_failed=FileCommonErrorCode.FILE_COMMON_3,
     write_failed=FileCommonErrorCode.FILE_COMMON_8,
-    report_invalid=FileCommonErrorCode.FILE_COMMON_4,
 )
 
 INITIAL = datetime(2000, 1, 1, tzinfo=timezone.utc)

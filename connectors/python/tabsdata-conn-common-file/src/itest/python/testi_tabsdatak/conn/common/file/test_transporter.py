@@ -20,16 +20,8 @@ import pytest
 
 from tabsdatak.common._interpreter.python.error import BinaryNotFoundError
 from tabsdatak.common._interpreter.python.venv import PythonEnvironment
-from tabsdatak.common._transporter.facade import make_handler
 from tabsdatak.common._transporter.handler.handler2 import TRANSPORTER_BINARY_NAME
 
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.file import (
-    _output as _output_module,
-)
-from tabsdatak.conn.common.file.typing_ import (
-    DestFileFormat,
-)
 
 # ---------------------------------------------------------------------------
 # Gate: skip the whole module if the binary isn't available
@@ -48,13 +40,6 @@ pytestmark = pytest.mark.skipif(
         "environment; integration tests skipped"
     ),
 )
-
-
-# ---------------------------------------------------------------------------
-# Test contexts
-# ---------------------------------------------------------------------------
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -77,39 +62,6 @@ def _output_dir(tmp_path: Path) -> Path:
     d = tmp_path / "out"
     d.mkdir()
     return d
-
-
-# ---------------------------------------------------------------------------
-# _output.copy_one
-# ---------------------------------------------------------------------------
-
-
-def test_copy_one_local_to_local(tmp_path: Path):
-    src_dir = _input_dir(tmp_path)
-    out_dir = _output_dir(tmp_path)
-
-    _write_input_parquet(
-        src_dir / "in.parquet",
-        [{"id": 100, "name": "carol"}],
-    )
-
-    handler = make_handler()
-    src_loc = handler.local_path_location(src_dir / "in.parquet")
-    target_path = out_dir / "out.parquet"
-    tgt_loc = handler.local_path_location(target_path)
-
-    report = _output_module.copy_one(
-        handler=handler,
-        source_target_pairs=[(src_loc, tgt_loc)],
-        work_dir=tmp_path,
-        file_format=DestFileFormat.PARQUET,
-        paths=[str(target_path)],
-    )
-
-    assert report is not None
-    assert (out_dir / "out.parquet").exists()
-    df = pl.read_parquet(out_dir / "out.parquet")
-    assert df.to_dicts() == [{"id": 100, "name": "carol"}]
 
 
 # EBCDIC fixed-length records. Every field encoding below is built by hand,

@@ -15,8 +15,6 @@ import pytest
 
 TRANSPORTER = "transporter"
 
-_allowed = 0
-
 
 class TransporterUsedError(AssertionError):
     pass
@@ -39,7 +37,7 @@ def transporter_forbidden() -> Iterator[None]:
     class Guarded(subprocess.Popen[Any]):
         def __init__(self, args: Any, *rest: Any, **options: Any) -> None:
             name = program(args)
-            if _allowed == 0 and TRANSPORTER in name.lower():
+            if TRANSPORTER in name.lower():
                 raise TransporterUsedError(
                     f"The transporter program '{name}' was started where data must "
                     "not go through the transporter"
@@ -51,16 +49,6 @@ def transporter_forbidden() -> Iterator[None]:
         yield
     finally:
         setattr(subprocess, "Popen", original)
-
-
-@contextmanager
-def transporter_allowed() -> Iterator[None]:
-    global _allowed
-    _allowed += 1
-    try:
-        yield
-    finally:
-        _allowed -= 1
 
 
 @pytest.fixture

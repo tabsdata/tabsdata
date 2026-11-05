@@ -60,7 +60,7 @@ class AzureBlobErrorCode(ErrorCode):
     AZURE_BLOB_6 = ErrorDef(
         AzureBlobRuntimeException,
         "td_transporter binary not found in the runtime environment.",
-    )  # _AzureBlobSrcPlugin / _AzureBlobDestPlugin: binary lookup
+    )  # no longer raised (transporter retired); kept registered
     AZURE_BLOB_7 = ErrorDef(
         AzureBlobRuntimeException,
         "AzureBlob read failed (path={path})",
@@ -72,7 +72,7 @@ class AzureBlobErrorCode(ErrorCode):
     AZURE_BLOB_9 = ErrorDef(
         AzureBlobRuntimeException,
         "AzureBlob transporter report invalid (path={path})",
-    )  # _AzureBlobSrcPlugin / _AzureBlobDestPlugin: bad report YAML
+    )  # no longer raised (transporter retired); kept registered
     AZURE_BLOB_10 = ErrorDef(
         AzureBlobRuntimeException,
         "AzureBlob credential resolution failed: {reason}",

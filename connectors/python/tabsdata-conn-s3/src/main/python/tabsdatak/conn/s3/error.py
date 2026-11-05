@@ -60,7 +60,7 @@ class S3ErrorCode(ErrorCode):
     S3_6 = ErrorDef(
         S3RuntimeException,
         "td_transporter binary not found in the runtime environment.",
-    )  # _S3SrcPlugin / _S3DestPlugin: binary lookup
+    )  # no longer raised (transporter retired); kept registered
     S3_7 = ErrorDef(
         S3RuntimeException,
         "S3 read failed (path={path})",
@@ -72,7 +72,7 @@ class S3ErrorCode(ErrorCode):
     S3_9 = ErrorDef(
         S3RuntimeException,
         "S3 transporter report invalid (path={path})",
-    )  # _S3SrcPlugin / _S3DestPlugin: bad report YAML
+    )  # no longer raised (transporter retired); kept registered
     S3_10 = ErrorDef(
         S3RuntimeException,
         "S3 credential resolution failed: {reason}",

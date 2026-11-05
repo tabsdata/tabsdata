@@ -36,10 +36,8 @@ from tabsdatak.spi import (
 
 
 ERRORS = _file_plugin.FilePluginErrors(
-    binary_not_found=LocalFileErrorCode.LOCALFILE_6,
     read_failed=LocalFileErrorCode.LOCALFILE_7,
     write_failed=LocalFileErrorCode.LOCALFILE_8,
-    report_invalid=LocalFileErrorCode.LOCALFILE_9,
 )
 
 

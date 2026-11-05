@@ -61,10 +61,8 @@ def file_store(conn: _AnyGCSConn) -> FileStore:
 
 
 ERRORS = _plugin.FilePluginErrors(
-    binary_not_found=GCSErrorCode.GCS_6,
     read_failed=GCSErrorCode.GCS_7,
     write_failed=GCSErrorCode.GCS_8,
-    report_invalid=GCSErrorCode.GCS_9,
     cred_resolution=GCSErrorCode.GCS_10,
 )
 

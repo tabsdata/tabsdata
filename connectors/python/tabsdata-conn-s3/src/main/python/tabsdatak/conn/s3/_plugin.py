@@ -59,10 +59,8 @@ def file_store(conn: _AnyS3Conn) -> FileStore:
 
 
 ERRORS = _plugin.FilePluginErrors(
-    binary_not_found=S3ErrorCode.S3_6,
     read_failed=S3ErrorCode.S3_7,
     write_failed=S3ErrorCode.S3_8,
-    report_invalid=S3ErrorCode.S3_9,
     cred_resolution=S3ErrorCode.S3_10,
 )
 

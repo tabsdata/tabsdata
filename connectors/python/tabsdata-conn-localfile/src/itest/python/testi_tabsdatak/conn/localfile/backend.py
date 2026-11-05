@@ -18,13 +18,7 @@ import pytest
 from tabsdatax.itest.fixture.backends.fs import FsDomain
 from tabsdatax.itest.fixture.monikers import moniker
 
-from tabsdatak.common._interpreter.python.venv import PythonEnvironment
-from tabsdatak.common._transporter.handler.handler2 import TRANSPORTER_BINARY_NAME
 from tabsdatak.conn.localfile import LocalFileDestConn, LocalFileSrcConn
-
-# The plugins shell out to this binary; resolving it at import time fails loudly
-# on an unhydrated environment instead of mid-test.
-TRANSPORTER_BINARY = PythonEnvironment().binary(TRANSPORTER_BINARY_NAME)
 
 
 def src_conn(base_path: Path) -> LocalFileSrcConn:

@@ -14,7 +14,6 @@ from pathlib import Path
 
 import polars as pl
 import yaml
-from tabsdatax.itest.fixture.transporter import transporter_allowed
 
 from tabsdatak.common._archive.bundle import build_bundle
 from tabsdatak.server._tdrunner.function._commons.manifests.input import (
@@ -283,18 +282,15 @@ class Driver:
 
     def subscriber(self, connection: Path) -> None:
         self.run_function("fn/in/inputs-manifest.yaml")
-        # File destinations still copy their output through the transporter
-        # (TRANSPORTER.md T9, pending): the only step allowed to use it.
-        with transporter_allowed():
-            self.step(
-                run_destination_plugin,
-                "destination-plugin",
-                request=self.request,
-                bundle_folder=self.path("bundle"),
-                outputs_manifest=self.path("fn/out/outputs-manifest.yaml"),
-                state_folder=self.path("state"),
-                connection_file=connection,
-            )
+        self.step(
+            run_destination_plugin,
+            "destination-plugin",
+            request=self.request,
+            bundle_folder=self.path("bundle"),
+            outputs_manifest=self.path("fn/out/outputs-manifest.yaml"),
+            state_folder=self.path("state"),
+            connection_file=connection,
+        )
 
     def run(
         self,

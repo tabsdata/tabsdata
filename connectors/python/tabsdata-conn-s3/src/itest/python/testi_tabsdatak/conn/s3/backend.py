@@ -13,14 +13,8 @@ from tabsdatax.itest.fixture.backends.s3 import S3Domain, S3System
 from tabsdatax.itest.fixture.functions.files import ObjectStore
 
 from tabsdatak.api import Secret
-from tabsdatak.common._interpreter.python.venv import PythonEnvironment
-from tabsdatak.common._transporter.handler.handler2 import TRANSPORTER_BINARY_NAME
 from tabsdatak.conn.common.types import AwsAccessSecretKey
 from tabsdatak.conn.s3 import S3DestConn, S3SrcConn
-
-# The plugins shell out to this binary; resolving it at import time fails loudly
-# on an unhydrated environment instead of mid-test.
-TRANSPORTER_BINARY = PythonEnvironment().binary(TRANSPORTER_BINARY_NAME)
 
 # Either backend flavour -- both carry bucket / region / access_key / secret_key.
 S3Backend = S3System | S3Domain

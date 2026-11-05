@@ -60,7 +60,7 @@ class GCSErrorCode(ErrorCode):
     GCS_6 = ErrorDef(
         GCSRuntimeException,
         "td_transporter binary not found in the runtime environment.",
-    )  # _GCSSrcPlugin / _GCSDestPlugin: binary lookup
+    )  # no longer raised (transporter retired); kept registered
     GCS_7 = ErrorDef(
         GCSRuntimeException,
         "GCS read failed (path={path})",
@@ -72,7 +72,7 @@ class GCSErrorCode(ErrorCode):
     GCS_9 = ErrorDef(
         GCSRuntimeException,
         "GCS transporter report invalid (path={path})",
-    )  # _GCSSrcPlugin / _GCSDestPlugin: bad report YAML
+    )  # no longer raised (transporter retired); kept registered
     GCS_10 = ErrorDef(
         GCSRuntimeException,
         "GCS credential resolution failed: {reason}",

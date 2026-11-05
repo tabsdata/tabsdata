@@ -73,10 +73,8 @@ def file_store(conn: _AnyAzureBlobConn) -> FileStore:
 
 
 ERRORS = _plugin.FilePluginErrors(
-    binary_not_found=AzureBlobErrorCode.AZURE_BLOB_6,
     read_failed=AzureBlobErrorCode.AZURE_BLOB_7,
     write_failed=AzureBlobErrorCode.AZURE_BLOB_8,
-    report_invalid=AzureBlobErrorCode.AZURE_BLOB_9,
     cred_resolution=AzureBlobErrorCode.AZURE_BLOB_10,
 )
 

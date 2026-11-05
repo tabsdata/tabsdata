@@ -187,10 +187,8 @@ class WriterConf:
 
 @dataclass(frozen=True)
 class FilePluginErrors:
-    binary_not_found: ErrorCode
     read_failed: ErrorCode
     write_failed: ErrorCode
-    report_invalid: ErrorCode
     cred_resolution: ErrorCode | None = None  # None when the connector has no creds
 
 

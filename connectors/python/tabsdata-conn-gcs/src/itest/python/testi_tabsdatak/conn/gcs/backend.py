@@ -14,14 +14,8 @@ from tabsdatax.itest.fixture.backends.gcs import GCSDomain, GCSSystem
 from tabsdatax.itest.fixture.functions.files import ObjectStore
 
 from tabsdatak.api import Secret
-from tabsdatak.common._interpreter.python.venv import PythonEnvironment
-from tabsdatak.common._transporter.handler.handler2 import TRANSPORTER_BINARY_NAME
 from tabsdatak.conn.common.types import GCPJson
 from tabsdatak.conn.gcs import GCSDestConn, GCSSrcConn
-
-# The plugins shell out to this binary; resolving it at import time fails loudly
-# on an unhydrated environment instead of mid-test.
-TRANSPORTER_BINARY = PythonEnvironment().binary(TRANSPORTER_BINARY_NAME)
 
 # Either backend flavour -- both carry bucket / service_account_key.
 GCSBackend = GCSSystem | GCSDomain

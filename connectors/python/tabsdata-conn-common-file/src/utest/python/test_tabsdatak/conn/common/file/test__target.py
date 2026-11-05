@@ -25,10 +25,8 @@ from tabsdatak.conn.common.file._store import FileStore
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 
 ERRORS = FilePluginErrors(
-    binary_not_found=FileCommonErrorCode.FILE_COMMON_1,
     read_failed=FileCommonErrorCode.FILE_COMMON_3,
     write_failed=FileCommonErrorCode.FILE_COMMON_8,
-    report_invalid=FileCommonErrorCode.FILE_COMMON_4,
 )
 
 ROWS = pl.LazyFrame(
