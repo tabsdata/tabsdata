@@ -11,7 +11,6 @@ use crate::components::{AdminPool, ApiserverComponent, UpgradeTransaction, resol
 use crate::config::{DatabaseComponents, RlsRoles};
 use crate::domain::DomainPools;
 use crate::error::DbError;
-use crate::pool::PoolKind;
 use crate::pool::TdPool;
 use async_trait::async_trait;
 use futures_util::future::BoxFuture;
@@ -41,11 +40,6 @@ pub trait SchemaComponent: Send + Sync + 'static {
     /// The default schema name (also the default owner-role name); a
     /// deployment may mount the component elsewhere via its entry's `schema:`.
     fn default_schema(&self) -> &'static str;
-
-    /// The pools this component uses — cite the domain marker's
-    /// [`POOLS`](crate::domain::DbDomain::POOLS) so the declaration exists
-    /// once. Its config entry must carry exactly these `pool:` blocks.
-    fn pools(&self) -> &'static [PoolKind];
 
     /// This component's schema content.
     fn schema_source(&self) -> &'static dyn SchemaSource;

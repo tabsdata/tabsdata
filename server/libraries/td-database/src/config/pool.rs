@@ -2,10 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! [`PoolsConfig`] — one full [`PoolConfig`] per pool kind (`regular`, the
-//! apiserver's `exclusive`, plus the privileged `admin`), the config-side
-//! sibling of the runtime [`ComponentPools`](crate::pool::ComponentPools).
-//! Times are bare integer seconds.
+//! [`PoolsConfig`] — one full [`PoolConfig`] per pool (the serving
+//! `regular`, plus the privileged `admin`). Times are bare integer seconds.
 
 use crate::pool::PoolKind;
 use serde::{Deserialize, Serialize};
@@ -45,14 +43,12 @@ fn acquire_slow_threshold() -> Duration {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct PoolsConfig {
-    /// The pool every non-serialized request runs on: reads and ordinary
-    /// writes alike.
+    /// The requests' pool: every API read and write.
     pub regular: Option<PoolConfig>,
-    /// The serialized-write pool, where the component declares one. Its
-    /// connections hold their project's lock for a whole transaction, so its
-    /// size bounds how many can queue and its `acquire_timeout` bounds the
-    /// wait.
-    pub exclusive: Option<PoolConfig>,
+    /// The server's own units: the services whose handle says `SystemPool` (the
+    /// scheduler, recovery, the probe dispatcher, the workers' internal
+    /// calls). Optional; absent, they run on `regular`.
+    pub system: Option<PoolConfig>,
     /// The privileged admin connection.
     pub admin: Option<PoolConfig>,
 }
@@ -61,7 +57,7 @@ impl PoolsConfig {
     pub fn get(&self, kind: PoolKind) -> &Option<PoolConfig> {
         match kind {
             PoolKind::Regular => &self.regular,
-            PoolKind::Exclusive => &self.exclusive,
+            PoolKind::System => &self.system,
         }
     }
 }
@@ -129,7 +125,7 @@ mod tests {
     fn pools_config_absent_blocks() {
         let cfg: PoolsConfig = serde_yaml::from_str("{}").unwrap();
         assert_eq!(cfg, PoolsConfig::default());
-        assert!(cfg.regular.is_none() && cfg.exclusive.is_none() && cfg.admin.is_none());
+        assert!(cfg.regular.is_none() && cfg.admin.is_none());
     }
 
     #[test]
@@ -138,16 +134,12 @@ mod tests {
 regular:
   min_connections: 5
   max_connections: 50
-exclusive:
-  min_connections: 1
-  max_connections: 10
 admin:
   min_connections: 1
   max_connections: 1
 ";
         let cfg: PoolsConfig = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(cfg.regular.unwrap().max_connections, 50);
-        assert_eq!(cfg.exclusive.unwrap().max_connections, 10);
         assert_eq!(cfg.admin.unwrap().max_connections, 1);
     }
 

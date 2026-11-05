@@ -29,8 +29,7 @@ use crate::config::{
 };
 use crate::domain::DomainPools;
 use crate::error::DbError;
-use crate::pool::PoolKind;
-use crate::pool::{ComponentPools, TdPool};
+use crate::pool::{ComponentPools, PoolKind, TdPool};
 use crate::server::{EmbeddedPassword, resolve_password, server_connectable};
 pub use admin_pool::AdminPool;
 pub use apiserver::{APISERVER_COMPONENT_KEY, ApiserverComponent};
@@ -425,30 +424,15 @@ pub async fn upgrade_all(
     Ok(upgraded)
 }
 
-/// Every declared pool must have its `pool:` block and every serving block
-/// must be declared — a block for a pool the component does not have is a
-/// config error, same as a missing one.
+/// Every component's entry must carry its serving `pool.regular` block.
 pub fn validate_component_pools(
     registry: &Registry,
     components: &DatabaseComponents,
 ) -> Result<(), DbError> {
     for component in registry.components() {
         let entry = component_entry(components, component)?;
-        for kind in [PoolKind::Regular, PoolKind::Exclusive] {
-            let declared = component.pools().contains(&kind);
-            let configured = entry.pool.get(kind).is_some();
-            if declared && !configured {
-                return Err(DbError::MissingComponentPoolConfig(
-                    component.key(),
-                    kind.as_str(),
-                ));
-            }
-            if configured && !declared {
-                return Err(DbError::UnexpectedPoolConfig(
-                    component.key(),
-                    kind.as_str(),
-                ));
-            }
+        if entry.pool.regular.is_none() {
+            return Err(DbError::MissingComponentPoolConfig(component.key()));
         }
     }
     Ok(())
@@ -495,24 +479,23 @@ pub async fn seed_all(registry: &Registry, components: &DatabaseComponents) -> R
     Ok(())
 }
 
-/// `serving` in every pool slot `component` declares: the domain pools a
-/// seeder opens its connections from.
+/// `serving` as `component`'s pool: the domain pools a seeder opens its
+/// connections from.
 fn seeding_pools(component: &dyn SchemaComponent, serving: &TdPool) -> DomainPools {
-    let mut pools = ComponentPools::default();
-    for kind in component.pools() {
-        pools.set(*kind, serving.clone());
-    }
-    DomainPools::from_map(BTreeMap::from([(component.key(), pools)]))
+    DomainPools::from_map(BTreeMap::from([(
+        component.key(),
+        ComponentPools {
+            regular: serving.clone(),
+            system: None,
+        },
+    )]))
 }
 
 /// Verify every registered component on its already-open serving pool — the
 /// apiserver's boot check.
 pub async fn check_pools(registry: &Registry, pools: &ServingPools) -> Result<(), DbError> {
     for component in registry.components() {
-        let regular = pools.get(component.key())?.get(PoolKind::Regular).ok_or(
-            DbError::MissingComponentPool(component.key(), PoolKind::Regular),
-        )?;
-        component.check(regular).await?;
+        component.check(pools.get(component.key())?).await?;
     }
     Ok(())
 }
@@ -601,16 +584,17 @@ fn auth_hint(error: DbError) -> DbError {
     }
 }
 
-/// Serving pools for every registered component, keyed by
+/// The serving pools of every registered component, keyed by
 /// [`SchemaComponent::key`]. Built once at startup by [`connect_app_all`].
 #[derive(Clone)]
 pub struct ServingPools(BTreeMap<&'static str, ComponentPools>);
 
 impl ServingPools {
-    /// The serving pools of a registered component.
-    pub fn get(&self, key: &str) -> Result<&ComponentPools, DbError> {
+    /// The requests' serving pool of a registered component.
+    pub fn get(&self, key: &str) -> Result<&TdPool, DbError> {
         self.0
             .get(key)
+            .map(|pools| &pools.regular)
             .ok_or_else(|| DbError::UnknownSchemaEntry(key.to_owned()))
     }
 
@@ -628,9 +612,8 @@ impl ServingPools {
     }
 }
 
-/// **App-only** serving pools for every registered component: one pool per
-/// declared kind, each sized by its own explicit `pool:` block. The apiserver
-/// never boots or manages the database, so it holds no privileged access.
+/// **App-only** serving pools for every registered component: its
+/// `pool.regular`, plus its `pool.system` where declared.
 pub async fn connect_app_all(
     registry: &Registry,
     components: &DatabaseComponents,
@@ -640,14 +623,16 @@ pub async fn connect_app_all(
     for component in registry.components() {
         let key = component.key();
         let config = serving_config(components, component)?;
-        let mut component_pools = ComponentPools::default();
-        let mut kinds = component.pools().to_vec();
-        kinds.sort_by_key(|kind| !matches!(kind, PoolKind::Regular));
-        for kind in kinds {
-            let pool = TdPool::connect_as(&config, kind).await?.of_component(key);
-            component_pools.set(kind, pool);
-        }
-        pools.insert(key, component_pools);
+        let regular = TdPool::connect(&config).await?.of_component(key);
+        let system = match config.pool.system {
+            Some(_) => Some(
+                TdPool::connect_kind(&config, PoolKind::System)
+                    .await?
+                    .of_component(key),
+            ),
+            None => None,
+        };
+        pools.insert(key, ComponentPools { regular, system });
     }
     Ok(ServingPools(pools))
 }

@@ -5,9 +5,7 @@
 //! The built-in apiserver schema component.
 
 use crate::components::{AdminPool, SchemaComponent, SchemaSource, UpgradeTransaction};
-use crate::domain::{Apiserver, DbDomain};
 use crate::error::DbError;
-use crate::pool::PoolKind;
 use crate::pool::TdPool;
 use async_trait::async_trait;
 use tracing::debug;
@@ -30,10 +28,6 @@ impl SchemaComponent for ApiserverComponent {
 
     fn default_schema(&self) -> &'static str {
         APISERVER_SCHEMA
-    }
-
-    fn pools(&self) -> &'static [PoolKind] {
-        Apiserver::POOLS
     }
 
     fn schema_source(&self) -> &'static dyn SchemaSource {

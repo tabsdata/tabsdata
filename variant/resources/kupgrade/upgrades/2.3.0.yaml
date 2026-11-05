@@ -23,6 +23,23 @@ assets:
     venvloader.sh:
       action: replace
 configs:
+  apiserver.database.yaml:
+    apiserver.database.yaml:
+      action: modify
+      changes:
+        - op: insert-sibling-if-existing
+          leaf: database.apiserver.pool.regular
+          sibling: system
+          placement: after
+          value:
+            min_connections: 1
+            max_connections: 10
+            acquire_timeout: 30
+            max_lifetime: 3600
+            idle_timeout: 60
+            test_before_acquire: true
+        - op: remove-leaf-if
+          leaf: database.apiserver.pool.exclusive
   apiserver.storage.schema.yaml:
     apiserver.storage.schema.yaml:
       action: replace

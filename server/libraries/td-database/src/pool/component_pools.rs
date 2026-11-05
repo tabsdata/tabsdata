@@ -2,40 +2,31 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! [`ComponentPools`] — one component's serving pools, one per pool kind it
-//! declares.
+//! [`ComponentPools`] — one component's serving pools: the requests' and,
+//! where the component declares one, the system's.
 
 use crate::pool::PoolKind;
 use crate::pool::TdPool;
 
-/// The serving pools of one schema component — a slot per pool kind,
-/// populated exactly for the kinds the component declares
-/// ([`DbDomain::POOLS`](crate::domain::DbDomain::POOLS)).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ComponentPools {
-    pub regular: Option<TdPool>,
-    pub exclusive: Option<TdPool>,
+    pub regular: TdPool,
+    pub system: Option<TdPool>,
 }
 
 impl ComponentPools {
-    pub fn get(&self, kind: PoolKind) -> Option<&TdPool> {
+    pub fn get(&self, kind: PoolKind) -> &TdPool {
         match kind {
-            PoolKind::Regular => self.regular.as_ref(),
-            PoolKind::Exclusive => self.exclusive.as_ref(),
-        }
-    }
-
-    pub(crate) fn set(&mut self, kind: PoolKind, pool: TdPool) {
-        match kind {
-            PoolKind::Regular => self.regular = Some(pool),
-            PoolKind::Exclusive => self.exclusive = Some(pool),
+            PoolKind::Regular => &self.regular,
+            PoolKind::System => self.system.as_ref().unwrap_or(&self.regular),
         }
     }
 
     /// Close every connected pool — on shutdown.
     pub async fn shutdown(&self) {
-        for pool in [&self.regular, &self.exclusive].into_iter().flatten() {
-            pool.shutdown().await;
+        self.regular.shutdown().await;
+        if let Some(system) = &self.system {
+            system.shutdown().await;
         }
     }
 }

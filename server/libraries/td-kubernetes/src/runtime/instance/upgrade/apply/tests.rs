@@ -917,11 +917,27 @@ fn shipped(relative: &str) -> String {
     std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()))
 }
 
-fn shipped_changes(group: &str, variant: &str) -> Vec<Operation> {
-    let yaml = shipped("variant/resources/kupgrade/upgrades/2.1.0.yaml");
-    let spec = crate::runtime::instance::upgrade::spec::deserialize_spec("2.1.0", &yaml)
+fn shipped_changes(version: &str, group: &str, variant: &str) -> Vec<Operation> {
+    let yaml = shipped(&format!(
+        "variant/resources/kupgrade/upgrades/{version}.yaml"
+    ));
+    let spec = crate::runtime::instance::upgrade::spec::deserialize_spec(version, &yaml)
         .expect("the shipped spec parses");
     spec.configs[group][variant].changes().to_vec()
+}
+
+fn shipped_apiserver_database_hops() -> Vec<Operation> {
+    let mut hops = shipped_changes(
+        "2.1.0",
+        "apiserver.database.yaml",
+        "apiserver.database_docker.yaml",
+    );
+    hops.extend(shipped_changes(
+        "2.3.0",
+        "apiserver.database.yaml",
+        "apiserver.database.yaml",
+    ));
+    hops
 }
 
 fn parsed(yaml: &str) -> serde_yaml::Value {
@@ -988,8 +1004,8 @@ database_server:
 ";
 
 #[test]
-fn the_shipped_spec_carries_a_2_0_2_apiserver_config_to_the_2_1_0_shape() {
-    let changes = shipped_changes("apiserver.database.yaml", "apiserver.database_docker.yaml");
+fn the_shipped_specs_carry_a_2_0_2_apiserver_config_to_the_shipped_shape() {
+    let changes = shipped_apiserver_database_hops();
     let (rendered, touched) = applied(APISERVER_DATABASE_2_0_2, &changes);
     assert!(touched);
     assert_eq!(
@@ -1002,7 +1018,11 @@ fn the_shipped_spec_carries_a_2_0_2_apiserver_config_to_the_2_1_0_shape() {
 
 #[test]
 fn the_shipped_spec_carries_a_2_0_2_dbmanager_config_to_the_2_1_0_shape() {
-    let changes = shipped_changes("dbmanager.database.yaml", "dbmanager.database_docker.yaml");
+    let changes = shipped_changes(
+        "2.1.0",
+        "dbmanager.database.yaml",
+        "dbmanager.database_docker.yaml",
+    );
     let (rendered, touched) = applied(DBMANAGER_DATABASE_2_0_2, &changes);
     assert!(touched);
     let document = parsed(&rendered);
@@ -1022,12 +1042,19 @@ fn the_shipped_spec_carries_a_2_0_2_dbmanager_config_to_the_2_1_0_shape() {
 }
 
 #[test]
-fn the_shipped_spec_is_idempotent_over_an_upgraded_config() {
-    let changes = shipped_changes("apiserver.database.yaml", "apiserver.database_docker.yaml");
-    let (once, _) = applied(APISERVER_DATABASE_2_0_2, &changes);
-    let (twice, touched) = applied(&once, &changes);
-    assert!(!touched);
-    assert_eq!(once, twice);
+fn each_shipped_hop_is_idempotent_over_the_config_it_upgraded() {
+    let mut config = APISERVER_DATABASE_2_0_2.to_owned();
+    for (version, variant) in [
+        ("2.1.0", "apiserver.database_docker.yaml"),
+        ("2.3.0", "apiserver.database.yaml"),
+    ] {
+        let changes = shipped_changes(version, "apiserver.database.yaml", variant);
+        let (once, _) = applied(&config, &changes);
+        let (twice, touched) = applied(&once, &changes);
+        assert!(!touched, "{version} touched an upgraded config");
+        assert_eq!(once, twice);
+        config = once;
+    }
 }
 
 fn child(leaf: &str, child: &str, value: serde_yaml::Value) -> Operation {

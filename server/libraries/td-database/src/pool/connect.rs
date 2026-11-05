@@ -32,9 +32,8 @@ const SERVING_IDLE_IN_TRANSACTION_TIMEOUT: &str = "60s";
 /// carry.
 pub struct ConnectOutput {
     pub(crate) pool: PgPool,
-    /// The connected block's acquire timeout — also bounds how long an
-    /// exclusive connection from the resulting pool queues on its project's
-    /// lock.
+    /// The connected block's acquire timeout — also bounds how long a unit
+    /// from the resulting pool waits on its project's lock.
     pub(crate) acquire_timeout: Duration,
     /// Schema the connection's `search_path` was pinned to. Mandatory on the
     /// serving path; `None` for the privileged system entry, which has no home
@@ -43,13 +42,13 @@ pub struct ConnectOutput {
 }
 
 impl DatabaseConfig {
-    /// Open `kind`'s serving pool: sized by its own
-    /// `pool.{regular,exclusive}` block — required, nothing is inherited — and
-    /// RLS-enforced under the [`APP_ROLE`](crate::APP_ROLE), which must
-    /// already exist (provisioning creates it, never a connect).
+    /// Open `kind`'s serving pool: sized by its own block — required,
+    /// nothing is inherited — and RLS-enforced under the
+    /// [`APP_ROLE`](crate::APP_ROLE), which must already exist (provisioning
+    /// creates it, never a connect).
     ///
-    /// Both kinds serve writes, so neither pins its sessions read-only: an
-    /// `RO` unit of work is `BEGIN READ ONLY`
+    /// It serves writes, so it does not pin its sessions read-only: an `RO`
+    /// unit of work is `BEGIN READ ONLY`
     /// ([`TdPool::begin_ro`](crate::pool::TdPool::begin_ro)), which is what
     /// makes a stray read-path write fail loudly.
     pub(crate) async fn connect_serving(&self, kind: PoolKind) -> Result<ConnectOutput, DbError> {
@@ -60,7 +59,7 @@ impl DatabaseConfig {
         self.open(&pool, true, Some(schema)).await
     }
 
-    /// `kind`'s block. Serving pools have no default — nothing is inherited,
+    /// `kind`'s block. A serving pool has no default — nothing is inherited,
     /// an absent block is a config error.
     fn serving_pool_config(&self, kind: PoolKind) -> Result<PoolConfig, DbError> {
         self.pool
@@ -379,32 +378,31 @@ mod tests {
         assert_eq!(options.get_acquire_slow_threshold(), Duration::from_secs(7));
     }
 
-    /// Every serving pool reads its own explicit block; nothing is inherited
+    /// Each serving pool reads its own explicit block; nothing is inherited
     /// and an absent block is a configuration error.
     #[test]
-    fn each_kind_selects_its_own_block() {
-        let block = |max: u32| PoolConfig {
+    fn each_serving_pool_reads_its_own_block() {
+        let block = |max_connections| PoolConfig {
             min_connections: 1,
-            max_connections: max,
+            max_connections,
             ..PoolConfig::default()
         };
         let config = database_config(PoolsConfig {
             regular: Some(block(50)),
-            exclusive: Some(block(10)),
+            system: Some(block(10)),
             admin: None,
         });
         let max = |kind| config.serving_pool_config(kind).unwrap().max_connections;
         assert_eq!(max(PoolKind::Regular), 50);
-        assert_eq!(max(PoolKind::Exclusive), 10);
+        assert_eq!(max(PoolKind::System), 10);
 
-        let empty = database_config(PoolsConfig::default());
-        for kind in [PoolKind::Regular, PoolKind::Exclusive] {
-            let error = empty.serving_pool_config(kind).unwrap_err();
-            assert!(
-                matches!(error, DbError::MissingPoolConfig(_)),
-                "expected MissingPoolConfig, got: {error:?}"
-            );
-        }
+        let error = database_config(PoolsConfig::default())
+            .serving_pool_config(PoolKind::Regular)
+            .unwrap_err();
+        assert!(
+            matches!(error, DbError::MissingPoolConfig(_)),
+            "expected MissingPoolConfig, got: {error:?}"
+        );
     }
 
     /// A serving connect whose app role cannot be switched to (missing role —

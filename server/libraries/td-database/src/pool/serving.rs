@@ -12,7 +12,7 @@ use crate::sea_query::builder::SeaQueryExt;
 use crate::sea_query::catalog::{current_setting, current_user, has_role};
 use sea_query::{Alias, Expr, ExprTrait, Query};
 use sqlx::PgPool;
-use sqlx::{Error, Postgres, SqlSafeStr, Transaction};
+use sqlx::{Error, Postgres, Transaction};
 use std::time::Duration;
 use td_schema::ACROSS_PROJECTS_ROLE;
 use tracing::{debug, info, instrument};
@@ -27,10 +27,7 @@ pub struct TdPool {
     pub(crate) pool: PgPool,
     /// Warn/lock identity: the component key ("db" outside the serving map).
     pub component: &'static str,
-    /// Warn/lock identity: which of the component's pools this is.
-    pub kind: PoolKind,
-    /// Also bounds how long an exclusive connection queues on its project's
-    /// lock.
+    /// Also bounds how long a unit waits on its project's lock.
     pub(crate) acquire_timeout: Duration,
 }
 
@@ -49,23 +46,20 @@ impl TdPool {
     /// server. The schema is
     /// assumed to be up to date.
     pub async fn connect(config: &DatabaseConfig) -> Result<Self, DbError> {
-        Self::connect_as(config, PoolKind::Regular).await
+        Self::connect_kind(config, PoolKind::Regular).await
     }
 
-    /// [`Self::connect`] opening `kind`'s pool — a `TdPool` is always one of
-    /// a component's serving pools, never the admin connection.
     #[instrument(name = "db.pool.connect", skip(config), level = "info", err(Debug))]
-    pub(crate) async fn connect_as(
+    pub(crate) async fn connect_kind(
         config: &DatabaseConfig,
         kind: PoolKind,
     ) -> Result<Self, DbError> {
-        info!("db.pool.connect: opening serving pool");
+        info!(%kind, "db.pool.connect: opening serving pool");
         let out = config.connect_serving(kind).await?;
         debug!("Connected to database pool: {:#?}", out.pool);
         Ok(Self {
             pool: out.pool,
             component: "db",
-            kind,
             acquire_timeout: out.acquire_timeout,
         })
     }
@@ -178,31 +172,14 @@ impl TdPool {
             .await
     }
 
-    /// [`begin_serializable`](Self::begin_serializable) on a connection that
-    /// first took `key`'s session lock, so its snapshot sees every transaction
-    /// that held the lock before it; `None`, holding nothing, when `key` is
-    /// held. The connection closes once it is done instead of returning to
-    /// the pool, and closing is what releases the lock: one dropped at any
-    /// point after the attempt cannot leave it held.
-    pub async fn begin_serializable_holding(
-        &self,
-        key: &str,
-    ) -> Result<Option<Transaction<'static, Postgres>>, Error> {
+    /// One snapshot for every statement, and a conflict (40001) on updating a
+    /// row another transaction changed since; what it reads to decide is
+    /// kept still by a lock its caller holds, not by the database.
+    pub async fn begin_repeatable(&self) -> Result<Transaction<'static, Postgres>, Error> {
         let pool = self.pool.clone();
-        let key = key.to_owned();
         uncancellable(async move {
-            let mut conn = pool.acquire().await?;
-            conn.close_on_drop();
-            if !conn.try_advisory_lock_text(&key).await? {
-                conn.return_to_pool().await;
-                return Ok(None);
-            }
-            Transaction::begin(
-                conn,
-                Some("BEGIN ISOLATION LEVEL SERIALIZABLE".into_sql_str()),
-            )
-            .await
-            .map(Some)
+            pool.begin_with("BEGIN ISOLATION LEVEL REPEATABLE READ")
+                .await
         })
         .await
     }

@@ -154,34 +154,21 @@ apiserver:
         .unwrap()
     };
 
-    // The apiserver is the component with an exclusive pool, so its entry
-    // carries both blocks.
     let full = entry(
         "  pool:
     regular: {min_connections: 1, max_connections: 2}
-    exclusive: {min_connections: 1, max_connections: 2}
 ",
     );
     validate_component_pools(&Registry::new(&[], &[]), &full).unwrap();
 
-    let missing_exclusive = entry(
-        "  pool:
-    regular: {min_connections: 1, max_connections: 2}
-",
-    );
-    assert!(matches!(
-        validate_component_pools(&Registry::new(&[], &[]), &missing_exclusive),
-        Err(DbError::MissingComponentPoolConfig(_, "exclusive"))
-    ));
-
     let missing_regular = entry(
         "  pool:
-    exclusive: {min_connections: 1, max_connections: 2}
+    admin: {min_connections: 1, max_connections: 2}
 ",
     );
     assert!(matches!(
         validate_component_pools(&Registry::new(&[], &[]), &missing_regular),
-        Err(DbError::MissingComponentPoolConfig(_, "regular"))
+        Err(DbError::MissingComponentPoolConfig(_))
     ));
 
     // The pre-split spelling fails where it is written, not silently.

@@ -144,7 +144,6 @@ pool:
         assert_eq!(entry.schema.as_deref(), Some("td_apiserver"));
         assert_eq!(entry.in_project_role.as_deref(), Some("ip_i1"));
         assert_eq!(entry.pool.regular.as_ref().unwrap().max_connections, 10);
-        assert!(entry.pool.exclusive.is_none());
     }
 
     #[test]

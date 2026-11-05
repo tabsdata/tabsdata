@@ -512,7 +512,6 @@ database:
         let regular = entry.pool.regular.as_ref().unwrap();
         assert_eq!(regular.max_connections, 25);
         assert_eq!(regular.min_connections, 1);
-        assert!(entry.pool.exclusive.is_none());
     }
 
     fn load(yaml: &str) -> Result<Config, config::ConfigError> {

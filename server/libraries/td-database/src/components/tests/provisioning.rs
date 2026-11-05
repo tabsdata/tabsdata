@@ -50,7 +50,7 @@ fn config(conn: PostgresConnect, schema: &str, roles: &RlsRoles) -> DatabaseConf
             };
             PoolsConfig {
                 regular: Some(pool.clone()),
-                exclusive: Some(pool.clone()),
+                system: None,
                 admin: Some(pool),
             }
         },
