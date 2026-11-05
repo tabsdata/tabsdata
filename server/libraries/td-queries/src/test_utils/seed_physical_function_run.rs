@@ -5,7 +5,7 @@
 use crate::Queries;
 use crate::Writes;
 use crate::test_utils::seed_logical_function_run::seed_logical_function_run;
-use td_database::access::{InProject, LockInstant};
+use td_database::access::{Holds, InProject, LockInstant, ProjectLock};
 use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
@@ -19,7 +19,7 @@ use td_objects::types::basic::{
 };
 
 pub(crate) async fn seed_physical_function_run(
-    mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    mut executor: impl Writes<Domain = Apiserver, Scope = InProject, Mode: Holds<ProjectLock>>,
     collection: &CollectionDB,
     function_version: &FunctionDB,
     execution: &ExecutionDB,

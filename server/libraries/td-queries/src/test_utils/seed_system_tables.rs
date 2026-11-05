@@ -5,7 +5,7 @@
 use crate::Queries;
 use crate::Writes;
 use ta_objects::and;
-use td_database::access::InProject;
+use td_database::access::{Holds, InProject, ProjectLock};
 use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
@@ -28,7 +28,7 @@ use td_objects::types::table_ref::Versions;
 // (`db.scoped(p)`), the field-less rows default their `project_id` from that
 // scope.
 pub(crate) async fn seed_system_tables(
-    mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    mut executor: impl Writes<Domain = Apiserver, Scope = InProject, Mode: Holds<ProjectLock>>,
     topology_at: TopologyInstant,
     function: &FunctionDB,
 ) -> Result<Vec<TableDB>, TdError> {

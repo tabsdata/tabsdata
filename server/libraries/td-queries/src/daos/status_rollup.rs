@@ -2,8 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! No lock of its own: write units are `SERIALIZABLE`, so two recomputes of
-//! one parent from different children's changes never both commit.
+//! No lock of its own: it runs under the project's lock, so two recomputes of
+//! one parent from different children's changes never overlap.
 //! Transactions first: an execution rolls up from its transactions.
 
 use std::collections::BTreeSet;
@@ -13,7 +13,7 @@ use sea_query::{Expr, ExprTrait, IntoIden, Query, SelectStatement};
 use ta_objects::Dao;
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
-use td_database::access::{InProject, WriteMode};
+use td_database::access::{Holds, InProject, ProjectLock};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::dxo::execution::ExecutionDB;
@@ -26,7 +26,7 @@ use td_objects::types::basic::{
 use td_schema::schema::current::{RollupDef, execution_rollup, transaction_rollup};
 
 pub(crate) async fn logical_runs_changed(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     lfr_ids: &[LogicalFunctionRunId],
 ) -> Result<(), SqlError> {
     let parents = |ids| {
@@ -42,7 +42,7 @@ pub(crate) async fn logical_runs_changed(
 }
 
 pub(crate) async fn physical_runs_changed(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     pfr_ids: &[PhysicalFunctionRunId],
 ) -> Result<(), SqlError> {
     let parents = |ids| {
@@ -74,7 +74,7 @@ fn parents_of(
 }
 
 async fn recompute<R: Dao>(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     parents_of: impl Fn(Vec<Expr>) -> SelectStatement,
     ids: &[impl SeaValue],
 ) -> Result<(), SqlError> {
@@ -101,7 +101,7 @@ async fn recompute<R: Dao>(
 }
 
 async fn roll_up<D: Dao>(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     rollup: RollupDef,
     parents: &BTreeSet<impl SeaValue>,
 ) -> Result<(), SqlError> {

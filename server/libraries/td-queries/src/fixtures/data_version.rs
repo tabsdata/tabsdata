@@ -4,7 +4,6 @@
 
 use sea_query::{ColumnDef, Iden, Query, Table};
 use td_database::components::{SchemaComponent, SchemaSource};
-use td_database::pool::PoolKind;
 use td_objects::types::basic::LogicalTableDataVersionId;
 use td_schema::schema::render::{render_query, render_schema};
 
@@ -121,10 +120,6 @@ impl SchemaSource for DataVersionSource {
 }
 
 impl SchemaComponent for DataVersion {
-    fn pools(&self) -> &'static [PoolKind] {
-        &[PoolKind::Regular]
-    }
-
     fn key(&self) -> &'static str {
         "test_data_version"
     }

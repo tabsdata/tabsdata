@@ -14,7 +14,7 @@ use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::project::ProjectDB;
 use td_queries::Queries;
-use td_queries::test_utils::begin_exclusive;
+use td_queries::test_utils::begin_locked;
 use td_schema::schema::current::{RollupDef, execution_rollup, transaction_rollup};
 
 use crate::dataset;
@@ -112,7 +112,7 @@ async fn assert_rollups_plan(
     project: &ProjectDB,
     statistics: bool,
 ) -> Result<(), TdError> {
-    let mut trx = begin_exclusive(db, project.project_id).await?;
+    let mut trx = begin_locked(db, project.project_id).await?;
     let conn: &mut PgConnection = trx.get(Grant::asserted("plan guard"));
     for (name, rollup, parents) in [
         ("transactions", transaction_rollup(), "transactions"),

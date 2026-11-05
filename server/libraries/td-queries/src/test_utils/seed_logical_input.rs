@@ -4,7 +4,7 @@
 
 use crate::Queries;
 use crate::Writes;
-use td_database::access::InProject;
+use td_database::access::{Holds, InProject, ProjectLock};
 use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::and;
@@ -26,7 +26,7 @@ use td_objects::types::basic::{DependencyPos, LogicalFunctionRunInputId, Version
 /// defaults its `project_id` from the scope.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn seed_logical_input(
-    mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    mut executor: impl Writes<Domain = Apiserver, Scope = InProject, Mode: Holds<ProjectLock>>,
     collection: &CollectionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,

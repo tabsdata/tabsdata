@@ -6,17 +6,15 @@
 //! instants change. Each writes the row, then what follows from it: the
 //! parents' status roll-up and the metrics facts, which for a reported
 //! attempt [`ended`](PhysicalRuns::ended) writes once its run is written too.
-//! They exist on in-project
-//! write connections only, and the update DAOs they use are constructed
-//! nowhere else. Write units are `SERIALIZABLE`, so two units changing the
-//! same runs, or the children of one parent, never both commit on stale reads.
+//! They exist only on connections holding the project's lock, which makes the
+//! unit the only writer of the project's runs.
 
 use crate::Queries;
 use crate::daos::function_runs::{LogicalRuns, PhysicalRuns};
 use crate::daos::metrics::write::{attempts_ended, runs_status_changed};
 use crate::daos::status_rollup::{logical_runs_changed, physical_runs_changed};
 use ta_objects::errors::SqlError;
-use td_database::access::{InProject, LockInstant, WriteMode};
+use td_database::access::{Holds, InProject, LockInstant, ProjectLock};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_objects::and;
 use td_objects::dxo::logical::LogicalFunctionRunStatusUpdateDB;
@@ -27,7 +25,7 @@ use td_objects::types::basic::{
     PhysicalFunctionRunStatus,
 };
 
-impl<M: WriteMode> LogicalRuns<&mut DomainConnection<Apiserver, InProject, M>> {
+impl<M: Holds<ProjectLock>> LogicalRuns<&mut DomainConnection<Apiserver, InProject, M>> {
     pub async fn set_status(
         self,
         lfr_ids: &[LogicalFunctionRunId],
@@ -66,7 +64,7 @@ impl<M: WriteMode> LogicalRuns<&mut DomainConnection<Apiserver, InProject, M>> {
     }
 }
 
-impl<M: WriteMode> PhysicalRuns<&mut DomainConnection<Apiserver, InProject, M>> {
+impl<M: Holds<ProjectLock>> PhysicalRuns<&mut DomainConnection<Apiserver, InProject, M>> {
     pub async fn dispatched(
         self,
         pfr_ids: &[PhysicalFunctionRunId],
@@ -147,7 +145,7 @@ impl<M: WriteMode> PhysicalRuns<&mut DomainConnection<Apiserver, InProject, M>> 
 }
 
 async fn physical_runs_finished(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     pfr_ids: &[PhysicalFunctionRunId],
 ) -> Result<(), SqlError> {
     attempts_ended(conn, pfr_ids).await?;
@@ -157,10 +155,10 @@ async fn physical_runs_finished(
 #[cfg(test)]
 mod tests {
     use crate::Queries;
-    use crate::test_utils::{SeedEntry, begin_exclusive, derive_status_rollup, seed_run};
+    use crate::test_utils::{SeedEntry, begin_locked, derive_status_rollup, seed_run};
     use td_common::execution_status::WorkerCallbackStatus;
     use td_database::access::LockInstant;
-    use td_database::access::{Grant, InProject, XW};
+    use td_database::access::{Grant, InProject, ProjectLock, RW};
     use td_database::domain::{Apiserver, DomainConnection};
     use td_database::pool::TdPool;
     use td_error::TdError;
@@ -177,9 +175,11 @@ mod tests {
 
     async fn in_project<F>(db: &TdPool, project: ProjectId, body: F) -> Result<(), TdError>
     where
-        F: AsyncFnOnce(&mut DomainConnection<Apiserver, InProject, XW>) -> Result<(), TdError>,
+        F: AsyncFnOnce(
+            &mut DomainConnection<Apiserver, InProject, RW<ProjectLock>>,
+        ) -> Result<(), TdError>,
     {
-        let mut trx = begin_exclusive(db, project).await?;
+        let mut trx = begin_locked(db, project).await?;
         body(trx.get(Grant::asserted("status rollup test"))).await?;
         trx.commit().await?;
         Ok(())

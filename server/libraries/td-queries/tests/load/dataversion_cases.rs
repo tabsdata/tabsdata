@@ -17,7 +17,6 @@ use ta_objects::Dao;
 use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
 use td_common::datetime::Timestamp;
 use td_database::components::{SchemaComponent, SchemaSource};
-use td_database::pool::PoolKind;
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::types::basic::{AtTime, LogicalTableDataVersionId, Scd2ValidFrom};
@@ -159,10 +158,6 @@ impl SchemaSource for LoadDvSource {
 }
 
 impl SchemaComponent for LoadDvFixture {
-    fn pools(&self) -> &'static [PoolKind] {
-        &[PoolKind::Regular]
-    }
-
     fn key(&self) -> &'static str {
         "load_dv"
     }
@@ -191,10 +186,6 @@ impl SchemaSource for LoadDvTableSource {
 }
 
 impl SchemaComponent for LoadDvTableOnly {
-    fn pools(&self) -> &'static [PoolKind] {
-        &[PoolKind::Regular]
-    }
-
     fn key(&self) -> &'static str {
         "load_dv"
     }

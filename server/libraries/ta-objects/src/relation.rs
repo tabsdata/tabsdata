@@ -45,6 +45,15 @@ pub trait ReachableFrom<S: td_database::access::DbScope> {}
 )]
 pub trait InsertableFrom<S: td_database::access::DbScope> {}
 
+/// Which write modes may write a DAO's rows. The project's run state is
+/// decided from under the project's lock, so only a unit holding it writes
+/// it; any write mode writes the rest.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is run state, which only a unit holding its project's lock writes",
+    note = "open the unit with `lock_project()` before `begin`"
+)]
+pub trait WritableFrom<M: td_database::access::WriteMode> {}
+
 /// Const-comparable, so [`UpdateDao::FilterBy`](crate::dxo::UpdateDao) can be
 /// proven to address the same relation at compile time.
 pub const fn relations_match(a: &str, b: &str) -> bool {

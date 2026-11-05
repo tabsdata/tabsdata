@@ -4,14 +4,14 @@
 
 // All seed methods exposed through the `Seed<E>` handle, reached via
 // `SeedEntry::seed` on any `QueryExecutor`.
-pub use exclusive::begin_exclusive;
+pub use locked::begin_locked;
 pub use metrics_facts::derive_metrics_facts;
 pub use seed::{Seed, SeedEntry};
 pub use seed_run::{SeededRun, seed_project_viewer, seed_run};
 pub use status_rollup::derive_status_rollup;
 pub use topology::{commit_topology_write, seed_instant, topology_write, topology_write_at};
 
-mod exclusive;
+mod locked;
 mod metrics_facts;
 pub mod probes;
 mod seed;

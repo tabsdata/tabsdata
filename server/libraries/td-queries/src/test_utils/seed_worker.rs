@@ -4,7 +4,7 @@
 
 use crate::Queries;
 use crate::Writes;
-use td_database::access::InProject;
+use td_database::access::{Holds, InProject, ProjectLock};
 use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
@@ -19,7 +19,7 @@ use td_objects::types::basic::{
 };
 
 pub(crate) async fn seed_worker(
-    mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    mut executor: impl Writes<Domain = Apiserver, Scope = InProject, Mode: Holds<ProjectLock>>,
     collection: &CollectionDB,
     function: &FunctionDB,
     worker_type: &WorkerType,
@@ -56,7 +56,7 @@ pub(crate) async fn seed_worker(
 }
 
 pub(crate) async fn seed_function_runner_worker(
-    mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    mut executor: impl Writes<Domain = Apiserver, Scope = InProject, Mode: Holds<ProjectLock>>,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
     physical_function_run: &PhysicalFunctionRunDB,

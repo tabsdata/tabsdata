@@ -4,7 +4,7 @@
 
 use crate::Queries;
 use crate::Writes;
-use td_database::access::{InProject, LockInstant};
+use td_database::access::{Holds, InProject, LockInstant, ProjectLock};
 use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::and;
@@ -24,7 +24,7 @@ use td_objects::types::basic::{
 };
 
 pub(crate) async fn seed_physical_table_data_version_with_data(
-    mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    mut executor: impl Writes<Domain = Apiserver, Scope = InProject, Mode: Holds<ProjectLock>>,
     collection: &CollectionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
@@ -44,7 +44,7 @@ pub(crate) async fn seed_physical_table_data_version_with_data(
 }
 
 pub(crate) async fn seed_physical_table_data_version(
-    mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    mut executor: impl Writes<Domain = Apiserver, Scope = InProject, Mode: Holds<ProjectLock>>,
     collection: &CollectionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
@@ -64,7 +64,7 @@ pub(crate) async fn seed_physical_table_data_version(
 }
 
 pub async fn _seed_physical_table_data_version(
-    mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    mut executor: impl Writes<Domain = Apiserver, Scope = InProject, Mode: Holds<ProjectLock>>,
     collection: &CollectionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,

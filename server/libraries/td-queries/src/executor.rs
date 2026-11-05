@@ -2,8 +2,10 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! `QueryExecutor`, the bound every executor-using signature takes, and
-//! `Serves`, the executor/DAO pairing.
+//! `QueryExecutor`, the bound every executor-using signature takes, and the
+//! executor/DAO pairings: `Serves` for any query, `Writes` and `WritesTo`
+//! for a write. The DAO side of each pairing is a marker `#[dao]` emits
+//! (`ReachableFrom`, `WritableFrom`).
 //!
 //! `QueryExecutor` carries no methods and is sealed by its blanket impl over
 //! `SeaExecutor`. The whole surface hangs off [`Queries`](crate::Queries),
@@ -13,6 +15,7 @@
 
 use ta_objects::Dao;
 use ta_objects::ReachableFrom;
+use ta_objects::WritableFrom;
 use td_database::access::WriteMode;
 use td_database::domain::Domained;
 use td_database::sea_query::executor::SeaExecutor;
@@ -45,3 +48,15 @@ where
 pub trait Writes: QueryExecutor + Domained<Mode: WriteMode> {}
 
 impl<E: QueryExecutor + Domained<Mode: WriteMode>> Writes for E {}
+
+/// The executor/DAO pairing for a write: this executor can commit, and its
+/// unit holds what writing `D` needs. Run state needs the project's lock
+/// ([`WritableFrom`]); the rest needs only a write mode.
+pub trait WritesTo<D: Dao>: Writes {}
+
+impl<E, D> WritesTo<D> for E
+where
+    D: Dao + WritableFrom<E::Mode>,
+    E: Writes,
+{
+}

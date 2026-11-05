@@ -5,7 +5,7 @@
 use crate::Queries;
 use crate::Writes;
 use ta_objects::and;
-use td_database::access::InProject;
+use td_database::access::{Holds, InProject, ProjectLock};
 use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
@@ -22,7 +22,7 @@ use td_objects::types::basic::{
 };
 
 /// What plan-build writes for one run: the LFR identity row plus an LTDV per
-/// output table, with no attempt yet.
+/// active output table, with no attempt yet.
 ///
 /// LFR identity is unique per `(execution_id, function_id)`. A repeat call
 /// with the same pair reuses the existing LFR and aligns its status with the
@@ -31,7 +31,7 @@ use td_objects::types::basic::{
 /// new `status` differs — the right failure mode for a test trying to
 /// violate the invariant.
 pub(crate) async fn seed_logical_function_run(
-    mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    mut executor: impl Writes<Domain = Apiserver, Scope = InProject, Mode: Holds<ProjectLock>>,
     collection: &CollectionDB,
     function_version: &FunctionDB,
     execution: &ExecutionDB,
@@ -73,7 +73,7 @@ pub(crate) async fn seed_logical_function_run(
     let tables: Vec<TableDB> = executor
         .reuse()
         .scd2()
-        .fetch_all::<TableDB>(&function_version.function_id)
+        .fetch_all::<TableDB>(and!(&function_version.function_id, TableDB::active()))
         .await?;
     for t in &tables {
         let ltdv = LogicalTableDataVersionInsertDB {

@@ -30,8 +30,7 @@
 //! and each aggregate computed once, so the plan holds without statistics. A
 //! parent the recompute would not change is not written, so it takes no new
 //! row version. An execution spans its transactions and is recomputed after
-//! them. No lock of its own: write units are `SERIALIZABLE`, so two
-//! recomputes of one parent never both commit on stale reads.
+//! them. Callers hold the project's lock.
 
 use sea_query::{
     BinOper, CaseStatement, CommonTableExpression, DynIden, Expr, ExprTrait, Func, Iden, IntoIden, IntoTableRef, JoinType, Query,

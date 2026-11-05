@@ -33,7 +33,8 @@ pub use {
     list_dto::{ListDto, ListField, ListRole, ListTags, SortDir},
     path_params::{PathParams, Route},
     relation::{
-        DeleteDao, InsertableFrom, ProjectScoped, ReachableFrom, TableDao, relations_match,
+        DeleteDao, InsertableFrom, ProjectScoped, ReachableFrom, TableDao, WritableFrom,
+        relations_match,
     },
     sea_value::{NullableSeaValue, SeaValue},
     tagged::{Tagged, TaggedExt},

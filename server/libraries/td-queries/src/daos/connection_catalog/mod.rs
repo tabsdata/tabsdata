@@ -14,7 +14,7 @@ use crate::{QueryExecutor, Writes};
 use sea_query::{Alias, Expr, ExprTrait, Func, OnConflict, Order, Query, SubQueryStatement};
 use ta_objects::errors::SqlError;
 use ta_objects::{Dao, HasColumn, Scd2Dao, SeaValue};
-use td_database::access::SeesProjectRows;
+use td_database::access::{Holds, InProject, ProjectLock, SeesProjectRows};
 use td_database::domain::Domained;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::dxo::connection_catalog::{
@@ -275,8 +275,7 @@ where
 
 impl<E> ConnectionCatalogs<E>
 where
-    E: Writes,
-    E::Scope: SeesProjectRows,
+    E: Writes<Scope = InProject, Mode: Holds<ProjectLock>>,
 {
     /// The catalog's texts changed: give it the next text revision (the
     /// identity column's default, so the serving role needs no grant on its

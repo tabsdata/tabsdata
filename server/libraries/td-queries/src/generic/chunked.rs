@@ -8,7 +8,7 @@
 //! handle they came from; writes exist on the grains that have them.
 
 use crate::Serves;
-use crate::Writes;
+use crate::WritesTo;
 use crate::generic::grain::{Current, Grain, Unversioned, select_chunk_in};
 use crate::primitives::chunked::{
     MAX_INSERT_ROWS, MAX_QUERY_CONDITIONS, close_chunk_query, fetch_chunked, insert_vec_query,
@@ -53,7 +53,7 @@ impl<E> Chunked<E, Unversioned> {
         daos: &[D],
     ) -> Result<PgQueryResult, SqlError>
     where
-        E: Serves<D> + Writes,
+        E: Serves<D> + WritesTo<D>,
     {
         let mut executor = self.executor;
         let mut result = PgQueryResult::default();
@@ -81,7 +81,7 @@ impl<E> Chunked<E, Unversioned> {
     ) -> Result<PgQueryResult, SqlError>
     where
         D::FilterBy: UnversionedDao,
-        E: Serves<D> + Writes,
+        E: Serves<D> + WritesTo<D>,
     {
         let mut executor = self.executor;
         warn_if_chunked::<D>(values.len());
@@ -107,7 +107,7 @@ impl<E> Chunked<E, Current> {
         at: D::At,
     ) -> Result<PgQueryResult, SqlError>
     where
-        E: Serves<D> + Writes,
+        E: Serves<D> + WritesTo<D>,
     {
         let mut executor = self.executor;
         warn_if_chunked::<D>(values.len());
@@ -133,7 +133,7 @@ impl<E> Chunked<E, Current> {
     ) -> Result<PgQueryResult, SqlError>
     where
         D::FilterBy: Scd2Dao,
-        E: Serves<D> + Writes,
+        E: Serves<D> + WritesTo<D>,
     {
         let mut executor = self.executor;
         warn_if_chunked::<D>(values.len());
@@ -156,7 +156,7 @@ impl<E> Chunked<E, Current> {
         at: D::At,
     ) -> Result<PgQueryResult, SqlError>
     where
-        E: Serves<D> + Writes,
+        E: Serves<D> + WritesTo<D>,
     {
         let mut executor = self.executor;
         let at = at.into();

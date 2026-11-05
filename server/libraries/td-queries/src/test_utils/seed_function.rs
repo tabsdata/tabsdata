@@ -5,7 +5,7 @@
 use crate::Queries;
 use crate::Writes;
 use ta_objects::and;
-use td_database::access::InProject;
+use td_database::access::{Holds, InProject, ProjectLock};
 use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
@@ -30,7 +30,7 @@ use td_objects::types::basic::{
 /// (`db.scoped(p)`), the field-less rows (function, tables, dependencies,
 /// triggers) default their `project_id` from that scope.
 pub(crate) async fn seed_function(
-    mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    mut executor: impl Writes<Domain = Apiserver, Scope = InProject, Mode: Holds<ProjectLock>>,
     topology_at: TopologyInstant,
     collection: &CollectionDB,
     function_create: &FunctionRegister,
@@ -196,7 +196,7 @@ pub(crate) async fn seed_function(
 /// a platform-owned row states it here rather than going through the
 /// reconcile that would normally create one.
 pub(crate) async fn seed_child_function(
-    mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    mut executor: impl Writes<Domain = Apiserver, Scope = InProject, Mode: Holds<ProjectLock>>,
     topology_at: TopologyInstant,
     collection: &CollectionDB,
     function_create: &FunctionRegister,

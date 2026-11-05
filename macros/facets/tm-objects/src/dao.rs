@@ -27,9 +27,9 @@ use syn::{DeriveInput, Field, Fields, ItemStruct, Type, parse_macro_input};
 /// so it addresses one version but not one row of the history), `scd2` /
 /// `scd2(at = T)` |
 /// `timeline`, and `project_scoped` /
-/// `project_scoped(unique(A, B), unique_at(A, B))`. A table DAO other than an
-/// update marks its primary key column with `#[dao(pk)]`, or flattens a base
-/// that does.
+/// `project_scoped(unique(A, B), unique_at(A, B))`, whose rows only a unit
+/// holding the project's lock writes. A table DAO other than an update marks
+/// its primary key column with `#[dao(pk)]`, or flattens a base that does.
 #[derive(Debug, FromDeriveInput)]
 #[darling(attributes(dao))]
 pub struct DaoArguments {
@@ -603,6 +603,16 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
         },
     };
     let table_dao = is_table.then(|| quote! { impl ta_objects::TableDao for #ident {} });
+    let writes = ops.writes() || ops.update.is_some();
+    let writable = match (writes, is_project_scoped) {
+        (false, _) => quote! {},
+        (true, true) => quote! {
+            impl<__M: td_database::access::Holds<td_database::access::ProjectLock>> ta_objects::WritableFrom<__M> for #ident {}
+        },
+        (true, false) => quote! {
+            impl<__M: td_database::access::WriteMode> ta_objects::WritableFrom<__M> for #ident {}
+        },
+    };
 
     let interval_has_columns = interval.map(|f| {
         let ty = field_type(f);
@@ -1047,6 +1057,7 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
         #fields_cb
         #dao_core
         #table_dao
+        #writable
         #reachable
         #insertable
         #pk_impl

@@ -5,7 +5,7 @@
 use crate::Queries;
 use crate::Writes;
 use crate::test_utils::topology::seed_instant;
-use td_database::access::InProject;
+use td_database::access::{Holds, InProject, ProjectLock};
 use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::dxo::collection::{CollectionDB, CollectionInsertDB};
@@ -16,7 +16,7 @@ use td_objects::types::basic::{
 };
 
 pub(crate) async fn seed_collection(
-    mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    mut executor: impl Writes<Domain = Apiserver, Scope = InProject, Mode: Holds<ProjectLock>>,
     collection_name: &CollectionName,
     created_by: &UserId,
 ) -> Result<CollectionDB, TdError> {
@@ -35,7 +35,7 @@ pub(crate) async fn seed_collection(
 /// field-less `CollectionInsertDB` defaults its `project_id` from the
 /// executor's scope, so the caller picks the project via `db.scoped(p)`.
 pub(crate) async fn seed_collection_in_group(
-    mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    mut executor: impl Writes<Domain = Apiserver, Scope = InProject, Mode: Holds<ProjectLock>>,
     collection_name: &CollectionName,
     created_by: &UserId,
     group: &GroupDB,

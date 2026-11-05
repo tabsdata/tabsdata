@@ -6,7 +6,11 @@
 //! locks and triggers, rather than rows.
 
 use sqlx::{Encode, Error, Executor, PgConnection, Postgres, Type};
+use std::time::Duration;
+use td_database::pool::TdPool;
 use td_database::test_utils::generated;
+use td_database::test_utils::waiting_on;
+use td_objects::types::basic::ProjectId;
 
 /// A setting's value on `conn`, as `SHOW` prints it.
 pub async fn show_setting(conn: &mut PgConnection, setting: &str) -> Result<String, Error> {
@@ -98,4 +102,18 @@ pub async fn trigger_disagreements(
         }
     }
     Ok(mismatches)
+}
+
+/// Whether a unit queues on `project`'s lock, not on a row, within `within`.
+pub async fn wait_until_queued_on_lock(db: &TdPool, project: &ProjectId, within: Duration) -> bool {
+    let deadline = tokio::time::Instant::now() + within;
+    loop {
+        if waiting_on(db, project) > 0 {
+            return true;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return false;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
 }

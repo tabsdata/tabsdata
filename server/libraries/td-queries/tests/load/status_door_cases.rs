@@ -15,14 +15,14 @@ use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::worker::WorkerExecutionUpdate;
 use td_objects::types::basic::{AtTime, LogicalFunctionRunStatus};
 use td_queries::Queries;
-use td_queries::test_utils::begin_exclusive;
+use td_queries::test_utils::begin_locked;
 
 use crate::harness::{record, seed};
 
 #[td_test::test(db)]
 async fn load_lfr_set_status(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
-    let mut trx = begin_exclusive(&db, h.project_id).await?;
+    let mut trx = begin_locked(&db, h.project_id).await?;
     let conn = trx.get(Grant::asserted("load case"));
     let t = Instant::now();
     conn.logical_runs()
@@ -42,7 +42,7 @@ async fn load_pfr_reported(db: TdPool) -> Result<(), TdError> {
         ended_on: Some(AtTime::now().into()),
         status: WorkerCallbackStatus::Done,
     };
-    let mut trx = begin_exclusive(&db, h.project_id).await?;
+    let mut trx = begin_locked(&db, h.project_id).await?;
     let conn = trx.get(Grant::asserted("load case"));
     let t = Instant::now();
     if conn

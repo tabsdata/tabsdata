@@ -2,10 +2,12 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::daos::function_runs::chain::{ProducerLfr, producer_status_in_or_lazy};
+use crate::daos::function_runs::chain::{
+    ProducerLfr, Visibility, materialization_of_ltdv, producer_status_in_or_lazy,
+};
 use crate::primitives::chunked::{MAX_INSERT_ROWS, pending_vec_query};
-use crate::primitives::scd2::{open_interval_at, settle_query};
-use crate::{QueryExecutor, Serves, Writes};
+use crate::primitives::scd2::settle_query;
+use crate::{QueryExecutor, Serves, WritesTo};
 use sea_query::{Asterisk, Expr, ExprTrait, JoinType, Order, Query, SelectStatement};
 use sqlx::postgres::PgQueryResult;
 use ta_objects::Dao;
@@ -114,7 +116,9 @@ impl<E> TableDataVersions<E> {
         at: LockInstant,
     ) -> Result<PgQueryResult, SqlError>
     where
-        E: SeaExecutor + Serves<PhysicalTableDataVersionInsertDB> + Writes,
+        E: SeaExecutor
+            + Serves<PhysicalTableDataVersionInsertDB>
+            + WritesTo<PhysicalTableDataVersionInsertDB>,
     {
         let mut executor = self.executor;
         let mut result = PgQueryResult::default();
@@ -145,7 +149,9 @@ impl<E> TableDataVersions<E> {
         at: LockInstant,
     ) -> Result<PgQueryResult, SqlError>
     where
-        E: SeaExecutor + Serves<PhysicalTableDataVersionUpdateDB> + Writes,
+        E: SeaExecutor
+            + Serves<PhysicalTableDataVersionUpdateDB>
+            + WritesTo<PhysicalTableDataVersionUpdateDB>,
     {
         settle_query(update, condition, at)?
             .build_query()
@@ -163,6 +169,12 @@ impl<E> TableDataVersions<E> {
 #[derive(sea_query::Iden, Clone, Copy)]
 struct Reader;
 
+#[derive(sea_query::Iden, Clone, Copy)]
+struct WithData;
+
+/// The newest logical version from the anchor whose current materialization
+/// has data. The materialization is a fenced lateral probe per version, so the
+/// planner never starts from the materializations, the table's whole history.
 fn with_data_query(anchor: Anchor<'_>, producers: &[LogicalFunctionRunStatus]) -> SelectStatement {
     let ltdv_id = (
         LogicalTableDataVersionDBIden::Table,
@@ -176,20 +188,29 @@ fn with_data_query(anchor: Anchor<'_>, producers: &[LogicalFunctionRunStatus]) -
         LogicalTableDataVersionDBIden::Table,
         LogicalTableDataVersionDBIden::TableId,
     );
-    let mut q = Query::select();
-    q.expr(Expr::col((
-        PhysicalTableDataVersionDBWithNamesIden::Table,
-        Asterisk,
-    )))
-    .from(PhysicalTableDataVersionDBWithNames::TABLE)
-    .join(
-        JoinType::InnerJoin,
-        LogicalTableDataVersionDBIden::Table,
-        Expr::col(ltdv_id).equals((
+    let current_with_data = Query::select()
+        .expr(Expr::col((
             PhysicalTableDataVersionDBWithNamesIden::Table,
-            PhysicalTableDataVersionDBIden::LogicalTableDataVersionId,
-        )),
-    );
+            Asterisk,
+        )))
+        .from(PhysicalTableDataVersionDBWithNames::TABLE)
+        .cond_where(materialization_of_ltdv(
+            PhysicalTableDataVersionDBWithNamesIden::Table,
+            Visibility::Open,
+        ))
+        .and_where(
+            Expr::col((
+                PhysicalTableDataVersionDBWithNamesIden::Table,
+                PhysicalTableDataVersionDBIden::HasData,
+            ))
+            .eq(HasData::TRUE.as_sea_expr()),
+        )
+        .limit(1)
+        .offset(0)
+        .take();
+    let mut q = Query::select();
+    q.expr(Expr::col((WithData, Asterisk)))
+        .from(LogicalTableDataVersionDBIden::Table);
     match anchor {
         Anchor::At(table_id, at) => {
             q.and_where(Expr::col(ltdv_table_id).eq(table_id.as_sea_expr()));
@@ -216,16 +237,11 @@ fn with_data_query(anchor: Anchor<'_>, producers: &[LogicalFunctionRunStatus]) -
             );
         }
     }
-    q.and_where(open_interval_at((
-        PhysicalTableDataVersionDBWithNamesIden::Table,
-        PhysicalTableDataVersionDBIden::ValidTo,
-    )))
-    .and_where(
-        Expr::col((
-            PhysicalTableDataVersionDBWithNamesIden::Table,
-            PhysicalTableDataVersionDBIden::HasData,
-        ))
-        .eq(HasData::TRUE.as_sea_expr()),
+    q.join_lateral(
+        JoinType::InnerJoin,
+        current_with_data,
+        WithData,
+        Expr::val(true),
     )
     .join_as(
         JoinType::LeftJoin,
@@ -264,7 +280,7 @@ mod tests {
             .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "physical_table_data_versions__with_names".* FROM "physical_table_data_versions__with_names" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "physical_table_data_versions__with_names"."logical_table_data_version_id" LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE "logical_table_data_versions"."table_id" = '00000000000000000000000t00' AND "logical_table_data_versions"."triggered_on" <= '2023-11-14 22:13:20.000000 +00:00' AND "physical_table_data_versions__with_names"."valid_to" = ('infinity'::timestamptz) AND "physical_table_data_versions__with_names"."has_data" = TRUE AND ("producer_lfr"."id" IS NULL OR "producer_lfr"."status" IN ('C')) ORDER BY "logical_table_data_versions"."triggered_on" DESC, "logical_table_data_versions"."id" DESC LIMIT 1"#
+            r#"SELECT "with_data".* FROM "logical_table_data_versions" INNER JOIN LATERAL (SELECT "physical_table_data_versions__with_names".* FROM "physical_table_data_versions__with_names" WHERE "physical_table_data_versions__with_names"."logical_table_data_version_id" = "logical_table_data_versions"."id" AND "physical_table_data_versions__with_names"."valid_to" = ('infinity'::timestamptz) AND "physical_table_data_versions__with_names"."has_data" = TRUE LIMIT 1 OFFSET 0) AS "with_data" ON TRUE LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE "logical_table_data_versions"."table_id" = '00000000000000000000000t00' AND "logical_table_data_versions"."triggered_on" <= '2023-11-14 22:13:20.000000 +00:00' AND ("producer_lfr"."id" IS NULL OR "producer_lfr"."status" IN ('C')) ORDER BY "logical_table_data_versions"."triggered_on" DESC, "logical_table_data_versions"."id" DESC LIMIT 1"#
         );
     }
 
@@ -274,7 +290,7 @@ mod tests {
             .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "physical_table_data_versions__with_names".* FROM "physical_table_data_versions__with_names" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "physical_table_data_versions__with_names"."logical_table_data_version_id" LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE "logical_table_data_versions"."table_id" = '00000000000000000000000t00' AND "physical_table_data_versions__with_names"."valid_to" = ('infinity'::timestamptz) AND "physical_table_data_versions__with_names"."has_data" = TRUE AND ("producer_lfr"."id" IS NULL OR "producer_lfr"."status" IN ('C')) ORDER BY "logical_table_data_versions"."triggered_on" DESC, "logical_table_data_versions"."id" DESC LIMIT 1"#
+            r#"SELECT "with_data".* FROM "logical_table_data_versions" INNER JOIN LATERAL (SELECT "physical_table_data_versions__with_names".* FROM "physical_table_data_versions__with_names" WHERE "physical_table_data_versions__with_names"."logical_table_data_version_id" = "logical_table_data_versions"."id" AND "physical_table_data_versions__with_names"."valid_to" = ('infinity'::timestamptz) AND "physical_table_data_versions__with_names"."has_data" = TRUE LIMIT 1 OFFSET 0) AS "with_data" ON TRUE LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE "logical_table_data_versions"."table_id" = '00000000000000000000000t00' AND ("producer_lfr"."id" IS NULL OR "producer_lfr"."status" IN ('C')) ORDER BY "logical_table_data_versions"."triggered_on" DESC, "logical_table_data_versions"."id" DESC LIMIT 1"#
         );
     }
 
@@ -284,7 +300,7 @@ mod tests {
         let sql = with_data_query(Anchor::Before(&ltdv), COMMITTED).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "physical_table_data_versions__with_names".* FROM "physical_table_data_versions__with_names" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "physical_table_data_versions__with_names"."logical_table_data_version_id" INNER JOIN "logical_table_data_versions" AS "reader" ON "reader"."id" = 202601010000000001 LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE "logical_table_data_versions"."table_id" = "reader"."table_id" AND ("logical_table_data_versions"."triggered_on", "logical_table_data_versions"."id") < ("reader"."triggered_on", "reader"."id") AND "physical_table_data_versions__with_names"."valid_to" = ('infinity'::timestamptz) AND "physical_table_data_versions__with_names"."has_data" = TRUE AND ("producer_lfr"."id" IS NULL OR "producer_lfr"."status" IN ('C')) ORDER BY "logical_table_data_versions"."triggered_on" DESC, "logical_table_data_versions"."id" DESC LIMIT 1"#
+            r#"SELECT "with_data".* FROM "logical_table_data_versions" INNER JOIN "logical_table_data_versions" AS "reader" ON "reader"."id" = 202601010000000001 INNER JOIN LATERAL (SELECT "physical_table_data_versions__with_names".* FROM "physical_table_data_versions__with_names" WHERE "physical_table_data_versions__with_names"."logical_table_data_version_id" = "logical_table_data_versions"."id" AND "physical_table_data_versions__with_names"."valid_to" = ('infinity'::timestamptz) AND "physical_table_data_versions__with_names"."has_data" = TRUE LIMIT 1 OFFSET 0) AS "with_data" ON TRUE LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE "logical_table_data_versions"."table_id" = "reader"."table_id" AND ("logical_table_data_versions"."triggered_on", "logical_table_data_versions"."id") < ("reader"."triggered_on", "reader"."id") AND ("producer_lfr"."id" IS NULL OR "producer_lfr"."status" IN ('C')) ORDER BY "logical_table_data_versions"."triggered_on" DESC, "logical_table_data_versions"."id" DESC LIMIT 1"#
         );
     }
 
@@ -294,7 +310,7 @@ mod tests {
             .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "physical_table_data_versions__with_names".* FROM "physical_table_data_versions__with_names" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "physical_table_data_versions__with_names"."logical_table_data_version_id" LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE "logical_table_data_versions"."table_id" = '00000000000000000000000t00' AND "logical_table_data_versions"."triggered_on" <= '2023-11-14 22:13:20.000000 +00:00' AND "physical_table_data_versions__with_names"."valid_to" = ('infinity'::timestamptz) AND "physical_table_data_versions__with_names"."has_data" = TRUE AND ("producer_lfr"."id" IS NULL OR "producer_lfr"."status" IN ('C', 'D')) ORDER BY "logical_table_data_versions"."triggered_on" DESC, "logical_table_data_versions"."id" DESC LIMIT 1"#
+            r#"SELECT "with_data".* FROM "logical_table_data_versions" INNER JOIN LATERAL (SELECT "physical_table_data_versions__with_names".* FROM "physical_table_data_versions__with_names" WHERE "physical_table_data_versions__with_names"."logical_table_data_version_id" = "logical_table_data_versions"."id" AND "physical_table_data_versions__with_names"."valid_to" = ('infinity'::timestamptz) AND "physical_table_data_versions__with_names"."has_data" = TRUE LIMIT 1 OFFSET 0) AS "with_data" ON TRUE LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE "logical_table_data_versions"."table_id" = '00000000000000000000000t00' AND "logical_table_data_versions"."triggered_on" <= '2023-11-14 22:13:20.000000 +00:00' AND ("producer_lfr"."id" IS NULL OR "producer_lfr"."status" IN ('C', 'D')) ORDER BY "logical_table_data_versions"."triggered_on" DESC, "logical_table_data_versions"."id" DESC LIMIT 1"#
         );
     }
 }

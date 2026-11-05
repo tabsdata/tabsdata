@@ -146,13 +146,16 @@ pub trait Serves<D: Dao>: QueryExecutor + Domained<Domain = D::Db> {}
 RLS scope can see `D`'s rows — see [DAO Trait Hierarchy](#dao-trait-hierarchy)
 on `#[dao(project_scoped)]`.
 
-### Which pool a query runs on
+### What a query runs under
 
-Nothing is inferred per statement. The pool is picked once, when the connection
-is acquired, by the **access mode** the service asked for: `RO` and `RW` share
-the component's regular pool, `XW` draws from the exclusive one and serializes on
-the project it is scoped to. See
-[Connections and Transactions](#connections-and-transactions).
+Nothing is inferred per statement. The unit's posture is picked once, when the
+connection is acquired, by the **access mode** the service asked for: `RO`
+reads, `RW` writes, and `RW<ProjectLock>` writes holding its project's lock,
+taken before the transaction begins. Which of the component's pools it draws
+from is the handle's type, not the mode's: `DbPool<S, D, P>`, where `P` is
+`RegularPool` (the default, the requests') or `SystemPool` (the server's own
+units).
+See [Connections and Transactions](#connections-and-transactions).
 
 ## The DAO System
 
@@ -540,12 +543,26 @@ opens on and what rows it can see are settled where the handle is declared, not
 at each call.
 
 ```rust
-// Acquire in the mode the work needs. RO and RW share the regular pool; XW
-// draws from the exclusive one and serializes on the project it is scoped to.
-let mut conn = db.read().await?;              // GatedConnection<RO, S, D>
-let mut conn = db.begin().await?;             // GatedConnection<RW, S, D>
-let mut conn = db.begin_exclusive().await?;   // GatedConnection<XW, InProject, D>
+// Acquire in the mode the work needs. A locked write takes its lock before it
+// begins and holds it until it ends; work that needs one asks with `Holds<K>`.
+let mut conn = db.read().await?;                               // GatedConnection<RO, S, D>
+let mut conn = db.begin(attempt).await?;                       // GatedConnection<RW, S, D>
+let mut conn = db.lock_project().begin(attempt).await?;        // GatedConnection<RW<ProjectLock>, InProject, D>
 ```
+
+A project's rows are written only under the project's lock: a unit that
+writes any project-scoped relation opens with `lock_project().begin(attempt)`
+and runs alone in the project; one that writes global relations only (users,
+roles, sessions, tokens, the projects themselves) opens with `begin(attempt)`.
+The lock kind is the isolation: an unlocked unit is `SERIALIZABLE`, a locked
+one `REPEATABLE READ`, which is sound because only locked units write what a
+locked unit decides from. The types enforce it: every `project_scoped` write
+DAO is `WritableFrom` only a mode that `Holds<ProjectLock>`, and every write
+primitive bounds its executor on `WritesTo<D>`. One exception: creating,
+renaming or deleting a project writes the global `projects` and `roles` rows
+in its locked unit, at `REPEATABLE READ`; what those writes decide on is held
+by constraints (unique names, foreign keys), not by the isolation. A unit runs
+once; a conflict is answered as 503.
 
 Every acquire applies its scope: `InProject` sets `app.project_id` and lets RLS
 draw the tenant boundary; `Global` stays on the tenant role with no project,

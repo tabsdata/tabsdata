@@ -4,7 +4,7 @@
 
 use crate::Queries;
 use crate::Writes;
-use td_database::access::InProject;
+use td_database::access::{Holds, InProject, ProjectLock};
 use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
@@ -14,7 +14,7 @@ use td_objects::dxo::transaction::TransactionInsertDB;
 use td_objects::types::basic::{TransactionId, TransactionKey};
 
 pub(crate) async fn seed_transaction(
-    mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    mut executor: impl Writes<Domain = Apiserver, Scope = InProject, Mode: Holds<ProjectLock>>,
     execution: &ExecutionDB,
     transaction_key: &TransactionKey,
 ) -> Result<TransactionDB, TdError> {

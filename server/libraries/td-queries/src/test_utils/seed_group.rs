@@ -5,7 +5,7 @@
 use crate::Queries;
 use crate::Writes;
 use crate::test_utils::topology::seed_instant;
-use td_database::access::InProject;
+use td_database::access::{Holds, InProject, ProjectLock};
 use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
@@ -13,7 +13,7 @@ use td_objects::dxo::group::{GroupCreate, GroupDB};
 use td_objects::types::basic::{AccessTokenId, Description, GroupName, UserId};
 
 pub(crate) async fn seed_group(
-    mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    mut executor: impl Writes<Domain = Apiserver, Scope = InProject, Mode: Holds<ProjectLock>>,
     name: GroupName,
     description: Description,
 ) -> Result<GroupDB, TdError> {

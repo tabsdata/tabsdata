@@ -9,7 +9,7 @@
 use crate::generic::grain::{Current, LastVersion, VisibleAt};
 use crate::generic::reader::Reader;
 use crate::primitives::scd2::{close_query, open_query, update_open_query};
-use crate::{Serves, Writes};
+use crate::{Serves, WritesTo};
 use sqlx::postgres::PgQueryResult;
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
@@ -44,7 +44,7 @@ impl<E> Reader<E, Current> {
         at: D::At,
     ) -> Result<PgQueryResult, SqlError>
     where
-        E: Serves<D> + Writes,
+        E: Serves<D> + WritesTo<D>,
     {
         open_query::<D>(dao, at.into())?
             .build_query()
@@ -61,7 +61,7 @@ impl<E> Reader<E, Current> {
     ) -> Result<PgQueryResult, SqlError>
     where
         U::FilterBy: Scd2Dao,
-        E: Serves<U> + Writes,
+        E: Serves<U> + WritesTo<U>,
     {
         update_open_query(dao, condition)?
             .build_query()
@@ -78,7 +78,7 @@ impl<E> Reader<E, Current> {
         at: D::At,
     ) -> Result<PgQueryResult, SqlError>
     where
-        E: Serves<D> + Writes,
+        E: Serves<D> + WritesTo<D>,
     {
         let values = condition.display_values();
         close_query::<D>(condition, at.into())?

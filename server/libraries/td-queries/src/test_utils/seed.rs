@@ -37,7 +37,7 @@ use crate::test_utils::topology::topology_write;
 use crate::{QueryExecutor, Writes};
 use std::borrow::Borrow;
 use ta_objects::errors::SqlError;
-use td_database::access::{InProject, RW, SeesProjectRows};
+use td_database::access::{Holds, InProject, ProjectLock, RW, SeesProjectRows};
 use td_database::domain::DomainConnection;
 use td_database::domain::{Apiserver, Domained};
 use td_database::pool::TdPool;
@@ -87,20 +87,22 @@ pub struct Seed<E> {
     pub(crate) executor: E,
 }
 
-impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
+impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows, Mode: Holds<ProjectLock>>> Seed<E> {
     // Project seeding uses its executor only to scope into the freshly-created
     // project, so the write bound is on the scoped view; `&TdPool` is the only
     // executor that scopes to one.
     pub async fn project(self, name: ProjectName) -> Result<ProjectDB, TdError>
     where
-        for<'s> &'s Scoped<E, ProjectId>: Writes<Domain = Apiserver, Scope = InProject>,
+        for<'s> &'s Scoped<E, ProjectId>:
+            Writes<Domain = Apiserver, Scope = InProject, Mode: Holds<ProjectLock>>,
     {
         seed_project(self.executor, name).await
     }
 
     pub async fn test_project(self) -> Result<ProjectDB, TdError>
     where
-        for<'s> &'s Scoped<E, ProjectId>: Writes<Domain = Apiserver, Scope = InProject>,
+        for<'s> &'s Scoped<E, ProjectId>:
+            Writes<Domain = Apiserver, Scope = InProject, Mode: Holds<ProjectLock>>,
     {
         seed_project(self.executor, ProjectName::try_from("test")?).await
     }
@@ -375,7 +377,13 @@ impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
 impl<P: Borrow<ProjectId> + Clone + Sync> Seed<&Scoped<&TdPool, P>> {
     async fn topology_write(
         &self,
-    ) -> Result<(DomainConnection<Apiserver, InProject, RW>, TopologyInstant), TdError> {
+    ) -> Result<
+        (
+            DomainConnection<Apiserver, InProject, RW<ProjectLock>>,
+            TopologyInstant,
+        ),
+        TdError,
+    > {
         let (project, pool) = self.executor.clone().into_parts();
         topology_write(pool, project.borrow()).await
     }
