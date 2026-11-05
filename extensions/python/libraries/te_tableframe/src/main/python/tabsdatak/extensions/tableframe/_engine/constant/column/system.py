@@ -170,9 +170,9 @@ OPTIONAL: tuple[SystemColumn, ...] = (
 )
 
 # Connector columns are no longer a fixed set. They are injected per input
-# file from the metadata a source plugin attaches to each `TableFileInput`,
-# so nothing is declared here and the registry resolves them by the `@td.`
-# prefix instead. The former fixed declarations are kept for reference:
+# from the metadata a source plugin attaches to each `LazyFrameInput` (or to
+# each legacy `TableFileInput`), so nothing is declared here and the registry
+# resolves them by the `@td.` prefix instead. The former fixed declarations are kept for reference:
 #
 # CONNECTOR: tuple[SystemColumn, ...] = (
 #     SystemColumn(
