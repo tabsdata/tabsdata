@@ -10,12 +10,14 @@ from typing import Any, Iterable, Iterator
 import polars as pl
 import pytest
 
+from tabsdatak._handoff import RestartRead
 from tabsdatak.server._tdrunner.function._commons.document.message.request import Info
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputEntry,
     OutputManifest,
 )
 from tabsdatak.server._tdrunner.function._handlers.columns import ColumnPolicy, Zone
+from tabsdatak.server._tdrunner.function._handlers import handoff as handoffs
 from tabsdatak.server._tdrunner.function._handlers.handoff import (
     DestinationHandoff,
     Handoff,
@@ -27,6 +29,7 @@ from tabsdatak.server._tdrunner.function._handlers.handoff import (
     UnsupportedPluginError,
     local_file,
 )
+from tabsdatak.server._tdrunner.function._handlers.landing import MetadataMismatchError
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.spi import (
     DestContext,
@@ -432,3 +435,126 @@ def test_a_variable_source_may_return_fewer_entries(tmp_path):
 def test_a_source_returns_only_tables_of_its_form(tmp_path, plugin, table):
     with pytest.raises(UnexpectedTableError, match="for input 0"):
         run_source(tmp_path, plugin([table]), ["orders"])
+
+
+class Interrupted(Exception):
+    pass
+
+
+class RestartingSource(SrcPlugin):
+    def __init__(self, failures: int, *, wait: float = 3, within: float = 60) -> None:
+        self.failures = failures
+        self.wait = wait
+        self.within = within
+        self.calls = 0
+        self.closed: list[int] = []
+
+    def read_in(self, ctx, conn, src) -> list[Iterable[LazyFrameInput]]:
+        self.calls += 1
+        attempt = self.calls
+        return [self.first(attempt), self.second(attempt)]
+
+    def first(self, attempt: int) -> Iterator[LazyFrameInput]:
+        yield LazyFrameInput(pl.LazyFrame({"attempt": [attempt]}))
+
+    def second(self, attempt: int) -> Iterator[LazyFrameInput]:
+        yield LazyFrameInput(pl.LazyFrame({"attempt": [attempt]}))
+        if attempt <= self.failures:
+            raise RestartRead(
+                Interrupted(f"attempt {attempt}"),
+                wait=self.wait,
+                within=self.within,
+            )
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.slept: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.now += seconds
+
+
+@pytest.fixture
+def clock(monkeypatch) -> Clock:
+    fake = Clock()
+    monkeypatch.setattr(handoffs.time, "monotonic", fake.monotonic)
+    monkeypatch.setattr(handoffs.time, "sleep", fake.sleep)
+    return fake
+
+
+def test_a_restarted_read_keeps_only_the_tables_of_its_last_attempt(tmp_path, clock):
+    plugin = RestartingSource(failures=2)
+    chosen = run_source(tmp_path, plugin, ["orders", "customers"])
+    first, second = chosen.reap()
+    assert plugin.calls == 3
+    assert [landed_values(file.data) for file in first + second] == [
+        {"attempt": [3]},
+        {"attempt": [3]},
+    ]
+    assert [file.index for file in first] == [2]
+    assert [file.index for file in second] == [2]
+    assert clock.slept == [3, 3]
+
+
+def test_the_tables_of_a_voided_attempt_stay_where_they_landed(tmp_path, clock):
+    run_source(tmp_path, RestartingSource(failures=1), ["orders", "customers"])
+    landing = tmp_path / "landing"
+    assert sorted(path.name for path in landing.glob("*.t")) == [
+        "0.0.t",
+        "0.1.t",
+        "1.0.t",
+        "1.1.t",
+    ]
+
+
+def test_a_read_that_keeps_failing_raises_the_cause_once_the_time_is_up(
+    tmp_path,
+    clock,
+):
+    plugin = RestartingSource(failures=99, wait=10, within=25)
+    with pytest.raises(Interrupted, match="attempt 4"):
+        run_source(tmp_path, plugin, ["orders", "customers"])
+    assert clock.slept == [10, 10, 10]
+
+
+def test_read_in_itself_may_ask_for_a_restart(tmp_path, clock):
+    class Unready(SrcPlugin):
+        calls = 0
+
+        def read_in(self, ctx, conn, src) -> list[Iterable[LazyFrameInput]]:
+            self.calls += 1
+            if self.calls == 1:
+                raise RestartRead(Interrupted("unready"), wait=1, within=60)
+            return [[LazyFrameInput(ORDERS.lazy())]]
+
+    [[landed]] = run_source(tmp_path, Unready(), ["orders"]).reap()
+    assert landed_values(landed.data) == {"id": [1, 2]}
+    assert clock.slept == [1]
+
+
+def test_inputs_left_unread_by_a_failure_are_closed(tmp_path):
+    closed: list[str] = []
+    wrong = FrameMetadata(pl.Schema({"other": pl.Int64}))
+
+    def tables() -> Iterator[LazyFrameInput]:
+        try:
+            yield LazyFrameInput(ORDERS.lazy(), metadata=wrong)
+            yield LazyFrameInput(ORDERS.lazy())
+        finally:
+            closed.append("orders")
+
+    class Mismatched(SrcPlugin):
+        def read_in(self, ctx, conn, src) -> list[Iterable[LazyFrameInput]]:
+            self.tables = tables()
+            return [self.tables]
+
+    plugin = Mismatched()
+    with pytest.raises(MetadataMismatchError):
+        run_source(tmp_path, plugin, ["orders"])
+    assert closed == ["orders"]

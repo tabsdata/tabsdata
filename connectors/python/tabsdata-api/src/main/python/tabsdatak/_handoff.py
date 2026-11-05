@@ -33,6 +33,24 @@ from tabsdatak.spi import (
 LEGACY_DEST_TABLES = list[TableFileSpec]
 
 
+class RestartRead(Exception):
+    cause: Exception
+    wait: float
+    within: float
+
+    def __init__(
+        self,
+        cause: Exception,
+        *,
+        wait: float,
+        within: float,
+    ) -> None:
+        super().__init__(str(cause))
+        self.cause = cause
+        self.wait = wait
+        self.within = within
+
+
 class PluginContract[Plugin]:
     plugin: type[Plugin]
 

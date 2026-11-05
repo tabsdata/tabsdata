@@ -4,18 +4,20 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 import tempfile
+import time
 from abc import ABC
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, overload
+from typing import Any, Iterable, overload
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 
 import polars as pl
 
-from tabsdatak._handoff import DestinationContract, SourceContract
+from tabsdatak._handoff import DestinationContract, RestartRead, SourceContract
 from tabsdatak.server._tdrunner.function._commons.document.message.request import Info
 from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputManifest,
@@ -39,6 +41,8 @@ from tabsdatak.spi import (
     TableFileInput,
 )
 from tabsdatak.tableframe import TableFrame
+
+logger = logging.getLogger(__name__)
 
 
 class HandoffError(Exception):
@@ -157,15 +161,23 @@ class Slot:
 class LandingSlot(Slot):
     landing: Landing
     landed: list[LandedFile] = field(default_factory=list)
+    count: int = 0
 
     def land(self, table: LazyFrameInput) -> None:
+        index = self.count
+        self.count += 1
         self.landed.append(
             self.landing.land(
                 self.position,
-                len(self.landed),
+                index,
                 table,
             ),
         )
+
+    def void(self) -> int:
+        voided = len(self.landed)
+        self.landed = []
+        return voided
 
 
 @dataclass(kw_only=True)
@@ -200,6 +212,28 @@ class SourceHandoff(Handoff):
         connection: Conn,
         source: Src,
     ) -> None:
+        began = time.monotonic()
+        while True:
+            try:
+                self.take(plugin, context, connection, source)
+                return
+            except RestartRead as restart:
+                if time.monotonic() - began >= restart.within:
+                    raise restart.cause
+                voided = sum(slot.void() for slot in self.slots)
+                logger.warning(
+                    f"Reading the inputs again in {restart.wait}s, voiding "
+                    f"{voided} landed table(s): {restart.cause}"
+                )
+                time.sleep(restart.wait)
+
+    def take(
+        self,
+        plugin: SrcPlugin,
+        context: SrcPluginCtx,
+        connection: Conn,
+        source: Src,
+    ) -> None:
         produced = plugin.read_in(
             context,
             connection,
@@ -210,9 +244,14 @@ class SourceHandoff(Handoff):
             not self.variable and len(produced) != expected
         ):
             raise InputCountError(len(produced), expected)
-        for slot, tables in zip(self.slots, produced):
-            for table in tables:
-                slot.land(self.unpack(plugin, slot, table))
+        try:
+            for slot, tables in zip(self.slots, produced):
+                for table in tables:
+                    slot.land(self.unpack(plugin, slot, table))
+        except BaseException:
+            for tables in produced:
+                close(tables)
+            raise
 
     def unpack(
         self,
@@ -351,6 +390,12 @@ class DestinationHandoff(Handoff):
         if self.tables_folder is not None:
             shutil.rmtree(self.tables_folder, ignore_errors=True)
             self.tables_folder = None
+
+
+def close(tables: Iterable[object]) -> None:
+    closing = getattr(tables, "close", None)
+    if callable(closing):
+        closing()
 
 
 def local_file(file: Path) -> Path:
