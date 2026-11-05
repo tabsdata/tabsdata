@@ -2,14 +2,15 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Reusable data-type coverage matrix for the SQLAlchemy-write connectors
-(db2 / mssqlserver / mysql / oracle / postgres).
+"""Reusable data-type coverage matrix for the table-writing destinations
+(bigquery / clickhouse / databricks / db2 / mongodb / mssqlserver / mysql /
+oracle / postgres / snowflake).
 
 Each :data:`DATATYPE_CASES` entry is one TableFrame/polars column type. The
 shared :func:`write_named_datatype_table` builds a one-column parquet of that
-type, drives the connector's ``DestPlugin.write_out`` in ``replace`` mode (so the
-create-on-write path picks the target column type), reads the table back, and
-returns the round-tripped frame.
+type, hands it as a LazyFrame to the connector's ``DestPlugin.write_out`` in
+``replace`` mode (so the create-on-write path picks the target column type),
+reads the table back, and returns the round-tripped frame.
 
 Each connector's itest parametrizes over ``DATATYPE_CASES`` and calls it against
 its live tdx-provisioned domain, naming the target table after the case. Types
@@ -28,8 +29,6 @@ from typing import Any, Callable
 import polars as pl
 from tabsdatax.itest.fixture.functions.files import PluginDestCtx
 from tabsdatax.itest.fixture.functions.sql import SqlStore
-
-from tabsdatak._handoff import DestinationContract
 
 
 @dataclass(frozen=True)
@@ -103,17 +102,12 @@ def write_named_datatype_table(
     unpredictable behind in the domain.
     """
     parquet = build_parquet(work_dir / f"{case.id}.parquet", case)
-    handed = (
-        pl.scan_parquet(parquet)
-        if DestinationContract(type(dest_plugin)).frames()
-        else parquet
-    )
     try:
         dest_plugin.write_out(
             PluginDestCtx(work_dir),
             dest_conn,
             make_dest([table]),
-            [handed],
+            [pl.scan_parquet(parquet)],
         )
         return sql.read_table(table)
     finally:
