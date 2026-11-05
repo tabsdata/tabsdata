@@ -189,6 +189,10 @@ def compute_delta(
             safe = (new.type in widen_map and old.type in widen_map[new.type]) or (
                 can_safely_widen(old.type, new.type) if can_safely_widen else False
             )
+            fits = not safe and (
+                (old.type in widen_map and new.type in widen_map[old.type])
+                or (can_safely_widen(new.type, old.type) if can_safely_widen else False)
+            )
             delta.changes.append(
                 SchemaChange(
                     action=Action.ALTER_TYPE,
@@ -198,6 +202,7 @@ def compute_delta(
                         "old_type": old.type,
                         "new_type": new.type,
                         "nullable": new.nullable,
+                        "fits": fits,
                     },
                 )
             )

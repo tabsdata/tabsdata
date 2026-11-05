@@ -26,11 +26,11 @@ pytestmark = pytest.mark.sql_common
 WIDENING = {"BIGINT": {"INT"}}
 
 
-def _delta(current: list[tuple[str, str]] | None, batch: list[tuple[str, str]]):
+def _delta(current: list[tuple] | None, batch: list[tuple]):
     def schema(columns):
         return TableSchema(
             table_name="t",
-            columns=[ColumnDef(name=name, type=type_) for name, type_ in columns],
+            columns=[ColumnDef(*column) for column in columns],
         )
 
     return compute_delta(
@@ -95,3 +95,22 @@ def test_strict_names_every_refused_change():
         governed(_delta(TABLE, batch), STRICT)
     message = str(raised.value)
     assert "new column 'x'" in message and "column 'score'" in message
+
+
+@pytest.mark.parametrize("evolution", [STRICT, UPDATE])
+def test_a_narrower_batch_type_fits_the_column(evolution):
+    batch = [("id", "INT"), ("name", "STRING"), ("score", "INT")]
+    assert governed(_delta(TABLE, batch), evolution).changes == []
+
+
+def test_strict_refuses_a_nullable_column_for_a_required_one():
+    table = [("id", "BIGINT", False)]
+    with pytest.raises(SqlCommonRuntimeException) as raised:
+        governed(_delta(table, [("id", "BIGINT", True)]), STRICT)
+    assert "column 'id' to nullable" in str(raised.value)
+
+
+def test_update_makes_a_required_column_nullable():
+    table = [("id", "BIGINT", False)]
+    [change] = governed(_delta(table, [("id", "BIGINT", True)]), UPDATE).changes
+    assert (change.action, change.column) == (Action.SET_NULLABLE, "id")

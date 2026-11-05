@@ -346,7 +346,17 @@ class TestComputeDeltaCanSafelyWiden:
         seen: list[tuple[str, str]] = []
         s1, s2 = _retype("INT", "DOUBLE")
         compute_delta(s1, s2, WIDEN_MAP, lambda old, new: seen.append((old, new)))
-        assert seen == [("INT", "DOUBLE")]
+        assert seen == [("INT", "DOUBLE"), ("DOUBLE", "INT")]
+
+    def test_a_column_that_already_holds_the_new_type_fits(self):
+        s1, s2 = _retype("BIGINT", "INT")
+        [change] = _alter(compute_delta(s1, s2, WIDEN_MAP))
+        assert (change.safe, change.detail["fits"]) == (False, True)
+
+    def test_a_widening_does_not_fit(self):
+        s1, s2 = _retype("INT", "BIGINT")
+        [change] = _alter(compute_delta(s1, s2, WIDEN_MAP))
+        assert (change.safe, change.detail["fits"]) == (True, False)
 
     def test_map_short_circuits_the_callback(self):
         """A retype the map already allows does not need asking twice."""
