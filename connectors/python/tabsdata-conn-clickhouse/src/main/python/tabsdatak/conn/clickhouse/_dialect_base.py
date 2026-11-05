@@ -58,7 +58,6 @@ class Dialect(ABC):
         load_mode: LoadMode,
         table_name: str,
         arrow_schema: schema,
-        column_nulls: dict[str, bool | None] | None = None,
     ) -> None:
         """Create a table from a PyArrow schema."""
 

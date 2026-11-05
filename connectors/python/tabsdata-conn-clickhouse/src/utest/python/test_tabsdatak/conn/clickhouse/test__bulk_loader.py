@@ -42,7 +42,6 @@ class _RecordingDialect:
         self._exists = exists
         self.calls: list[str] = []
         self.schemas: list = []
-        self.nulls: list = []
 
     def drop_tables(self, load_mode, table_names):
         self.calls.append("drop_tables")
@@ -52,10 +51,9 @@ class _RecordingDialect:
         self.calls.append("table_exists")
         return self._exists
 
-    def create_table(self, load_mode, table_name, arrow_schema, column_nulls=None):
+    def create_table(self, load_mode, table_name, arrow_schema):
         self.calls.append("create_table")
         self.schemas.append(arrow_schema)
-        self.nulls.append(column_nulls)
 
     def supports_auto_cleanup(self):
         return False
@@ -119,21 +117,16 @@ def test_frames_are_staged_under_the_upload_id(tmp_path):
     )
 
 
-def test_the_table_is_created_from_the_staged_footer(tmp_path):
+@pytest.mark.parametrize("evolution", [STRICT, UPDATE])
+def test_the_table_is_created_nullable_from_the_staged_footer(tmp_path, evolution):
+    # Every column nullable whatever the first batch held, so a later batch
+    # that lacks one leaves NULL there rather than ClickHouse's default.
     dialect = _RecordingDialect(exists=False)
-    loader = _loader(tmp_path, dialect, WriteMode.APPEND, UPDATE)
+    loader = _loader(tmp_path, dialect, WriteMode.APPEND, evolution)
     loader.phase_validate_and_prepare(_staged(loader))
     [schema] = dialect.schemas
     assert schema.names == ["id", "name"]
-    [nulls] = dialect.nulls
-    assert nulls == {"id": False, "name": True}
-
-
-def test_strict_creates_every_column_nullable(tmp_path):
-    dialect = _RecordingDialect(exists=False)
-    loader = _loader(tmp_path, dialect, WriteMode.APPEND, STRICT)
-    loader.phase_validate_and_prepare(_staged(loader))
-    assert dialect.nulls == [None]
+    assert all(field.nullable for field in schema)
 
 
 class _Evolving(_RecordingDialect):

@@ -104,6 +104,40 @@ def test_iceberg_keeps_a_column_the_batch_lacks(
 
 @clickhouse_domain("clickhouse")
 @s3_domain("s3")
+def test_iceberg_leaves_null_in_a_column_a_later_batch_lacks(
+    domain_clickhouse: ClickhouseDomain,
+    domain_s3: S3Domain,
+    tmp_path: Path,
+):
+    # The first batch has no nulls, yet the table it creates must still take a
+    # NULL: otherwise a later batch without the column leaves ClickHouse's
+    # default (0) there.
+    db = store(domain_clickhouse)
+    table = "td_iceberg_null_for_lacking"
+    work = work_dir(tmp_path)
+    seed = _parquet(tmp_path / "seed.parquet", pl.DataFrame({"id": [1], "score": [10]}))
+    lacking = _parquet(tmp_path / "lacking.parquet", pl.DataFrame({"id": [2]}))
+    conn = dest_conn(domain_clickhouse, domain_s3)
+    try:
+        _write(
+            conn,
+            work,
+            seed,
+            table,
+            if_table_exists="replace",
+            schema_evolution="update",
+        )
+        _write(conn, work, lacking, table, schema_evolution="update")
+
+        assert db.column_types(table)["score"].startswith("Nullable(")
+        rows = sorted(db.read_table(table).select("id", "score").rows())
+        assert rows == [(1, 10), (2, None)]
+    finally:
+        db.drop_table(table)
+
+
+@clickhouse_domain("clickhouse")
+@s3_domain("s3")
 def test_iceberg_widens_int_type(
     domain_clickhouse: ClickhouseDomain,
     domain_s3: S3Domain,

@@ -122,31 +122,19 @@ def _arrow_type_to_clickhouse(arrow_type: pa.DataType) -> str:
     raise TypeError(f"Unsupported PyArrow type for ClickHouse: {arrow_type}")
 
 
-def schema_to_clickhouse_columns(
-    arrow_schema: pa.Schema,
-    column_nulls: dict[str, bool | None] | None = None,
-) -> list[tuple[str, str]]:
+def schema_to_clickhouse_columns(arrow_schema: pa.Schema) -> list[tuple[str, str]]:
     """Convert a PyArrow schema to ``[(name, clickhouse_type), ...]``.
 
     Non-container nullable fields are wrapped with ``Nullable()``.
     Container types (``Array``/``Map``/``Tuple``) are never wrapped
     because ClickHouse does not support top-level ``Nullable`` on those
     types.
-
-    ``column_nulls`` (when provided) overrides Arrow's schema-level
-    nullable flag: ``True`` or ``None`` (stats missing) -> ``Nullable``,
-    ``False`` -> bare type.
     """
     columns = []
     for field in arrow_schema:
         ch_type = _arrow_type_to_clickhouse(field.type)
         is_container = any(check(field.type) for check in _CONTAINER_TYPE_CHECKS)
-        if is_container:
-            nullable = False
-        elif column_nulls is not None and field.name in column_nulls:
-            nullable = column_nulls[field.name] is not False
-        else:
-            nullable = field.nullable
+        nullable = not is_container and field.nullable
         if nullable:
             ch_type = f"Nullable({ch_type})"
         columns.append((field.name, ch_type))
@@ -358,9 +346,8 @@ class ClickHouseDialect(Dialect):
         load_mode: LoadMode,
         table_name: str,
         arrow_schema: schema,
-        column_nulls: dict[str, bool | None] | None = None,
     ) -> None:
-        col_defs = schema_to_clickhouse_columns(arrow_schema, column_nulls)
+        col_defs = schema_to_clickhouse_columns(arrow_schema)
         columns = ",\n    ".join(
             f"{quote_column(name)} {typ}" for name, typ in col_defs
         )

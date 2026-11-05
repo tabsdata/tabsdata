@@ -29,7 +29,7 @@ from tabsdatak.conn.clickhouse._results import BulkLoadResult
 from tabsdatak.conn.clickhouse._statuses import BulkLoadStatus
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._schema.policy import UPDATE, SchemaEvolution, governed
+from tabsdatak.conn.common.sql._schema.policy import SchemaEvolution, governed
 
 logger = logging.getLogger(__name__)
 
@@ -138,18 +138,11 @@ class CloudStagedBulkLoader:
         # share the same schema).
         arrow_schema = footers[0].schema.to_arrow_schema()
 
-        column_nulls = self._detect_nullability(footers)
-
         if not self.dialect.table_exists(self.load_mode, table_name):
             logger.debug("Creating table: %s", table_name)
-            self.dialect.create_table(
-                self.load_mode,
-                table_name,
-                arrow_schema,
-                column_nulls if self.schema_evolution == UPDATE else None,
-            )
+            self.dialect.create_table(self.load_mode, table_name, arrow_schema)
         else:
-            self.evolve(table_name, arrow_schema, column_nulls)
+            self.evolve(table_name, arrow_schema, self._detect_nullability(footers))
         return list(arrow_schema.names)
 
     def evolve(
