@@ -35,7 +35,7 @@ through the `_port` getter.
 
 from __future__ import annotations
 
-from abc import ABC
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal, TypeAlias
 
@@ -124,6 +124,9 @@ class CloudLocation(_api.DescriptorBase, ABC):
     """
 
     __kind__ = "starRocksCloudLocation"
+
+    @abstractmethod
+    def _base_path(self) -> str: ...
 
 
 @_api.dataclass(StarRocksErrorCode.STARROCKS_8, kw_only=True)

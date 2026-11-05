@@ -9,6 +9,8 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
+import polars as pl
+
 from tabsdatak.conn.starrocks import (
     DestCfgKey,
     DestCfgSpec,
@@ -21,7 +23,6 @@ from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    TableFileSpec,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,20 +58,22 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
     )
 
 
-# All sqlalchemy and transporter imports are made inside the plugin
+# All sqlalchemy and object-store imports are made inside the plugin
 # method bodies below. The conn-starrocks package should be cheap to
 # import even when no flow actually uses the plugin (registry scans
 # pay only for the DestDef metadata and the abstract Dest class, not
 # the runtime IO stack).
 
 
-class StarRocksDestPlugin(DestPlugin[StarRocksDestConn, StarRocksDest]):
+class StarRocksDestPlugin(
+    DestPlugin[StarRocksDestConn, StarRocksDest, list[pl.LazyFrame]],
+):
     def write_out(
         self,
         ctx: DestContext,
         conn: StarRocksDestConn,
         dest: StarRocksDest,
-        tables: list[TableFileSpec],
+        tables: list[pl.LazyFrame],
     ) -> None:
         from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
@@ -83,7 +86,7 @@ class StarRocksDestPlugin(DestPlugin[StarRocksDestConn, StarRocksDest]):
             "starrocks: write_out starting (%d table(s))", len(dest.tables or [])
         )
 
-        # Verifies that the number of incoming parquet files matches
+        # Verifies that the number of incoming tables matches
         # the destination's declared ``tables`` (STARROCKS_3).
         if len(dest.tables) != len(tables):
             raise StarRocksErrorCode.STARROCKS_3.exception(
@@ -107,14 +110,14 @@ class StarRocksDestPlugin(DestPlugin[StarRocksDestConn, StarRocksDest]):
             conn_cfg=dict(conn.conn_cfg) if conn.conn_cfg else None,
         )
 
-        # Upload-prefix lives under the dest's working directory so
+        # A fresh upload id keys this write's staged files so
         # multiple concurrent transactions on the same staging bucket
         # don't collide. The framework's ``transaction_id`` would be ideal but
         # is opaque here; a uuid is sufficient.
         upload_id = uuid.uuid4().hex
 
         try:
-            adapter.execute(write_cfg, list(tables), ctx.work_dir, upload_id)
+            adapter.execute(write_cfg, list(tables), upload_id)
         except OperationalError as e:
             raise StarRocksErrorCode.STARROCKS_4.exception(
                 cause=e,

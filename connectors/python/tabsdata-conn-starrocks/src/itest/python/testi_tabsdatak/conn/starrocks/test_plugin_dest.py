@@ -77,7 +77,7 @@ def test_dest_plugin_write_out_appends_rows(
             PluginDestCtx(work),
             conn,
             StarRocksDest(tables=[table], if_table_exists="replace"),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
         assert_frames_match(db.read_table(table), expected)
 
@@ -85,7 +85,7 @@ def test_dest_plugin_write_out_appends_rows(
             PluginDestCtx(work),
             conn,
             StarRocksDest(tables=[table], if_table_exists="append"),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
         assert db.read_table(table).height == 2 * expected.height
     finally:
@@ -124,7 +124,7 @@ def test_dest_plugin_write_out_replace_clears_existing(
                 PluginDestCtx(work),
                 conn,
                 StarRocksDest(tables=[table], if_table_exists="replace"),
-                [parquet],
+                [pl.scan_parquet(parquet)],
             )
         assert_frames_match(db.read_table(table), expected)
     finally:
@@ -158,7 +158,7 @@ def test_dest_plugin_write_out_resolves_table_name_spelling(
             PluginDestCtx(work),
             conn,
             StarRocksDest(tables=[table], if_table_exists="replace"),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
         plugin.StarRocksDestPlugin().write_out(
             PluginDestCtx(work),
@@ -167,7 +167,7 @@ def test_dest_plugin_write_out_resolves_table_name_spelling(
                 tables=[template.format(db=domain_starrocks.database, table=table)],
                 if_table_exists="append",
             ),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
         assert db.read_table(table).height == 2 * expected.height
     finally:
@@ -201,7 +201,7 @@ def test_dest_plugin_write_out_loads_every_table(
             PluginDestCtx(work),
             conn,
             StarRocksDest(tables=tables, if_table_exists="replace"),
-            parquets,
+            [pl.scan_parquet(parquet) for parquet in parquets],
         )
         for table, frame in zip(tables, expected):
             assert_frames_match(db.read_table(table), frame)

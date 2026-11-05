@@ -51,9 +51,14 @@ def _dest_ctx(work: Path) -> _Ctx:
     return _Ctx(work)
 
 
-def _make_parquet(path: Path, rows: list[dict]) -> Path:
-    pl.DataFrame(rows).write_parquet(path, use_pyarrow=True)
-    return path
+def _staged(monkeypatch, calls: list | None = None) -> None:
+    def stage(staging, store, frame, rel):
+        if calls is not None:
+            calls.append(rel)
+        return f"stg/{rel}", f"s3://staging-bucket/stg/{rel}"
+
+    monkeypatch.setattr(impl, "stage", stage)
+    monkeypatch.setattr(impl, "discard", lambda store, keys: None)
 
 
 @pytest.fixture
@@ -104,7 +109,7 @@ def test_dest_plugin_raises_starrocks_3_on_tables_slots_mismatch(work_dir):
     dest = StarRocksDest(
         tables=["analytics.users", "analytics.orders"],
     )
-    src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
+    src = pl.LazyFrame([{"id": 1}])
     with pytest.raises(StarRocksRuntimeException) as ei:
         plugin.StarRocksDestPlugin().write_out(
             _dest_ctx(work_dir), _bare_conn(), dest, [src]
@@ -113,14 +118,13 @@ def test_dest_plugin_raises_starrocks_3_on_tables_slots_mismatch(work_dir):
 
 
 def test_dest_plugin_wraps_operational_error_as_starrocks_4(monkeypatch, work_dir):
-    # Skip the actual staging upload step.
-    monkeypatch.setattr(impl, "upload_parquet", lambda *a, **kw: "s3://x/y")
+    _staged(monkeypatch)
 
     fake = MagicMock()
     fake.begin.side_effect = OperationalError("conn fail", {}, BaseException("c"))
     monkeypatch.setattr(impl, "build_starrocks_engine", lambda **kw: fake)
 
-    src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
+    src = pl.LazyFrame([{"id": 1}])
     dest = StarRocksDest(tables=["users"])
     with pytest.raises(StarRocksRuntimeException) as ei:
         plugin.StarRocksDestPlugin().write_out(
@@ -134,13 +138,13 @@ def test_dest_plugin_wraps_other_sqlalchemy_error_as_starrocks_5(
     monkeypatch,
     work_dir,
 ):
-    monkeypatch.setattr(impl, "upload_parquet", lambda *a, **kw: "s3://x/y")
+    _staged(monkeypatch)
 
     fake = MagicMock()
     fake.begin.side_effect = ProgrammingError("bad sql", {}, BaseException("p"))
     monkeypatch.setattr(impl, "build_starrocks_engine", lambda **kw: fake)
 
-    src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
+    src = pl.LazyFrame([{"id": 1}])
     dest = StarRocksDest(tables=["users"])
     with pytest.raises(StarRocksRuntimeException) as ei:
         plugin.StarRocksDestPlugin().write_out(
@@ -157,11 +161,7 @@ def test_dest_plugin_wraps_other_sqlalchemy_error_as_starrocks_5(
 def test_dest_plugin_uploads_then_executes_insert(monkeypatch, work_dir):
     calls: list[tuple] = []
 
-    def fake_upload(staging, work, upload_id, parquet, table_key):
-        calls.append(("upload", str(parquet.name), table_key))
-        return f"s3://staging-bucket/stg/{upload_id}/{table_key}/{parquet.name}"
-
-    monkeypatch.setattr(impl, "upload_parquet", fake_upload)
+    _staged(monkeypatch, calls)
 
     executed: list[str] = []
 
@@ -180,15 +180,16 @@ def test_dest_plugin_uploads_then_executes_insert(monkeypatch, work_dir):
     fake_engine.begin.side_effect = lambda: _BeginCtx()
     monkeypatch.setattr(impl, "build_starrocks_engine", lambda **kw: fake_engine)
 
-    parquet = _make_parquet(work_dir / "users.parquet", [{"id": 1, "name": "a"}])
+    table = pl.LazyFrame([{"id": 1, "name": "a"}])
     dest = StarRocksDest(tables=["users"])
     plugin.StarRocksDestPlugin().write_out(
-        _dest_ctx(work_dir), _bare_conn(), dest, [parquet]
+        _dest_ctx(work_dir), _bare_conn(), dest, [table]
     )
 
-    assert calls == [("upload", "users.parquet", "users")]
+    [rel] = calls
+    assert rel.endswith("/users/0.parquet")
     assert len(executed) == 1
-    # The INSERT names the staged parquet's columns explicitly.
+    # The INSERT names the table's columns explicitly.
     assert executed[0].startswith(
         "INSERT INTO `testdb`.`users` (`id`, `name`) SELECT * FROM FILES("
     )
@@ -196,11 +197,7 @@ def test_dest_plugin_uploads_then_executes_insert(monkeypatch, work_dir):
 
 
 def test_dest_plugin_replace_truncates_then_inserts(monkeypatch, work_dir):
-    monkeypatch.setattr(
-        impl,
-        "upload_parquet",
-        lambda *a, **kw: "s3://staging-bucket/stg/x/users/u.parquet",
-    )
+    _staged(monkeypatch)
 
     executed: list[str] = []
 
@@ -219,13 +216,13 @@ def test_dest_plugin_replace_truncates_then_inserts(monkeypatch, work_dir):
     fake_engine.begin.side_effect = lambda: _BeginCtx()
     monkeypatch.setattr(impl, "build_starrocks_engine", lambda **kw: fake_engine)
 
-    parquet = _make_parquet(work_dir / "users.parquet", [{"id": 1}])
+    table = pl.LazyFrame([{"id": 1}])
     dest = StarRocksDest(
         tables=["users"],
         if_table_exists="replace",
     )
     plugin.StarRocksDestPlugin().write_out(
-        _dest_ctx(work_dir), _bare_conn(), dest, [parquet]
+        _dest_ctx(work_dir), _bare_conn(), dest, [table]
     )
 
     assert len(executed) == 2
@@ -235,13 +232,13 @@ def test_dest_plugin_replace_truncates_then_inserts(monkeypatch, work_dir):
     )
 
 
-def test_dest_plugin_insert_omits_columns_absent_from_parquet(monkeypatch, work_dir):
-    # Regression: the INSERT must name only the columns the staged parquet
+def test_dest_plugin_insert_names_only_the_columns_of_the_table(monkeypatch, work_dir):
+    # Regression: the INSERT must name only the columns the staged table
     # actually carries, so a target column the file omits (e.g. an
     # AUTO_INCREMENT `id`) is left for StarRocks to populate. A bare
     # ``INSERT ... SELECT *`` used to fail with "Inserted target column count: 5
     # doesn't match select/value column count: 4" against such a table.
-    monkeypatch.setattr(impl, "upload_parquet", lambda *a, **kw: "s3://x/city/c.parquet")
+    _staged(monkeypatch)
 
     executed: list[str] = []
 
@@ -262,13 +259,12 @@ def test_dest_plugin_insert_omits_columns_absent_from_parquet(monkeypatch, work_
 
     # No `id` column -- mirrors the file-seeded `city` table whose target has an
     # AUTO_INCREMENT `id`.
-    parquet = _make_parquet(
-        work_dir / "city.parquet",
-        [{"name": "Kabul", "country_code": "AFG", "district": "Kabol", "population": 1}],
+    table = pl.LazyFrame(
+        [{"name": "Kabul", "country_code": "AFG", "district": "Kabol", "population": 1}]
     )
     dest = StarRocksDest(tables=["city"])
     plugin.StarRocksDestPlugin().write_out(
-        _dest_ctx(work_dir), _bare_conn(), dest, [parquet]
+        _dest_ctx(work_dir), _bare_conn(), dest, [table]
     )
 
     assert len(executed) == 1

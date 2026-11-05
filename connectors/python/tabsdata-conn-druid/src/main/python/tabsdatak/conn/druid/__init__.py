@@ -34,7 +34,7 @@ URL and credential fields accept a plain string or a `Secret`.
 
 from __future__ import annotations
 
-from abc import ABC
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal, TypeAlias
 
@@ -132,6 +132,9 @@ class CloudLocation(_api.DescriptorBase, ABC):
     """
 
     __kind__ = "druidCloudLocation"
+
+    @abstractmethod
+    def _base_path(self) -> str: ...
 
 
 @_api.dataclass(DruidErrorCode.DRUID_12, kw_only=True)

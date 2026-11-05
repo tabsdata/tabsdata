@@ -62,7 +62,7 @@ def test_dest_plugin_write_out_appends_rows(
             PluginDestCtx(work),
             conn,
             DruidDest(tables=[datasource], if_table_exists="replace"),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
         assert db.wait_count(datasource, rows) == rows
 
@@ -70,7 +70,7 @@ def test_dest_plugin_write_out_appends_rows(
             PluginDestCtx(work),
             conn,
             DruidDest(tables=[datasource], if_table_exists="append"),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
         assert db.wait_count(datasource, 2 * rows) == 2 * rows
     finally:
@@ -108,7 +108,7 @@ def test_dest_plugin_write_out_replace_clears_existing(
             PluginDestCtx(work),
             conn,
             DruidDest(tables=[datasource], if_table_exists="replace"),
-            [first],
+            [pl.scan_parquet(first)],
         )
         assert db.wait_count(datasource, replaced) == replaced
 
@@ -116,7 +116,7 @@ def test_dest_plugin_write_out_replace_clears_existing(
             PluginDestCtx(work),
             conn,
             DruidDest(tables=[datasource], if_table_exists="replace"),
-            [second],
+            [pl.scan_parquet(second)],
         )
         assert db.wait_count(datasource, expected.height) == expected.height
         assert db.dimensions(datasource) == set(expected.columns)
@@ -157,7 +157,7 @@ def test_dest_plugin_write_out_writes_one_datasource_per_slot(
                 tables=[first_datasource, second_datasource],
                 if_table_exists="replace",
             ),
-            [first, second],
+            [pl.scan_parquet(first), pl.scan_parquet(second)],
         )
         assert db.wait_count(first_datasource, first_rows) == first_rows
         assert db.wait_count(second_datasource, second_rows) == second_rows
@@ -200,7 +200,7 @@ def test_dest_plugin_write_out_maps_time_column(
                 time_column="hire_date",
                 segment_granularity="YEAR",
             ),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
         assert db.wait_count(datasource, expected.height) == expected.height
         assert db.dimensions(datasource) == set(expected.columns) - {"hire_date"}

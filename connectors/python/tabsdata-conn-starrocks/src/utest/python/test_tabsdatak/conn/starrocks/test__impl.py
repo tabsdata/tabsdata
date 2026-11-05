@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -11,6 +12,7 @@ import polars as pl
 import pytest
 
 from tabsdatak.api import Secret
+from tabsdatak.conn.common.file._store import FileStore
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     AzureAccountKey,
@@ -28,7 +30,6 @@ from tabsdatak.conn.starrocks import (
 from tabsdatak.conn.common.sql._engine import sqlalchemy_utils
 
 # noinspection PyProtectedMember
-from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
 from tabsdatak.conn.starrocks import _impl as impl
 from tabsdatak.conn.starrocks.error import (
     StarRocksErrorCode,
@@ -38,7 +39,6 @@ from tabsdatak.conn.starrocks.error import (
 
 pytestmark = pytest.mark.starrocks
 
-HANDLER = TransporterHandler1()
 
 
 # ---------------------------------------------------------------------------
@@ -251,26 +251,50 @@ def test_qualify_preserves_existing_backtick_quotes():
 
 
 # ---------------------------------------------------------------------------
-# transporter_env -- credential resolution per staging type
+# staging_store / stage / discard
 # ---------------------------------------------------------------------------
 
 
-def test_transporter_env_s3():
-    env = impl.transporter_env(_s3_staging(), HANDLER)
-    assert env["LOCATION_AWS_ACCESS_KEY_ID"] == "AKIA..."
-    assert env["LOCATION_AWS_SECRET_ACCESS_KEY"] == "secret"
-    assert env["LOCATION_AWS_REGION"] == "us-east-1"
+def test_staging_store_of_s3_is_its_bucket_with_credentials():
+    store = impl.staging_store(_s3_staging())
+    assert store.root.startswith("s3://")
+    assert store.options["aws_access_key_id"] == "AKIA..."
+    assert store.options["aws_secret_access_key"] == "secret"
+    assert store.options["aws_region"] == "us-east-1"
 
 
-def test_transporter_env_azure():
-    env = impl.transporter_env(_az_staging(), HANDLER)
-    assert env["LOCATION_ACCOUNT_NAME"] == "acct"
-    assert env["LOCATION_ACCOUNT_KEY"] == "azkey"
+def test_staging_store_of_azure_is_its_container_with_credentials():
+    store = impl.staging_store(_az_staging())
+    assert store.root.startswith("az://")
+    assert store.options == {
+        "azure_storage_account_name": "acct",
+        "azure_storage_account_key": "azkey",
+    }
 
 
-def test_transporter_env_gcs_uses_json_credentials():
-    env = impl.transporter_env(_gcs_staging(), HANDLER)
-    assert env["LOCATION_GCS_SERVICE_ACCOUNT_JSON"] == "{}"
+def test_staging_store_of_gcs_uploads_with_the_json_key():
+    store = impl.staging_store(_gcs_staging())
+    assert store.root.startswith("gs://")
+    assert store.options == {"google_service_account_key": "{}"}
+
+
+def test_stage_writes_the_frame_under_the_base_path(tmp_path):
+    store = FileStore(tmp_path.as_uri())
+    staging = _s3_staging()
+    key, uri = impl.stage(staging, store, pl.LazyFrame({"id": [1]}), "up/t/0.parquet")
+    assert uri == impl.staged_uri(staging, "up/t/0.parquet")
+    assert key.endswith("up/t/0.parquet")
+    assert pl.read_parquet(tmp_path / key).to_dicts() == [{"id": 1}]
+
+
+def test_discard_never_fails(caplog):
+    class Broken:
+        def delete(self, keys):
+            raise OSError("denied")
+
+    with caplog.at_level(logging.WARNING, logger=impl.logger.name):
+        impl.discard(Broken(), ["a"])
+    assert "staged files remain" in caplog.text
 
 
 # ---------------------------------------------------------------------------
@@ -285,17 +309,24 @@ def work_dir(tmp_path: Path) -> Path:
     return out
 
 
-def _make_parquet(path: Path, rows: list[dict]) -> Path:
-    pl.DataFrame(rows).write_parquet(path, use_pyarrow=True)
-    return path
+ROWS = pl.LazyFrame({"id": [1]})
+
+
+def _staging(monkeypatch, fail: Exception | None = None) -> list[str]:
+    discarded: list[str] = []
+
+    def stage(staging, store, frame, rel):
+        if fail is not None:
+            raise fail
+        return f"prefix/{rel}", f"s3://stg/prefix/{rel}"
+
+    monkeypatch.setattr(impl, "stage", stage)
+    monkeypatch.setattr(impl, "discard", lambda store, keys: discarded.extend(keys))
+    return discarded
 
 
 def test_execute_uploads_then_inserts(monkeypatch, work_dir):
-    monkeypatch.setattr(
-        impl,
-        "upload_parquet",
-        lambda *a, **kw: "s3://stg/prefix/up1/t/x.parquet",
-    )
+    discarded = _staging(monkeypatch)
 
     executed: list[str] = []
 
@@ -320,13 +351,12 @@ def test_execute_uploads_then_inserts(monkeypatch, work_dir):
         staging=_s3_staging(),
         target_tables=["users", "orders"],
     )
-    parquet1 = _make_parquet(work_dir / "u.parquet", [{"id": 1}])
-    parquet2 = _make_parquet(work_dir / "o.parquet", [{"id": 1}])
-    impl.execute(cfg, [parquet1, parquet2], work_dir, upload_id="up1")
+    impl.execute(cfg, [ROWS, ROWS], upload_id="up1")
 
     assert len(executed) == 2
-    assert executed[0].startswith("INSERT INTO `db`.`users`")
-    assert executed[1].startswith("INSERT INTO `db`.`orders`")
+    assert executed[0].startswith("INSERT INTO `db`.`users` (`id`)")
+    assert executed[1].startswith("INSERT INTO `db`.`orders` (`id`)")
+    assert discarded == ["prefix/up1/users/0.parquet", "prefix/up1/orders/1.parquet"]
     engine.dispose.assert_called()
 
 
@@ -338,9 +368,8 @@ def test_execute_rejects_unknown_if_table_exists(work_dir):
         target_tables=["t"],
         if_table_exists="invalid",
     )
-    parquet = _make_parquet(work_dir / "x.parquet", [{"id": 1}])
     with pytest.raises(ValueError):
-        impl.execute(cfg, [parquet], work_dir, upload_id="up1")
+        impl.execute(cfg, [ROWS], upload_id="up1")
 
 
 # ---------------------------------------------------------------------------
@@ -367,11 +396,7 @@ def test_transient_predicate_rejects_table_not_found():
 def test_execute_does_not_retry_on_non_transient_error(monkeypatch, work_dir):
     # A deterministic failure (e.g. a missing target table) must surface on the
     # first attempt rather than being retried for the full timeout.
-    monkeypatch.setattr(
-        impl,
-        "upload_parquet",
-        lambda *a, **kw: "s3://stg/prefix/up1/t/x.parquet",
-    )
+    discarded = _staging(monkeypatch)
     attempts = {"n": 0}
 
     class _Conn:
@@ -397,7 +422,22 @@ def test_execute_does_not_retry_on_non_transient_error(monkeypatch, work_dir):
         target_tables=["t"],
         if_table_exists="replace",
     )
-    parquet = _make_parquet(work_dir / "x.parquet", [{"id": 1}])
     with pytest.raises(RuntimeError, match="is not found"):
-        impl.execute(cfg, [parquet], work_dir, upload_id="up1")
+        impl.execute(cfg, [ROWS], upload_id="up1")
     assert attempts["n"] == 1
+    assert discarded == ["prefix/up1/t/0.parquet"]
+
+
+def test_a_staging_failure_is_a_write_failure_of_its_table(monkeypatch):
+    _staging(monkeypatch, fail=OSError("bucket unreachable"))
+    monkeypatch.setattr(impl, "build_starrocks_engine", lambda **kw: MagicMock())
+    cfg = impl.StarRocksWriteCfg(
+        host="h", port=9030, database="db",
+        credentials=_credentials(),
+        staging=_s3_staging(),
+        target_tables=["t"],
+    )
+    with pytest.raises(StarRocksRuntimeException) as raised:
+        impl.execute(cfg, [ROWS], upload_id="up1")
+    assert raised.value.api_error is StarRocksErrorCode.STARROCKS_5
+    assert raised.value.extra["table"] == "t"

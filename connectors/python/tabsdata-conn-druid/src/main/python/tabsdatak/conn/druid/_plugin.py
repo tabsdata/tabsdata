@@ -8,11 +8,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from tabsdatak.common._transporter.invoker.transporter1 import (
-    TransporterBinaryNotFoundError,
-    TransporterReportError,
-    TransporterRunError,
-)
+import polars as pl
+
 from tabsdatak.conn.druid import (
     DestCfgKey,
     DestCfgSpec,
@@ -28,7 +25,6 @@ from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    TableFileSpec,
 )
 
 logger = logging.getLogger(__name__)
@@ -79,14 +75,17 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
     )
 
 
-class DruidDestPlugin(DestPlugin[DruidDestConn, DruidDest]):
+class DruidDestPlugin(
+    DestPlugin[DruidDestConn, DruidDest, list[pl.LazyFrame]],
+):
     """Apache Druid destination plugin.
 
     Druid ingestion is asynchronous: parquet files first land in a
-    cloud staging area (S3 / GCS / Azure) and then the plugin POSTs a
+    cloud staging area (S3 / Azure) and then the plugin POSTs a
     native batch ``index_parallel`` task to the Overlord. The plugin
     polls the Overlord until the task terminates and returns ``None``
-    on success or raises ``DRUID_*`` on any failure.
+    on success or raises ``DRUID_*`` on any failure. Once the task has
+    ended, successfully or not, its staged file is deleted, best effort.
 
     One ingestion task is submitted per target datasource; per-task
     parallelism is governed by ``DruidDest.max_concurrent_subtasks``.
@@ -97,7 +96,7 @@ class DruidDestPlugin(DestPlugin[DruidDestConn, DruidDest]):
         ctx: DestContext,
         conn: DruidDestConn,
         dest: DruidDest,
-        tables: list[TableFileSpec],
+        tables: list[pl.LazyFrame],
     ) -> None:
         # All adapter imports live inside the method body so the
         # tabsdata-conn-druid package stays cheap to import for a
@@ -135,86 +134,109 @@ class DruidDestPlugin(DestPlugin[DruidDestConn, DruidDest]):
         # ---- Submit one ingestion task per datasource ------------
         logger.debug("druid: establishing overlord client")
         client = adapter.make_overlord_client_for_dest(conn, dest)
+        store = adapter.staging_store(staging)
         total = len(dest.tables)
         with client:
-            for slot_idx, (datasource, parquet) in enumerate(zip(dest.tables, tables)):
+            for slot_idx, (datasource, frame) in enumerate(zip(dest.tables, tables)):
                 logger.info(
                     "druid: writing datasource %d/%d: %r",
                     slot_idx + 1,
                     total,
                     datasource,
                 )
-                slot_subdir = f"{subdir_root}/slot{slot_idx}"
                 logger.info("druid: staging parquet for %r", datasource)
                 try:
-                    staged_uris = adapter.upload_staged_files(
-                        staging=staging,
-                        parquet_files=[parquet],
-                        subdir=slot_subdir,
-                        work_dir=ctx.work_dir,
+                    key, staged_uri = adapter.stage(
+                        staging,
+                        store,
+                        frame,
+                        f"{subdir_root}/slot{slot_idx}",
+                        f"part-00000-{slot_idx}.parquet",
                     )
-                except (
-                    TransporterRunError,
-                    TransporterReportError,
-                    TransporterBinaryNotFoundError,
-                ) as e:
+                except Exception as e:
                     # noinspection PyProtectedMember
                     raise DruidErrorCode.DRUID_7.exception(
                         cause=e,
                         datasource=datasource,
                     )
-
-                # Build the per-task ingestion spec.
-                input_source = adapter.build_input_source(staging, staged_uris)
-                spec = adapter.build_ingestion_spec(
-                    datasource=datasource,
-                    input_source=input_source,
-                    is_replace=(dest.if_table_exists == "replace"),
-                    time_column=dest.time_column,
-                    segment_granularity=dest.segment_granularity,
-                    max_concurrent_subtasks=dest.max_concurrent_subtasks,
-                    max_rows_per_segment=dest.max_rows_per_segment,
-                    max_rows_in_memory=dest.max_rows_in_memory,
-                )
-
-                # Submit + wait.
                 try:
-                    task_id = client.submit_task(spec)
-                except TabsdataException:
-                    # ``submit_task`` already raised DRUID_10 with the
-                    # safe-URL context baked in; let it propagate.
-                    raise
-                except Exception as e:
-                    # noinspection PyProtectedMember
-                    raise DruidErrorCode.DRUID_8.exception(
-                        cause=e,
-                        datasource=datasource,
-                        # noinspection PyProtectedMember
-                        url=adapter._sanitize_url(
-                            conn._overlord_url(),
-                        ),
+                    self._ingest(
+                        adapter, client, conn, dest, staging, datasource, staged_uri
                     )
-
-                logger.info(
-                    "Druid ingestion task submitted (datasource=%s, task_id=%s)",
-                    datasource,
-                    task_id,
-                )
-                try:
-                    client.wait_for_completion(task_id)
-                except TabsdataException as e:
-                    if e.api_error is DruidErrorCode.DRUID_9:
-                        # ``wait_for_completion`` doesn't know which
-                        # datasource produced the failure; rebuild
-                        # the exception with the right context.
-                        reason = e.extra.get("reason", "ingestion failed")
-                        # noinspection PyProtectedMember
-                        raise DruidErrorCode.DRUID_9.exception(
-                            datasource=datasource,
-                            task_id=task_id,
-                            reason=reason,
-                        ) from e
+                except BaseException as error:
+                    if (
+                        isinstance(error, TabsdataException)
+                        and error.api_error is DruidErrorCode.DRUID_9
+                    ):
+                        adapter.discard(store, [key])
+                    else:
+                        logger.warning(
+                            "druid: the ingestion of %r may still read its "
+                            "staged file; keeping %s",
+                            datasource,
+                            key,
+                        )
                     raise
+                adapter.discard(store, [key])
+
+    @staticmethod
+    def _ingest(
+        adapter: Any,
+        client: Any,
+        conn: DruidDestConn,
+        dest: DruidDest,
+        staging: Any,
+        datasource: str,
+        staged_uri: str,
+    ) -> None:
+        input_source = adapter.build_input_source(staging, [staged_uri])
+        spec = adapter.build_ingestion_spec(
+            datasource=datasource,
+            input_source=input_source,
+            is_replace=(dest.if_table_exists == "replace"),
+            time_column=dest.time_column,
+            segment_granularity=dest.segment_granularity,
+            max_concurrent_subtasks=dest.max_concurrent_subtasks,
+            max_rows_per_segment=dest.max_rows_per_segment,
+            max_rows_in_memory=dest.max_rows_in_memory,
+        )
+        try:
+            task_id = client.submit_task(spec)
+        except TabsdataException:
+            # ``submit_task`` already raised DRUID_10 with the
+            # safe-URL context baked in; let it propagate.
+            raise
+        except Exception as e:
+            # noinspection PyProtectedMember
+            raise DruidErrorCode.DRUID_8.exception(
+                cause=e,
+                datasource=datasource,
+                # noinspection PyProtectedMember
+                url=adapter._sanitize_url(
+                    conn._overlord_url(),
+                ),
+            )
+
+        logger.info(
+            "Druid ingestion task submitted (datasource=%s, task_id=%s)",
+            datasource,
+            task_id,
+        )
+        try:
+            client.wait_for_completion(task_id)
+        except TabsdataException as e:
+            if e.api_error is DruidErrorCode.DRUID_9:
+                # ``wait_for_completion`` doesn't know which
+                # datasource produced the failure; rebuild
+                # the exception with the right context.
+                reason = e.extra.get("reason", "ingestion failed")
+                # noinspection PyProtectedMember
+                raise DruidErrorCode.DRUID_9.exception(
+                    datasource=datasource,
+                    task_id=task_id,
+                    reason=reason,
+                ) from e
+            raise
 
 
 DRUID_DEST = DestDef(

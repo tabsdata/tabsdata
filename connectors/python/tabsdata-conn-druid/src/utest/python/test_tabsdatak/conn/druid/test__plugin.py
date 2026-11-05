@@ -9,18 +9,17 @@ The real-Druid happy paths live in ``test__plugin_integration.py``.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock
 
 import polars as pl
 import pytest
 
 from tabsdatak.api import Secret
-from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
-from tabsdatak.common._transporter.invoker import transporter1
+from tabsdatak.conn.common.file._store import FileStore
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     AzureAccountKey,
@@ -43,7 +42,6 @@ from tabsdatak.conn.druid.error import (
 
 pytestmark = pytest.mark.druid
 
-HANDLER = TransporterHandler1()
 
 
 # ---------------------------------------------------------------------------
@@ -96,11 +94,6 @@ def work_dir(tmp_path: Path) -> Path:
     return out
 
 
-def _make_parquet(path: Path, rows: list[dict]) -> Path:
-    pl.DataFrame(rows).write_parquet(path, use_pyarrow=True)
-    return path
-
-
 # ---------------------------------------------------------------------------
 # Builders for the test connection / destination
 # ---------------------------------------------------------------------------
@@ -147,60 +140,68 @@ def _conn(staging=None) -> DruidDestConn:
 
 def test_dest_plugin_raises_druid_6_on_tables_slots_mismatch(work_dir):
     dest = DruidDest(tables=["events", "metrics"])
-    parquet = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(DruidRuntimeException) as ei:
         plugin.DruidDestPlugin().write_out(
             _dest_ctx(work_dir),
             _conn(),
             dest,
-            [parquet],
+            [ROWS],
         )
     assert ei.value.api_error is DruidErrorCode.DRUID_6
 
 
+ROWS = pl.LazyFrame({"id": [1]})
+
+
+@dataclass
+class Staging:
+    staged: list[tuple[str, str]]
+    discarded: list[str]
+
+
+def _staging(monkeypatch, fail: Exception | None = None) -> Staging:
+    record = Staging([], [])
+
+    def stage(staging, store, frame, subdir, name):
+        if fail is not None:
+            raise fail
+        record.staged.append((subdir, name))
+        key = f"staging/{subdir}/{name}"
+        return key, f"s3://staging-bucket/{key}"
+
+    monkeypatch.setattr(impl, "stage", stage)
+    monkeypatch.setattr(
+        impl, "discard", lambda store, keys: record.discarded.extend(keys)
+    )
+    return record
+
+
+def _client(monkeypatch, *, submit=None, wait=None) -> MagicMock:
+    fake_client = MagicMock()
+    fake_client.submit_task.side_effect = submit or (lambda spec: "task-1")
+    fake_client.wait_for_completion.side_effect = wait
+    monkeypatch.setattr(
+        impl,
+        "make_overlord_client_for_dest",
+        lambda conn, dest: fake_client,
+    )
+    return fake_client
+
+
 # ---------------------------------------------------------------------------
-# DestPlugin.write_out -- staging upload failure (DRUID_7)
+# DestPlugin.write_out -- staging failure (DRUID_7)
 # ---------------------------------------------------------------------------
 
 
-def test_dest_plugin_wraps_transporter_run_error_as_druid_7(
-    monkeypatch,
-    work_dir,
-):
-    def boom(*args, **kwargs):
-        raise transporter1.TransporterRunError(1, "", "upload failed")
-
-    monkeypatch.setattr(impl, "upload_staged_files", boom)
-    parquet = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = DruidDest(tables=["events"])
+def test_dest_plugin_wraps_a_staging_failure_as_druid_7(monkeypatch, work_dir):
+    record = _staging(monkeypatch, fail=OSError("bucket unreachable"))
+    _client(monkeypatch)
     with pytest.raises(DruidRuntimeException) as ei:
         plugin.DruidDestPlugin().write_out(
-            _dest_ctx(work_dir),
-            _conn(),
-            dest,
-            [parquet],
+            _dest_ctx(work_dir), _conn(), DruidDest(tables=["events"]), [ROWS]
         )
     assert ei.value.api_error is DruidErrorCode.DRUID_7
-
-
-def test_dest_plugin_wraps_transporter_binary_not_found_as_druid_7(
-    monkeypatch,
-    work_dir,
-):
-    def boom(*args, **kwargs):
-        raise transporter1.TransporterBinaryNotFoundError("missing binary")
-
-    monkeypatch.setattr(impl, "upload_staged_files", boom)
-    parquet = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = DruidDest(tables=["events"])
-    with pytest.raises(DruidRuntimeException) as ei:
-        plugin.DruidDestPlugin().write_out(
-            _dest_ctx(work_dir),
-            _conn(),
-            dest,
-            [parquet],
-        )
-    assert ei.value.api_error is DruidErrorCode.DRUID_7
+    assert record.discarded == []
 
 
 # ---------------------------------------------------------------------------
@@ -208,35 +209,24 @@ def test_dest_plugin_wraps_transporter_binary_not_found_as_druid_7(
 # ---------------------------------------------------------------------------
 
 
-def test_dest_plugin_wraps_submit_failure_as_druid_8(
+def test_dest_plugin_wraps_submit_failure_as_druid_8_keeping_the_file(
     monkeypatch,
     work_dir,
 ):
-    monkeypatch.setattr(
-        impl,
-        "upload_staged_files",
-        lambda **kwargs: ["s3://staging-bucket/staging/dummy"],
-    )
+    record = _staging(monkeypatch)
 
-    fake_client = MagicMock()
-    fake_client.submit_task.side_effect = RuntimeError("network down")
-    monkeypatch.setattr(
-        impl,
-        "make_overlord_client_for_dest",
-        lambda conn, dest: fake_client,
-    )
-    parquet = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = DruidDest(tables=["events"])
+    def submit(spec):
+        raise RuntimeError("network down")
+
+    _client(monkeypatch, submit=submit)
     with pytest.raises(DruidRuntimeException) as ei:
         plugin.DruidDestPlugin().write_out(
-            _dest_ctx(work_dir),
-            _conn(),
-            dest,
-            [parquet],
+            _dest_ctx(work_dir), _conn(), DruidDest(tables=["events"]), [ROWS]
         )
     assert ei.value.api_error is DruidErrorCode.DRUID_8
     # The URL embedded in the error is the safe-sanitized form.
     assert "druid.example.com" in ei.value.extra["url"]
+    assert record.discarded == []
 
 
 # ---------------------------------------------------------------------------
@@ -244,15 +234,10 @@ def test_dest_plugin_wraps_submit_failure_as_druid_8(
 # ---------------------------------------------------------------------------
 
 
-def test_dest_plugin_wraps_task_failure_as_druid_9(monkeypatch, work_dir):
-    monkeypatch.setattr(
-        impl,
-        "upload_staged_files",
-        lambda **kwargs: ["s3://staging-bucket/staging/dummy"],
-    )
-
-    fake_client = MagicMock()
-    fake_client.submit_task.return_value = "task-123"
+def test_dest_plugin_wraps_task_failure_as_druid_9_and_discards(
+    monkeypatch, work_dir
+):
+    record = _staging(monkeypatch)
 
     def _wait(_task_id):
         # noinspection PyProtectedMember
@@ -262,27 +247,40 @@ def test_dest_plugin_wraps_task_failure_as_druid_9(monkeypatch, work_dir):
             reason="bad parquet",
         )
 
-    fake_client.wait_for_completion.side_effect = _wait
-    monkeypatch.setattr(
-        impl,
-        "make_overlord_client_for_dest",
-        lambda conn, dest: fake_client,
-    )
-    parquet = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = DruidDest(tables=["events"])
+    _client(monkeypatch, wait=_wait)
     with pytest.raises(DruidRuntimeException) as ei:
         plugin.DruidDestPlugin().write_out(
-            _dest_ctx(work_dir),
-            _conn(),
-            dest,
-            [parquet],
+            _dest_ctx(work_dir), _conn(), DruidDest(tables=["events"]), [ROWS]
         )
     assert ei.value.api_error is DruidErrorCode.DRUID_9
     # The datasource is hydrated from the dest's tables -- the
     # original placeholder ("?") must be replaced.
     assert ei.value.extra["datasource"] == "events"
-    assert ei.value.extra["task_id"] == "task-123"
+    assert ei.value.extra["task_id"] == "task-1"
     assert "bad parquet" in ei.value.extra["reason"]
+    assert record.discarded == [
+        f"staging/{record.staged[0][0]}/{record.staged[0][1]}"
+    ]
+
+
+def test_dest_plugin_keeps_the_file_when_the_task_state_is_unknown(
+    monkeypatch, work_dir
+):
+    record = _staging(monkeypatch)
+
+    def _wait(_task_id):
+        # noinspection PyProtectedMember
+        raise DruidErrorCode.DRUID_10.exception(
+            url="http://druid.example.com:8081", reason="status unreachable"
+        )
+
+    _client(monkeypatch, wait=_wait)
+    with pytest.raises(DruidRuntimeException) as ei:
+        plugin.DruidDestPlugin().write_out(
+            _dest_ctx(work_dir), _conn(), DruidDest(tables=["events"]), [ROWS]
+        )
+    assert ei.value.api_error is DruidErrorCode.DRUID_10
+    assert record.discarded == []
 
 
 # ---------------------------------------------------------------------------
@@ -291,30 +289,14 @@ def test_dest_plugin_wraps_task_failure_as_druid_9(monkeypatch, work_dir):
 
 
 def test_dest_plugin_submits_one_task_per_table(monkeypatch, work_dir):
-    captured: dict[str, Any] = {"specs": [], "uploads": []}
-
-    def _fake_upload(**kwargs):
-        captured["uploads"].append(kwargs)
-        return ["s3://staging-bucket/staging/dummy"]
-
-    monkeypatch.setattr(impl, "upload_staged_files", _fake_upload)
-
-    fake_client = MagicMock()
+    record = _staging(monkeypatch)
+    specs: list[dict] = []
 
     def _fake_submit(spec: dict) -> str:
-        captured["specs"].append(spec)
-        return f"task-{len(captured['specs'])}"
+        specs.append(spec)
+        return f"task-{len(specs)}"
 
-    fake_client.submit_task.side_effect = _fake_submit
-    fake_client.wait_for_completion.return_value = None
-    monkeypatch.setattr(
-        impl,
-        "make_overlord_client_for_dest",
-        lambda conn, dest: fake_client,
-    )
-
-    parquet_a = _make_parquet(work_dir / "a.parquet", [{"id": 1}])
-    parquet_b = _make_parquet(work_dir / "b.parquet", [{"id": 2}])
+    _client(monkeypatch, submit=_fake_submit)
     dest = DruidDest(
         tables=["events", "metrics"],
         if_table_exists="replace",
@@ -326,16 +308,16 @@ def test_dest_plugin_submits_one_task_per_table(monkeypatch, work_dir):
         _dest_ctx(work_dir),
         _conn(),
         dest,
-        [parquet_a, parquet_b],
+        [ROWS, pl.LazyFrame({"id": [2]})],
     )
 
     # One ingestion task per target datasource.
-    assert [s["spec"]["dataSchema"]["dataSource"] for s in captured["specs"]] == [
+    assert [s["spec"]["dataSchema"]["dataSource"] for s in specs] == [
         "events",
         "metrics",
     ]
     # All specs honour replace semantics + tuning knobs.
-    for s in captured["specs"]:
+    for s in specs:
         assert s["spec"]["ioConfig"]["dropExisting"] is True
         assert s["spec"]["ioConfig"]["appendToExisting"] is False
         assert s["spec"]["dataSchema"]["timestampSpec"]["column"] == "ts"
@@ -343,11 +325,15 @@ def test_dest_plugin_submits_one_task_per_table(monkeypatch, work_dir):
             s["spec"]["dataSchema"]["granularitySpec"]["segmentGranularity"] == "HOUR"
         )
         assert s["spec"]["tuningConfig"]["maxNumConcurrentSubTasks"] == 4
-    # Both upload calls used the same staging subdir root (per
-    # transaction).
-    subdirs = {kw["subdir"] for kw in captured["uploads"]}
-    assert len(subdirs) == 2  # different slot suffix per datasource
+    # Both stagings share the transaction's subdir root, one slot each.
+    subdirs = {subdir for subdir, _ in record.staged}
+    assert len(subdirs) == 2
     assert all(s.startswith("td-druid/trx-unit/") for s in subdirs)
+    assert [name for _, name in record.staged] == [
+        "part-00000-0.parquet",
+        "part-00000-1.parquet",
+    ]
+    assert len(record.discarded) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -417,7 +403,7 @@ def test_build_input_source_azure():
 
 
 # ---------------------------------------------------------------------------
-# Adapter helpers -- staged_uri / transporter target / env
+# Adapter helpers -- staged_uri / staging store
 # ---------------------------------------------------------------------------
 
 
@@ -430,19 +416,51 @@ def test_staged_uri_for_each_flavor():
     )
 
 
-def test_transporter_env_s3():
-    # noinspection PyProtectedMember
-    env = impl._transporter_env(_s3_staging(), HANDLER)
-    assert env[transporter1.SERVER_SIDE_AWS_ACCESS_KEY_ID] == "AKIA..."
-    assert env[transporter1.SERVER_SIDE_AWS_SECRET_ACCESS_KEY] == "secret"
-    assert env[transporter1.SERVER_SIDE_AWS_REGION] == "us-east-1"
+def test_staging_store_of_s3_is_its_bucket_with_credentials():
+    staging = S3Location(
+        bucket="staging-bucket",
+        region="us-east-1",
+        credentials=AwsAccessSecretKey(
+            access_key_id=Secret("AKIA..."),
+            secret_access_key=Secret("secret"),
+        ),
+        cfg={"obstore.endpoint": "http://127.0.0.1:9000"},
+    )
+    store = impl.staging_store(staging)
+    assert store.root == "s3://staging-bucket"
+    assert store.options == {
+        "aws_access_key_id": "AKIA...",
+        "aws_secret_access_key": "secret",
+        "aws_region": "us-east-1",
+        "aws_endpoint": "http://127.0.0.1:9000",
+    }
 
 
-def test_transporter_env_azure():
-    # noinspection PyProtectedMember
-    env = impl._transporter_env(_az_staging(), HANDLER)
-    assert env[transporter1.SERVER_SIDE_AZURE_ACCOUNT_NAME] == "acct"
-    assert env[transporter1.SERVER_SIDE_AZURE_ACCOUNT_KEY] == "key"
+def test_staging_store_of_azure_is_its_container_with_credentials():
+    store = impl.staging_store(_az_staging())
+    assert store.root == "az://td-stage"
+    assert store.options == {
+        "azure_storage_account_name": "acct",
+        "azure_storage_account_key": "key",
+    }
+
+
+def test_stage_writes_the_frame_under_the_base_path(tmp_path):
+    store = FileStore(tmp_path.as_uri())
+    key, uri = impl.stage(_s3_staging(), store, ROWS, "td-druid/trx/x", "p.parquet")
+    assert key == "staging/td-druid/trx/x/p.parquet"
+    assert uri == "s3://staging-bucket/staging/td-druid/trx/x/p.parquet"
+    assert pl.read_parquet(tmp_path / key).to_dicts() == [{"id": 1}]
+
+
+def test_discard_never_fails(tmp_path, caplog):
+    class Broken:
+        def delete(self, keys):
+            raise OSError("denied")
+
+    with caplog.at_level(logging.WARNING, logger=impl.logger.name):
+        impl.discard(Broken(), ["a"])
+    assert "staged files remain" in caplog.text
 
 
 # ---------------------------------------------------------------------------

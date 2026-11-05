@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import IO, Any, cast
 
 import obstore
 import polars as pl
@@ -94,6 +94,9 @@ class FileStore:
 
     def ranged(self, path: str) -> Ranged:
         return Ranged(StorageLocation(self.uri(path), self.options))
+
+    def open_writer(self, key: str) -> IO[bytes]:
+        return cast(IO[bytes], obstore.open_writer(self.store(), key))
 
     def scan_parquet(self, path: str) -> pl.LazyFrame:
         return FrameLocator(self.uri(path), self.options).scan()

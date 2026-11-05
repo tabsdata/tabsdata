@@ -8,14 +8,19 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from tabsdatak.common._fileformat.taxonomy import DestFileFormat
-from tabsdatak.common._transporter.facade import make_handler
-from tabsdatak.common._transporter.handler.handler import TransporterHandler
-from tabsdatak.conn.common.file._output import copy_one as _transporter_copy_one
+import polars as pl
+
+from tabsdatak.common._storage.transfer import (
+    AWS_ACCESS_KEY_ID_OPTION,
+    AWS_REGION_OPTION,
+    AWS_SECRET_ACCESS_KEY_OPTION,
+    AZURE_STORAGE_ACCOUNT_KEY_OPTION,
+    AZURE_STORAGE_ACCOUNT_NAME_OPTION,
+)
+from tabsdatak.conn.common.file._store import FileStore, forwarded
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert, cloud_full_path
@@ -68,14 +73,6 @@ def _sanitize_url(url: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True, slots=True)
-class StagedFile:
-    """A single parquet file staged at a cloud location, identified by
-    the cloud-native URI Druid will use for ingestion."""
-
-    uri: str
-
-
 def _staging_subdir(transaction_id: str) -> str:
     """Return the per-execution subdir under ``staging.base_path``.
 
@@ -105,117 +102,56 @@ def staged_uri(location: CloudLocation, key: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Transporter (LocalFile -> CloudLocation) for staging uploads
+# Staging store
 # ---------------------------------------------------------------------------
 
 
-def _transporter_target(
-    location: CloudLocation, key: str, handler: TransporterHandler
-) -> Any:
-    """Build the transporter location target for a staged file.
-
-    The cloud-side credentials are passed via the transporter env (so
-    they don't leak into request YAML on disk); the URL identifies the
-    target object under ``location``.
-    """
+def staging_store(location: CloudLocation) -> FileStore:
+    """The object store staged parquet is written to: the bucket or
+    container root of *location*, with its credentials and any
+    ``obstore.*`` keys of its ``cfg``."""
     if isinstance(location, S3Location):
-        bucket = location._bucket()
-        return handler.s3_location(
-            uri=f"s3://{bucket}/{key}",
-            access_key_env=handler.aws_access_key_id_env,
-            secret_key_env=handler.aws_secret_access_key_env,
-            region_env=handler.aws_region_env,
-        )
-    # No GCS staging for Druid -- see the commented-out
-    # GCSLocation in __init__.py for why.
-    # if isinstance(location, GCSLocation):
-    #     bucket = location._bucket()
-    #     return handler.gcs_location(
-    #         uri=f"gs://{bucket}/{key}",
-    #         service_account_key_env=handler.gcp_service_account_json_env,
-    #     )
-    if isinstance(location, AzBlobLocation):
-        container = location._container()
-        return handler.azure_location(
-            uri=f"az://{container}/{key}",
-            account_name_env=handler.azure_account_name_env,
-            account_key_env=handler.azure_account_key_env,
-        )
-    # noinspection PyProtectedMember
-    raise DruidErrorCode.DRUID_11.exception(kind=type(location).__name__)
-
-
-def _transporter_env(
-    location: CloudLocation, handler: TransporterHandler
-) -> dict[str, str]:
-    """Build the env dict the transporter binary needs for ``location``.
-
-    Mirrors the per-flavor ``run_env`` helpers in the cloud-side
-    connectors (s3, gcs, azureblob).
-    """
-    if isinstance(location, S3Location):
+        root = f"s3://{location._bucket()}"
         creds = location.credentials
-        return {
-            handler.aws_access_key_id_env: _convert(creds.access_key_id, str),
-            handler.aws_secret_access_key_env: _convert(creds.secret_access_key, str),
-            handler.aws_region_env: location._region(),
+        options = {
+            AWS_ACCESS_KEY_ID_OPTION: _convert(creds.access_key_id, str),
+            AWS_SECRET_ACCESS_KEY_OPTION: _convert(creds.secret_access_key, str),
+            AWS_REGION_OPTION: location._region(),
         }
-    # No GCS staging for Druid -- see the commented-out
-    # GCSLocation in __init__.py for why.
-    # if isinstance(location, GCSLocation):
-    #     return {
-    #         handler.gcp_service_account_json_env: _convert(
-    #             location.credentials.json, str
-    #         ),
-    #     }
-    if isinstance(location, AzBlobLocation):
-        creds = location.credentials
-        return {
-            handler.azure_account_name_env: _convert(creds.account_name, str),
-            handler.azure_account_key_env: _convert(creds.account_key, str),
+    elif isinstance(location, AzBlobLocation):
+        root = f"az://{location._container()}"
+        account = location.credentials
+        options = {
+            AZURE_STORAGE_ACCOUNT_NAME_OPTION: _convert(account.account_name, str),
+            AZURE_STORAGE_ACCOUNT_KEY_OPTION: _convert(account.account_key, str),
         }
-    # noinspection PyProtectedMember
-    raise DruidErrorCode.DRUID_11.exception(kind=type(location).__name__)
+    else:
+        # noinspection PyProtectedMember
+        raise DruidErrorCode.DRUID_11.exception(kind=type(location).__name__)
+    return FileStore(root, {**options, **forwarded(root, location.cfg)})
 
 
-def upload_staged_files(
-    *,
+def stage(
     staging: CloudLocation,
-    parquet_files: list[Path],
+    store: FileStore,
+    frame: pl.LazyFrame,
     subdir: str,
-    work_dir: Path,
-) -> list[str]:
-    """Copy ``parquet_files`` to ``staging/<subdir>`` via the
-    transporter binary; return the list of staged-file URIs.
+    name: str,
+) -> tuple[str, str]:
+    """Write *frame* as parquet to ``staging/<subdir>/<name>`` and return its
+    key in *store* and the URI Druid's ingestion ``inputSource`` takes."""
+    key = cloud_full_path(staging._base_path(), f"{subdir}/{name}")
+    writer = store.open_writer(key)
+    frame.sink_parquet(writer)
+    writer.close()
+    return key, staged_uri(staging, key)
 
-    Each parquet file is uploaded under a deterministic name --
-    ``part-NNNNN-<basename>`` -- so ordering matches the input and so
-    parallel writes never overlap. The function returns the list of
-    cloud-native URIs Druid will see in the ingestion ``inputSource``.
-    """
-    handler = make_handler()
-    pairs: list[tuple[Any, Any]] = []
-    uris: list[str] = []
-    keys: list[str] = []
-    for idx, src_path in enumerate(parquet_files):
-        name = f"part-{idx:05d}-{Path(src_path).name}"
-        key = cloud_full_path(staging._base_path(), f"{subdir}/{name}")
-        target = _transporter_target(staging, key, handler)
-        source = handler.local_path_location(Path(src_path))
-        pairs.append((source, target))
-        uris.append(staged_uri(staging, key))
-        keys.append(key)
 
-    env = _transporter_env(staging, handler)
-    _transporter_copy_one(
-        handler=handler,
-        source_target_pairs=pairs,
-        work_dir=work_dir,
-        file_format=DestFileFormat.PARQUET,
-        paths=keys,
-        env=env,
-    )
-    return uris
+def discard(store: FileStore, keys: list[str]) -> None:
+    try:
+        store.delete(keys)
+    except Exception as error:
+        logger.warning("druid: staged files remain (%s): %s", keys, error)
 
 
 # ---------------------------------------------------------------------------
@@ -257,12 +193,12 @@ def build_input_source(location: CloudLocation, uris: list[str]) -> dict:
     #         "uris": uris,
     #     }
     if isinstance(location, AzBlobLocation):
-        creds = location.credentials
+        account = location.credentials
         return {
             "type": "azureStorage",
             "uris": uris,
             "properties": {
-                "key": _convert(creds.account_key, str),
+                "key": _convert(account.account_key, str),
             },
         }
     # noinspection PyProtectedMember

@@ -8,7 +8,6 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
-import obstore
 import polars as pl
 
 from tabsdata.expansions.foundation.writers import avro  # noqa: TID251
@@ -98,7 +97,7 @@ def write(
     frame: pl.LazyFrame,
     csv: Mapping[str, Any],
 ) -> None:
-    writer = obstore.open_writer(store.store(), key(path))
+    writer = store.open_writer(key(path))
     match file_format:
         case DestFileFormat.CSV:
             in_utc(frame).sink_csv(writer, **csv)

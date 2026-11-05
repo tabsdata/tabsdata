@@ -6,9 +6,19 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from pathlib import Path
 
+import polars as pl
 from tenacity import retry, retry_if_exception, stop_after_delay, wait_fixed
+
+from tabsdatak.common._storage.transfer import (
+    AWS_ACCESS_KEY_ID_OPTION,
+    AWS_REGION_OPTION,
+    AWS_SECRET_ACCESS_KEY_OPTION,
+    AZURE_STORAGE_ACCOUNT_KEY_OPTION,
+    AZURE_STORAGE_ACCOUNT_NAME_OPTION,
+    GOOGLE_SERVICE_ACCOUNT_KEY_OPTION,
+)
+from tabsdatak.conn.common.file._store import FileStore, forwarded
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import UserPassword, _convert, cloud_full_path
@@ -130,13 +140,13 @@ def build_files_function(staging: CloudLocation, staged_uris: list[str]) -> str:
             + ")"
         )
     if isinstance(staging, AzBlobLocation):
-        creds = staging.credentials
+        account = staging.credentials
         return (
             "FILES("
             + _kv({
                 "path": _path_expr(staged_uris),
                 "format": "parquet",
-                "azure.blob.shared_key": _convert(creds.account_key, str),
+                "azure.blob.shared_key": _convert(account.account_key, str),
             })
             + ")"
         )
@@ -144,14 +154,14 @@ def build_files_function(staging: CloudLocation, staged_uris: list[str]) -> str:
         # StarRocks reads GCS only through its S3-compatible endpoint, so the
         # ``s3a://`` paths built by ``staged_uri`` are fed to ``FILES()`` with
         # the HMAC access/secret keys and the GCS endpoint.
-        creds = staging.hmac_credentials
+        hmac = staging.hmac_credentials
         return (
             "FILES("
             + _kv({
                 "path": _path_expr(staged_uris),
                 "format": "parquet",
-                "aws.s3.access_key": _convert(creds.access_key, str),
-                "aws.s3.secret_key": _convert(creds.secret_key, str),
+                "aws.s3.access_key": _convert(hmac.access_key, str),
+                "aws.s3.secret_key": _convert(hmac.secret_key, str),
                 "aws.s3.endpoint": "https://storage.googleapis.com",
             })
             + ")"
@@ -179,10 +189,9 @@ def staged_uri(staging: CloudLocation, key: str) -> str:
         bucket = staging._bucket()
         return f"s3://{bucket}/{rel}"
     if isinstance(staging, AzBlobLocation):
-        creds = staging.credentials
         container = staging._container()
-        account = _convert(creds.account_name, str)
-        return f"wasbs://{container}@{account}.blob.core.windows.net/{rel}"
+        name = _convert(staging.credentials.account_name, str)
+        return f"wasbs://{container}@{name}.blob.core.windows.net/{rel}"
     if isinstance(staging, GCSLocation):
         bucket = staging._bucket()
         return f"s3a://{bucket}/{rel}"
@@ -193,71 +202,40 @@ def staged_uri(staging: CloudLocation, key: str) -> str:
     )
 
 
-# --- Transporter upload helpers --------------------------------------
-#
-# The transporter binary handles cloud uploads. We construct one
-# ``TransporterLocation`` per cloud backend; credential resolution
-# happens in the caller and is passed in through ``env``.
+# --- Staging store ---------------------------------------------------
 
 
-def transporter_target(staging: CloudLocation, key: str, handler):
-    """Build the transporter location *destination* for a parquet upload
-    to *staging* under the relative *key*."""
-    rel = cloud_full_path(staging._base_path(), key)
+def staging_store(staging: CloudLocation) -> FileStore:
+    """The object store the staged parquet is written to: the bucket or
+    container root of *staging*, with its credentials and any ``obstore.*``
+    keys of its ``cfg``."""
     if isinstance(staging, S3Location):
-        bucket = staging._bucket()
-        return handler.s3_location(
-            uri=f"s3://{bucket}/{rel}",
-            access_key_env=handler.aws_access_key_id_env,
-            secret_key_env=handler.aws_secret_access_key_env,
-            region_env=handler.aws_region_env,
-        )
-    if isinstance(staging, AzBlobLocation):
-        container = staging._container()
-        return handler.azure_location(
-            uri=f"az://{container}/{rel}",
-            account_name_env=handler.azure_account_name_env,
-            account_key_env=handler.azure_account_key_env,
-        )
-    if isinstance(staging, GCSLocation):
-        bucket = staging._bucket()
-        return handler.gcs_location(
-            uri=f"gs://{bucket}/{rel}",
-            service_account_key_env=handler.gcp_service_account_json_env,
-        )
-    from tabsdatak.conn.starrocks.error import StarRocksErrorCode
-
-    raise StarRocksErrorCode.STARROCKS_7.exception(
-        kind=type(staging).__name__,
-    )
-
-
-def transporter_env(staging: CloudLocation, handler) -> dict[str, str]:
-    """Resolve the credentials on *staging* into env vars the
-    transporter binary reads at runtime."""
-    if isinstance(staging, S3Location):
+        root = f"s3://{staging._bucket()}"
         creds = staging.credentials
-        return {
-            handler.aws_access_key_id_env: _convert(creds.access_key_id, str),
-            handler.aws_secret_access_key_env: _convert(creds.secret_access_key, str),
-            handler.aws_region_env: staging._region(),
+        options = {
+            AWS_ACCESS_KEY_ID_OPTION: _convert(creds.access_key_id, str),
+            AWS_SECRET_ACCESS_KEY_OPTION: _convert(creds.secret_access_key, str),
+            AWS_REGION_OPTION: staging._region(),
         }
-    if isinstance(staging, AzBlobLocation):
-        creds = staging.credentials
-        return {
-            handler.azure_account_name_env: _convert(creds.account_name, str),
-            handler.azure_account_key_env: _convert(creds.account_key, str),
+    elif isinstance(staging, AzBlobLocation):
+        root = f"az://{staging._container()}"
+        account = staging.credentials
+        options = {
+            AZURE_STORAGE_ACCOUNT_NAME_OPTION: _convert(account.account_name, str),
+            AZURE_STORAGE_ACCOUNT_KEY_OPTION: _convert(account.account_key, str),
         }
-    if isinstance(staging, GCSLocation):
-        creds = staging.credentials
-        return {
-            handler.gcp_service_account_json_env: _convert(creds.json, str),
+    elif isinstance(staging, GCSLocation):
+        root = f"gs://{staging._bucket()}"
+        options = {
+            GOOGLE_SERVICE_ACCOUNT_KEY_OPTION: _convert(staging.credentials.json, str),
         }
-    from tabsdatak.conn.starrocks.error import StarRocksErrorCode
+    else:
+        from tabsdatak.conn.starrocks.error import StarRocksErrorCode
 
-    raise StarRocksErrorCode.STARROCKS_7.exception(
-        kind=type(staging).__name__,
-    )
+        raise StarRocksErrorCode.STARROCKS_7.exception(
+            kind=type(staging).__name__,
+        )
+    return FileStore(root, {**options, **forwarded(root, staging.cfg)})
 
 
 # --- Write config + main write entry point ---------------------------
@@ -293,58 +271,35 @@ def _qualify(database: str, table: str) -> str:
     raw = split_fqn(table, quote="`")
     parts: list[str | None] = [None] * (2 - len(raw)) + list(raw)
     db, tbl = complete_levels(parts, [database, None])
+    assert db is not None and tbl is not None
     return f"{_quote_ident(db)}.{_quote_ident(tbl)}"
 
 
-def upload_parquet(
+def stage(
     staging: CloudLocation,
-    work_dir: Path,
-    upload_id: str,
-    parquet_path: Path,
-    table_key: str,
-) -> str:
-    """Upload one local parquet to *staging* under
-    ``<upload_id>/<table_key>/<filename>`` and return the staged URI.
-
-    Returns the same URI shape that :func:`build_files_function` /
-    :func:`staged_uri` expect.
-    """
-    from tabsdatak.common._fileformat.taxonomy import DestFileFormat
-    from tabsdatak.common._transporter.facade import make_handler
-    from tabsdatak.conn.common.file import _output
-
-    handler = make_handler()
-    rel = f"{upload_id}/{table_key}/{parquet_path.name}"
-    target_loc = transporter_target(staging, rel, handler)
-    source_loc = handler.local_path_location(parquet_path)
-    env = transporter_env(staging, handler)
-
-    _output.copy_one(
-        handler=handler,
-        source_target_pairs=[(source_loc, target_loc)],
-        work_dir=work_dir,
-        file_format=DestFileFormat.PARQUET,
-        paths=[rel],
-        env=env,
-    )
-
-    return staged_uri(staging, rel)
+    store: FileStore,
+    frame: pl.LazyFrame,
+    rel: str,
+) -> tuple[str, str]:
+    """Write *frame* as parquet to *staging* under *rel* and return its key
+    in *store* and the URI :func:`build_files_function` takes."""
+    key = cloud_full_path(staging._base_path(), rel)
+    writer = store.open_writer(key)
+    frame.sink_parquet(writer)
+    writer.close()
+    return key, staged_uri(staging, rel)
 
 
-def _parquet_column_names(parquet: Path) -> list[str]:
-    """Column names of a staged parquet, in file order. Used to build an
-    explicit INSERT column list so a target column the file does not carry
-    (e.g. an ``AUTO_INCREMENT`` key) is left for StarRocks to populate rather
-    than triggering a positional column-count mismatch."""
-    import pyarrow.parquet as pq
-
-    return list(pq.read_schema(parquet).names)
+def discard(store: FileStore, keys: list[str]) -> None:
+    try:
+        store.delete(keys)
+    except Exception as error:
+        logger.warning("starrocks: staged files remain (%s): %s", keys, error)
 
 
 def execute(
     cfg: StarRocksWriteCfg,
-    tables: list[Path],
-    work_dir: Path,
+    tables: list[pl.LazyFrame],
     upload_id: str,
 ) -> None:
     """Stage each parquet to cloud, then issue one
@@ -393,9 +348,12 @@ def execute(
                 text(f"INSERT INTO {qualified} ({collist}) SELECT * FROM {files_fn}")
             )
 
+    from tabsdatak.conn.starrocks.error import StarRocksErrorCode
+
+    store = staging_store(cfg.staging)
     total = len(cfg.target_tables)
     try:
-        for i, (table_name, parquet) in enumerate(
+        for i, (table_name, frame) in enumerate(
             zip(cfg.target_tables, tables),
             1,
         ):
@@ -406,16 +364,25 @@ def execute(
                 table_name,
             )
             logger.info("starrocks: staging parquet for %r", table_name)
-            staged = upload_parquet(
-                cfg.staging,
-                work_dir,
-                upload_id,
-                parquet,
-                table_key=table_name.replace("`", "").replace(".", "_"),
-            )
-            files_fn = build_files_function(cfg.staging, [staged])
-            qualified = _qualify(cfg.database, table_name)
-            _load_one(qualified, files_fn, _parquet_column_names(parquet))
+            table_key = table_name.replace("`", "").replace(".", "_")
+            try:
+                key, staged = stage(
+                    cfg.staging,
+                    store,
+                    frame,
+                    f"{upload_id}/{table_key}/{i - 1}.parquet",
+                )
+            except Exception as error:
+                raise StarRocksErrorCode.STARROCKS_5.exception(
+                    cause=error,
+                    table=table_name,
+                )
+            try:
+                files_fn = build_files_function(cfg.staging, [staged])
+                qualified = _qualify(cfg.database, table_name)
+                _load_one(qualified, files_fn, frame.collect_schema().names())
+            finally:
+                discard(store, [key])
             logger.info(
                 "starrocks: loaded %s from %d staged file(s)",
                 qualified,
