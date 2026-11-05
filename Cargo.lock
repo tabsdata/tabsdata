@@ -2158,9 +2158,9 @@ dependencies = [
 
 [[package]]
 name = "croner"
-version = "4.0.2"
+version = "4.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26d09284075f5c87675790d1ad74212a7863eb8bdf228cdbd364f08a152fc62d"
+checksum = "0097e28936e948e8f759478e1b5ec2e5ca70ab62cf38aaa9bd3aa660023e3fca"
 dependencies = [
  "chrono",
  "derive_builder",
@@ -2949,9 +2949,9 @@ checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
 
 [[package]]
 name = "finl_unicode"
-version = "1.5.0"
+version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80bb028c8b4148c9ee0cca68fcd9add6044e81d3619f48577ddf13a263d047a2"
+checksum = "09ded33109e99472f809cb7495544506eea45e366725dacf2a383e184f660456"
 
 [[package]]
 name = "fixedbitset"
@@ -10902,7 +10902,7 @@ version = "2.3.0"
 dependencies = [
  "async-trait",
  "chrono",
- "croner 4.0.2",
+ "croner 4.0.3",
  "http 1.5.0",
  "reqwest 0.13.5",
  "serde",
@@ -11095,7 +11095,7 @@ dependencies = [
  "bytes",
  "chrono",
  "constcat",
- "croner 4.0.2",
+ "croner 4.0.3",
  "derive-new",
  "futures",
  "headers",
