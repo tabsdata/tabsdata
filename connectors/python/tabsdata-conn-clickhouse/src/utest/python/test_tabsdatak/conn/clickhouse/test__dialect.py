@@ -269,9 +269,9 @@ class TestDialectBulkLoad:
             "s3('https://...', 'Parquet')"
         )
         d = ClickHouseDialect(_config("analytics"), cloud)
-        d.bulk_load(MagicMock(), "users", ["ref1"])
+        d.bulk_load(MagicMock(), "users", ["ref1"], ["id"])
         assert captured_client.commands == [
-            "INSERT INTO `analytics`.`users` SELECT * FROM "
+            "INSERT INTO `analytics`.`users` (`id`) SELECT `id` FROM "
             "s3('https://...', 'Parquet')"
         ]
 
@@ -281,10 +281,22 @@ class TestDialectBulkLoad:
             "s3('https://...', 'Parquet')"
         )
         d = ClickHouseDialect(_config("analytics"), cloud)
-        d.bulk_load(MagicMock(), "warehouse.events", ["ref1"])
+        d.bulk_load(MagicMock(), "warehouse.events", ["ref1"], ["id"])
         assert captured_client.commands == [
-            "INSERT INTO `warehouse`.`events` SELECT * FROM "
+            "INSERT INTO `warehouse`.`events` (`id`) SELECT `id` FROM "
             "s3('https://...', 'Parquet')"
+        ]
+
+    def test_bulk_load_matches_the_staged_columns_by_name(self, captured_client):
+        """A table whose columns are in another order, or that has more of
+        them, must still get each value in its own column."""
+        cloud = MagicMock()
+        cloud.clickhouse_table_function.return_value = "s3('x', 'Parquet')"
+        d = ClickHouseDialect(_config("analytics"), cloud)
+        d.bulk_load(MagicMock(), "users", ["ref1"], ["name", "id", "we`ird"])
+        assert captured_client.commands == [
+            "INSERT INTO `analytics`.`users` (`name`, `id`, `we``ird`) "
+            "SELECT `name`, `id`, `we``ird` FROM s3('x', 'Parquet')"
         ]
 
 

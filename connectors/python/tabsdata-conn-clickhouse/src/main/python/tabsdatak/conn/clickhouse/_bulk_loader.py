@@ -78,11 +78,14 @@ class CloudStagedBulkLoader:
         logger.info("Starting cloud-staged bulk load")
         try:
             staged_files = self.phase_upload(tables)
-            self.phase_validate_and_prepare(staged_files)
-            self.phase_bulk_load({
-                table: [staged.ref for staged in files]
-                for table, files in staged_files.items()
-            })
+            columns = self.phase_validate_and_prepare(staged_files)
+            self.phase_bulk_load(
+                {
+                    table: [staged.ref for staged in files]
+                    for table, files in staged_files.items()
+                },
+                columns,
+            )
         finally:
             self.phase_cleanup()
         logger.info("Cloud-staged bulk load complete")
@@ -106,9 +109,10 @@ class CloudStagedBulkLoader:
 
     def phase_validate_and_prepare(
         self, staged_files: dict[str, list[StagedFile]]
-    ) -> None:
+    ) -> dict[str, list[str]]:
         """Phase 2 -- Validate all tables against their staged files'
-        footers and prepare them (create/evolve), before any load."""
+        footers and prepare them (create/evolve), before any load. Returns
+        each table's staged column names."""
         logger.info("Phase 2: Validate & Prepare")
         # 'replace' drops the target up front so it is recreated fresh from the
         # incoming schema (honouring a changed schema too); the create path below
@@ -118,16 +122,19 @@ class CloudStagedBulkLoader:
             logger.debug(f"Dropping tables for replace: {table_names}")
             self.dialect.drop_tables(self.load_mode, table_names)
 
+        columns: dict[str, list[str]] = {}
         for table_name, files in staged_files.items():
             footers = [self.cloud_storage.footer(staged.key) for staged in files]
-            self.validate_and_prepare_table(table_name, footers)
+            columns[table_name] = self.validate_and_prepare_table(table_name, footers)
 
         logger.info("Phase 2 complete: all tables validated and prepared.")
+        return columns
 
     def validate_and_prepare_table(
         self, table_name: str, footers: list[pq.FileMetaData]
-    ) -> None:
-        """Validate and prepare a single table."""
+    ) -> list[str]:
+        """Validate and prepare a single table, returning the staged column
+        names."""
         # Read schema from the first file (all files for the same table
         # share the same schema).
         arrow_schema = footers[0].schema.to_arrow_schema()
@@ -149,6 +156,7 @@ class CloudStagedBulkLoader:
             )
         else:
             self.ensure_schema_compatible(table_name, arrow_schema, column_nulls)
+        return list(arrow_schema.names)
 
     def ensure_schema_compatible(
         self,
@@ -244,12 +252,14 @@ class CloudStagedBulkLoader:
 
     # --- Phase 3: Bulk Load ------------------------------------------
 
-    def phase_bulk_load(self, staged_files: dict[str, list[str]]) -> None:
+    def phase_bulk_load(
+        self, staged_files: dict[str, list[str]], columns: dict[str, list[str]]
+    ) -> None:
         """Phase 3 -- Bulk load all staged files into their target
         tables. Uses dialect batch methods and handles transactions and
         async polling."""
         logger.info("Phase 3: Bulk Load")
-        items = list(staged_files.items())
+        items = [(table, refs, columns[table]) for table, refs in staged_files.items()]
         try:
             if self.dialect.supports_transactions():
                 self.dialect.begin_transaction()
@@ -284,7 +294,12 @@ class CloudStagedBulkLoader:
             ]
             if not pending_indices:
                 break
-            pending_handles = [results[i].job_handle for i in pending_indices]
+            pending_handles: list[str] = []
+            for index in pending_indices:
+                handle = results[index].job_handle
+                if handle is None:
+                    raise BulkLoadError(f"Pending bulk load {index} has no job handle")
+                pending_handles.append(handle)
             if time.monotonic() >= deadline:
                 raise BulkLoadError(
                     f"Polling timed out after {self.poll_timeout}s. "
@@ -300,11 +315,11 @@ class CloudStagedBulkLoader:
 
     def check_bulk_load_results(
         self,
-        items: list[tuple[str, list[str]]],
+        items: list[tuple[str, list[str], list[str]]],
         results: list[BulkLoadResult],
     ) -> None:
         """Check results and raise on any failure."""
-        for (table_name, _), result in zip(items, results):
+        for (table_name, _, _), result in zip(items, results):
             if result.status == BulkLoadStatus.FAILED:
                 raise BulkLoadError(
                     f"Bulk load failed for table '{table_name}': {result.error}"

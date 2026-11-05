@@ -151,3 +151,20 @@ def test_a_failed_load_still_cleans_up_and_a_failed_cleanup_is_ignored(tmp_path)
     with pytest.raises(RuntimeError, match="load refused"):
         loader.load({"users": [("0.parquet", ROWS)]})
     assert loader.cloud_storage.deleted == ["u1"]
+
+
+def test_the_load_names_the_staged_columns(tmp_path):
+    loaded = []
+
+    class _Loading(_RecordingDialect):
+        def bulk_load_tables(self, load_mode, items):
+            loaded.extend(items)
+            return []
+
+        def is_bulk_load_async(self):
+            return False
+
+    loader = _loader(tmp_path, _Loading(exists=False), WriteMode.APPEND)
+    loader.check_bulk_load_results = lambda items, results: None
+    loader.load({"users": [("0.parquet", ROWS)]})
+    assert loaded == [("users", ["ref:stage/u1/0.parquet"], ["id", "name"])]

@@ -257,6 +257,8 @@ def clickhouse_fqn_parts(table_name: str, default_db: str) -> tuple[str, str]:
     """
     parts = unfqn(table_name, CLICKHOUSE_FQN_DEF, total_parts=2)
     db, tbl = complete_levels(parts, [default_db, None])
+    if db is None or tbl is None:
+        raise ValueError(f"Incomplete ClickHouse table name {table_name!r}")
     return db, tbl
 
 
@@ -423,7 +425,7 @@ class ClickHouseDialect(Dialect):
         )
         return table_schema_from_system_columns(
             self._fqn(table_name),
-            result.result_rows,
+            [(row[0], row[1], row[2], row[3]) for row in result.result_rows],
         )
 
     def compute_evolution_delta(
@@ -512,18 +514,24 @@ class ClickHouseDialect(Dialect):
         load_mode: LoadMode,
         table_name: str,
         staged_file_refs: list[str],
+        columns: list[str],
     ) -> BulkLoadResult:
         """Load staged Parquet files into the target table.
 
         For each staged file reference, asks the cloud storage object
         to produce the ClickHouse table function call, then executes::
 
-            INSERT INTO `<db>`.`<table>` SELECT * FROM <table_fn>
+            INSERT INTO `<db>`.`<table>` (`a`, `b`) SELECT `a`, `b` FROM <table_fn>
+
+        Naming the columns matches them by name: a table whose columns are in
+        another order, or that has more of them, still gets each value in its
+        own column.
         """
         fq = self._fqn(table_name)
+        named = ", ".join(fqn([column], CLICKHOUSE_FQN_DEF) for column in columns)
         for ref in staged_file_refs:
             table_fn = self._cloud_storage.clickhouse_table_function(ref)
-            sql = f"INSERT INTO {fq} SELECT * FROM {table_fn}"
+            sql = f"INSERT INTO {fq} ({named}) SELECT {named} FROM {table_fn}"
             logger.debug("Executing INSERT INTO")
             self._client.command(sql)
             logger.debug("Inserted data into %s from %s", fq, ref)

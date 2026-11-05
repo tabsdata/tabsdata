@@ -155,8 +155,10 @@ class Dialect(ABC):
         load_mode: LoadMode,
         table_name: str,
         staged_file_refs: list[str],
+        columns: list[str],
     ) -> BulkLoadResult:
-        """Start a bulk load from the staged files."""
+        """Start a bulk load from the staged files, matching ``columns`` --
+        the staged files' own -- onto the table by name."""
 
     def poll_bulk_load(self, load_mode: LoadMode, job_handle: str) -> BulkLoadResult:
         raise NotImplementedError("Dialect does not support async bulk loads")
@@ -170,10 +172,11 @@ class Dialect(ABC):
     def bulk_load_tables(
         self,
         load_mode: LoadMode,
-        items: list[tuple[str, list[str]]],
+        items: list[tuple[str, list[str], list[str]]],
     ) -> list[BulkLoadResult]:
         return [
-            self.bulk_load(load_mode, table_name, refs) for table_name, refs in items
+            self.bulk_load(load_mode, table_name, refs, columns)
+            for table_name, refs, columns in items
         ]
 
     def poll_bulk_load_all(

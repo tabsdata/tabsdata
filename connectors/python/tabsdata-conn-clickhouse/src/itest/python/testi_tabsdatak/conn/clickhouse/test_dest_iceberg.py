@@ -202,3 +202,49 @@ def test_iceberg_applies_combined_delta(
         assert db.count(table) == 2
     finally:
         db.drop_table(table)
+
+
+@pytest.mark.parametrize("from_insertion_table", [2, 0])
+@clickhouse_domain("clickhouse")
+@s3_domain("s3")
+def test_columns_land_by_name_whatever_their_order(
+    domain_clickhouse: ClickhouseDomain,
+    domain_s3: S3Domain,
+    tmp_path: Path,
+    monkeypatch,
+    from_insertion_table: int,
+):
+    # With the setting at 0 the table function no longer takes the target's
+    # structure, so only naming the columns keeps each value in its own column.
+    import clickhouse_connect
+
+    original = clickhouse_connect.get_client
+
+    def client(**kwargs):
+        setting = "use_structure_from_insertion_table_in_table_functions"
+        return original(**kwargs, settings={setting: from_insertion_table})
+
+    monkeypatch.setattr(clickhouse_connect, "get_client", client)
+    db = store(domain_clickhouse)
+    table = f"td_iceberg_column_order_{from_insertion_table}"
+    work = work_dir(tmp_path)
+    seed = _parquet(
+        tmp_path / "seed.parquet",
+        pl.DataFrame({"id": [1], "name": ["one"], "score": [10]}),
+    )
+    reordered = _parquet(
+        tmp_path / "reordered.parquet",
+        pl.DataFrame({"score": [20], "name": ["two"], "id": [2]}),
+    )
+    conn = dest_conn(domain_clickhouse, domain_s3)
+    try:
+        _write(conn, work, seed, table, if_table_exists="replace")
+        _write(conn, work, reordered, table, schema_evolution="iceberg")
+
+        got = db.read_table(table).sort("id")
+        assert got.select("id", "name", "score").rows() == [
+            (1, "one", 10),
+            (2, "two", 20),
+        ]
+    finally:
+        db.drop_table(table)
