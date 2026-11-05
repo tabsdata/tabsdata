@@ -10,19 +10,19 @@ pub use recovery_config::{
 pub use scheduler_config::{
     MaxFunctionsPerTick, SchedulerCheckFrequency, SchedulerConfig, SchedulerTickTimeout,
 };
-pub use scheduler_notify::SchedulerNotify;
 pub use te_execution::plan::ExecutionScope;
 pub use te_execution::transaction::TransactionBy;
 pub use version_resolver::{VersionResolver, VersionResolverError};
+pub use wakes::{Concerns, ProjectWakes};
 
 mod execution_plan;
 pub mod graph;
 mod knob;
 mod recovery_config;
 mod scheduler_config;
-mod scheduler_notify;
 #[cfg(test)]
 mod test_utils;
 pub mod topology;
 pub mod transaction_map;
 mod version_resolver;
+mod wakes;

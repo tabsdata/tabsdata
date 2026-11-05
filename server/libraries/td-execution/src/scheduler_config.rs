@@ -19,24 +19,16 @@ seconds_knob!(
 );
 
 seconds_knob!(
-    /// Budget for one scheduler tick (the request or dispatch service call),
-    /// the floor of an adaptive budget: each timeout raises it by this much,
-    /// up to ten times this, and finished ticks bring it back down. On expiry
-    /// the tick is cancelled and its transaction rolled back, and the next
-    /// tick retries. The orchestrator writes a tick makes are
-    /// post-commit, so they are not rolled back with it; each workload is
-    /// applied as one uncancellable unit so that expiry falls between
-    /// workloads rather than part-way through one.
+    /// Budget for one project's scheduler pass (and one connection-probe
+    /// dispatch): a timeout cancels the pass, rolls it back and raises the
+    /// project's budget by this much, up to ten times this.
     SchedulerTickTimeout,
     10
 );
 
 count_knob!(
-    /// Upper bound on function runs dispatched per scheduler tick — bounds
-    /// both the tick transaction's size and the post-commit worker-message
-    /// burst. A tick that hits the cap re-notifies the scheduler, so the
-    /// backlog drains in back-to-back capped ticks (oldest runs first)
-    /// instead of waiting for the failover timer.
+    /// Function runs dispatched per project pass, oldest first. A pass that
+    /// hits the cap runs again.
     MaxFunctionsPerTick,
     50
 );

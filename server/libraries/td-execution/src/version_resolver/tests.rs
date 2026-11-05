@@ -129,7 +129,8 @@ async fn test_resolve_logical_none(db: TdPool) -> Result<(), TdError> {
     let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 1).await;
     let triggered_on = AtTime::now();
 
-    let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+    let mut conn =
+        DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
     let found = VersionResolver::builder()
         .function_id(&FunctionId::default())
         .table_id(&table_id)
@@ -146,7 +147,8 @@ async fn test_resolve_logical_none(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn test_resolve_logical_single_head(db: TdPool) -> Result<(), TdError> {
     let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 3).await;
-    let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+    let mut conn =
+        DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
 
     let cases = [
         (Version::Head(0), Some(&ltdvs[2])),
@@ -175,7 +177,8 @@ async fn test_resolve_logical_single_head(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn test_resolve_logical_single_initial(db: TdPool) -> Result<(), TdError> {
     let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 3).await;
-    let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+    let mut conn =
+        DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
 
     let cases = [
         (Version::Initial(0), Some(&ltdvs[0])),
@@ -204,7 +207,8 @@ async fn test_resolve_logical_single_initial(db: TdPool) -> Result<(), TdError> 
 #[td_test::test(db)]
 async fn test_resolve_logical_list_relative(db: TdPool) -> Result<(), TdError> {
     let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 2).await;
-    let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+    let mut conn =
+        DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
 
     let versions = Versions::List(vec![
         Version::Head(0),
@@ -235,7 +239,8 @@ async fn test_resolve_logical_list_relative(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn test_resolve_logical_list_without_head_or_initial(db: TdPool) -> Result<(), TdError> {
     let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 3).await;
-    let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+    let mut conn =
+        DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
 
     let versions = Versions::List(vec![
         Version::Head(-1),
@@ -266,7 +271,8 @@ async fn test_resolve_logical_list_without_head_or_initial(db: TdPool) -> Result
 #[td_test::test(db)]
 async fn test_resolve_logical_range_head(db: TdPool) -> Result<(), TdError> {
     let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 3).await;
-    let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+    let mut conn =
+        DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
 
     let versions = Versions::Range(Version::Head(-2), Version::Head(0));
     let found = VersionResolver::builder()
@@ -287,7 +293,8 @@ async fn test_resolve_logical_range_head(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn test_resolve_logical_range_descending(db: TdPool) -> Result<(), TdError> {
     let (_collection, _function, table_id, _ftdvs) = seed_ftdv_timeline(&db, 3).await;
-    let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+    let mut conn =
+        DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
 
     let versions = Versions::Range(Version::Head(-1), Version::Head(-3));
     let found = VersionResolver::builder()
@@ -305,7 +312,8 @@ async fn test_resolve_logical_range_descending(db: TdPool) -> Result<(), TdError
 #[td_test::test(db)]
 async fn test_resolve_logical_range_initial(db: TdPool) -> Result<(), TdError> {
     let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 3).await;
-    let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+    let mut conn =
+        DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
 
     let versions = Versions::Range(Version::Initial(0), Version::Initial(2));
     let found = VersionResolver::builder()
@@ -328,7 +336,8 @@ async fn test_resolve_logical_range_initial(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn test_resolve_logical_range_mixed_bounds(db: TdPool) -> Result<(), TdError> {
     let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 3).await;
-    let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+    let mut conn =
+        DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
 
     let versions = Versions::Range(Version::Initial(0), Version::Head(0));
     let found = VersionResolver::builder()
@@ -349,7 +358,8 @@ async fn test_resolve_logical_range_mixed_bounds(db: TdPool) -> Result<(), TdErr
 #[td_test::test(db)]
 async fn test_resolve_logical_new_no_prior_execution(db: TdPool) -> Result<(), TdError> {
     let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 3).await;
-    let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+    let mut conn =
+        DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
 
     let found = VersionResolver::builder()
         .function_id(&FunctionId::default())
@@ -415,7 +425,8 @@ async fn test_resolve_logical_new_downstream_consumer(db: TdPool) -> Result<(), 
         .insert::<LogicalFunctionRunInsertDB>(&lfr_run1)
         .await?;
 
-    let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+    let mut conn =
+        DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
     let found = VersionResolver::builder()
         .function_id(&consumer.base.function_id)
         .table_id(&table_id)
@@ -503,7 +514,8 @@ async fn test_resolve_logical_partition_isolation(db: TdPool) -> Result<(), TdEr
         insert_ftdv(&db, &collection.project_id, &ltdv).await;
     }
 
-    let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+    let mut conn =
+        DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
     let found = VersionResolver::builder()
         .function_id(&FunctionId::default())
         .table_id(&table_a_id)
@@ -532,7 +544,8 @@ async fn test_resolve_logical_partition_isolation(db: TdPool) -> Result<(), TdEr
 async fn test_resolve_ignores_materialization_state(db: TdPool) -> Result<(), TdError> {
     let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 2).await;
 
-    let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+    let mut conn =
+        DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
     let found = VersionResolver::builder()
         .function_id(&FunctionId::default())
         .table_id(&table_id)
@@ -619,7 +632,8 @@ async fn test_resolve_logical_skips_canceled_producer(db: TdPool) -> Result<(), 
 
     seed_canceled_ltdv(&db, &collection, &function, table_id).await;
 
-    let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+    let mut conn =
+        DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
     let found = VersionResolver::builder()
         .function_id(&FunctionId::default())
         .table_id(&table_id)
@@ -645,7 +659,8 @@ async fn test_resolve_logical_fixed_skips_canceled_producer(db: TdPool) -> Resul
 
     let canceled_ltdv = seed_canceled_ltdv(&db, &collection, &function, table_id).await;
 
-    let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+    let mut conn =
+        DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
 
     let found = VersionResolver::builder()
         .function_id(&FunctionId::default())
@@ -680,7 +695,8 @@ async fn test_resolve_logical_fixed_skips_canceled_producer(db: TdPool) -> Resul
 async fn test_resolve_heads_matches_each_tables_head(db: TdPool) -> Result<(), TdError> {
     let (_collection, function, table_id, ltdvs) = seed_ftdv_timeline(&db, 3).await;
     let empty = TableId::default();
-    let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+    let mut conn =
+        DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
     for at in [AtTime::from(ltdvs[1].triggered_on), AtTime::now()] {
         let heads = VersionResolver::resolve_heads(&mut conn, &[table_id, empty], &at).await?;
         let head = VersionResolver::builder()
