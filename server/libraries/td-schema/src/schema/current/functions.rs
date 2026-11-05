@@ -82,6 +82,9 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Functions::Enabled).boolean().default(true))
                 .col(ColumnDef::new(Functions::ValidTo).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(Functions::FunctionType).text().not_null())
+                // The target of the project-scoped foreign keys, and keyset
+                // pagination: `ORDER BY id` under the tenant predicate.
+                .index(Index::create().name("functions___project_id__id___key").unique().col(Functions::ProjectId).col(Functions::Id))
                 .to_owned(),
         ]
     }
@@ -106,13 +109,6 @@ impl Entity for Defs {
                 .col(Functions::Name)
                 .and_where(open_interval(Functions::ValidTo))
                 .unique()
-                .to_owned(),
-            // Keyset pagination: `ORDER BY id` under the tenant predicate.
-            Index::create()
-                .name("functions___project_id__id___idx")
-                .table(Functions::Table)
-                .col(Functions::ProjectId)
-                .col(Functions::Id)
                 .to_owned(),
             // As-of reads of the project's topology: the rows still open at the
             // instant, without walking its closed history.

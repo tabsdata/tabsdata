@@ -38,8 +38,9 @@ impl Entity for Defs {
                 .col(ColumnDef::new(ConnectionEntities::Doc).json_binary().not_null())
                 .foreign_key(
                     ForeignKey::create()
-                        .from(ConnectionEntities::Table, ConnectionEntities::ConnectionId)
-                        .to(ConnectionCatalogs::Table, ConnectionCatalogs::ConnectionId)
+                        .name("connection_entities___connection_id___fkey")
+                        .from(ConnectionEntities::Table, (ConnectionEntities::ProjectId, ConnectionEntities::ConnectionId))
+                        .to(ConnectionCatalogs::Table, (ConnectionCatalogs::ProjectId, ConnectionCatalogs::ConnectionId))
                         .on_delete(ForeignKeyAction::Cascade)
                         .on_update(ForeignKeyAction::Restrict),
                 )

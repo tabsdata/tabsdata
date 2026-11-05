@@ -30,6 +30,14 @@ impl Entity for Defs {
                 .col(id_column(ProjectTopologies::ProjectId).not_null())
                 .col(ColumnDef::new(ProjectTopologies::ValidFrom).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(ProjectTopologies::ValidTo).timestamp_with_time_zone().not_null())
+                // The target of the project-scoped foreign keys.
+                .index(
+                    Index::create()
+                        .name("project_topologies___project_id__id___key")
+                        .unique()
+                        .col(ProjectTopologies::ProjectId)
+                        .col(ProjectTopologies::Id),
+                )
                 .to_owned(),
         ]
     }

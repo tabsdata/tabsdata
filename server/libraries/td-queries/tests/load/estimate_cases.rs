@@ -133,6 +133,14 @@ async fn assert_rollups_plan(db: &TdPool, project: &ProjectDB) -> Result<(), TdE
     Ok(())
 }
 
+fn knobs(projects: usize) -> MetricsKnobs {
+    MetricsKnobs {
+        publishers: 160 * projects,
+        consumers: 80 * projects,
+        projects,
+    }
+}
+
 #[td_test::test(db)]
 async fn rollups_plan_from_estimates_within_a_project(db: TdPool) -> Result<(), TdError> {
     dataset::metrics_dataset(
@@ -152,4 +160,20 @@ async fn rollups_plan_from_estimates_within_a_project(db: TdPool) -> Result<(), 
         assert_rollups_plan(&db, project).await?;
     }
     Ok(())
+}
+
+#[td_test::test(db)]
+async fn rollups_plan_from_estimates_for_a_project_the_statistics_have_not_seen(
+    db: TdPool,
+) -> Result<(), TdError> {
+    dataset::metrics_dataset(&db, knobs(1)).await?;
+    analyze(&db, "roll-up plans").await;
+    dataset::metrics_dataset(&db, knobs(2)).await?;
+
+    let projects: Vec<ProjectDB> = db.scd2().fetch_all::<ProjectDB>(()).await?;
+    let unseen = projects
+        .iter()
+        .find(|p| p.name.to_string() == "test_p1")
+        .expect("the second dataset seeds test_p1");
+    assert_rollups_plan(&db, unseen).await
 }

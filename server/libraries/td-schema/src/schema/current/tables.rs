@@ -65,8 +65,9 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Tables::ValidTo).timestamp_with_time_zone().not_null())
                 .foreign_key(
                     ForeignKey::create()
-                        .from(Tables::Table, Tables::FunctionVersionId)
-                        .to(Functions::Table, Functions::Id)
+                        .name("tables___function_version_id___fkey")
+                        .from(Tables::Table, (Tables::ProjectId, Tables::FunctionVersionId))
+                        .to(Functions::Table, (Functions::ProjectId, Functions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )

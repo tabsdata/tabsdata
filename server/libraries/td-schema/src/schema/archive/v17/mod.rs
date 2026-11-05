@@ -33,9 +33,9 @@ mod users_roles;
 mod workers;
 
 use crate::schema::Entity;
+use crate::schema::archive::sql::rls_v4::policy_statements;
 use crate::schema::render::{render_query, render_schema};
 use crate::schema::source::{Derived, SchemaSource, index_derived};
-use crate::schema::sql::rls::policy_statements;
 use sea_query::{DynIden, IntoIden};
 
 /// Frozen schema revision of this archive.

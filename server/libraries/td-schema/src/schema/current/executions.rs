@@ -80,18 +80,23 @@ impl Entity for Defs {
                 .col(id_column(Executions::TopologyVersionId).not_null())
                 .foreign_key(
                     ForeignKey::create()
-                        .from(Executions::Table, Executions::TopologyVersionId)
-                        .to(ProjectTopologies::Table, ProjectTopologies::Id)
+                        .name("executions___topology_version_id___fkey")
+                        .from(Executions::Table, (Executions::ProjectId, Executions::TopologyVersionId))
+                        .to(ProjectTopologies::Table, (ProjectTopologies::ProjectId, ProjectTopologies::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
                     ForeignKey::create()
-                        .from(Executions::Table, Executions::FunctionVersionId)
-                        .to(Functions::Table, Functions::Id)
+                        .name("executions___function_version_id___fkey")
+                        .from(Executions::Table, (Executions::ProjectId, Executions::FunctionVersionId))
+                        .to(Functions::Table, (Functions::ProjectId, Functions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
+                // The target of the project-scoped foreign keys, and keyset
+                // pagination: `ORDER BY id` under the tenant predicate.
+                .index(Index::create().name("executions___project_id__id___key").unique().col(Executions::ProjectId).col(Executions::Id))
                 .to_owned(),
         ]
     }
@@ -113,13 +118,6 @@ impl Entity for Defs {
                 .table(Executions::Table)
                 .col(Executions::ProjectId)
                 .col(Executions::TriggeredOn)
-                .col(Executions::Id)
-                .to_owned(),
-            // Keyset pagination: `ORDER BY id` under the tenant predicate.
-            Index::create()
-                .name("executions___project_id__id___idx")
-                .table(Executions::Table)
-                .col(Executions::ProjectId)
                 .col(Executions::Id)
                 .to_owned(),
             Index::create()

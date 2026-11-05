@@ -41,15 +41,17 @@ impl Entity for Defs {
                 .col(ColumnDef::new(TablePartitions::PartitionDeleted).boolean().null())
                 .foreign_key(
                     ForeignKey::create()
-                        .from(TablePartitions::Table, TablePartitions::FunctionVersionId)
-                        .to(Functions::Table, Functions::Id)
+                        .name("table_partitions___function_version_id___fkey")
+                        .from(TablePartitions::Table, (TablePartitions::ProjectId, TablePartitions::FunctionVersionId))
+                        .to(Functions::Table, (Functions::ProjectId, Functions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
                     ForeignKey::create()
-                        .from(TablePartitions::Table, TablePartitions::TableDataVersionId)
-                        .to(PhysicalTableDataVersions::Table, PhysicalTableDataVersions::Id)
+                        .name("table_partitions___table_data_version_id___fkey")
+                        .from(TablePartitions::Table, (TablePartitions::ProjectId, TablePartitions::TableDataVersionId))
+                        .to(PhysicalTableDataVersions::Table, (PhysicalTableDataVersions::ProjectId, PhysicalTableDataVersions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )

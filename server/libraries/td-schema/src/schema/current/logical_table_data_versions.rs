@@ -85,15 +85,20 @@ impl Entity for Defs {
                 .col(id_column(LogicalTableDataVersions::GroupId).not_null())
                 .foreign_key(
                     ForeignKey::create()
-                        .from(LogicalTableDataVersions::Table, LogicalTableDataVersions::ExecutionId)
-                        .to(Executions::Table, Executions::Id)
+                        .name("ltdv___execution_id___fkey")
+                        .from(LogicalTableDataVersions::Table, (LogicalTableDataVersions::ProjectId, LogicalTableDataVersions::ExecutionId))
+                        .to(Executions::Table, (Executions::ProjectId, Executions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
                     ForeignKey::create()
-                        .from(LogicalTableDataVersions::Table, LogicalTableDataVersions::TransactionId)
-                        .to(Transactions::Table, Transactions::Id)
+                        .name("ltdv___transaction_id___fkey")
+                        .from(
+                            LogicalTableDataVersions::Table,
+                            (LogicalTableDataVersions::ProjectId, LogicalTableDataVersions::TransactionId),
+                        )
+                        .to(Transactions::Table, (Transactions::ProjectId, Transactions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
@@ -102,10 +107,23 @@ impl Entity for Defs {
                 // which is similarly unconstrained.
                 .foreign_key(
                     ForeignKey::create()
-                        .from(LogicalTableDataVersions::Table, LogicalTableDataVersions::ProducerLogicalFunctionRunId)
-                        .to(LogicalFunctionRuns::Table, LogicalFunctionRuns::Id)
+                        .name("ltdv___producer_logical_function_run_id___fkey")
+                        .from(
+                            LogicalTableDataVersions::Table,
+                            (LogicalTableDataVersions::ProjectId, LogicalTableDataVersions::ProducerLogicalFunctionRunId),
+                        )
+                        .to(LogicalFunctionRuns::Table, (LogicalFunctionRuns::ProjectId, LogicalFunctionRuns::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
+                )
+                // The target of the project-scoped foreign keys, and keyset
+                // pagination: `ORDER BY id` under the tenant predicate.
+                .index(
+                    Index::create()
+                        .name("logical_table_data_versions___project_id__id___key")
+                        .unique()
+                        .col(LogicalTableDataVersions::ProjectId)
+                        .col(LogicalTableDataVersions::Id),
                 )
                 .to_owned(),
         ]
@@ -145,13 +163,6 @@ impl Entity for Defs {
                 .table(LogicalTableDataVersions::Table)
                 .col(LogicalTableDataVersions::ExecutionId)
                 .col(LogicalTableDataVersions::TableId)
-                .to_owned(),
-            // Keyset pagination: `ORDER BY id` under the tenant predicate.
-            Index::create()
-                .name("logical_table_data_versions___project_id__id___idx")
-                .table(LogicalTableDataVersions::Table)
-                .col(LogicalTableDataVersions::ProjectId)
-                .col(LogicalTableDataVersions::Id)
                 .to_owned(),
             time_ordered("ltdv___collection_id__triggered_on__id___idx", Some(LogicalTableDataVersions::CollectionId)),
             time_ordered("ltdv___execution_id__triggered_on__id___idx", Some(LogicalTableDataVersions::ExecutionId)),

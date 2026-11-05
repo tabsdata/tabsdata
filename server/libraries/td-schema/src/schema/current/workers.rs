@@ -133,29 +133,33 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Workers::DestinationWriteOn).timestamp_with_time_zone().null())
                 .foreign_key(
                     ForeignKey::create()
-                        .from(Workers::Table, Workers::ExecutionId)
-                        .to(Executions::Table, Executions::Id)
+                        .name("workers___execution_id___fkey")
+                        .from(Workers::Table, (Workers::ProjectId, Workers::ExecutionId))
+                        .to(Executions::Table, (Executions::ProjectId, Executions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
                     ForeignKey::create()
-                        .from(Workers::Table, Workers::TransactionId)
-                        .to(Transactions::Table, Transactions::Id)
+                        .name("workers___transaction_id___fkey")
+                        .from(Workers::Table, (Workers::ProjectId, Workers::TransactionId))
+                        .to(Transactions::Table, (Transactions::ProjectId, Transactions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
                     ForeignKey::create()
-                        .from(Workers::Table, Workers::FunctionVersionId)
-                        .to(Functions::Table, Functions::Id)
+                        .name("workers___function_version_id___fkey")
+                        .from(Workers::Table, (Workers::ProjectId, Workers::FunctionVersionId))
+                        .to(Functions::Table, (Functions::ProjectId, Functions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
                     ForeignKey::create()
-                        .from(Workers::Table, Workers::PhysicalFunctionRunId)
-                        .to(PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Id)
+                        .name("workers___physical_function_run_id___fkey")
+                        .from(Workers::Table, (Workers::ProjectId, Workers::PhysicalFunctionRunId))
+                        .to(PhysicalFunctionRuns::Table, (PhysicalFunctionRuns::ProjectId, PhysicalFunctionRuns::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )

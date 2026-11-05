@@ -5,6 +5,7 @@
 //! SQL machinery only archived schema versions use.
 
 pub(crate) mod rls;
+pub(crate) mod rls_v4;
 pub(crate) mod rollup;
 pub(crate) mod seed_current;
 pub(crate) mod trigger;

@@ -59,29 +59,42 @@ impl Entity for Defs {
                 .col(id_column(LogicalFunctionRunInputs::RequirementTableVersionId).null())
                 .foreign_key(
                     ForeignKey::create()
-                        .from(LogicalFunctionRunInputs::Table, LogicalFunctionRunInputs::ExecutionId)
-                        .to(Executions::Table, Executions::Id)
+                        .name("lfri___execution_id___fkey")
+                        .from(LogicalFunctionRunInputs::Table, (LogicalFunctionRunInputs::ProjectId, LogicalFunctionRunInputs::ExecutionId))
+                        .to(Executions::Table, (Executions::ProjectId, Executions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
                     ForeignKey::create()
-                        .from(LogicalFunctionRunInputs::Table, LogicalFunctionRunInputs::TransactionId)
-                        .to(Transactions::Table, Transactions::Id)
+                        .name("lfri___transaction_id___fkey")
+                        .from(
+                            LogicalFunctionRunInputs::Table,
+                            (LogicalFunctionRunInputs::ProjectId, LogicalFunctionRunInputs::TransactionId),
+                        )
+                        .to(Transactions::Table, (Transactions::ProjectId, Transactions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
                     ForeignKey::create()
-                        .from(LogicalFunctionRunInputs::Table, LogicalFunctionRunInputs::LogicalFunctionRunId)
-                        .to(LogicalFunctionRuns::Table, LogicalFunctionRuns::Id)
+                        .name("lfri___logical_function_run_id___fkey")
+                        .from(
+                            LogicalFunctionRunInputs::Table,
+                            (LogicalFunctionRunInputs::ProjectId, LogicalFunctionRunInputs::LogicalFunctionRunId),
+                        )
+                        .to(LogicalFunctionRuns::Table, (LogicalFunctionRuns::ProjectId, LogicalFunctionRuns::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
                     ForeignKey::create()
-                        .from(LogicalFunctionRunInputs::Table, LogicalFunctionRunInputs::RequirementLogicalTableDataVersionId)
-                        .to(LogicalTableDataVersions::Table, LogicalTableDataVersions::Id)
+                        .name("lfri___requirement_logical_table_data_version_id___fkey")
+                        .from(
+                            LogicalFunctionRunInputs::Table,
+                            (LogicalFunctionRunInputs::ProjectId, LogicalFunctionRunInputs::RequirementLogicalTableDataVersionId),
+                        )
+                        .to(LogicalTableDataVersions::Table, (LogicalTableDataVersions::ProjectId, LogicalTableDataVersions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )

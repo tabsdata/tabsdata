@@ -89,10 +89,16 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Transactions::EndedOn).timestamp_with_time_zone().null())
                 .foreign_key(
                     ForeignKey::create()
-                        .from(Transactions::Table, Transactions::ExecutionId)
-                        .to(Executions::Table, Executions::Id)
+                        .name("transactions___execution_id___fkey")
+                        .from(Transactions::Table, (Transactions::ProjectId, Transactions::ExecutionId))
+                        .to(Executions::Table, (Executions::ProjectId, Executions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
+                )
+                // The target of the project-scoped foreign keys, and keyset
+                // pagination: `ORDER BY id` under the tenant predicate.
+                .index(
+                    Index::create().name("transactions___project_id__id___key").unique().col(Transactions::ProjectId).col(Transactions::Id),
                 )
                 .to_owned(),
         ]
@@ -112,13 +118,6 @@ impl Entity for Defs {
                 .table(Transactions::Table)
                 .col(Transactions::ExecutionId)
                 .col(Transactions::TriggeredOn)
-                .col(Transactions::Id)
-                .to_owned(),
-            // Keyset pagination: `ORDER BY id` under the tenant predicate.
-            Index::create()
-                .name("transactions___project_id__id___idx")
-                .table(Transactions::Table)
-                .col(Transactions::ProjectId)
                 .col(Transactions::Id)
                 .to_owned(),
             // The transaction list's default time ordering.

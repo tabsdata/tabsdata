@@ -168,10 +168,6 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Queries(&["Executions::list_by_function_version"]),
     },
     IndexCase {
-        index: "executions___project_id__id___idx",
-        served_by: Path(KEYSET),
-    },
-    IndexCase {
         index: "executions___project_id__status__triggered_on__id___idx",
         served_by: List(|| {
             list::<Execution>(&["project_id", "status:eq:S"], Some("triggered_on-"))
@@ -212,10 +208,6 @@ const INDEX_CASES: &[IndexCase] = &[
     IndexCase {
         index: "functions___function_id__valid_from__id___idx",
         served_by: Queries(TIMELINE),
-    },
-    IndexCase {
-        index: "functions___project_id__id___idx",
-        served_by: Path(KEYSET),
     },
     IndexCase {
         index: "functions___project_id__valid_to___idx",
@@ -285,10 +277,6 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Path(GROUP_FK),
     },
     IndexCase {
-        index: "logical_function_runs___project_id__id___idx",
-        served_by: Path(KEYSET),
-    },
-    IndexCase {
         index: "logical_function_runs___project_id__triggered_on__id___idx",
         served_by: List(|| list::<FunctionRun>(&["project_id"], Some("triggered_on-"))),
     },
@@ -341,10 +329,6 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Path("versions produced by a run: commit, cancel"),
     },
     IndexCase {
-        index: "logical_table_data_versions___project_id__id___idx",
-        served_by: Path(KEYSET),
-    },
-    IndexCase {
         index: "logical_table_data_versions___table_id__triggered_on__id___idx",
         served_by: Queries(&[
             "Until::list",
@@ -393,10 +377,6 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Path("execution roll-up: MIN(started_on) / MAX(ended_on) of the attempts"),
     },
     IndexCase {
-        index: "pfr___project_id__id___idx",
-        served_by: Path(KEYSET),
-    },
-    IndexCase {
         index: "pfr___project_id__transaction_id__started_on__ended_on___idx",
         served_by: Path("transaction roll-up: MIN(started_on) / MAX(ended_on) of the attempts"),
     },
@@ -419,10 +399,6 @@ const INDEX_CASES: &[IndexCase] = &[
     IndexCase {
         index: "ptdv___physical_function_run_id__table_id___uidx",
         served_by: Constraint,
-    },
-    IndexCase {
-        index: "ptdv___project_id__id___idx",
-        served_by: Path(KEYSET),
     },
     IndexCase {
         index: "permissions___role_id__permission_type__entity___idx",
@@ -537,10 +513,6 @@ const INDEX_CASES: &[IndexCase] = &[
     IndexCase {
         index: "transactions___group_id__project_id___idx",
         served_by: Path(GROUP_FK),
-    },
-    IndexCase {
-        index: "transactions___project_id__id___idx",
-        served_by: Path(KEYSET),
     },
     IndexCase {
         index: "transactions___project_id__started_on__id___idx",

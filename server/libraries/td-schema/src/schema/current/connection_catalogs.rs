@@ -76,10 +76,19 @@ impl Entity for Defs {
                 .col(ColumnDef::new(ConnectionCatalogs::TextRevision).big_integer().not_null().auto_increment())
                 .foreign_key(
                     ForeignKey::create()
-                        .from(ConnectionCatalogs::Table, ConnectionCatalogs::ConnectionId)
-                        .to(Connections::Table, Connections::Id)
+                        .name("connection_catalogs___connection_id___fkey")
+                        .from(ConnectionCatalogs::Table, (ConnectionCatalogs::ProjectId, ConnectionCatalogs::ConnectionId))
+                        .to(Connections::Table, (Connections::ProjectId, Connections::Id))
                         .on_delete(ForeignKeyAction::Cascade)
                         .on_update(ForeignKeyAction::Restrict),
+                )
+                // The target of the project-scoped foreign keys.
+                .index(
+                    Index::create()
+                        .name("connection_catalogs___project_id__connection_id___key")
+                        .unique()
+                        .col(ConnectionCatalogs::ProjectId)
+                        .col(ConnectionCatalogs::ConnectionId),
                 )
                 .to_owned(),
         ]

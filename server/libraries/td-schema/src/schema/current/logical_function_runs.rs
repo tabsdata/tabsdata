@@ -141,17 +141,28 @@ impl Entity for Defs {
                 .col(ColumnDef::new(LogicalFunctionRuns::Recoveries).integer().not_null().default(0))
                 .foreign_key(
                     ForeignKey::create()
-                        .from(LogicalFunctionRuns::Table, LogicalFunctionRuns::ExecutionId)
-                        .to(Executions::Table, Executions::Id)
+                        .name("logical_function_runs___execution_id___fkey")
+                        .from(LogicalFunctionRuns::Table, (LogicalFunctionRuns::ProjectId, LogicalFunctionRuns::ExecutionId))
+                        .to(Executions::Table, (Executions::ProjectId, Executions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
                     ForeignKey::create()
-                        .from(LogicalFunctionRuns::Table, LogicalFunctionRuns::TransactionId)
-                        .to(Transactions::Table, Transactions::Id)
+                        .name("logical_function_runs___transaction_id___fkey")
+                        .from(LogicalFunctionRuns::Table, (LogicalFunctionRuns::ProjectId, LogicalFunctionRuns::TransactionId))
+                        .to(Transactions::Table, (Transactions::ProjectId, Transactions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
+                )
+                // The target of the project-scoped foreign keys, and keyset
+                // pagination: `ORDER BY id` under the tenant predicate.
+                .index(
+                    Index::create()
+                        .name("logical_function_runs___project_id__id___key")
+                        .unique()
+                        .col(LogicalFunctionRuns::ProjectId)
+                        .col(LogicalFunctionRuns::Id),
                 )
                 .to_owned(),
         ]
@@ -176,13 +187,6 @@ impl Entity for Defs {
                 .col(LogicalFunctionRuns::Status)
                 .col(LogicalFunctionRuns::ProjectId)
                 .col(LogicalFunctionRuns::TriggeredOn)
-                .to_owned(),
-            // Keyset pagination: `ORDER BY id` under the tenant predicate.
-            Index::create()
-                .name("logical_function_runs___project_id__id___idx")
-                .table(LogicalFunctionRuns::Table)
-                .col(LogicalFunctionRuns::ProjectId)
-                .col(LogicalFunctionRuns::Id)
                 .to_owned(),
             // Executions of one function version; the column is otherwise
             // unindexed and the lookup drives an OR of two EXISTS probes.

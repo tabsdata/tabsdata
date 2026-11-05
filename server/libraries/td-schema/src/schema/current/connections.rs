@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use sea_query::{ColumnDef, Iden, IndexCreateStatement, InsertStatement, Table, TableCreateStatement};
+use sea_query::{ColumnDef, Iden, Index, IndexCreateStatement, InsertStatement, Table, TableCreateStatement};
 
 use crate::schema::Entity;
 use crate::schema::sql::ViewDef;
@@ -42,6 +42,8 @@ impl Entity for Defs {
                 .col(id_column(Connections::CreatedById).not_null())
                 .col(ColumnDef::new(Connections::ModifiedOn).timestamp_with_time_zone().not_null())
                 .col(id_column(Connections::ModifiedById).not_null())
+                // The target of the project-scoped foreign keys.
+                .index(Index::create().name("connections___project_id__id___key").unique().col(Connections::ProjectId).col(Connections::Id))
                 .to_owned(),
         ]
     }

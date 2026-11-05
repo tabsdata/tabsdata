@@ -63,10 +63,19 @@ impl Entity for Defs {
                 .col(ColumnDef::new(FunctionPatches::ValidTo).timestamp_with_time_zone().not_null())
                 .foreign_key(
                     ForeignKey::create()
-                        .from(FunctionPatches::Table, FunctionPatches::ParentFunctionVersionId)
-                        .to(Functions::Table, Functions::Id)
+                        .name("function_patches___parent_function_version_id___fkey")
+                        .from(FunctionPatches::Table, (FunctionPatches::ProjectId, FunctionPatches::ParentFunctionVersionId))
+                        .to(Functions::Table, (Functions::ProjectId, Functions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
+                )
+                // The target of the project-scoped foreign keys.
+                .index(
+                    Index::create()
+                        .name("function_patches___project_id__id___key")
+                        .unique()
+                        .col(FunctionPatches::ProjectId)
+                        .col(FunctionPatches::Id),
                 )
                 .to_owned(),
         ]

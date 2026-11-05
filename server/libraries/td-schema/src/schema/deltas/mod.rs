@@ -60,6 +60,7 @@ pub(crate) mod v19_to_v20;
 pub(crate) mod v1_to_v2;
 pub(crate) mod v20_to_v21;
 pub(crate) mod v21_to_v22;
+pub(crate) mod v22_to_v23;
 pub(crate) mod v2_to_v3;
 pub(crate) mod v3_to_v4;
 pub(crate) mod v4_to_v5;
@@ -121,6 +122,7 @@ pub fn get(target_version: usize) -> Delta {
         20 => rung::<v19_to_v20::Migration>(),
         21 => rung::<v20_to_v21::Migration>(),
         22 => rung::<v21_to_v22::Migration>(),
+        23 => rung::<v22_to_v23::Migration>(),
         _ => panic!("No delta migration for version {target_version}"),
     }
 }

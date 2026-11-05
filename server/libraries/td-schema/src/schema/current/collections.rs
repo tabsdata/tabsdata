@@ -83,8 +83,9 @@ impl Entity for Defs {
                 .col(id_column(Collections::DefinedById).not_null())
                 .foreign_key(
                     ForeignKey::create()
-                        .from(Collections::Table, Collections::ConnectionId)
-                        .to(Connections::Table, Connections::Id)
+                        .name("collections___connection_id___fkey")
+                        .from(Collections::Table, (Collections::ProjectId, Collections::ConnectionId))
+                        .to(Connections::Table, (Connections::ProjectId, Connections::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )

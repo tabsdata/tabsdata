@@ -14,6 +14,7 @@ use super::function_patches::FunctionPatches;
 use super::functions::Functions;
 use super::logical_function_runs::LogicalFunctionRuns;
 use super::projects::{LastProject, Projects};
+use super::transactions::Transactions;
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
@@ -106,31 +107,52 @@ impl Entity for Defs {
                 .col(ColumnDef::new(PhysicalFunctionRuns::ValidTo).timestamp_with_time_zone().not_null())
                 .foreign_key(
                     ForeignKey::create()
-                        .from(PhysicalFunctionRuns::Table, PhysicalFunctionRuns::LogicalFunctionRunId)
-                        .to(LogicalFunctionRuns::Table, LogicalFunctionRuns::Id)
+                        .name("pfr___logical_function_run_id___fkey")
+                        .from(PhysicalFunctionRuns::Table, (PhysicalFunctionRuns::ProjectId, PhysicalFunctionRuns::LogicalFunctionRunId))
+                        .to(LogicalFunctionRuns::Table, (LogicalFunctionRuns::ProjectId, LogicalFunctionRuns::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
                     ForeignKey::create()
-                        .from(PhysicalFunctionRuns::Table, PhysicalFunctionRuns::FunctionVersionId)
-                        .to(Functions::Table, Functions::Id)
+                        .name("pfr___function_version_id___fkey")
+                        .from(PhysicalFunctionRuns::Table, (PhysicalFunctionRuns::ProjectId, PhysicalFunctionRuns::FunctionVersionId))
+                        .to(Functions::Table, (Functions::ProjectId, Functions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
                     ForeignKey::create()
-                        .from(PhysicalFunctionRuns::Table, PhysicalFunctionRuns::FunctionVersionPatchId)
-                        .to(FunctionPatches::Table, FunctionPatches::Id)
+                        .name("pfr___function_version_patch_id___fkey")
+                        .from(PhysicalFunctionRuns::Table, (PhysicalFunctionRuns::ProjectId, PhysicalFunctionRuns::FunctionVersionPatchId))
+                        .to(FunctionPatches::Table, (FunctionPatches::ProjectId, FunctionPatches::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
                     ForeignKey::create()
-                        .from(PhysicalFunctionRuns::Table, PhysicalFunctionRuns::ExecutionId)
-                        .to(Executions::Table, Executions::Id)
+                        .name("pfr___execution_id___fkey")
+                        .from(PhysicalFunctionRuns::Table, (PhysicalFunctionRuns::ProjectId, PhysicalFunctionRuns::ExecutionId))
+                        .to(Executions::Table, (Executions::ProjectId, Executions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
+                )
+                .foreign_key(
+                    ForeignKey::create()
+                        .name("pfr___transaction_id___fkey")
+                        .from(PhysicalFunctionRuns::Table, (PhysicalFunctionRuns::ProjectId, PhysicalFunctionRuns::TransactionId))
+                        .to(Transactions::Table, (Transactions::ProjectId, Transactions::Id))
+                        .on_delete(ForeignKeyAction::Restrict)
+                        .on_update(ForeignKeyAction::Restrict),
+                )
+                // The target of the project-scoped foreign keys, and keyset
+                // pagination: `ORDER BY id` under the tenant predicate.
+                .index(
+                    Index::create()
+                        .name("pfr___project_id__id___key")
+                        .unique()
+                        .col(PhysicalFunctionRuns::ProjectId)
+                        .col(PhysicalFunctionRuns::Id),
                 )
                 .to_owned(),
         ]
@@ -187,13 +209,6 @@ impl Entity for Defs {
                 .name("pfr___function_version_id___idx")
                 .table(PhysicalFunctionRuns::Table)
                 .col(PhysicalFunctionRuns::FunctionVersionId)
-                .to_owned(),
-            // Keyset pagination: `ORDER BY id` under the tenant predicate.
-            Index::create()
-                .name("pfr___project_id__id___idx")
-                .table(PhysicalFunctionRuns::Table)
-                .col(PhysicalFunctionRuns::ProjectId)
-                .col(PhysicalFunctionRuns::Id)
                 .to_owned(),
             // One open interval per logical run.
             Index::create()

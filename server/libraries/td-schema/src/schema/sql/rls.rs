@@ -18,8 +18,11 @@ use crate::{ACROSS_PROJECTS_ROLE, PROJECT_ID_GUC};
 /// Must stay a bare equality: an `OR` is index-usable only where every branch
 /// constrains an indexed column, so admitting cross-project work here would
 /// cost every tenant read a per-row filter over the whole instance.
+///
+/// The sub-select keeps the planner on the average project: folded, a project
+/// the statistics have not seen yet is estimated at one row.
 fn tenant_predicate() -> String {
-    format!("project_id = current_setting('{PROJECT_ID_GUC}', true)")
+    format!("project_id = (SELECT current_setting('{PROJECT_ID_GUC}', true))")
 }
 
 /// RLS statements for one project-scoped table. Caller emits these in the

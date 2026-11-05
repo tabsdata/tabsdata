@@ -12,7 +12,7 @@ use super::{CurrentSource, SchemaDelta, SchemaSource, archive, current, deltas, 
 use crate::ID_COLLATION;
 use crate::schema::render::{render_schema, update_db_version};
 use crate::schema::sql::{created_table, is_id_column};
-use sea_query::ColumnType;
+use sea_query::{ColumnType, TableName, TableRef};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::LazyLock;
 
@@ -582,6 +582,31 @@ fn test_project_scoped_tables_match_project_id_columns() {
         "project_scoped_tables lists tables that have no `project_id` column: \
          {stale:?}. Remove them from the list or add the column.",
     );
+}
+
+#[test]
+fn test_project_scoped_references_carry_the_project() {
+    let scoped: HashSet<String> = current::project_scoped_tables().iter().map(|t| t.to_string()).collect();
+    let mut single: Vec<String> = Vec::new();
+    for stmt in current::ENTITIES.iter().flat_map(|e| e.create_tables()) {
+        let table = created_table(&stmt);
+        if !scoped.contains(&table) {
+            continue;
+        }
+        for fk in stmt.get_foreign_key_create_stmts() {
+            let fk = fk.get_foreign_key();
+            let parent = match fk.get_ref_table() {
+                Some(TableRef::Table(TableName(_, parent), _)) => parent.to_string(),
+                other => panic!("{table}: a foreign key to an unexpected table reference: {other:?}"),
+            };
+            let carries = fk.get_columns().first().map(String::as_str) == Some("project_id")
+                && fk.get_ref_columns().first().map(String::as_str) == Some("project_id");
+            if scoped.contains(&parent) && !carries {
+                single.push(format!("{table}{:?} -> {parent}{:?}", fk.get_columns(), fk.get_ref_columns()));
+            }
+        }
+    }
+    assert!(single.is_empty(), "references between project-scoped tables without `project_id`: {single:?}");
 }
 
 #[test]

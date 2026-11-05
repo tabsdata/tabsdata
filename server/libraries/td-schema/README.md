@@ -69,12 +69,34 @@ it. The planner estimates that filter like any other, so the schema keeps its
 estimates from collapsing; when they collapse, it picks per-row nested loops
 that scan a whole project per row:
 
+- The policy is a bare equality on a sub-select,
+  `project_id = (SELECT current_setting('app.project_id', true))`. A bare
+  `current_setting` is folded to the project's id when planning, so a project
+  the statistics have not seen yet (new, or grown since the last `ANALYZE`) is
+  estimated at one row, and a cached plan keeps the estimate of the project it
+  was planned for. Behind the sub-select the filter is estimated as the average
+  project, and still serves as an index condition.
+- Across tables: a reference between two project-scoped tables is a composite
+  foreign key, `(project_id, x_id) REFERENCES parent (project_id, id)`, against
+  the parent's `UNIQUE (project_id, id)`. The planner then reads both sides'
+  tenant filters as one, instead of underestimating each join by the number of
+  projects. It also keeps a row from referencing another project's.
+  `test_project_scoped_references_carry_the_project` enforces it.
 - Within a table: `current/` derives a `(dependencies)` statistic on
   `(column, project_id)` for each table's `id`, `collection_id` and references,
   so a filter on a key is not multiplied by the tenant filter it implies.
+- Under RLS the planner uses a column's statistics, and pushes a condition into
+  an index scan ahead of the policy, only for `LEAKPROOF` operators. Comparisons
+  of integers, text, timestamps, booleans and uuids are; `LIKE`, `lower()` and
+  the jsonb operators are not, so a prefix search on a large table is a range
+  on a `COLLATE "C"` column rather than a `LIKE`.
+
+None of this helps a table that has no statistics at all (never analyzed, or
+analyzed while empty) until autovacuum analyzes it.
 
 The td-queries load suite's `estimate_cases` check the result on multi-project
-data under the tenant role.
+data under the tenant role, including a project created after the last
+`ANALYZE`.
 
 ## Major versions and upgradeability
 

@@ -60,8 +60,9 @@ impl Entity for Defs {
                 .col(ColumnDef::new(ConnectionProbes::EndedOn).timestamp_with_time_zone().null())
                 .foreign_key(
                     ForeignKey::create()
-                        .from(ConnectionProbes::Table, ConnectionProbes::ConnectionId)
-                        .to(Connections::Table, Connections::Id)
+                        .name("connection_probes___connection_id___fkey")
+                        .from(ConnectionProbes::Table, (ConnectionProbes::ProjectId, ConnectionProbes::ConnectionId))
+                        .to(Connections::Table, (Connections::ProjectId, Connections::Id))
                         .on_delete(ForeignKeyAction::Cascade)
                         .on_update(ForeignKeyAction::Restrict),
                 )

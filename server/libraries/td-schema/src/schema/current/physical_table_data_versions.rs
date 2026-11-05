@@ -106,38 +106,67 @@ impl Entity for Defs {
                 .col(ColumnDef::new(PhysicalTableDataVersions::ValidTo).timestamp_with_time_zone().not_null())
                 .foreign_key(
                     ForeignKey::create()
-                        .from(PhysicalTableDataVersions::Table, PhysicalTableDataVersions::LogicalTableDataVersionId)
-                        .to(LogicalTableDataVersions::Table, LogicalTableDataVersions::Id)
+                        .name("ptdv___logical_table_data_version_id___fkey")
+                        .from(
+                            PhysicalTableDataVersions::Table,
+                            (PhysicalTableDataVersions::ProjectId, PhysicalTableDataVersions::LogicalTableDataVersionId),
+                        )
+                        .to(LogicalTableDataVersions::Table, (LogicalTableDataVersions::ProjectId, LogicalTableDataVersions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
                     ForeignKey::create()
-                        .from(PhysicalTableDataVersions::Table, PhysicalTableDataVersions::FunctionVersionId)
-                        .to(Functions::Table, Functions::Id)
+                        .name("ptdv___function_version_id___fkey")
+                        .from(
+                            PhysicalTableDataVersions::Table,
+                            (PhysicalTableDataVersions::ProjectId, PhysicalTableDataVersions::FunctionVersionId),
+                        )
+                        .to(Functions::Table, (Functions::ProjectId, Functions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
                     ForeignKey::create()
-                        .from(PhysicalTableDataVersions::Table, PhysicalTableDataVersions::FunctionVersionPatchId)
-                        .to(FunctionPatches::Table, FunctionPatches::Id)
+                        .name("ptdv___function_version_patch_id___fkey")
+                        .from(
+                            PhysicalTableDataVersions::Table,
+                            (PhysicalTableDataVersions::ProjectId, PhysicalTableDataVersions::FunctionVersionPatchId),
+                        )
+                        .to(FunctionPatches::Table, (FunctionPatches::ProjectId, FunctionPatches::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
                     ForeignKey::create()
-                        .from(PhysicalTableDataVersions::Table, PhysicalTableDataVersions::ExecutionId)
-                        .to(Executions::Table, Executions::Id)
+                        .name("ptdv___execution_id___fkey")
+                        .from(
+                            PhysicalTableDataVersions::Table,
+                            (PhysicalTableDataVersions::ProjectId, PhysicalTableDataVersions::ExecutionId),
+                        )
+                        .to(Executions::Table, (Executions::ProjectId, Executions::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
                     ForeignKey::create()
-                        .from(PhysicalTableDataVersions::Table, PhysicalTableDataVersions::PhysicalFunctionRunId)
-                        .to(PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Id)
+                        .name("ptdv___physical_function_run_id___fkey")
+                        .from(
+                            PhysicalTableDataVersions::Table,
+                            (PhysicalTableDataVersions::ProjectId, PhysicalTableDataVersions::PhysicalFunctionRunId),
+                        )
+                        .to(PhysicalFunctionRuns::Table, (PhysicalFunctionRuns::ProjectId, PhysicalFunctionRuns::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
+                )
+                // The target of the project-scoped foreign keys, and keyset
+                // pagination: `ORDER BY id` under the tenant predicate.
+                .index(
+                    Index::create()
+                        .name("ptdv___project_id__id___key")
+                        .unique()
+                        .col(PhysicalTableDataVersions::ProjectId)
+                        .col(PhysicalTableDataVersions::Id),
                 )
                 .to_owned(),
         ]
@@ -162,13 +191,6 @@ impl Entity for Defs {
                 .col(PhysicalTableDataVersions::LogicalTableDataVersionId)
                 .unique()
                 .and_where(open_interval(PhysicalTableDataVersions::ValidTo))
-                .to_owned(),
-            // Keyset pagination: `ORDER BY id` under the tenant predicate.
-            Index::create()
-                .name("ptdv___project_id__id___idx")
-                .table(PhysicalTableDataVersions::Table)
-                .col(PhysicalTableDataVersions::ProjectId)
-                .col(PhysicalTableDataVersions::Id)
                 .to_owned(),
             // At-time reads; `(valid_from, id)` is the splice order.
             Index::create()

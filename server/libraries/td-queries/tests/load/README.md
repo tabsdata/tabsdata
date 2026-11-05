@@ -40,9 +40,10 @@ cargo nextest run -p td-queries --test load --run-ignored ignored-only --test-th
 ## Plan guard
 
 `estimate_cases.rs` plans the status roll-ups under each project's tenant
-policy over a multi-project dataset with real statistics, and fails when a scan
-is underestimated past 4x or an aggregate, sort, hash or full scan runs once per
-outer row. Row counts and loops, so it runs in the normal test path.
+policy over a multi-project dataset with real statistics, and for a project
+created after the last `ANALYZE`, and fails when a scan is underestimated past
+4x or an aggregate, sort, hash or full scan runs once per outer row. Row counts
+and loops, so it runs in the normal test path.
 
 The other cases here run through the cross-project role, whose policy is
 `USING (true)`: they cannot see how the tenant filter is estimated, so plan
