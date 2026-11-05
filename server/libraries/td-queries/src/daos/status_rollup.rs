@@ -8,7 +8,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::primitives::chunked::{MAX_QUERY_CONDITIONS, warn_if_chunked};
+use crate::primitives::chunked::{MAX_QUERY_CONDITIONS, trace_if_chunked};
 use sea_query::{Expr, ExprTrait, IntoIden, Query, SelectStatement};
 use ta_objects::Dao;
 use ta_objects::SeaValue;
@@ -81,7 +81,7 @@ async fn recompute<R: Dao>(
     if ids.is_empty() {
         return Ok(());
     }
-    warn_if_chunked::<ExecutionDB>(ids.len());
+    trace_if_chunked::<ExecutionDB>(ids.len());
     let mut transactions = BTreeSet::new();
     let mut executions = BTreeSet::new();
     for chunk in ids.chunks(MAX_QUERY_CONDITIONS) {

@@ -12,7 +12,7 @@ use crate::WritesTo;
 use crate::generic::grain::{Current, Grain, Unversioned, select_chunk_in};
 use crate::primitives::chunked::{
     MAX_INSERT_ROWS, MAX_QUERY_CONDITIONS, close_chunk_query, fetch_chunked, insert_vec_query,
-    open_vec_query, update_chunk_query, update_open_chunk_query, warn_if_chunked,
+    open_vec_query, trace_if_chunked, update_chunk_query, update_open_chunk_query,
 };
 use sqlx::postgres::PgQueryResult;
 use ta_objects::errors::SqlError;
@@ -84,7 +84,7 @@ impl<E> Chunked<E, Unversioned> {
         E: Serves<D> + WritesTo<D>,
     {
         let mut executor = self.executor;
-        warn_if_chunked::<D>(values.len());
+        trace_if_chunked::<D>(values.len());
         let mut result = PgQueryResult::default();
         for chunk in values.chunks(MAX_QUERY_CONDITIONS) {
             let r = update_chunk_query::<D>(dao, chunk)
@@ -110,7 +110,7 @@ impl<E> Chunked<E, Current> {
         E: Serves<D> + WritesTo<D>,
     {
         let mut executor = self.executor;
-        warn_if_chunked::<D>(values.len());
+        trace_if_chunked::<D>(values.len());
         let extra = extra.resolve();
         let at = at.into();
         let mut result = PgQueryResult::default();
@@ -136,7 +136,7 @@ impl<E> Chunked<E, Current> {
         E: Serves<D> + WritesTo<D>,
     {
         let mut executor = self.executor;
-        warn_if_chunked::<D>(values.len());
+        trace_if_chunked::<D>(values.len());
         let mut result = PgQueryResult::default();
         for chunk in values.chunks(MAX_QUERY_CONDITIONS) {
             let r = update_open_chunk_query::<D>(dao, chunk)

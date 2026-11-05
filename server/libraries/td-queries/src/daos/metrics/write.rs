@@ -7,7 +7,7 @@
 use crate::Queries;
 use crate::daos::metrics::load::load_ended_attempts;
 use crate::daos::metrics::rows::fact_rows;
-use crate::primitives::chunked::{MAX_QUERY_CONDITIONS, warn_if_chunked};
+use crate::primitives::chunked::{MAX_QUERY_CONDITIONS, trace_if_chunked};
 use sea_query::{Alias, Expr, ExprTrait, Func, Query};
 use std::collections::{BTreeMap, HashSet};
 use ta_objects::SeaValue;
@@ -146,7 +146,7 @@ pub async fn versions_consumed(
     if version_ids.is_empty() {
         return Ok(());
     }
-    warn_if_chunked::<MetricsFactDB>(version_ids.len());
+    trace_if_chunked::<MetricsFactDB>(version_ids.len());
     for chunk in version_ids.chunks(MAX_QUERY_CONDITIONS) {
         let mut update = Query::update();
         update
@@ -186,7 +186,7 @@ pub async fn runs_status_changed(
     if lfr_ids.is_empty() || !status.is_ended() {
         return Ok(());
     }
-    warn_if_chunked::<MetricsFactDB>(lfr_ids.len());
+    trace_if_chunked::<MetricsFactDB>(lfr_ids.len());
     for chunk in lfr_ids.chunks(MAX_QUERY_CONDITIONS) {
         let mut update = Query::update();
         update
@@ -221,7 +221,7 @@ pub async fn runs_reattempted(
     if lfr_ids.is_empty() {
         return Ok(());
     }
-    warn_if_chunked::<MetricsFactDB>(lfr_ids.len());
+    trace_if_chunked::<MetricsFactDB>(lfr_ids.len());
     for chunk in lfr_ids.chunks(MAX_QUERY_CONDITIONS) {
         let mut update = Query::update();
         update

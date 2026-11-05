@@ -15,7 +15,7 @@ use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{Dao, Insertable, Scd2Dao, Scd2OpenDao, SelectDao, TableDao, UpdateDao};
 use td_database::access::LockInstant;
 use td_database::sea_query::builder::SeaQueryExt;
-use tracing::warn;
+use tracing::trace;
 
 pub(crate) const MAX_QUERY_CONDITIONS: usize = 100;
 
@@ -27,9 +27,9 @@ pub(crate) fn resolve_or<D: Dao>(items: &[impl SqlCondition<D>]) -> Condition {
         .fold(Condition::any(), |cond, item| cond.add(item.resolve()))
 }
 
-pub(crate) fn warn_if_chunked<D: Dao>(len: usize) {
+pub(crate) fn trace_if_chunked<D: Dao>(len: usize) {
     if len > MAX_QUERY_CONDITIONS {
-        warn!(
+        trace!(
             entity = D::display_name(),
             values = len,
             max = MAX_QUERY_CONDITIONS,
@@ -40,7 +40,7 @@ pub(crate) fn warn_if_chunked<D: Dao>(len: usize) {
 }
 
 /// One statement per chunk of `values`; `D` names the entity in errors and
-/// the chunking warning, `O` is the decoded row.
+/// the chunking trace, `O` is the decoded row.
 pub(crate) async fn fetch_chunked<D, O, E, C>(
     mut executor: E,
     values: &[C],
@@ -51,7 +51,7 @@ where
     O: Send + Unpin + for<'r> FromRow<'r, PgRow>,
     E: QueryExecutor,
 {
-    warn_if_chunked::<D>(values.len());
+    trace_if_chunked::<D>(values.len());
     let mut results = Vec::new();
     for chunk in values.chunks(MAX_QUERY_CONDITIONS) {
         let rows: Vec<O> = statement(chunk)
