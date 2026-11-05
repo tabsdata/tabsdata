@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -22,10 +23,10 @@ from tabsdatak.conn.salesforce._explorer._soql_explorer import (
     SalesforceSOQLConnectionExplorer,
 )
 from tabsdatak.spi import (
+    LazyFrameInput,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
-    TableFileInput,
     TableMode,
 )
 
@@ -66,44 +67,37 @@ def _resolve_src_cfg(src_cfg: SrcCfgSpec | None) -> _ReaderCfg:
     )
 
 
-# All simple-salesforce / polars / pandas / ijson imports are made
+# All simple-salesforce / polars / ijson imports are made
 # inside the plugin method bodies (or in ``_reader.py``) so the
 # conn-salesforce package stays cheap to import for registry scans
 # that only care about the SrcDef metadata.
 
 
 class _SalesforceSrcPlugin(SrcPlugin[SalesforceSrcConn, SalesforceSrc]):
-    """Run SOQL queries against Salesforce and emit one parquet file
-    per query (``TableMode.SINGLE``)."""
+    """Run SOQL queries against Salesforce and hand over one input per
+    query (``TableMode.SINGLE``)."""
 
     def read_in(
         self,
         ctx: SrcPluginCtx,
         conn: SalesforceSrcConn,
         src: SalesforceSrc,
-    ) -> list[list[TableFileInput]]:
+    ) -> list[Iterable[LazyFrameInput]]:
         # noinspection PyProtectedMember
         from tabsdatak.conn.salesforce import _reader
 
         cfg = _resolve_src_cfg(src.src_cfg)
         logger.setLevel(cfg.logging_level)
         logger.info("salesforce: read_in starting (%d quer(ies))", len(src.queries))
-
-        api_version = src.api_version
-        sf = _reader.login(conn, api_version=api_version)
-        try:
-            return _reader.read_soql_src(
-                sf,
-                src,
-                ctx.work_dir,
-                drop_metadata=cfg.drop_metadata,
-            )
-        finally:
-            logger.info("salesforce: read_in finished (%d quer(ies))", len(src.queries))
+        return _reader.read_soql_src(
+            _reader.Client(conn, api_version=src.api_version),
+            src,
+            drop_metadata=cfg.drop_metadata,
+        )
 
 
 class _SalesforceReportSrcPlugin(SrcPlugin[SalesforceSrcConn, SalesforceReportSrc]):
-    """Run Salesforce Analytics reports and emit one parquet file per
+    """Run Salesforce Analytics reports and hand over one input per
     report (``TableMode.SINGLE``)."""
 
     def read_in(
@@ -111,24 +105,18 @@ class _SalesforceReportSrcPlugin(SrcPlugin[SalesforceSrcConn, SalesforceReportSr
         ctx: SrcPluginCtx,
         conn: SalesforceSrcConn,
         src: SalesforceReportSrc,
-    ) -> list[list[TableFileInput]]:
+    ) -> list[Iterable[LazyFrameInput]]:
         # noinspection PyProtectedMember
         from tabsdatak.conn.salesforce import _reader
 
         cfg = _resolve_src_cfg(src.src_cfg)
         logger.setLevel(cfg.logging_level)
         logger.info("salesforce: read_in starting (%d report(s))", len(src.reports))
-
-        sf = _reader.login(conn)
-        try:
-            return _reader.read_report_src(
-                sf,
-                src,
-                ctx.work_dir,
-                drop_metadata=cfg.drop_metadata,
-            )
-        finally:
-            logger.info("salesforce: read_in finished (%d report(s))", len(src.reports))
+        return _reader.read_report_src(
+            _reader.Client(conn),
+            src,
+            drop_metadata=cfg.drop_metadata,
+        )
 
 
 SALESFORCE_SRC = SrcDef(

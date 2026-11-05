@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import io
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,23 +16,25 @@ import polars as pl
 import pytest
 
 from tabsdatak.api import Secret
+from tabsdatak.common._storage.failures import collected
+from tabsdatak.common._storage.landed import StoredMetadata, serve
+
+# noinspection PyProtectedMember
+# noinspection PyProtectedMember
 from tabsdatak.conn.salesforce import (
-    SalesforceSrcConn,
     SalesforceReportSrc,
     SalesforceSrc,
+    SalesforceSrcConn,
     SalesforceTokenCredentials,
+    _plugin as plugin,
+    _reader as reader,
 )
-# noinspection PyProtectedMember
-from tabsdatak.conn.salesforce import _plugin as plugin
 from tabsdatak.conn.salesforce._explorer._report_explorer import (
     SalesforceReportsConnectionExplorer,
 )
 from tabsdatak.conn.salesforce._explorer._soql_explorer import (
     SalesforceSOQLConnectionExplorer,
 )
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.salesforce import _reader as reader
 from tabsdatak.conn.salesforce.constants import (
     SALESFORCE_META_LAST_MODIFIED,
     SALESFORCE_META_REPORT_ID,
@@ -40,8 +44,7 @@ from tabsdatak.conn.salesforce.error import (
     SalesforceErrorCode,
     SalesforceRuntimeException,
 )
-from tabsdatak.spi import TableFileInput
-
+from tabsdatak.spi import FrameMetadata, LazyFrameInput
 
 pytestmark = pytest.mark.salesforce
 
@@ -193,47 +196,88 @@ def test_login_rejects_unsupported_credentials_type():
 # ---------------------------------------------------------------------------
 
 
-def _patch_login(monkeypatch, fake_sf: _FakeSF) -> None:
-    monkeypatch.setattr(reader, "login", lambda conn, api_version=None: fake_sf)
+def _patch_login(monkeypatch, fake_sf: _FakeSF) -> list:
+    logins: list = []
+
+    def login(conn, api_version=None):
+        logins.append(api_version)
+        return fake_sf
+
+    monkeypatch.setattr(reader, "login", login)
+    return logins
 
 
-def _read_parquet(tfi: TableFileInput) -> pl.DataFrame:
-    return pl.read_parquet(tfi.file)
+def _metadata(table: LazyFrameInput) -> FrameMetadata | None:
+    return table.metadata() if callable(table.metadata) else table.metadata
 
 
-def test_src_plugin_writes_one_parquet_per_query(monkeypatch, work_dir):
+def _served(table: LazyFrameInput) -> pl.DataFrame:
+    raw = collected(table.frame)
+    metadata = _metadata(table) or FrameMetadata()
+    return serve(raw.lazy(), StoredMetadata.read(StoredMetadata.of(metadata))).collect()
+
+
+def _soql(monkeypatch, *records: list[dict], **options) -> tuple:
     fake = _FakeSF()
-    fake.records_by_query = [
+    fake.records_by_query = list(records)
+    logins = _patch_login(monkeypatch, fake)
+    queries = [f"SELECT Id FROM T{i}" for i in range(len(records))]
+    src = SalesforceSrc(queries=queries, **options)
+    return fake, logins, src
+
+
+def test_src_plugin_reads_nothing_until_an_input_lands(monkeypatch, work_dir):
+    fake, logins, src = _soql(monkeypatch, [{"Id": "001"}])
+    out = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    assert len(out) == 1
+    assert (logins, fake.query_all_iter_calls) == ([], [])
+    [[table]] = out
+    _served(table)
+    assert fake.query_all_iter_calls == [("SELECT Id FROM T0", False)]
+
+
+def test_src_plugin_hands_over_the_records_of_its_query(monkeypatch, work_dir):
+    _, logins, src = _soql(
+        monkeypatch,
         [
             {"attributes": {"_": 1}, "Id": "001", "Name": "Acme"},
             {"attributes": {"_": 1}, "Id": "002", "Name": "Initech"},
         ],
-    ]
-    _patch_login(monkeypatch, fake)
-
-    src = SalesforceSrc(
-        queries=["SELECT Id, Name FROM Account"],
     )
     out = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
-
-    assert len(out) == 1
-    assert len(out[0]) == 1
-    df0 = _read_parquet(out[0][0])
-    assert df0["Name"].to_list() == ["Acme", "Initech"]
-    # SOQL passthrough: the query string is unchanged in this case.
-    assert fake.query_all_iter_calls[0][0] == "SELECT Id, Name FROM Account"
+    [[table]] = out
+    assert _served(table)["Name"].to_list() == ["Acme", "Initech"]
+    assert len(logins) == 1
 
 
-def test_src_plugin_strips_attributes_column(monkeypatch, work_dir):
-    fake = _FakeSF()
-    fake.records_by_query = [
-        [{"attributes": {"x": 1}, "Id": "001"}],
-    ]
-    _patch_login(monkeypatch, fake)
-    src = SalesforceSrc(queries=["SELECT Id FROM Account"])
-    out = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
-    df = _read_parquet(out[0][0])
-    assert list(df.columns) == ["Id"]
+def test_src_plugin_strips_attributes_at_every_level(monkeypatch, work_dir):
+    _, _, src = _soql(
+        monkeypatch,
+        [
+            {
+                "attributes": {"type": "Account"},
+                "Id": "001",
+                "Owner": {"attributes": {"type": "User"}, "Name": "Ada"},
+            }
+        ],
+    )
+    [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    frame = _served(table)
+    assert frame.columns == ["Id", "Owner"]
+    assert frame["Owner"].to_list() == [{"Name": "Ada"}]
+
+
+def test_src_plugin_types_each_field_over_the_whole_result(monkeypatch, work_dir):
+    _, _, src = _soql(
+        monkeypatch,
+        [{"Id": "001", "Amount": 1, "Active": True}]
+        + [{"Id": "002", "Amount": 2.5, "Active": False}],
+    )
+    [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    frame = _served(table)
+    assert frame.schema == pl.Schema(
+        {"Id": pl.String, "Amount": pl.Float64, "Active": pl.Boolean}
+    )
 
 
 def test_src_plugin_replaces_last_modified_token(monkeypatch, work_dir):
@@ -246,8 +290,8 @@ def test_src_plugin_replaces_last_modified_token(monkeypatch, work_dir):
         ],
         initial_last_modified=datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
-    plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
-    # The token must have been replaced inside the rewritten query.
+    [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    _served(table)
     actual_query = fake.query_all_iter_calls[0][0]
     assert "$lastModified" not in actual_query
     assert "2026-01-01" in actual_query
@@ -266,26 +310,49 @@ def test_src_plugin_rejects_token_without_initial_value(monkeypatch, work_dir):
     assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_11
 
 
-def test_src_plugin_wraps_query_failure_as_salesforce_11(monkeypatch, work_dir):
+def test_src_plugin_wraps_query_failure_as_salesforce_10(monkeypatch, work_dir):
     fake = _FakeSF()
     fake.query_all_iter_raise = RuntimeError("API explode")
     _patch_login(monkeypatch, fake)
     src = SalesforceSrc(queries=["SELECT Id FROM Account"])
+    [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
     with pytest.raises(SalesforceRuntimeException) as ei:
-        plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+        _served(table)
     assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_10
 
 
-def test_src_plugin_handles_empty_result_set(monkeypatch, work_dir):
+def test_src_plugin_wraps_a_failed_page_as_salesforce_10(monkeypatch, work_dir):
+    def pages():
+        yield {"Id": "001"}
+        raise RuntimeError("page lost")
+
     fake = _FakeSF()
-    fake.records_by_query = [[]]
+    fake.query_all_iter = lambda query, include_deleted=False: pages()
     _patch_login(monkeypatch, fake)
     src = SalesforceSrc(queries=["SELECT Id FROM Account"])
-    out = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
-    # Even on empty results we must emit one parquet so the framework
-    # has a slot to consume.
-    assert len(out) == 1
-    assert out[0][0].file.exists()
+    [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    with pytest.raises(SalesforceRuntimeException) as ei:
+        _served(table)
+    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_10
+    assert "query_index=0" in str(ei.value)
+
+
+def test_src_plugin_surfaces_a_failed_login_when_reading(monkeypatch, work_dir):
+    def login(conn, api_version=None):
+        raise SalesforceErrorCode.SALESFORCE_9.exception(instance_url=None)
+
+    monkeypatch.setattr(reader, "login", login)
+    src = SalesforceSrc(queries=["SELECT Id FROM Account"])
+    [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    with pytest.raises(SalesforceRuntimeException) as ei:
+        _served(table)
+    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_9
+
+
+def test_src_plugin_handles_empty_result_set(monkeypatch, work_dir):
+    _, _, src = _soql(monkeypatch, [])
+    [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    assert _served(table).shape == (0, 0)
 
 
 def test_src_plugin_reports_soql_and_cutoff_as_metadata(monkeypatch, work_dir):
@@ -298,13 +365,13 @@ def test_src_plugin_reports_soql_and_cutoff_as_metadata(monkeypatch, work_dir):
         ],
         initial_last_modified=datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
-    out = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
-
-    metadata = out[0][0].metadata
+    [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    _served(table)
+    columns = _metadata(table).columns
     # The reported SOQL is the query as sent -- token already substituted.
-    assert metadata[SALESFORCE_META_SOQL] == fake.query_all_iter_calls[0][0]
-    assert "$lastModified" not in metadata[SALESFORCE_META_SOQL]
-    assert metadata[SALESFORCE_META_LAST_MODIFIED].startswith("2026-01-01")
+    assert columns[SALESFORCE_META_SOQL] == fake.query_all_iter_calls[0][0]
+    assert "$lastModified" not in columns[SALESFORCE_META_SOQL]
+    assert columns[SALESFORCE_META_LAST_MODIFIED].startswith("2026-01-01")
 
 
 def test_src_plugin_metadata_cutoff_empty_without_initial_last_modified(
@@ -315,11 +382,11 @@ def test_src_plugin_metadata_cutoff_empty_without_initial_last_modified(
     fake.records_by_query = [[{"attributes": {}, "Id": "001"}]]
     _patch_login(monkeypatch, fake)
     src = SalesforceSrc(queries=["SELECT Id FROM Account"])
-    out = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
-
+    [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    _served(table)
     # The metadata never changes shape between a full and an
     # incremental read: both keys are always present.
-    assert out[0][0].metadata == {
+    assert _metadata(table).columns == {
         SALESFORCE_META_SOQL: "SELECT Id FROM Account",
         SALESFORCE_META_LAST_MODIFIED: "",
     }
@@ -333,9 +400,18 @@ def test_src_plugin_drops_metadata_when_src_cfg_asks(monkeypatch, work_dir):
         queries=["SELECT Id FROM Account"],
         src_cfg={"tabsdata.src_metadata.drop": True},
     )
-    out = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    _served(table)
+    assert _metadata(table).columns is None
 
-    assert out[0][0].metadata is None
+
+def test_record_lines_hand_out_whole_records_in_the_sizes_asked():
+    lines = reader.RecordLines(iter([{"a": 1}, {"a": 2}, {"a": "é"}]), 0)
+    data = b""
+    while chunk := lines.read(5):
+        assert len(chunk) <= 5
+        data += chunk
+    assert data.decode("utf-8").splitlines() == ['{"a":1}', '{"a":2}', '{"a":"é"}']
 
 
 # ---------------------------------------------------------------------------
@@ -343,7 +419,11 @@ def test_src_plugin_drops_metadata_when_src_cfg_asks(monkeypatch, work_dir):
 # ---------------------------------------------------------------------------
 
 
-def test_report_plugin_raises_salesforce_14_when_lookup_misses(
+def _drained(out) -> list[list[LazyFrameInput]]:
+    return [list(slot) for slot in out]
+
+
+def test_report_plugin_raises_salesforce_13_when_lookup_misses(
     monkeypatch, work_dir,
 ):
     fake = _FakeSF()
@@ -355,12 +435,13 @@ def test_report_plugin_raises_salesforce_14_when_lookup_misses(
         reports=["NotARealReport"],
         find_report_by="name",
     )
+    out = plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
     with pytest.raises(SalesforceRuntimeException) as ei:
-        plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+        _drained(out)
     assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_13
 
 
-def test_report_plugin_raises_salesforce_16_on_unsupported_format(
+def test_report_plugin_raises_salesforce_15_on_unsupported_format(
     monkeypatch, work_dir,
 ):
     fake = _FakeSF()
@@ -372,41 +453,145 @@ def test_report_plugin_raises_salesforce_16_on_unsupported_format(
         reports=["00O000000000001"],
         find_report_by="id",
     )
+    out = plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
     with pytest.raises(SalesforceRuntimeException) as ei:
-        plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+        _drained(out)
     assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_15
 
 
-def _patch_report_run(monkeypatch, parquet_path: Path) -> None:
-    """Stub out everything between report-id resolution and the parquet
-    sink so a report read can be driven without an HTTP layer."""
+def test_report_plugin_wraps_other_failures_as_salesforce_16(monkeypatch, work_dir):
+    fake = _FakeSF()
+    fake.query_returns = {"records": [{"Id": "00O000000000001", "Format": "Tabular"}]}
+    _patch_login(monkeypatch, fake)
+    _patch_report_run(monkeypatch, [["a"]])
+    monkeypatch.setattr(
+        reader,
+        "_launch_report_instance",
+        MagicMock(side_effect=RuntimeError("launch failed")),
+    )
+    src = SalesforceReportSrc(reports=["00O000000000001"], find_report_by="id")
+    out = plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    with pytest.raises(SalesforceRuntimeException) as ei:
+        _drained(out)
+    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_16
+    assert "report_index=0" in str(ei.value)
+
+
+class _Response:
+    def __init__(self, rows: list[list[Any]]) -> None:
+        body = {
+            "factMap": {
+                "T!T": {
+                    "rows": [
+                        {
+                            "dataCells": [
+                                {"label": "-" if v is None else str(v), "value": v}
+                                for v in row
+                            ]
+                        }
+                        for row in rows
+                    ]
+                }
+            }
+        }
+        self.raw = io.BytesIO(json.dumps(body).encode("utf-8"))
+        self.headers: dict = {}
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _patch_report_run(
+    monkeypatch,
+    rows: list[list[Any]],
+    columns: list[tuple[str, str]] | None = None,
+) -> list[_Response]:
+    """Stub out everything between report-id resolution and the result
+    stream so a report read can be driven without an HTTP layer."""
+    columns = columns or [("C", "string")]
+    names = [name for name, _ in columns]
     monkeypatch.setattr(
         reader,
         "_obtain_report_metadata",
         lambda _sf, _report_id, _report: (
-            ["C"],
-            {"columnName": {"C": "C"}, "label": {"C": "C"}},
-            ["string"],
-            {"C": {"columnName": "C", "label": "C", "dataType": "string"}},
+            names,
+            {
+                "columnName": {name: name for name in names},
+                "label": {name: name for name in names},
+            },
+            [kind for _, kind in columns],
+            {
+                name: {"columnName": name, "label": name, "dataType": kind}
+                for name, kind in columns
+            },
         ),
     )
     monkeypatch.setattr(reader, "_launch_report_instance", lambda **_kw: "instance-1")
-    monkeypatch.setattr(reader, "_await_report_stream", lambda **_kw: object())
+    responses: list[_Response] = []
+
+    def stream(**_kw):
+        responses.append(_Response(rows))
+        return responses[-1]
+
+    monkeypatch.setattr(reader, "_await_report_stream", stream)
+    return responses
+
+
+def _report(monkeypatch, rows, columns=None, **options):
+    fake = _FakeSF()
+    fake.query_returns = {"records": [{"Id": "00O000000000001", "Format": "Tabular"}]}
+    logins = _patch_login(monkeypatch, fake)
+    responses = _patch_report_run(monkeypatch, rows, columns)
+    options.setdefault("reports", ["00O000000000001"])
+    options.setdefault("find_report_by", "id")
+    return logins, responses, SalesforceReportSrc(**options)
+
+
+def test_report_plugin_runs_nothing_until_read(monkeypatch, work_dir):
+    logins, responses, src = _report(monkeypatch, [["a"]])
+    out = plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    assert (logins, responses) == ([], [])
+    [[table]] = _drained(out)
+    assert table.frame.collect()["C"].to_list() == ["a"]
+    assert [response.closed for response in responses] == [True]
+
+
+def test_report_plugin_hands_over_typed_batches(monkeypatch, work_dir):
+    monkeypatch.setattr(reader, "_SFR_CHUNK_ROWS", 2)
+    _, _, src = _report(monkeypatch, [["a"], ["b"], ["c"]])
+    reader_batches = reader._report_batches
     monkeypatch.setattr(
-        reader, "_stream_report_to_parquet", lambda **_kw: parquet_path
+        reader,
+        "_report_batches",
+        lambda **kw: reader_batches(**{**kw, "chunk_size": 2}),
     )
+    out = plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    [tables] = _drained(out)
+    assert [table.frame.collect()["C"].to_list() for table in tables] == [
+        ["a", "b"],
+        ["c"],
+    ]
+
+
+def test_report_plugin_closes_the_result_when_reading_stops(monkeypatch, work_dir):
+    _, responses, src = _report(monkeypatch, [["a"]])
+    [slot] = plugin._SalesforceReportSrcPlugin().read_in(
+        _src_ctx(work_dir), _conn(), src
+    )
+    tables = iter(slot)
+    next(tables)
+    tables.close()
+    assert [response.closed for response in responses] == [True]
 
 
 def test_report_plugin_reports_resolved_id_and_cutoff_as_metadata(
     monkeypatch,
     work_dir,
 ):
-    fake = _FakeSF()
-    fake.query_returns = {"records": [{"Id": "00O000000000001", "Format": "Tabular"}]}
-    _patch_login(monkeypatch, fake)
-    _patch_report_run(monkeypatch, work_dir / "0.parquet")
-
-    src = SalesforceReportSrc(
+    _, _, src = _report(
+        monkeypatch,
+        [["a"]],
         # Named by name -- the metadata must carry the *resolved* id.
         reports=["Quarterly Pipeline"],
         find_report_by="name",
@@ -414,44 +599,103 @@ def test_report_plugin_reports_resolved_id_and_cutoff_as_metadata(
         initial_last_modified=datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
     out = plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
-
-    metadata = out[0][0].metadata
-    assert metadata[SALESFORCE_META_REPORT_ID] == "00O000000000001"
-    assert metadata[SALESFORCE_META_LAST_MODIFIED].startswith("2026-01-01")
+    [[table]] = _drained(out)
+    columns = _metadata(table).columns
+    assert columns[SALESFORCE_META_REPORT_ID] == "00O000000000001"
+    assert columns[SALESFORCE_META_LAST_MODIFIED].startswith("2026-01-01")
 
 
 def test_report_plugin_metadata_cutoff_empty_without_initial_last_modified(
     monkeypatch,
     work_dir,
 ):
-    fake = _FakeSF()
-    fake.query_returns = {"records": [{"Id": "00O000000000001", "Format": "Tabular"}]}
-    _patch_login(monkeypatch, fake)
-    _patch_report_run(monkeypatch, work_dir / "0.parquet")
-
-    src = SalesforceReportSrc(reports=["00O000000000001"], find_report_by="id")
+    _, _, src = _report(monkeypatch, [["a"]])
     out = plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
-
-    assert out[0][0].metadata == {
+    [[table]] = _drained(out)
+    assert _metadata(table).columns == {
         SALESFORCE_META_REPORT_ID: "00O000000000001",
         SALESFORCE_META_LAST_MODIFIED: "",
     }
 
 
 def test_report_plugin_drops_metadata_when_src_cfg_asks(monkeypatch, work_dir):
-    fake = _FakeSF()
-    fake.query_returns = {"records": [{"Id": "00O000000000001", "Format": "Tabular"}]}
-    _patch_login(monkeypatch, fake)
-    _patch_report_run(monkeypatch, work_dir / "0.parquet")
-
-    src = SalesforceReportSrc(
-        reports=["00O000000000001"],
-        find_report_by="id",
+    _, _, src = _report(
+        monkeypatch,
+        [["a"]],
         src_cfg={"tabsdata.src_metadata.drop": True},
     )
     out = plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    [[table]] = _drained(out)
+    assert table.metadata is None
 
-    assert out[0][0].metadata is None
+
+COLUMNS = [
+    ("s", "string"),
+    ("i", "int"),
+    ("n", "long"),
+    ("d", "double"),
+    ("b", "boolean"),
+    ("day", "date"),
+    ("at", "datetime"),
+    ("t", "time"),
+    ("p", "picklist"),
+]
+
+SCHEMA = pl.Schema(
+    {
+        "s": pl.String,
+        "i": pl.Int64,
+        "n": pl.Int64,
+        "d": pl.Float64,
+        "b": pl.Boolean,
+        "day": pl.Datetime("ns", "UTC"),
+        "at": pl.Datetime("ns", "UTC"),
+        "t": pl.Datetime("ns", "UTC"),
+        "p": pl.String,
+    }
+)
+
+
+def test_report_values_take_their_column_types(monkeypatch, work_dir):
+    rows = [
+        [
+            "x",
+            1,
+            12345678901,
+            2.5,
+            False,
+            "2026-01-15",
+            "2026-01-15T10:20:30Z",
+            "10:20:30.000Z",
+            "Open",
+        ],
+        ["-", None, None, None, True, None, None, None, None],
+    ]
+    _, _, src = _report(monkeypatch, rows, COLUMNS)
+    out = plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    [[table]] = _drained(out)
+    frame = table.frame.collect()
+    assert frame.schema == SCHEMA
+    assert frame.row(0) == (
+        "x",
+        1,
+        12345678901,
+        2.5,
+        False,
+        datetime(2026, 1, 15, tzinfo=timezone.utc),
+        datetime(2026, 1, 15, 10, 20, 30, tzinfo=timezone.utc),
+        datetime(1970, 1, 1, 10, 20, 30, tzinfo=timezone.utc),
+        "Open",
+    )
+    assert frame.row(1) == (None, None, None, None, True, None, None, None, None)
+
+
+def test_an_empty_report_is_one_empty_table_of_its_types(monkeypatch, work_dir):
+    _, _, src = _report(monkeypatch, [], COLUMNS)
+    out = plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    [[table]] = _drained(out)
+    frame = table.frame.collect()
+    assert (frame.height, frame.schema) == (0, SCHEMA)
 
 
 # ---------------------------------------------------------------------------

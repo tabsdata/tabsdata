@@ -9,13 +9,15 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
+import polars as pl
 import pytest
 from tabsdatax.itest.fixture.backends.salesforce import (
     SalesforceDomain,
     salesforce_domain,
 )
 from tabsdatax.itest.fixture.functions.files import PluginSrcCtx
-from testi_tabsdatak.conn.common.sql.plugin_io import slot_frame, work_dir
+from testi_tabsdatak.conn.common.landed import taken
+from testi_tabsdatak.conn.common.sql.plugin_io import work_dir
 from testi_tabsdatak.conn.salesforce.backend import (
     ACCOUNT,
     report_columns,
@@ -33,13 +35,20 @@ from tabsdatak.conn.salesforce import (
 
 pytestmark = pytest.mark.salesforce
 
+
+def served(out: list, folder: Path) -> list[pl.DataFrame]:
+    """Every input of a ``read_in`` landed and served as the server does, its
+    tables concatenated."""
+    return [pl.concat([table.frame for table in slot]) for slot in taken(out, folder)]
+
+
 LIMIT = 3
 BEFORE_ANY_ROW = datetime(2000, 1, 1, tzinfo=timezone.utc)
 AFTER_EVERY_ROW = datetime(2999, 1, 1, tzinfo=timezone.utc)
 
 
 @salesforce_domain("salesforce")
-def test_src_plugin_read_in_returns_parquet_files(
+def test_src_plugin_read_in_returns_the_rows(
     domain_salesforce: SalesforceDomain, tmp_path: Path
 ):
     domain = domain_salesforce
@@ -50,7 +59,7 @@ def test_src_plugin_read_in_returns_parquet_files(
         PluginSrcCtx(work_dir(tmp_path)), src_conn(domain), src
     )
     assert len(out) == 1
-    frame = slot_frame(out)
+    [frame] = served(out, tmp_path / "served")
     # An org's Account rows are whatever it holds, so the assertion is on the
     # projection and on the LIMIT reaching Salesforce -- not on the contents.
     assert frame.columns == ["Id", "Name"]
@@ -58,7 +67,7 @@ def test_src_plugin_read_in_returns_parquet_files(
 
 
 @salesforce_domain("salesforce")
-def test_src_plugin_read_in_matching_no_rows_writes_empty_parquet(
+def test_src_plugin_read_in_matching_no_rows_lands_an_empty_table(
     domain_salesforce: SalesforceDomain, tmp_path: Path
 ):
     src = SalesforceSrc(
@@ -67,11 +76,11 @@ def test_src_plugin_read_in_matching_no_rows_writes_empty_parquet(
     out = plugin._SalesforceSrcPlugin().read_in(
         PluginSrcCtx(work_dir(tmp_path)), src_conn(domain_salesforce), src
     )
-    # Unlike the SQL sources, a query matching nothing still writes a file, so the
-    # slot is never empty; polars cannot infer a schema from zero rows, hence no
-    # columns either.
+    # Unlike the SQL sources, a query matching nothing still hands over a table,
+    # so the input is never empty; with no record to type, it has no columns
+    # either.
     assert len(out[0]) == 1
-    assert slot_frame(out).shape == (0, 0)
+    assert served(out, tmp_path / "served")[0].shape == (0, 0)
 
 
 @salesforce_domain("salesforce")
@@ -81,21 +90,23 @@ def test_src_plugin_read_in_substitutes_last_modified(
     domain = domain_salesforce
     query = f"SELECT Id FROM {ACCOUNT} WHERE SystemModstamp > $lastModified ORDER BY Id"
 
-    everything = slot_frame(
+    [everything] = served(
         plugin._SalesforceSrcPlugin().read_in(
             PluginSrcCtx(work_dir(tmp_path)),
             src_conn(domain),
             SalesforceSrc(queries=[query], initial_last_modified=BEFORE_ANY_ROW),
-        )
+        ),
+        tmp_path / "served",
     )
     assert everything.height == sobject_rows(domain)
 
-    nothing = slot_frame(
+    [nothing] = served(
         plugin._SalesforceSrcPlugin().read_in(
             PluginSrcCtx(work_dir(tmp_path, "rerun")),
             src_conn(domain),
             SalesforceSrc(queries=[query], initial_last_modified=AFTER_EVERY_ROW),
-        )
+        ),
+        tmp_path / "served-rerun",
     )
     assert nothing.height == 0
 
@@ -112,7 +123,7 @@ def test_src_plugin_read_in_include_deleted(
         PluginSrcCtx(work_dir(tmp_path)), src_conn(domain), src
     )
     # queryAll also scans the recycle bin, so it can only see more than query does.
-    assert slot_frame(out).height >= sobject_rows(domain)
+    assert served(out, tmp_path / "served")[0].height >= sobject_rows(domain)
 
 
 @salesforce_domain("salesforce")
@@ -129,8 +140,9 @@ def test_report_src_plugin_read_in_returns_one_slot_per_report(
     )
     assert len(out) == 2
     expected = report_columns(domain, report)
-    assert slot_frame(out, 0).columns == expected
-    assert slot_frame(out, 1).columns == expected
+    first, second = served(out, tmp_path / "served")
+    assert first.columns == expected
+    assert second.columns == expected
 
 
 @salesforce_domain("salesforce")
@@ -143,4 +155,5 @@ def test_report_src_plugin_read_in_label_column_names(
     out = plugin._SalesforceReportSrcPlugin().read_in(
         PluginSrcCtx(work_dir(tmp_path)), src_conn(domain), src
     )
-    assert slot_frame(out).columns == report_columns(domain, report, "label")
+    [frame] = served(out, tmp_path / "served")
+    assert frame.columns == report_columns(domain, report, "label")

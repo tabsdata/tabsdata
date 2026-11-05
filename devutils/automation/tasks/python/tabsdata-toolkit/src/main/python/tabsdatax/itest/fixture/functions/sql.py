@@ -13,14 +13,11 @@ generic harness in :mod:`.harness`.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Protocol
 
 import polars as pl
-import pyarrow.parquet as pq
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.spi import TableFileInput
 
 
 class SqlStore(Protocol):
@@ -87,12 +84,3 @@ def sql_credentials(domain) -> UserPassword:
     """The ``UserPassword`` every SQL connection uses, from the backend's
     ``user`` / ``password`` -- the harness registers the two secrets."""
     return UserPassword(user=Secret(domain.user), password=Secret(domain.password))
-
-
-def read_parquet_slot(tfi: TableFileInput) -> pl.DataFrame:
-    return pl.from_arrow(pq.read_table(tfi.file))
-
-
-def write_parquet(path: Path, rows: list[dict]) -> Path:
-    pl.DataFrame(rows).write_parquet(path, use_pyarrow=True)
-    return path

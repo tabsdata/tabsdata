@@ -4,13 +4,16 @@
 
 from __future__ import annotations
 
-import csv
 import gzip
+import json
 import logging
 import time
+from collections.abc import Iterable, Iterator, Sequence
+from dataclasses import replace
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Literal
+
+import polars as pl
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
@@ -25,8 +28,11 @@ from tabsdatak.conn.salesforce.constants import (
     SALESFORCE_META_REPORT_ID,
     SALESFORCE_META_SOQL,
 )
-from tabsdatak.conn.salesforce.error import SalesforceErrorCode
-from tabsdatak.spi import TableFileInput
+from tabsdatak.conn.salesforce.error import (
+    SalesforceErrorCode,
+    SalesforceRuntimeException,
+)
+from tabsdatak.spi import FrameMetadata, LazyFrameInput, MetadataSpec
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +67,7 @@ _SFR_ID_PATTERN = r"[a-zA-Z0-9]{15}|[a-zA-Z0-9]{18}"
 # uses the label since the API returns the formatted display value there;
 # numeric / temporal use the raw value.
 _SFR_TYPE_TO_VALUE_FIELD = {
+    "boolean": "dataCells.item.value",
     "date": "dataCells.item.value",
     "datetime": "dataCells.item.value",
     "double": "dataCells.item.value",
@@ -71,16 +78,18 @@ _SFR_TYPE_TO_VALUE_FIELD = {
     "url": "dataCells.item.value",
 }
 
-_SFR_TYPE_TO_PANDAS_TYPE = {
-    "boolean": "bool",
-    "date": "datetime64[ns, UTC]",
-    "datetime": "datetime64[ns, UTC]",
-    "double": "float64",
-    "int": "int64",
-    "long": "int64",
-    "string": "string",
-    "time": "datetime64[ns, UTC]",
-    "url": "string",
+_SFR_CHUNK_ROWS = 50000
+
+_SFR_EPOCH_DAY = "1970-01-01T"
+
+# Codes that already carry a precise diagnosis of a report read: re-raised
+# as they are instead of wrapped in SALESFORCE_16.
+_SFR_PASSTHROUGH = {
+    SalesforceErrorCode.SALESFORCE_9,
+    SalesforceErrorCode.SALESFORCE_12,
+    SalesforceErrorCode.SALESFORCE_13,
+    SalesforceErrorCode.SALESFORCE_14,
+    SalesforceErrorCode.SALESFORCE_15,
 }
 
 
@@ -118,20 +127,30 @@ def login(conn: SalesforceSrcConn, api_version: str | None = None) -> Any:
         )
 
 
+class Client:
+    def __init__(self, conn: SalesforceSrcConn, api_version: str | None = None) -> None:
+        self.conn = conn
+        self.api_version = api_version
+        self.sf: Any = None
+
+    def __call__(self) -> Any:
+        if self.sf is None:
+            self.sf = login(self.conn, api_version=self.api_version)
+        return self.sf
+
+
 # --- SOQL source ----------------------------------------------------------
 
 
 def read_soql_src(
-    sf: Any,
+    client: Client,
     src: SalesforceSrc,
-    work_dir: Path,
     drop_metadata: bool = False,
-) -> list[list[TableFileInput]]:
-    """Execute every SOQL query in ``src`` against the open Salesforce
-    client ``sf`` and return one ``TableMode.SINGLE``-shaped output per
-    query (each inner list has exactly one parquet file), each carrying
-    the query it ran and the last-modified cutoff as metadata --
-    or no metadata at all when ``drop_metadata`` is set (the source's
+) -> list[Iterable[LazyFrameInput]]:
+    """One input per SOQL query in ``src``, each holding the query's
+    records as JSON lines, read only when the input is landed. Each carries
+    the query it ran and the last-modified cutoff as metadata -- or no
+    metadata at all when ``drop_metadata`` is set (the source's
     ``tabsdata.src_metadata.drop`` config key).
 
     Updates ``src.initial_last_modified`` is *not* attempted -- offset
@@ -145,85 +164,59 @@ def read_soql_src(
     for i, query in enumerate(src.queries):
         if _SF_LAST_MODIFIED_TOKEN in query and initial_last_modified is None:
             raise SalesforceErrorCode.SALESFORCE_11.exception(query_index=i)
-
-    outputs: list[list[TableFileInput]] = []
-    for i, query in enumerate(src.queries):
-        outputs.append(
-            _run_one_soql(
-                sf=sf,
+    return [
+        [
+            _soql_input(
+                client=client,
                 index=i,
-                query=query,
+                query=_substituted(query, initial_last_modified),
                 include_deleted=src.include_deleted,
                 initial_last_modified=initial_last_modified,
-                work_dir=work_dir,
                 drop_metadata=drop_metadata,
             )
-        )
-    return outputs
+        ]
+        for i, query in enumerate(src.queries)
+    ]
 
 
-def _run_one_soql(
+def _substituted(query: str, initial_last_modified: datetime | None) -> str:
+    if _SF_LAST_MODIFIED_TOKEN not in query:
+        return query
+    assert initial_last_modified is not None  # guarded by read_soql_src
+    return query.replace(
+        _SF_LAST_MODIFIED_TOKEN,
+        _format_sf_datetime(initial_last_modified),
+    )
+
+
+def _soql_input(
     *,
-    sf: Any,
+    client: Client,
     index: int,
     query: str,
     include_deleted: bool,
     initial_last_modified: datetime | None,
-    work_dir: Path,
     drop_metadata: bool,
-) -> list[TableFileInput]:
-    import polars as pl
+) -> LazyFrameInput:
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.file._read._ndjson import AutoNdjson
 
-    # Token replacement: the legacy contract is that the value is a
-    # Salesforce-formatted datetime string. We accept ``datetime`` and
-    # serialise it ourselves; callers passing a string were never
-    # supported on the new dataclass (its field is ``datetime | None``).
-    if _SF_LAST_MODIFIED_TOKEN in query:
-        assert initial_last_modified is not None  # guarded above
-        query = query.replace(
-            _SF_LAST_MODIFIED_TOKEN,
-            _format_sf_datetime(initial_last_modified),
-        )
-
-    logger.debug("Executing SOQL query %d: %s", index, query)
-
-    csv_path = work_dir / f"{index}.csv"
-    parquet_path = work_dir / f"{index}.parquet"
-
-    try:
-        records = sf.query_all_iter(query, include_deleted=include_deleted)
-    except Exception as e:
-        raise SalesforceErrorCode.SALESFORCE_10.exception(
-            cause=e,
-            query_index=index,
-        )
-
-    try:
-        writer = None
-        with open(csv_path, "w", newline="") as f:
-            for rec in records:
-                rec.pop("attributes", None)
-                if writer is None:
-                    writer = csv.DictWriter(f, fieldnames=list(rec.keys()))
-                    writer.writeheader()
-                writer.writerow(rec)
-    except Exception as e:
-        raise SalesforceErrorCode.SALESFORCE_10.exception(
-            cause=e,
-            query_index=index,
-        )
-
-    if writer is None:
-        # No records at all -- emit an empty parquet so the downstream
-        # always sees a file. Polars cannot infer a schema from zero
-        # rows so we produce an explicit empty DataFrame.
-        pl.DataFrame().write_parquet(parquet_path)
-    else:
+    def opened() -> RecordLines:
+        logger.debug("Executing SOQL query %d: %s", index, query)
+        sf = client()
         try:
-            pl.scan_csv(csv_path, raise_if_empty=True).sink_parquet(parquet_path)
-        except pl.exceptions.NoDataError:
-            pl.DataFrame().write_parquet(parquet_path)
-    metadata = (
+            records = sf.query_all_iter(query, include_deleted=include_deleted)
+        except Exception as e:
+            raise SalesforceErrorCode.SALESFORCE_10.exception(
+                cause=e,
+                query_index=index,
+            )
+        return RecordLines(records, index)
+
+    lines = AutoNdjson().read(opened)
+    assert callable(lines.metadata)
+    folded = lines.metadata
+    columns: MetadataSpec | None = (
         None
         if drop_metadata
         else {
@@ -233,7 +226,54 @@ def _run_one_soql(
             ),
         }
     )
-    return [TableFileInput(file=parquet_path, metadata=metadata)]
+    return LazyFrameInput(
+        lines.frame,
+        metadata=lambda: replace(folded(), columns=columns),
+    )
+
+
+class RecordLines:
+    """The records of a SOQL query as UTF-8 JSON lines, one record per
+    line, fetched page by page as they are read."""
+
+    def __init__(self, records: Iterator[dict], index: int) -> None:
+        self.records = records
+        self.index = index
+        self.buffer = bytearray()
+
+    def read(self, size: int = -1) -> bytes:
+        while size < 0 or len(self.buffer) < size:
+            try:
+                record = next(self.records, None)
+            except Exception as e:
+                raise SalesforceErrorCode.SALESFORCE_10.exception(
+                    cause=e,
+                    query_index=self.index,
+                )
+            if record is None:
+                break
+            self.buffer += json.dumps(
+                _without_attributes(record),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            self.buffer += b"\n"
+        taken = len(self.buffer) if size < 0 else min(size, len(self.buffer))
+        data = bytes(self.buffer[:taken])
+        del self.buffer[:taken]
+        return data
+
+
+def _without_attributes(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _without_attributes(item)
+            for key, item in value.items()
+            if key != "attributes"
+        }
+    if isinstance(value, list):
+        return [_without_attributes(item) for item in value]
+    return value
 
 
 def _format_sf_datetime(dt: datetime) -> str:
@@ -255,98 +295,44 @@ def _last_modified_metadata(dt: datetime | None) -> str:
 
 
 def read_report_src(
-    sf: Any,
+    client: Client,
     src: SalesforceReportSrc,
-    work_dir: Path,
     drop_metadata: bool = False,
-) -> list[list[TableFileInput]]:
-    """Run every Salesforce report in ``src`` and return per-report
-    parquet outputs, each carrying the resolved report id and the
-    last-modified cutoff as metadata -- or no metadata at all when
-    ``drop_metadata`` is set (the source's
+) -> list[Iterable[LazyFrameInput]]:
+    """One input per Salesforce report in ``src``, each run only when the
+    input is read and handed over in typed batches, carrying the resolved
+    report id and the last-modified cutoff as metadata -- or no metadata at
+    all when ``drop_metadata`` is set (the source's
     ``tabsdata.src_metadata.drop`` config key)."""
-    outputs: list[list[TableFileInput]] = []
-    for i, report in enumerate(src.reports):
-        outputs.append(
-            _run_one_report(
-                sf=sf,
-                index=i,
-                report=report,
-                src=src,
-                work_dir=work_dir,
-                drop_metadata=drop_metadata,
-            )
+    return [
+        _report_inputs(
+            client=client,
+            index=i,
+            report=report,
+            src=src,
+            drop_metadata=drop_metadata,
         )
-    return outputs
+        for i, report in enumerate(src.reports)
+    ]
 
 
-def _run_one_report(
+def _report_inputs(
     *,
-    sf: Any,
+    client: Client,
     index: int,
     report: str,
     src: SalesforceReportSrc,
-    work_dir: Path,
     drop_metadata: bool,
-) -> list[TableFileInput]:
-    from tabsdatak.conn.salesforce.error import SalesforceRuntimeException
-
-    # Codes that already carry a precise diagnosis: re-raise as-is so
-    # the user keeps the original signal instead of getting the
-    # generic SALESFORCE_16 wrapper.
-    _passthrough = {
-        SalesforceErrorCode.SALESFORCE_13,
-        SalesforceErrorCode.SALESFORCE_14,
-        SalesforceErrorCode.SALESFORCE_15,
-    }
+) -> Iterator[LazyFrameInput]:
     try:
-        report_id = _resolve_report_id(sf, report, src.find_report_by)
-        (
-            col_sys_order,
-            reverse_lookup,
-            ordered_col_types,
-            col_sys_meta,
-        ) = _obtain_report_metadata(sf, report_id, report)
-
-        # Apply the user's filter list -- map user-supplied column
-        # references through the requested naming strategy.
-        sf_filters = None
-        if src.filter:
-            sf_filters = [
-                (
-                    reverse_lookup[src.column_name_strategy][column],
-                    operator,
-                    value,
-                )
-                for column, operator, value in src.filter
-            ]
-
-        instance_id = _launch_report_instance(
-            sf=sf,
-            report_id=report_id,
-            filters=sf_filters,
-            filter_logic=src.filter_logic,
-        )
-        raw_stream = _await_report_stream(
-            sf=sf,
-            report_id=report_id,
-            instance_id=instance_id,
-        )
-
-        # Translate the system column names to the requested strategy.
-        column_names = [
-            col_sys_meta[col][src.column_name_strategy] for col in col_sys_order
-        ]
-
-        parquet_path = _stream_report_to_parquet(
-            raw_stream=raw_stream,
-            index=index,
-            work_dir=work_dir,
-            ordered_col_types=ordered_col_types,
-            column_names=column_names,
+        yield from _run_one_report(
+            sf=client(),
+            report=report,
+            src=src,
+            drop_metadata=drop_metadata,
         )
     except SalesforceRuntimeException as e:
-        if e.api_error in _passthrough:
+        if e.api_error in _SFR_PASSTHROUGH:
             raise
         raise SalesforceErrorCode.SALESFORCE_16.exception(
             cause=e,
@@ -357,7 +343,48 @@ def _run_one_report(
             cause=e,
             report_index=index,
         )
-    metadata = (
+
+
+def _run_one_report(
+    *,
+    sf: Any,
+    report: str,
+    src: SalesforceReportSrc,
+    drop_metadata: bool,
+) -> Iterator[LazyFrameInput]:
+    report_id = _resolve_report_id(sf, report, src.find_report_by)
+    (
+        col_sys_order,
+        reverse_lookup,
+        ordered_col_types,
+        col_sys_meta,
+    ) = _obtain_report_metadata(sf, report_id, report)
+
+    # Apply the user's filter list -- map user-supplied column
+    # references through the requested naming strategy.
+    sf_filters = None
+    if src.filter:
+        sf_filters = [
+            (
+                reverse_lookup[src.column_name_strategy][column],
+                operator,
+                value,
+            )
+            for column, operator, value in src.filter
+        ]
+
+    instance_id = _launch_report_instance(
+        sf=sf,
+        report_id=report_id,
+        filters=sf_filters,
+        filter_logic=src.filter_logic,
+    )
+    response = _await_report_stream(
+        sf=sf,
+        report_id=report_id,
+        instance_id=instance_id,
+    )
+    columns: MetadataSpec | None = (
         None
         if drop_metadata
         else {
@@ -367,7 +394,20 @@ def _run_one_report(
             ),
         }
     )
-    return [TableFileInput(file=parquet_path, metadata=metadata)]
+    metadata = None if columns is None else FrameMetadata(columns=columns)
+    # Translate the system column names to the requested strategy.
+    column_names = [
+        col_sys_meta[col][src.column_name_strategy] for col in col_sys_order
+    ]
+    try:
+        for batch in _report_batches(
+            raw_stream=_report_body(response),
+            ordered_col_types=ordered_col_types,
+            column_names=column_names,
+        ):
+            yield LazyFrameInput(batch.lazy(), metadata=metadata)
+    finally:
+        response.close()
 
 
 def _resolve_report_id(
@@ -463,7 +503,7 @@ def _launch_report_instance(
     *,
     sf: Any,
     report_id: str,
-    filters: list[tuple[str, str, str]] | None,
+    filters: Sequence[tuple[str, str, str]] | None,
     filter_logic: str | None,
 ) -> str:
     url = f"analytics/reports/{report_id}/instances"
@@ -513,35 +553,32 @@ def _await_report_stream(
             raise RuntimeError(f"Report generation failed: {msg}")
         time.sleep(poll_interval)
 
-    resp = requests.get(
+    return requests.get(
         f"{sf.base_url}{url}",
         headers={"Authorization": f"Bearer {sf.session_id}"},
         stream=True,
     )
-    raw = resp.raw
-    if resp.headers.get("content-encoding") == "gzip":
-        raw = gzip.GzipFile(fileobj=resp.raw)
-    return raw
 
 
-def _stream_report_to_parquet(
+def _report_body(response: Any) -> Any:
+    if response.headers.get("content-encoding") == "gzip":
+        return gzip.GzipFile(fileobj=response.raw)
+    return response.raw
+
+
+def _report_batches(
     *,
     raw_stream: Any,
-    index: int,
-    work_dir: Path,
     ordered_col_types: list[str],
     column_names: list[str],
-    chunk_size: int = 50000,
-) -> Path:
+    chunk_size: int = _SFR_CHUNK_ROWS,
+) -> Iterator[pl.DataFrame]:
     import ijson
-    import pandas as pd
 
-    destination = work_dir / f"{index}.parquet"
     chunk: list[list[Any]] = []
     current_row: list[Any] = []
     current_value: Any = None
-    first_chunk = True
-    stored_any = False
+    yielded = False
 
     parser = ijson.parse(raw_stream)
     for prefix, event, value in parser:
@@ -568,53 +605,52 @@ def _stream_report_to_parquet(
                 current_value = value if value != "-" else None
 
         if len(chunk) >= chunk_size:
-            _sink_chunk(
-                chunk=chunk,
-                column_names=column_names,
-                ordered_col_types=ordered_col_types,
-                destination=destination,
-                first_chunk=first_chunk,
-            )
-            stored_any = True
+            yield _typed(chunk, ordered_col_types, column_names)
+            yielded = True
             chunk = []
-            first_chunk = False
 
-    if chunk:
-        _sink_chunk(
-            chunk=chunk,
-            column_names=column_names,
-            ordered_col_types=ordered_col_types,
-            destination=destination,
-            first_chunk=first_chunk,
-        )
-        stored_any = True
-
-    if not stored_any:
-        # Empty result -- emit empty parquet with the expected columns.
-        empty = pd.DataFrame({c: [] for c in column_names})
-        empty.to_parquet(destination, engine="fastparquet", index=False)
-    return destination
+    if chunk or not yielded:
+        yield _typed(chunk, ordered_col_types, column_names)
 
 
-def _sink_chunk(
-    *,
-    chunk: list[list[Any]],
-    column_names: list[str],
+def _typed(
+    rows: list[list[Any]],
     ordered_col_types: list[str],
-    destination: Path,
-    first_chunk: bool,
-) -> None:
-    import pandas as pd
+    column_names: list[str],
+) -> pl.DataFrame:
+    columns = list(zip(*rows)) if rows else [() for _ in column_names]
+    return pl.DataFrame([
+        _column(name, kind, values)
+        for name, kind, values in zip(column_names, ordered_col_types, columns)
+    ])
 
-    columns = list(zip(*chunk)) or [[] for _ in column_names]
-    df = pd.DataFrame(dict(zip(column_names, columns)))
-    pandas_types = [
-        _SFR_TYPE_TO_PANDAS_TYPE.get(t, "string") for t in ordered_col_types
-    ]
-    df = df.astype(dict(zip(column_names, pandas_types)))
-    df.to_parquet(
-        destination,
-        engine="fastparquet",
-        index=False,
-        append=(not first_chunk),
+
+def _column(name: str, kind: str, values: Iterable[Any]) -> pl.Series:
+    text = pl.Series(
+        name,
+        [None if value is None else str(value) for value in values],
+        dtype=pl.String,
     )
+    if kind in ("int", "long"):
+        return text.cast(pl.Int64)
+    if kind == "double":
+        return text.cast(pl.Float64)
+    if kind == "boolean":
+        return text.str.to_lowercase().replace_strict(
+            {"true": True, "false": False},
+            return_dtype=pl.Boolean,
+        )
+    if kind in ("date", "datetime"):
+        return _instant(text)
+    if kind == "time":
+        return _instant((_SFR_EPOCH_DAY + text.str.strip_suffix("Z")).alias(name))
+    return text
+
+
+def _instant(text: pl.Series) -> pl.Series:
+    if text.null_count() == text.len():
+        return text.cast(pl.Datetime("ns", "UTC"))
+    parsed = text.str.to_datetime(time_unit="ns")
+    if isinstance(parsed.dtype, pl.Datetime) and parsed.dtype.time_zone is None:
+        return parsed.dt.replace_time_zone("UTC")
+    return parsed.dt.convert_time_zone("UTC")

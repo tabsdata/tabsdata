@@ -3,7 +3,7 @@
 #
 
 """Plumbing every SQL connector's plugin-level integration test repeats: a work
-dir for the plugin to write into, the frame behind a ``read_in`` output slot, and
+dir for the plugin to write into, the rows behind a ``read_in`` input, and
 the provisioned data a test drives the plugin with (a SQL domain's row count, an
 fs domain's parquet file).
 
@@ -21,7 +21,6 @@ import polars as pl
 import pytest
 from tabsdatax.itest.fixture.backends.fs import FsDomain
 from tabsdatax.itest.fixture.functions.files import first_provisioned_file
-from tabsdatax.itest.fixture.functions.sql import read_parquet_slot
 
 from tabsdatak.spi import LazyFrameInput
 
@@ -33,13 +32,6 @@ def work_dir(tmp_path: Path, name: str = "work") -> Path:
     work = tmp_path / name
     work.mkdir()
     return work
-
-
-def slot_frame(out: list[list], index: int = 0) -> pl.DataFrame:
-    """The frame a ``read_in`` output slot holds, chunks concatenated. A query that
-    matched no rows writes no chunk at all, so its slot is empty -- assert on
-    ``out[index] == []`` rather than calling this."""
-    return pl.concat([read_parquet_slot(p) for p in out[index]])
 
 
 def slot_rows(out: list[Iterable[LazyFrameInput]], index: int = 0) -> pl.DataFrame:
