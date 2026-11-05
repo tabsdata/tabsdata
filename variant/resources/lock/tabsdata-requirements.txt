@@ -12,7 +12,7 @@ anyio==4.16.0
 archspec==0.2.7
 asn1crypto==1.5.1
 attrs==26.1.0
-authlib==1.9.3
+authlib==1.9.4
 avro==1.12.2
 azure-common==1.1.28
 azure-core==1.41.0
@@ -175,7 +175,7 @@ truststore==0.10.5 ; sys_platform != 'emscripten'
 types-pyyaml==6.0.12.20261030
 types-s3transfer==0.19.3
 typing-extensions==4.16.0
-typing-inspection==0.4.4
+typing-inspection==0.4.5
 tzdata==2026.6 ; sys_platform == 'emscripten' or sys_platform == 'win32'
 tzlocal==5.4.5
 urllib3==2.8.0

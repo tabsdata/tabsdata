@@ -211,7 +211,7 @@ truststore==0.10.5
 twine==7.0.0
 types-pyyaml==6.0.12.20261030
 typing-extensions==4.16.0
-typing-inspection==0.4.4
+typing-inspection==0.4.5
 tzdata==2026.6 ; sys_platform == 'win32'
 tzlocal==5.4.5
 url-normalize==3.1.0
