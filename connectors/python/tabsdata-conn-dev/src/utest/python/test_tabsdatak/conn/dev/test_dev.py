@@ -239,14 +239,16 @@ def test_trash_dest_has_no_configuration_and_round_trips():
     assert TrashDest.from_json(dest.to_json()) == dest
 
 
-def test_trash_dest_write_out_discards_and_returns_none(tmp_path):
-    parquet = tmp_path / "in.parquet"
-    pl.DataFrame({"a": [1]}).write_parquet(parquet)
+def test_trash_dest_write_out_discards_without_reading():
+    unreadable = pl.LazyFrame({"a": ["x"]}).select(pl.col("a").str.to_integer())
     out = plugin.TrashDestPlugin().write_out(
-        object(), TrashDestConn(), TrashDest(), [parquet]
+        object(), TrashDestConn(), TrashDest(), [unreadable]
     )
     assert out is None
-    assert parquet.exists()
+
+
+def test_trash_dest_takes_lazy_frames():
+    assert DestinationContract(plugin.TrashDestPlugin).frames()
 
 
 # ---------------------------------------------------------------------------

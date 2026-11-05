@@ -29,7 +29,6 @@ from tabsdatak.spi import (
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
-    TableFileSpec,
     TableMode,
 )
 
@@ -68,13 +67,15 @@ class DevFrameSrcPlugin(SrcPlugin[DevFrameSrcConn, DevFrameSrc]):
         return tables
 
 
-class TrashDestPlugin(DestPlugin[TrashDestConn, TrashDest]):
+class TrashDestPlugin(
+    DestPlugin[TrashDestConn, TrashDest, list[pl.LazyFrame]],
+):
     def write_out(
         self,
         ctx: DestContext,
         conn: TrashDestConn,
         dest: TrashDest,
-        tables: list[TableFileSpec],
+        tables: list[pl.LazyFrame],
     ) -> None:
         pass
 
