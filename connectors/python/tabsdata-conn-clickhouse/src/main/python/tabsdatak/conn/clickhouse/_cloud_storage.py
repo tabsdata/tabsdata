@@ -7,16 +7,20 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 import polars as pl
 import pyarrow.parquet as pq
 
 from tabsdatak.common._storage.transfer import (
     AWS_ACCESS_KEY_ID_OPTION,
+    AWS_ENDPOINT_OPTION,
     AWS_REGION_OPTION,
     AWS_SECRET_ACCESS_KEY_OPTION,
+    AWS_VIRTUAL_HOSTED_STYLE_REQUEST_OPTION,
     AZURE_STORAGE_ACCOUNT_KEY_OPTION,
     AZURE_STORAGE_ACCOUNT_NAME_OPTION,
+    AZURE_STORAGE_ENDPOINT_OPTION,
     GOOGLE_SERVICE_ACCOUNT_KEY_OPTION,
 )
 
@@ -111,11 +115,23 @@ class CloudStorage(ABC):
         """Delete all staged files with upload_id <= ``up_to_id``.
         Uses lexicographic ordering of the IDs."""
 
+    def _sweep(self, up_to_id: str) -> int:
+        import obstore
+
+        store = self.store()
+        prefix = _list_prefix(self.base_path)
+        swept = [
+            meta["path"]
+            for batch in obstore.list(store.store(), prefix=prefix or None)
+            for meta in batch
+            if meta["path"][len(prefix) :].split("/")[0] <= up_to_id
+        ]
+        store.delete(swept)
+        return len(swept)
+
 
 class S3Storage(CloudStorage):
     """Stages Parquet files in Amazon S3.
-
-    The cleanup sweep requires ``boto3``.
 
     Upload path layout::
 
@@ -124,25 +140,13 @@ class S3Storage(CloudStorage):
     Returned staged file refs are HTTPS URLs of the form::
 
         https://<bucket>.s3.<region>.amazonaws.com/<base_path>/<upload_id>/<filename>
+
+    or, with a custom endpoint in the options, ``<endpoint>/<bucket>/<key>``
+    (``<scheme>://<bucket>.<host>/<key>`` when virtual-hosted style is on).
     """
 
     def __init__(self, config: S3Config) -> None:
         self._config = config
-
-    def _client(self):
-        try:
-            import boto3
-        except ImportError as e:
-            raise ImportError(
-                "boto3 is required for S3 cloud storage. "
-                "Install it with: pip install boto3"
-            ) from e
-        return boto3.client(
-            "s3",
-            region_name=self._config.region,
-            aws_access_key_id=self._config.access_key_id,
-            aws_secret_access_key=self._config.secret_access_key,
-        )
 
     @property
     def base_path(self) -> str:
@@ -155,35 +159,27 @@ class S3Storage(CloudStorage):
                 AWS_ACCESS_KEY_ID_OPTION: self._config.access_key_id,
                 AWS_SECRET_ACCESS_KEY_OPTION: self._config.secret_access_key,
                 AWS_REGION_OPTION: self._config.region,
+                **self._config.options,
             },
         )
 
     def staged_ref(self, key: str) -> str:
-        return (
-            f"https://{self._config.bucket}"
-            f".s3.{self._config.region}.amazonaws.com/{key}"
-        )
+        endpoint = self._config.options.get(AWS_ENDPOINT_OPTION)
+        if endpoint is None:
+            return (
+                f"https://{self._config.bucket}"
+                f".s3.{self._config.region}.amazonaws.com/{key}"
+            )
+        virtual = self._config.options.get(AWS_VIRTUAL_HOSTED_STYLE_REQUEST_OPTION)
+        if virtual == "true":
+            address = urlparse(endpoint)
+            return f"{address.scheme}://{self._config.bucket}.{address.netloc}/{key}"
+        return f"{endpoint.rstrip('/')}/{self._config.bucket}/{key}"
 
     def delete(self, up_to_id: str) -> None:
-        s3 = self._client()
-        prefix = _list_prefix(self._config.base_path)
-        to_delete = []
-        paginator = s3.get_paginator("list_objects_v2")
-        for page in paginator.paginate(Bucket=self._config.bucket, Prefix=prefix):
-            for obj in page.get("Contents", []):
-                relative = obj["Key"][len(prefix) :]
-                file_upload_id = relative.split("/")[0]
-                if file_upload_id <= up_to_id:
-                    to_delete.append({"Key": obj["Key"]})
-
-        # S3 delete_objects accepts at most 1000 keys per call.
-        for i in range(0, len(to_delete), 1000):
-            batch = to_delete[i : i + 1000]
-            s3.delete_objects(Bucket=self._config.bucket, Delete={"Objects": batch})
+        swept = self._sweep(up_to_id)
         logger.debug(
-            "Deleted %d staged S3 object(s) with upload_id <= %s",
-            len(to_delete),
-            up_to_id,
+            "Deleted %d staged S3 object(s) with upload_id <= %s", swept, up_to_id
         )
 
 
@@ -238,7 +234,10 @@ class GCSStorage(CloudStorage):
     def store(self) -> FileStore:
         return FileStore(
             f"gs://{self._config.bucket}",
-            {GOOGLE_SERVICE_ACCOUNT_KEY_OPTION: self._config.service_account_json},
+            {
+                GOOGLE_SERVICE_ACCOUNT_KEY_OPTION: self._config.service_account_json,
+                **self._config.options,
+            },
         )
 
     def staged_ref(self, key: str) -> str:
@@ -310,8 +309,6 @@ class GCSStorage(CloudStorage):
 class AzureStorage(CloudStorage):
     """Stages Parquet files in Azure Blob Storage.
 
-    The cleanup sweep requires ``azure-storage-blob``.
-
     Upload path layout::
 
         <container>/<base_path>/<upload_id>/<filename>
@@ -324,24 +321,6 @@ class AzureStorage(CloudStorage):
     def __init__(self, config: AzureConfig) -> None:
         self._config = config
 
-    def _connection_string(self) -> str:
-        return (
-            f"DefaultEndpointsProtocol=https;"
-            f"AccountName={self._config.account_name};"
-            f"AccountKey={self._config.account_key};"
-            f"EndpointSuffix=core.windows.net"
-        )
-
-    def _service(self):
-        try:
-            from azure.storage.blob import BlobServiceClient
-        except ImportError as e:
-            raise ImportError(
-                "azure-storage-blob is required for Azure cloud storage."
-                " Install it with: pip install azure-storage-blob"
-            ) from e
-        return BlobServiceClient.from_connection_string(self._connection_string())
-
     @property
     def base_path(self) -> str:
         return self._config.base_path
@@ -352,27 +331,23 @@ class AzureStorage(CloudStorage):
             {
                 AZURE_STORAGE_ACCOUNT_NAME_OPTION: self._config.account_name,
                 AZURE_STORAGE_ACCOUNT_KEY_OPTION: self._config.account_key,
+                **self._config.options,
             },
         )
+
+    def account_url(self) -> str:
+        endpoint = self._config.options.get(AZURE_STORAGE_ENDPOINT_OPTION)
+        if endpoint is not None:
+            return endpoint.rstrip("/")
+        return f"https://{self._config.account_name}.blob.core.windows.net"
 
     def staged_ref(self, key: str) -> str:
         return key
 
     def delete(self, up_to_id: str) -> None:
-        container = self._service().get_container_client(self._config.container)
-        prefix = _list_prefix(self._config.base_path)
-        to_delete = []
-        for blob in container.list_blobs(name_starts_with=prefix):
-            relative = blob.name[len(prefix) :]
-            file_upload_id = relative.split("/")[0]
-            if file_upload_id <= up_to_id:
-                to_delete.append(blob.name)
-        for blob_name in to_delete:
-            container.delete_blob(blob_name)
+        swept = self._sweep(up_to_id)
         logger.debug(
-            "Deleted %d staged Azure blob(s) with upload_id <= %s",
-            len(to_delete),
-            up_to_id,
+            "Deleted %d staged Azure blob(s) with upload_id <= %s", swept, up_to_id
         )
 
 
@@ -446,7 +421,7 @@ class AzureClickHouseStorage(AzureStorage, ClickHouseCloudStorage):
         # key inside a connection string.
         return table_function(
             "azureBlobStorage",
-            f"https://{self._config.account_name}.blob.core.windows.net",
+            self.account_url(),
             self._config.container,
             staged_file_ref,
             self._config.account_name,

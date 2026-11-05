@@ -17,9 +17,10 @@ from tabsdatak.conn.clickhouse import (
 )
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common.file._store import forwarded
 from tabsdatak.conn.common.types import _convert
 
-# All driver-touching imports (boto3 / azure / google-cloud-storage /
+# All driver-touching imports (google-cloud-storage /
 # clickhouse-connect) are made inside the call-sites of the private
 # helper modules below.  The conn-clickhouse package stays cheap to
 # import for registry scans.
@@ -70,6 +71,7 @@ def build_cloud_storage(staging: CloudLocation):
             base_path=staging._base_path(),
             access_key_id=_convert(staging.credentials.access_key_id, str),
             secret_access_key=(_convert(staging.credentials.secret_access_key, str)),
+            options=forwarded(f"s3://{staging._bucket()}", staging.cfg),
         )
         return S3ClickHouseStorage(s3)
 
@@ -79,6 +81,7 @@ def build_cloud_storage(staging: CloudLocation):
             base_path=staging._base_path(),
             account_name=_convert(staging.credentials.account_name, str),
             account_key=_convert(staging.credentials.account_key, str),
+            options=forwarded(f"az://{staging._container()}", staging.cfg),
         )
         return AzureClickHouseStorage(azure)
 
@@ -89,6 +92,7 @@ def build_cloud_storage(staging: CloudLocation):
             service_account_json=_convert(staging.credentials.json, str),
             hmac_access_key=_convert(staging.hmac_credentials.access_key, str),
             hmac_secret_key=_convert(staging.hmac_credentials.secret_key, str),
+            options=forwarded(f"gs://{staging._bucket()}", staging.cfg),
         )
         return GCSClickHouseStorage(gcs)
 

@@ -253,3 +253,24 @@ def test_clickhouse_dest_rejects_a_table_listed_twice(tables):
 
 def test_clickhouse_dest_keeps_names_its_backend_tells_apart():
     assert ClickHouseDest(tables=['db.t', 'db.T']).tables == ['db.t', 'db.T']
+
+
+@pytest.mark.parametrize("key", ["obstore.endpoint", "obstore.google_base_url"])
+def test_gcs_location_refuses_an_endpoint_in_its_cfg(key):
+    with pytest.raises(Exception) as ei:
+        GCSLocation(
+            bucket="my-bucket",
+            credentials=_sa_creds(),
+            hmac_credentials=_hmac_creds(),
+            cfg={key: "http://localhost:4443"},
+        )
+    assert ei.value.api_error is ClickHouseErrorCode.CLICKHOUSE_12
+
+
+def test_gcs_location_accepts_other_obstore_keys():
+    GCSLocation(
+        bucket="my-bucket",
+        credentials=_sa_creds(),
+        hmac_credentials=_hmac_creds(),
+        cfg={"obstore.allow_http": True},
+    )

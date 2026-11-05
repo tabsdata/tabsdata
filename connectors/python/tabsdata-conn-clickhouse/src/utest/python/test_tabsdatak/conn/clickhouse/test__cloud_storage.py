@@ -149,3 +149,115 @@ def test_table_function_arguments_are_escaped() -> None:
     from tabsdatak.conn.clickhouse._cloud_storage import table_function
 
     assert table_function("s3", "a\\b", "it's") == "s3('a\\\\b', 'it\\'s')"
+
+
+# ---------------------------------------------------------------------------
+# obstore.* options: the upload store and the address ClickHouse reads from
+# ---------------------------------------------------------------------------
+
+
+def _s3(**options) -> S3ClickHouseStorage:
+    return S3ClickHouseStorage(
+        S3Config(
+            bucket="b",
+            region="eu-west-1",
+            base_path="staging",
+            access_key_id="AK",
+            secret_access_key="SK",
+            options=options,
+        )
+    )
+
+
+def _azure(**options) -> AzureClickHouseStorage:
+    return AzureClickHouseStorage(
+        AzureConfig(
+            container="c",
+            base_path="staging",
+            account_name="ACCT",
+            account_key="KEY",
+            options=options,
+        )
+    )
+
+
+def test_s3_reads_from_aws_without_an_endpoint():
+    assert _s3().staged_ref("k/x.parquet") == (
+        "https://b.s3.eu-west-1.amazonaws.com/k/x.parquet"
+    )
+
+
+def test_s3_reads_from_a_custom_endpoint_path_style():
+    storage = _s3(aws_endpoint="http://minio:9000/", aws_allow_http="true")
+    assert storage.staged_ref("k/x.parquet") == "http://minio:9000/b/k/x.parquet"
+    assert storage.store().options["aws_endpoint"] == "http://minio:9000/"
+    assert storage.store().options["aws_allow_http"] == "true"
+
+
+def test_s3_reads_from_a_custom_endpoint_virtual_hosted():
+    storage = _s3(
+        aws_endpoint="https://storage.example.com",
+        aws_virtual_hosted_style_request="true",
+    )
+    assert storage.staged_ref("k/x.parquet") == (
+        "https://b.storage.example.com/k/x.parquet"
+    )
+
+
+def test_azure_reads_from_a_custom_endpoint():
+    storage = _azure(azure_storage_endpoint="http://azurite:10000/devstoreaccount1")
+    assert storage.clickhouse_table_function("k/x.parquet").startswith(
+        "azureBlobStorage('http://azurite:10000/devstoreaccount1', 'c', "
+    )
+    assert storage.store().options["azure_storage_endpoint"] == (
+        "http://azurite:10000/devstoreaccount1"
+    )
+
+
+def test_cfg_obstore_keys_reach_the_storage():
+    from tabsdatak.api import Secret
+    from tabsdatak.conn.clickhouse import S3Location
+    from tabsdatak.conn.clickhouse._impl import build_cloud_storage
+    from tabsdatak.conn.common.types import AwsAccessSecretKey
+
+    storage = build_cloud_storage(
+        S3Location(
+            bucket="my-bucket",
+            region="eu-west-1",
+            credentials=AwsAccessSecretKey(
+                access_key_id=Secret("AK"), secret_access_key=Secret("SK")
+            ),
+            cfg={"obstore.endpoint": "http://minio:9000", "ignored": 1},
+        )
+    )
+    assert storage.staged_ref("k") == "http://minio:9000/my-bucket/k"
+
+
+def test_the_cleanup_sweep_deletes_only_the_older_uploads(tmp_path):
+    import polars as pl
+
+    from tabsdatak.conn.common.file._store import FileStore
+
+    class _Local(S3ClickHouseStorage):
+        def store(self):
+            return FileStore(tmp_path.as_uri())
+
+    storage = _Local(
+        S3Config(
+            bucket="b",
+            region="r",
+            base_path="staging",
+            access_key_id="AK",
+            secret_access_key="SK",
+        )
+    )
+    frame = pl.LazyFrame({"id": [1]})
+    for upload_id in ["0001", "0002", "0003"]:
+        storage.upload(upload_id, [("x.parquet", frame)])
+    storage.delete("0002")
+    left = sorted(
+        path.relative_to(tmp_path).as_posix()
+        for path in tmp_path.rglob("*")
+        if path.is_file()
+    )
+    assert left == ["staging/0003/x.parquet"]

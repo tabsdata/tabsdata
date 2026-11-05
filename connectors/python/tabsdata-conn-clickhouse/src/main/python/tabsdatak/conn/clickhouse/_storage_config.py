@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -20,6 +20,7 @@ class S3Config:
     base_path: str
     access_key_id: str
     secret_access_key: str
+    options: dict[str, str] = field(default_factory=dict)
 
     def __repr__(self) -> str:
         return (
@@ -39,6 +40,7 @@ class AzureConfig:
     base_path: str
     account_name: str
     account_key: str
+    options: dict[str, str] = field(default_factory=dict)
 
     def __repr__(self) -> str:
         return (
@@ -69,6 +71,7 @@ class GCSConfig:
     service_account_json: str
     hmac_access_key: str
     hmac_secret_key: str
+    options: dict[str, str] = field(default_factory=dict)
 
     def __repr__(self) -> str:
         return (

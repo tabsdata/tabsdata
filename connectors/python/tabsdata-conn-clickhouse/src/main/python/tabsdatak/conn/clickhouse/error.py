@@ -84,3 +84,9 @@ class ClickHouseErrorCode(ErrorCode):
         "not a valid ClickHouse database name (letters, digits and underscores, "
         "not starting with a digit): {value!r}",
     )  # DatabaseSpec
+    CLICKHOUSE_12 = ErrorDef(
+        ClickHouseValidateException,
+        "GCSLocation.cfg cannot set {key!r}: ClickHouse reads GCS staging"
+        " through Google's own S3-compatible endpoint, so a custom endpoint"
+        " would write the parquet where ClickHouse cannot read it",
+    )  # GCSLocation.validate()

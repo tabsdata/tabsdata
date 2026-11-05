@@ -162,7 +162,11 @@ class S3Location(CloudLocation):
             `/`, has no trailing `/` and no empty segments (`//`)
             (the leading `/` is trimmed when forming the key).
             Defaults to `/`.
-        cfg: Optional connector-config dict for the S3 client.
+        cfg: Optional config dict; its `obstore.*` keys configure the
+            store parquet is staged through. `obstore.endpoint` (an
+            S3-compatible service) also becomes the address ClickHouse
+            reads the staged file from, path-style unless
+            `obstore.virtual_hosted_style_request` is true.
     """
 
     __kind__ = "clickHouseS3Location"
@@ -198,7 +202,10 @@ class AzBlobLocation(CloudLocation):
             `/`, has no trailing `/` and no empty segments (`//`)
             (the leading `/` is trimmed when forming the blob name).
             Defaults to `/`.
-        cfg: Optional connector-config dict for the Azure Blob client.
+        cfg: Optional config dict; its `obstore.*` keys configure the
+            store parquet is staged through. `obstore.endpoint` (e.g.
+            Azurite) also becomes the account URL ClickHouse reads the
+            staged file from.
     """
 
     __kind__ = "clickHouseAzBlobLocation"
@@ -236,7 +243,9 @@ class GCSLocation(CloudLocation):
             `/`, has no trailing `/` and no empty segments (`//`)
             (the leading `/` is trimmed when forming the key).
             Defaults to `/`.
-        cfg: Optional connector-config dict for the GCS client.
+        cfg: Optional config dict; its `obstore.*` keys configure the
+            store parquet is staged through. An endpoint key is refused:
+            ClickHouse reads GCS through Google's S3-compatible endpoint.
     """
 
     __kind__ = "clickHouseGCSLocation"
@@ -245,6 +254,16 @@ class GCSLocation(CloudLocation):
     hmac_credentials: GCPHmac
     base_path: CloudRelativePathSpec = "/"
     cfg: CfgSpec | None = None
+
+    def validate(self) -> None:
+        """Refuse an `obstore.*` key that moves the store elsewhere.
+
+        Called by the framework; raises `ClickHouseValidateException`.
+        """
+        for key in self.cfg or {}:
+            name = key.lower()
+            if name.startswith("obstore.") and ("endpoint" in name or "url" in name):
+                raise ClickHouseErrorCode.CLICKHOUSE_12.exception(key=key)
 
     def _bucket(self) -> str:
         return _convert(self.bucket, str)

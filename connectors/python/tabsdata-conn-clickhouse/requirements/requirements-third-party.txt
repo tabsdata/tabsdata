@@ -3,9 +3,7 @@
 #
 
 # Required at runtime by ``_id.new_upload_id`` (UUIDv7 backing for
-# the time-ordered per-load namespace). Cloud-SDK deps are
-# intentionally NOT listed here: ``boto3`` (S3), ``azure-storage-blob``
-# (Azure), and ``google-cloud-storage`` (GCS) are pulled in on demand
-# by the corresponding storage class -- a flow that only stages to
-# one provider shouldn't have to install the other two.
+# the time-ordered per-load namespace). S3 and Azure staging go
+# through obstore; ``google-cloud-storage`` is intentionally NOT listed:
+# only the GCS cleanup sweep pulls it in, on demand.
 uuid6==2025.0.1

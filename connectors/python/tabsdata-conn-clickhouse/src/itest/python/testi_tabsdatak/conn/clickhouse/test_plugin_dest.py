@@ -181,3 +181,59 @@ def test_dest_plugin_write_out_resolves_table_name_spelling(
         assert db.count(table) == 2 * rows
     finally:
         db.drop_table(table)
+
+
+@pytest.mark.parametrize("provider", STAGING_PROVIDERS)
+@clickhouse_domain("clickhouse")
+@s3_domain("s3")
+@azureblob_domain("azureblob")
+@gcs_domain("gcs")
+def test_dest_plugin_write_out_sweeps_its_staged_files(
+    provider: str,
+    domain_clickhouse: ClickhouseDomain,
+    domain_s3: S3Domain,
+    domain_azureblob: AzureblobDomain,
+    domain_gcs: GCSDomain,
+    tmp_path: Path,
+    monkeypatch,
+    caplog,
+):
+    import obstore
+
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.clickhouse import _bulk_loader, _id
+    from tabsdatak.conn.clickhouse._impl import build_cloud_storage
+
+    db = store(domain_clickhouse)
+    table = f"td_dest_sweep_{provider}"
+    staging = staging_domain(provider, domain_s3, domain_azureblob, domain_gcs)
+    conn = dest_conn(domain_clickhouse, staging)
+    upload_ids: list[str] = []
+    original = _id.new_upload_id
+
+    def recorded() -> str:
+        upload_ids.append(original())
+        return upload_ids[-1]
+
+    monkeypatch.setattr(_id, "new_upload_id", recorded)
+    try:
+        with caplog.at_level("WARNING", logger=_bulk_loader.logger.name):
+            plugin._ClickHouseDestPlugin().write_out(
+                PluginDestCtx(work_dir(tmp_path)),
+                conn,
+                ClickHouseDest(tables=[table], if_table_exists="replace"),
+                [pl.LazyFrame({"id": [1, 2]})],
+            )
+        assert db.count(table) == 2
+        assert not [r for r in caplog.records if "Cleanup failed" in r.getMessage()]
+        storage = build_cloud_storage(conn.staging)
+        [upload_id] = upload_ids
+        prefix = f"{storage.base_path.strip('/')}/{upload_id}/".lstrip("/")
+        left = [
+            meta["path"]
+            for batch in obstore.list(storage.store().store(), prefix=prefix)
+            for meta in batch
+        ]
+        assert left == []
+    finally:
+        db.drop_table(table)
