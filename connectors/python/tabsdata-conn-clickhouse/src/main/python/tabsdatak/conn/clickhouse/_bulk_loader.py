@@ -17,20 +17,19 @@ from tabsdatak.conn.clickhouse._cloud_storage import CloudStorage, StagedFile
 from tabsdatak.conn.clickhouse._dialect_base import Dialect
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.clickhouse._errors import BulkLoadError, SchemaError
+from tabsdatak.conn.clickhouse._errors import BulkLoadError
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.clickhouse._modes import (
-    LoadMode,
-    SchemaEvolutionMode,
-    WriteMode,
-)
+from tabsdatak.conn.clickhouse._modes import LoadMode, WriteMode
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._results import BulkLoadResult
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._statuses import BulkLoadStatus
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.policy import UPDATE, SchemaEvolution, governed
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +47,7 @@ class CloudStagedBulkLoader:
         cloud_storage: CloudStorage,
         dialect: Dialect,
         write_mode: WriteMode,
-        schema_evolution: SchemaEvolutionMode,
+        schema_evolution: SchemaEvolution,
         upload_id: str,
         poll_interval: float = 5.0,
         poll_timeout: float = 1800.0,
@@ -139,71 +138,33 @@ class CloudStagedBulkLoader:
         # share the same schema).
         arrow_schema = footers[0].schema.to_arrow_schema()
 
-        # Detect per-column nullability from parquet stats only when
-        # schema evolution is enabled. For NONE mode we preserve the
-        # legacy behavior (Arrow's always-nullable flag) so that
-        # ``verify_schema`` -- which also uses the Arrow flag -- stays
-        # consistent.
-        if self.schema_evolution != SchemaEvolutionMode.NONE:
-            column_nulls = self._detect_nullability(footers)
-        else:
-            column_nulls = None
+        column_nulls = self._detect_nullability(footers)
 
         if not self.dialect.table_exists(self.load_mode, table_name):
             logger.debug("Creating table: %s", table_name)
             self.dialect.create_table(
-                self.load_mode, table_name, arrow_schema, column_nulls
+                self.load_mode,
+                table_name,
+                arrow_schema,
+                column_nulls if self.schema_evolution == UPDATE else None,
             )
         else:
-            self.ensure_schema_compatible(table_name, arrow_schema, column_nulls)
+            self.evolve(table_name, arrow_schema, column_nulls)
         return list(arrow_schema.names)
 
-    def ensure_schema_compatible(
+    def evolve(
         self,
         table_name: str,
         arrow_schema,
-        column_nulls: dict[str, bool | None] | None = None,
+        column_nulls: dict[str, bool | None],
     ) -> None:
-        """Check schema compatibility and apply evolution if configured."""
-        try:
-            self.dialect.verify_schema(self.load_mode, table_name, arrow_schema)
-        except SchemaError:
-            if self.schema_evolution == SchemaEvolutionMode.NONE:
-                raise
-
-            if self.schema_evolution == SchemaEvolutionMode.NATIVE:
-                if not self.dialect.supports_native_schema_evolution():
-                    raise SchemaError(
-                        f"Schema mismatch for '{table_name}' and dialect"
-                        f" does not support native schema evolution."
-                    )
-                old_schema = self.dialect.get_table_schema(self.load_mode, table_name)
-                self.dialect.apply_native_schema_evolution(
-                    self.load_mode, table_name, old_schema, arrow_schema
-                )
-                logger.info(
-                    "clickhouse: applied native schema evolution to table %r",
-                    table_name,
-                )
-
-            elif self.schema_evolution == SchemaEvolutionMode.ICEBERG:
-                if not self.dialect.supports_tabsdata_schema_evolution():
-                    raise SchemaError(
-                        f"Schema mismatch for '{table_name}' and dialect"
-                        f" does not support Tabsdata (Iceberg-style)"
-                        f" schema evolution."
-                    )
-                delta = self.dialect.compute_evolution_delta(
-                    self.load_mode,
-                    table_name,
-                    arrow_schema,
-                    column_nulls,
-                )
-                self.dialect.apply_schema_delta(self.load_mode, table_name, delta)
-                logger.info(
-                    "clickhouse: applied iceberg schema evolution to table %r",
-                    table_name,
-                )
+        delta = self.dialect.compute_evolution_delta(
+            self.load_mode, table_name, arrow_schema, column_nulls
+        )
+        delta = governed(delta, self.schema_evolution)
+        if delta.changes:
+            self.dialect.apply_schema_delta(self.load_mode, table_name, delta)
+            logger.info("clickhouse: evolved the schema of table %r", table_name)
 
     @staticmethod
     def _detect_nullability(

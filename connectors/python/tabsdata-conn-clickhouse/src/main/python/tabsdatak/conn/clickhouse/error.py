@@ -90,3 +90,10 @@ class ClickHouseErrorCode(ErrorCode):
         " through Google's own S3-compatible endpoint, so a custom endpoint"
         " would write the parquet where ClickHouse cannot read it",
     )  # GCSLocation.validate()
+
+    # --- schema_evolution_engine (tabsdatak.conn.clickhouse) --------
+    CLICKHOUSE_13 = ErrorDef(
+        ClickHouseValidateException,
+        "ClickHouseDest.dest_cfg['clickhouse.schema_evolution_engine']={value!r}"
+        " is not a schema evolution engine; it is {allowed} or unset",
+    )  # _resolve_dest_cfg

@@ -141,10 +141,7 @@ def write_via_bulk_loader(
     from tabsdatak.conn.clickhouse._id import new_upload_id
 
     # noinspection PyProtectedMember
-    from tabsdatak.conn.clickhouse._modes import (
-        SchemaEvolutionMode,
-        WriteMode,
-    )
+    from tabsdatak.conn.clickhouse._modes import WriteMode
 
     cloud_storage = build_cloud_storage(cfg.conn.staging)
     ch_config = _build_clickhouse_config(cfg.conn)
@@ -152,11 +149,6 @@ def write_via_bulk_loader(
 
     write_mode = (
         WriteMode.REPLACE if cfg.if_table_exists == "replace" else WriteMode.APPEND
-    )
-    schema_evo = (
-        SchemaEvolutionMode.ICEBERG
-        if cfg.schema_evolution == "update"
-        else SchemaEvolutionMode.NONE
     )
 
     # Time-ordered, lexicographically sortable per-load namespace
@@ -170,7 +162,7 @@ def write_via_bulk_loader(
         cloud_storage=cloud_storage,
         dialect=dialect,
         write_mode=write_mode,
-        schema_evolution=schema_evo,
+        schema_evolution=cfg.schema_evolution,
         upload_id=upload_id,
     )
 

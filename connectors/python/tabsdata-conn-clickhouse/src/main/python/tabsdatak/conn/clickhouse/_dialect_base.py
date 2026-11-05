@@ -28,15 +28,6 @@ class Dialect(ABC):
     # --- Capability flags --------------------------------------------
 
     @abstractmethod
-    def supports_tabsdata_schema_evolution(self) -> bool:
-        """Return True if Iceberg-style schema evolution is supported."""
-
-    @abstractmethod
-    def supports_native_schema_evolution(self) -> bool:
-        """Return True if the target system has its own schema evolution
-        mechanism."""
-
-    @abstractmethod
     def supports_transactions(self) -> bool:
         """Return True if the target system supports multi-statement
         transactions."""
@@ -71,13 +62,6 @@ class Dialect(ABC):
     ) -> None:
         """Create a table from a PyArrow schema."""
 
-    @abstractmethod
-    def verify_schema(
-        self, load_mode: LoadMode, table_name: str, arrow_schema: schema
-    ) -> bool:
-        """Return True if the existing table is compatible with the
-        PyArrow schema. Raise ``SchemaError`` if incompatible."""
-
     # --- Schema operations (batch, default loop) ---------------------
 
     def tables_exist(self, load_mode: LoadMode, table_names: list[str]) -> list[bool]:
@@ -94,24 +78,7 @@ class Dialect(ABC):
         for table_name, arrow_schema in items:
             self.create_table(load_mode, table_name, arrow_schema)
 
-    def verify_schemas(
-        self, load_mode: LoadMode, items: list[tuple[str, object]]
-    ) -> list[bool]:
-        return [self.verify_schema(load_mode, name, schema) for name, schema in items]
-
     # --- Schema evolution (single-table) -----------------------------
-
-    def apply_native_schema_evolution(
-        self,
-        load_mode: LoadMode,
-        table_name: str,
-        old_schema: schema,
-        new_schema: schema,
-    ) -> None:
-        pass  # no-op by default
-
-    def get_type_widening_map(self) -> dict[str, set[str]]:
-        return {}
 
     def compute_evolution_delta(
         self,
@@ -126,16 +93,6 @@ class Dialect(ABC):
         raise NotImplementedError("Dialect does not implement apply_schema_delta")
 
     # --- Schema evolution (batch) ------------------------------------
-
-    def apply_native_schema_evolutions(
-        self,
-        load_mode: LoadMode,
-        items: list[tuple[str, object, object]],
-    ) -> None:
-        for table_name, old_schema, new_schema in items:
-            self.apply_native_schema_evolution(
-                load_mode, table_name, old_schema, new_schema
-            )
 
     def apply_schema_deltas(
         self, load_mode: LoadMode, items: list[tuple[str, object]]

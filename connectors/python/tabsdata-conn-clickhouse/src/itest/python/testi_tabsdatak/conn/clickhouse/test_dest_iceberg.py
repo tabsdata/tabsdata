@@ -23,10 +23,6 @@ from testi_tabsdatak.conn.common.sql.plugin_io import provisioned_parquet, work_
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse import ClickHouseDest, _plugin as plugin
-from tabsdatak.conn.clickhouse.error import (
-    ClickHouseErrorCode,
-    ClickHouseRuntimeException,
-)
 
 pytestmark = pytest.mark.clickhouse
 
@@ -81,14 +77,14 @@ def test_iceberg_adds_nullable_column(
 @fs_domain("fs_employees_xs")
 @clickhouse_domain("clickhouse")
 @s3_domain("s3")
-def test_iceberg_drops_column(
+def test_iceberg_keeps_a_column_the_batch_lacks(
     domain_fs_employees_xs: FsDomain,
     domain_clickhouse: ClickhouseDomain,
     domain_s3: S3Domain,
     tmp_path: Path,
 ):
     db = store(domain_clickhouse)
-    table = "td_iceberg_drop_column"
+    table = "td_iceberg_keep_column"
     work = work_dir(tmp_path)
     seed = provisioned_parquet(domain_fs_employees_xs, DEPARTMENTS)
     rows = pl.read_parquet(seed)
@@ -99,7 +95,7 @@ def test_iceberg_drops_column(
         _write(conn, work, evolved, table, schema_evolution="update")
 
         columns = db.column_types(table)
-        assert "dept_name" not in columns
+        assert "dept_name" in columns
         assert "dept_no" in columns
         assert db.count(table) == 2 * rows.height
     finally:
@@ -138,13 +134,13 @@ def test_iceberg_widens_int_type(
 
 @clickhouse_domain("clickhouse")
 @s3_domain("s3")
-def test_iceberg_rejects_unsafe_narrowing(
+def test_iceberg_takes_a_narrower_type_as_is(
     domain_clickhouse: ClickhouseDomain,
     domain_s3: S3Domain,
     tmp_path: Path,
 ):
     db = store(domain_clickhouse)
-    table = "td_iceberg_reject_narrowing"
+    table = "td_iceberg_narrower_type"
     work = work_dir(tmp_path)
     seed = _parquet(
         tmp_path / "seed.parquet", pl.DataFrame({"id": [1]}, schema={"id": pl.Int64})
@@ -156,12 +152,10 @@ def test_iceberg_rejects_unsafe_narrowing(
     conn = dest_conn(domain_clickhouse, domain_s3)
     try:
         _write(conn, work, seed, table, if_table_exists="replace")
-        with pytest.raises(ClickHouseRuntimeException) as raised:
-            _write(conn, work, narrowed, table, schema_evolution="update")
-        assert raised.value.api_error is ClickHouseErrorCode.CLICKHOUSE_6
+        _write(conn, work, narrowed, table, schema_evolution="update")
 
         assert "Int64" in db.column_types(table)["id"]
-        assert db.count(table) == 1
+        assert db.count(table) == 2
     finally:
         db.drop_table(table)
 
@@ -196,7 +190,7 @@ def test_iceberg_applies_combined_delta(
         _write(conn, work, evolved, table, schema_evolution="update")
 
         columns = db.column_types(table)
-        assert "old_col" not in columns
+        assert "old_col" in columns
         assert "Int64" in columns["id"]
         assert columns["category"].startswith("Nullable(")
         assert db.count(table) == 2

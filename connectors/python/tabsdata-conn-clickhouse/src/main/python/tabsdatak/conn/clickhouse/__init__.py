@@ -104,6 +104,11 @@ names that differ only in quoting, or in the case of an unquoted part
 (unchanged, as ClickHouse names are case-sensitive), are the same table."""
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 SchemaEvolutionSpec: TypeAlias = Literal["strict", "update"]
+SchemaEvolutionEngineSpec: TypeAlias = Literal["iceberg"]
+"""Which machinery evolves the target's schema. ClickHouse has no schema
+evolution of its own, so the only engine is `"iceberg"`: the connector diffs
+the target against the incoming batch and emits the `ALTER` statements
+itself."""
 
 
 # --- ClickHouseDest.dest_cfg keys ------------------------------------
@@ -113,7 +118,10 @@ SchemaEvolutionSpec: TypeAlias = Literal["strict", "update"]
 # of keys at validation time, so unknown keys are rejected at
 # construction; `CONN_CFG_VALIDATION` reuses the conn_cfg basic-value
 # checks (str/int/float/bool/None, plus list/dict compositions).
-DestCfgKey: TypeAlias = Literal["clickhouse.logging_level",]
+DestCfgKey: TypeAlias = Literal[
+    "clickhouse.logging_level",
+    "clickhouse.schema_evolution_engine",
+]
 
 DestCfgSpec: TypeAlias = Annotated[
     Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
@@ -344,8 +352,10 @@ class ClickHouseDest(Dest):
         schema_evolution: `"strict"` (the default) rejects schema changes;
             `"update"` adds new columns and widens column types of the target
             to match the schema of the incoming data.
-        dest_cfg: Optional connector config; the only supported key is
-            `clickhouse.logging_level`.
+        dest_cfg: Optional connector config. Supported keys:
+            `clickhouse.logging_level`, and
+            `clickhouse.schema_evolution_engine` -- `"iceberg"`, the default
+            and only engine: ClickHouse has no schema evolution of its own.
 
     Note:
         ClickHouse 24.8 has no time-of-day and no interval type, so a `Time`

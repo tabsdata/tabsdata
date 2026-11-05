@@ -22,9 +22,6 @@ from tabsdatak.conn.clickhouse._cloud_storage import (
 from tabsdatak.conn.clickhouse._dialect_base import Dialect
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.clickhouse._errors import SchemaError
-
-# noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._modes import LoadMode
 
 # noinspection PyProtectedMember
@@ -321,12 +318,6 @@ class ClickHouseDialect(Dialect):
 
     # --- Capability flags --------------------------------------------
 
-    def supports_tabsdata_schema_evolution(self) -> bool:
-        return True
-
-    def supports_native_schema_evolution(self) -> bool:
-        return False
-
     def supports_transactions(self) -> bool:
         return False
 
@@ -383,33 +374,7 @@ class ClickHouseDialect(Dialect):
         logger.info("Creating table '%s': %s", fq, ddl)
         self._client.command(ddl)
 
-    def verify_schema(
-        self,
-        load_mode: LoadMode,
-        table_name: str,
-        arrow_schema: schema,
-    ) -> bool:
-        """Verify that the existing table schema exactly matches the
-        Arrow schema."""
-        expected = schema_to_clickhouse_columns(arrow_schema)
-        existing = self._get_raw_columns(table_name)
-        if existing != expected:
-            raise SchemaError(
-                f"Schema mismatch for table {self._fqn(table_name)}.\n"
-                f"  Expected: {expected}\n"
-                f"  Found:    {existing}"
-            )
-        return True
-
     # --- Schema evolution --------------------------------------------
-
-    def get_type_widening_map(self) -> dict[str, set[str]]:
-        # noinspection PyProtectedMember
-        from tabsdatak.conn.clickhouse._iceberg import (
-            CLICKHOUSE_TYPE_WIDENING_MAP,
-        )
-
-        return CLICKHOUSE_TYPE_WIDENING_MAP
 
     def get_evolution_table_schema(self, table_name: str):
         # noinspection PyProtectedMember
@@ -445,7 +410,6 @@ class ClickHouseDialect(Dialect):
             ColumnDef,
             compute_delta,
             table_schema_from_arrow,
-            validate_delta,
         )
 
         current = self.get_evolution_table_schema(table_name)
@@ -488,7 +452,6 @@ class ClickHouseDialect(Dialect):
         desired = type(desired)(table_name=desired.table_name, columns=desired_columns)
 
         delta = compute_delta(current, desired, CLICKHOUSE_TYPE_WIDENING_MAP)
-        validate_delta(delta, strict=True)
         return delta
 
     def apply_schema_delta(self, load_mode: LoadMode, table_name: str, delta) -> None:

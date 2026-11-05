@@ -137,6 +137,16 @@ def test_dest_validate_rejects_empty_tables():
     assert ei.value.api_error is ClickHouseErrorCode.CLICKHOUSE_3
 
 
+def test_dest_cfg_takes_the_iceberg_engine():
+    plugin._resolve_dest_cfg({"clickhouse.schema_evolution_engine": "iceberg"})
+
+
+def test_dest_cfg_rejects_another_engine():
+    with pytest.raises(ClickHouseValidateException) as ei:
+        plugin._resolve_dest_cfg({"clickhouse.schema_evolution_engine": "native"})
+    assert ei.value.api_error is ClickHouseErrorCode.CLICKHOUSE_13
+
+
 # ---------------------------------------------------------------------------
 # _ClickHouseDestPlugin.write_out -- defensive recheck (CLICKHOUSE_4)
 # ---------------------------------------------------------------------------

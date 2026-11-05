@@ -22,8 +22,15 @@ from tabsdatak.conn.clickhouse._bulk_loader import CloudStagedBulkLoader
 from tabsdatak.conn.clickhouse._cloud_storage import CloudStorage, StagedFile
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.clickhouse._modes import SchemaEvolutionMode, WriteMode
+from tabsdatak.conn.clickhouse._modes import WriteMode
 from tabsdatak.conn.common.file._store import FileStore
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.delta import Action, SchemaChange, SchemaDelta
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.policy import STRICT, UPDATE
+from tabsdatak.conn.common.sql.error import SqlCommonRuntimeException
 
 pytestmark = pytest.mark.clickhouse
 
@@ -87,7 +94,7 @@ def _loader(
     tmp_path: Path,
     dialect,
     write_mode: WriteMode,
-    evolution: SchemaEvolutionMode = SchemaEvolutionMode.NONE,
+    evolution: str = STRICT,
 ) -> CloudStagedBulkLoader:
     return CloudStagedBulkLoader(
         cloud_storage=_LocalStorage(tmp_path),
@@ -114,12 +121,59 @@ def test_frames_are_staged_under_the_upload_id(tmp_path):
 
 def test_the_table_is_created_from_the_staged_footer(tmp_path):
     dialect = _RecordingDialect(exists=False)
-    loader = _loader(tmp_path, dialect, WriteMode.APPEND, SchemaEvolutionMode.NATIVE)
+    loader = _loader(tmp_path, dialect, WriteMode.APPEND, UPDATE)
     loader.phase_validate_and_prepare(_staged(loader))
     [schema] = dialect.schemas
     assert schema.names == ["id", "name"]
     [nulls] = dialect.nulls
     assert nulls == {"id": False, "name": True}
+
+
+def test_strict_creates_every_column_nullable(tmp_path):
+    dialect = _RecordingDialect(exists=False)
+    loader = _loader(tmp_path, dialect, WriteMode.APPEND, STRICT)
+    loader.phase_validate_and_prepare(_staged(loader))
+    assert dialect.nulls == [None]
+
+
+class _Evolving(_RecordingDialect):
+    def __init__(self, changes: list[SchemaChange]):
+        super().__init__(exists=True)
+        self._changes = changes
+        self.applied: list[SchemaChange] = []
+
+    def compute_evolution_delta(self, load_mode, table_name, arrow_schema, nulls):
+        return SchemaDelta(table_name=table_name, is_create=False, changes=self._changes)
+
+    def apply_schema_delta(self, load_mode, table_name, delta):
+        self.applied.extend(delta.changes)
+
+
+_DROPPED = SchemaChange(action=Action.DROP_COLUMN, column="score", safe=True)
+_ADDED = SchemaChange(
+    action=Action.ADD_COLUMN, column="extra", safe=True, detail={"type": "String"}
+)
+
+
+@pytest.mark.parametrize("evolution", [STRICT, UPDATE])
+def test_a_column_the_batch_lacks_is_never_dropped(tmp_path, evolution):
+    dialect = _Evolving([_DROPPED])
+    loader = _loader(tmp_path, dialect, WriteMode.APPEND, evolution)
+    loader.phase_validate_and_prepare(_staged(loader))
+    assert dialect.applied == []
+
+
+def test_strict_refuses_a_new_column(tmp_path):
+    loader = _loader(tmp_path, _Evolving([_ADDED]), WriteMode.APPEND, STRICT)
+    with pytest.raises(SqlCommonRuntimeException):
+        loader.phase_validate_and_prepare(_staged(loader))
+
+
+def test_update_adds_a_new_column(tmp_path):
+    dialect = _Evolving([_ADDED, _DROPPED])
+    loader = _loader(tmp_path, dialect, WriteMode.APPEND, UPDATE)
+    loader.phase_validate_and_prepare(_staged(loader))
+    assert dialect.applied == [_ADDED]
 
 
 def test_replace_drops_before_create(tmp_path):
