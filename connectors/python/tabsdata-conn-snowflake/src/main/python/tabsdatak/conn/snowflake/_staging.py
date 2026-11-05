@@ -5,7 +5,7 @@
 """Putting a table on a stage as parquet parts and reading it back off one.
 
 The steps every disposition shares, whichever of them is driving:
-``_impl`` for an append or a replace, ``_merge_dialect`` for a merge. They
+``_impl`` for an append or a replace, ``_merge`` for a merge. They
 live here rather than in either so both spell them the same way -- and so
 neither has to import the other.
 """

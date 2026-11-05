@@ -56,7 +56,7 @@ from tabsdatak.conn.common.sql.cdc.constants import (
 )
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.databricks import DatabricksDestConn, DatabricksSrcConn, MergeCfg
-from tabsdatak.conn.databricks._merge_dialect import DatabricksMergeDialect
+from tabsdatak.conn.databricks._merge import DatabricksMergeDialect
 from tabsdatak.conn.databricks._validation import _DATABRICKS_FQN_DEF
 from tabsdatak.spi import DestContext
 
@@ -783,7 +783,7 @@ def _quote_columns(names: Collection[str]) -> str:
 #
 # Shared by the two paths that stamp a target with the id of the trx that wrote
 # it: the merge, through
-# :class:`~tabsdatak.conn.databricks._merge_dialect.DatabricksMergeDialect`,
+# :class:`~tabsdatak.conn.databricks._merge.DatabricksMergeDialect`,
 # and the bulk load below. They live here so the two cannot drift on the
 # column's type, on how a target is probed for it, or on whether the rows
 # already in a target get backfilled.
@@ -876,7 +876,7 @@ def copy_into_table(
     sequence against ``fq_table`` from ``file_in_volume``.
 
     Append and replace only -- a merge goes through the shared driver and
-    :class:`~tabsdatak.conn.databricks._merge_dialect.DatabricksMergeDialect`.
+    :class:`~tabsdatak.conn.databricks._merge.DatabricksMergeDialect`.
     """
     cursor = sql_conn.cursor()
     sql_fq = _fq_for_sql(fq_table)
@@ -1134,7 +1134,7 @@ def _merge_one(
 
     Everything the merge does -- coalescing the batch, staging it, creating the
     target, evolving it, running the statement -- belongs to the driver and to
-    :class:`~tabsdatak.conn.databricks._merge_dialect.DatabricksMergeDialect`.
+    :class:`~tabsdatak.conn.databricks._merge.DatabricksMergeDialect`.
     The volume upload and the staged file's deletion move in with the staging,
     which is why nothing is left here but the cursor.
     """

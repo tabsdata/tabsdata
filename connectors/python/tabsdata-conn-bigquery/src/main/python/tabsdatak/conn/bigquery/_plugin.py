@@ -109,7 +109,7 @@ class _BigQueryDestPlugin(
         )
 
         # noinspection PyProtectedMember
-        from tabsdatak.conn.bigquery._merge_dialect import BigQueryMergeDialect
+        from tabsdatak.conn.bigquery._merge import BigQueryMergeDialect
 
         # noinspection PyProtectedMember
         from tabsdatak.conn.common.sql._merge._driver import merge_batch

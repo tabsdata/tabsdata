@@ -39,7 +39,7 @@ from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
 from tabsdatak.conn.databricks import MergeCfg
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.databricks._merge_dialect import DatabricksMergeDialect
+from tabsdatak.conn.databricks._merge import DatabricksMergeDialect
 from tabsdatak.conn.databricks.error import (
     DatabricksErrorCode,
     DatabricksRuntimeException,

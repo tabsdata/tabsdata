@@ -39,7 +39,7 @@ from tabsdatak.conn.snowflake._evolution import (
     check_watermark_column,
     ensure_watermark_column,
 )
-from tabsdatak.conn.snowflake._merge_dialect import SnowflakeMergeDialect
+from tabsdatak.conn.snowflake._merge import SnowflakeMergeDialect
 from tabsdatak.conn.snowflake._staging import (
     copy_into,
     create_file_format,
@@ -448,7 +448,7 @@ def _merge_one(
 
     Everything the merge does -- coalescing the batch, staging it, creating the
     target, evolving it, running the statement -- belongs to the driver and to
-    :class:`~tabsdatak.conn.snowflake._merge_dialect.SnowflakeMergeDialect`.
+    :class:`~tabsdatak.conn.snowflake._merge.SnowflakeMergeDialect`.
 
     ``ENABLE_SCHEMA_EVOLUTION`` is not set here, unlike the other dispositions.
     The mark is read by ``COPY INTO``, and the only COPY a merge runs loads the

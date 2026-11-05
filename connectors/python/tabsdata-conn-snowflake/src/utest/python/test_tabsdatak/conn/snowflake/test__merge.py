@@ -41,7 +41,7 @@ from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
 from tabsdatak.conn.snowflake import MergeCfg, _iceberg
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.snowflake._merge_dialect import SnowflakeMergeDialect
+from tabsdatak.conn.snowflake._merge import SnowflakeMergeDialect
 from tabsdatak.conn.snowflake.error import (
     SnowflakeErrorCode,
     SnowflakeRuntimeException,

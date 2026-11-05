@@ -23,7 +23,7 @@ import pytest
 from tabsdatak.conn.bigquery import MergeCfg, _iceberg, _impl as impl
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.bigquery._merge_dialect import BigQueryMergeDialect
+from tabsdatak.conn.bigquery._merge import BigQueryMergeDialect
 from tabsdatak.conn.bigquery.error import BigQueryErrorCode, BigQueryRuntimeException
 from tabsdatak.conn.common.file._store import FileStore
 
