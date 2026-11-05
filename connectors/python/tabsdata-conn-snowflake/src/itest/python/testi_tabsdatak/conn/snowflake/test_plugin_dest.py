@@ -62,7 +62,7 @@ def test_dest_plugin_write_out_appends_rows(
             PluginDestCtx(work),
             conn,
             SnowflakeDest(tables=[table], if_table_exists="replace"),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
         assert db.count(table) == rows
 
@@ -70,7 +70,7 @@ def test_dest_plugin_write_out_appends_rows(
             PluginDestCtx(work),
             conn,
             SnowflakeDest(tables=[table], if_table_exists="append"),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
         assert db.count(table) == 2 * rows
     finally:
@@ -99,7 +99,7 @@ def test_dest_plugin_write_out_replace_clears_existing(
                 PluginDestCtx(work),
                 conn,
                 SnowflakeDest(tables=[table], if_table_exists=mode),
-                [parquet],
+                [pl.scan_parquet(parquet)],
             )
         assert db.count(table) == 2 * expected.height
 
@@ -107,7 +107,7 @@ def test_dest_plugin_write_out_replace_clears_existing(
             PluginDestCtx(work),
             conn,
             SnowflakeDest(tables=[table], if_table_exists="replace"),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
         got = db.read_table(table)
         assert got.height == expected.height
@@ -144,13 +144,13 @@ def test_dest_plugin_write_out_resolves_table_name_spelling(
             PluginDestCtx(work),
             conn,
             SnowflakeDest(tables=[table], if_table_exists="replace"),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
         plugin.SnowflakeDestPlugin().write_out(
             PluginDestCtx(work),
             conn,
             SnowflakeDest(tables=[spelled], if_table_exists="append"),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
         assert db.count(table) == 2 * rows
     finally:
@@ -232,7 +232,7 @@ def _merge_out(
             watermark_column=watermark_column,
             dest_cfg=_ICEBERG,
         ),
-        [parquet],
+        [pl.scan_parquet(parquet)],
     )
 
 
@@ -588,7 +588,10 @@ def test_dest_plugin_write_out_merge_applies_one_cfg_per_table(
     try:
         for batch in (seeds, deltas):
             plugin.SnowflakeDestPlugin().write_out(
-                PluginDestCtx(work), conn, dest, batch
+                PluginDestCtx(work),
+                conn,
+                dest,
+                [pl.scan_parquet(path) for path in batch],
             )
         assert_frames_match(
             db.read_table(orders),
@@ -690,7 +693,7 @@ def test_dest_plugin_write_out_takes_a_new_column_on_update(
                 if_table_exists=if_table_exists,
                 schema_evolution="update",
             ),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
 
     try:
@@ -729,7 +732,7 @@ def _load_out(conn, work: Path, table: str, parquet: Path, **dest_kwargs) -> Non
             schema_evolution=dest_kwargs.pop("schema_evolution", "update"),
             **dest_kwargs,
         ),
-        [parquet],
+        [pl.scan_parquet(parquet)],
     )
 
 
@@ -890,7 +893,7 @@ def test_dest_plugin_write_out_ignores_a_new_column_on_strict(
                 if_table_exists=if_table_exists,
                 schema_evolution="strict",
             ),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
 
     try:
@@ -1070,7 +1073,7 @@ def test_dest_plugin_write_out_stops_evolving_when_switched_back_to_strict(
                 if_table_exists="append",
                 schema_evolution=schema_evolution,
             ),
-            [parquet],
+            [pl.scan_parquet(parquet)],
         )
 
     try:
@@ -1711,7 +1714,7 @@ def _append_out(
             schema_evolution=schema_evolution,
             watermark_column=watermark_column,
         ),
-        [parquet],
+        [pl.scan_parquet(parquet)],
     )
 
 
@@ -1947,5 +1950,132 @@ def test_dest_plugin_write_out_append_leaves_the_batch_columns_untouched(
             watermark_column=_WATERMARK,
         )
         assert pl.read_parquet(batch).columns == ["order_id", "status"]
+    finally:
+        db.drop_table(table)
+
+
+# ---------------------------------------------------------------------------
+# A table staged in several parts
+#
+# A table is put on the stage as parquet parts of bounded size and loaded with
+# one COPY from their folder. The size is lowered here so a small table spans
+# several parts; the slow test crosses the real one.
+# ---------------------------------------------------------------------------
+
+
+def _rows(count: int) -> pl.LazyFrame:
+    return (
+        pl
+        .LazyFrame()
+        .select(pl.int_range(0, count, dtype=pl.Int64).alias("id"))
+        .with_columns(
+            (pl.lit("row-") + pl.col("id").cast(pl.String)).alias("name"),
+            (pl.col("id") % 7).alias("bucket"),
+        )
+    )
+
+
+def _counted_parts(monkeypatch) -> list[int]:
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.snowflake import _staging
+
+    counted: list[int] = []
+    original = _staging.parquet_parts
+
+    def counting(frame, part_bytes=None):
+        for part in original(frame, part_bytes):
+            counted.append(part.getbuffer().nbytes)
+            yield part
+
+    monkeypatch.setattr(_staging, "parquet_parts", counting)
+    return counted
+
+
+def _small_parts(monkeypatch) -> list[int]:
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.snowflake import _staging
+
+    monkeypatch.setattr(_staging, "PART_BYTES", 256 * 1024)
+    monkeypatch.setattr(_staging, "BATCH_ROWS", 10_000)
+    return _counted_parts(monkeypatch)
+
+
+@snowflake_domain("snowflake")
+def test_dest_plugin_write_out_loads_every_part_and_purges_them(
+    domain_snowflake: SnowflakeDomain,
+    tmp_path: Path,
+    monkeypatch,
+):
+    db = store(domain_snowflake)
+    table = "TD_DEST_PARTS"
+    stage = "TD_DEST_PARTS_STAGE"
+    parts = _small_parts(monkeypatch)
+    conn = dest_conn(domain_snowflake, stage=stage)
+    try:
+        plugin.SnowflakeDestPlugin().write_out(
+            PluginDestCtx(work_dir(tmp_path)),
+            conn,
+            SnowflakeDest(tables=[table], if_table_exists="replace"),
+            [_rows(200_000)],
+        )
+        assert len(parts) > 1
+        got = db.read_table(table)
+        assert got.height == 200_000
+        assert got["id"].sort().to_list() == list(range(200_000))
+        assert db.list_stage(stage) == []
+    finally:
+        db.drop_table(table)
+        db.drop_stage(stage)
+
+
+@snowflake_domain("snowflake")
+def test_dest_plugin_write_out_merges_a_batch_staged_in_parts(
+    domain_snowflake: SnowflakeDomain,
+    tmp_path: Path,
+    monkeypatch,
+):
+    db = store(domain_snowflake)
+    table = "TD_DEST_MERGE_PARTS"
+    parts = _small_parts(monkeypatch)
+    conn = dest_conn(domain_snowflake)
+    batch = _rows(120_000).with_columns(pl.lit("i").alias("op"))
+    try:
+        plugin.SnowflakeDestPlugin().write_out(
+            PluginDestCtx(work_dir(tmp_path)),
+            conn,
+            SnowflakeDest(
+                tables=[table],
+                if_table_exists="merge",
+                merge_cfg=[MergeCfg(on=["id"], op_column="op")],
+                dest_cfg=_ICEBERG,
+            ),
+            [batch],
+        )
+        assert len(parts) > 1
+        assert db.count(table) == 120_000
+    finally:
+        db.drop_table(table)
+
+
+@pytest.mark.slow
+@snowflake_domain("snowflake")
+def test_dest_plugin_write_out_stages_a_large_table_in_default_sized_parts(
+    domain_snowflake: SnowflakeDomain,
+    tmp_path: Path,
+    monkeypatch,
+):
+    db = store(domain_snowflake)
+    table = "TD_DEST_LARGE"
+    parts = _counted_parts(monkeypatch)
+    count = 25_000_000
+    try:
+        plugin.SnowflakeDestPlugin().write_out(
+            PluginDestCtx(work_dir(tmp_path)),
+            dest_conn(domain_snowflake),
+            SnowflakeDest(tables=[table], if_table_exists="replace"),
+            [_rows(count)],
+        )
+        assert len(parts) > 1
+        assert db.count(table) == count
     finally:
         db.drop_table(table)

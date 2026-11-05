@@ -20,7 +20,7 @@ from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._validation import fqn, unfqn
+from tabsdatak.conn.common._validation import fqn
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._evolution import evolve_with_iceberg
@@ -35,9 +35,6 @@ from tabsdatak.conn.common.sql._merge.dialect import (
     MergeSyntax,
     Staged,
 )
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._spool import spooled_parquet
 from tabsdatak.conn.snowflake import _iceberg
 from tabsdatak.conn.snowflake._evolution import (
     WATERMARK_TYPE,
@@ -49,9 +46,10 @@ from tabsdatak.conn.snowflake._evolution import (
 )
 from tabsdatak.conn.snowflake._staging import (
     copy_into,
+    first_part,
     inferred_columns,
     inferred_schema_template,
-    put_file_to_stage,
+    staged_frame,
 )
 
 # noinspection PyProtectedMember
@@ -59,6 +57,7 @@ from tabsdatak.conn.snowflake._validation import (
     _SNOWFLAKE_FQN_DEF,
     MERGE_SOURCE_ALIAS,
     MERGE_TARGET_ALIAS,
+    bare_parts,
 )
 from tabsdatak.conn.snowflake.error import SnowflakeErrorCode
 
@@ -132,8 +131,8 @@ class SnowflakeMergeDialect(MergeDialect):
         batch: pl.LazyFrame,
         watermark_cfg: WatermarkCfg | None = None,
     ) -> Iterator[Staged]:
-        """``PUT`` the batch, template a temporary table from it and ``COPY``
-        the rows in.
+        """``PUT`` the batch as parquet parts, template a temporary table from
+        the first and ``COPY`` the rows in.
 
         The scratch table carries the file's whole schema, marker column and
         all: the clauses read the marker off it. Nothing drops it on the way
@@ -141,9 +140,9 @@ class SnowflakeMergeDialect(MergeDialect):
         connection, and its name carries a suffix unique to this call, so the
         few a multi-table write leaves behind collide with nothing.
 
-        The columns are read from the file before the ``COPY``, which purges it:
-        after that the staged file is gone and ``infer_schema`` has nothing to
-        report.
+        The columns are read from the first part before the ``COPY``, which
+        purges the parts: after that nothing is staged and ``infer_schema`` has
+        nothing to report.
 
         A watermark column is added to the scratch table once the rows are in,
         not to its template: the batch does not carry the column, so the
@@ -153,18 +152,17 @@ class SnowflakeMergeDialect(MergeDialect):
         through ``ensure_target``, ``evolve`` and the write list onto the
         target.
         """
-        with spooled_parquet(batch, f"{uuid.uuid4().hex}.parquet") as spooled:
-            file_name = put_file_to_stage(self._cursor, spooled, self._stage)
-        columns = inferred_columns(self._cursor, self._stage, file_name)
-        scratch = self._create_scratch_table(target, file_name)
-        copy_into(
-            self._cursor,
-            self._stage,
-            file_name,
-            scratch,
-            match_by_column_name=self._match_by_column_name,
-            purge=self._purge,
-        )
+        with staged_frame(self._cursor, batch, self._stage) as folder:
+            columns = inferred_columns(self._cursor, self._stage, first_part(folder))
+            scratch = self._create_scratch_table(target, first_part(folder))
+            copy_into(
+                self._cursor,
+                self._stage,
+                folder,
+                scratch,
+                match_by_column_name=self._match_by_column_name,
+                purge=self._purge,
+            )
         if watermark_cfg is not None:
             self._add_watermark_column(scratch, watermark_cfg)
             columns.append((watermark_cfg.column, WATERMARK_TYPE))
@@ -291,6 +289,6 @@ def _scratch_table_name(target: str) -> str:
     for the rest of the session, so it must never be spelled exactly like the
     target it is about to be merged into.
     """
-    parts = unfqn(target, _SNOWFLAKE_FQN_DEF)
+    parts = bare_parts(target)
     parts[-1] = f"{parts[-1]}_{uuid.uuid4().hex[:8].upper()}"
     return fqn(parts, _SNOWFLAKE_FQN_DEF)

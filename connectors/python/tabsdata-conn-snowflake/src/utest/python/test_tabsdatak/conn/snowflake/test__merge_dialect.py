@@ -584,7 +584,7 @@ def test_staging_puts_templates_and_copies_in_that_order(tmp_path):
     with _dialect(fake).staging(_TARGET, batch) as staged:
         assert staged.columns == [("C", "NUMBER(38,0)"), ("OP", "TEXT")]
     log = fake.log
-    put = next(i for i, s in enumerate(log) if s.startswith("PUT file://"))
+    put = next(i for i, s in enumerate(log) if s.startswith("PUT 'file:///"))
     infer = next(i for i, s in enumerate(log) if s.startswith(_INFER_PREFIX))
     create = next(
         i for i, s in enumerate(log) if s.startswith("CREATE TEMPORARY TABLE")
@@ -1035,7 +1035,7 @@ def test_merge_batch_checks_the_watermark_before_it_stages_anything(tmp_path):
     fake = _watermark_fake(watermark_answers(has_column=False))
     _merge(fake, batch, watermark_column="WM")
     probe = next(i for i, s in enumerate(fake.log) if s.startswith("SELECT COUNT("))
-    put = next(i for i, s in enumerate(fake.log) if s.startswith("PUT file://"))
+    put = next(i for i, s in enumerate(fake.log) if s.startswith("PUT 'file:///"))
     assert probe < put
 
 

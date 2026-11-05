@@ -79,8 +79,11 @@ class _FakeCursor:
         self.description: list[tuple] = []
         self._rows: list[tuple] = []
         self.closed = False
+        self.streamed: list[bytes] = []
 
-    def execute(self, sql: str, params: tuple | None = None) -> None:
+    def execute(self, sql: str, params: tuple | None = None, file_stream=None) -> None:
+        if file_stream is not None:
+            self.streamed.append(file_stream.read())
         self._log.append(sql)
         self._binds.append((sql, params))
         self._apply_add_column(sql)

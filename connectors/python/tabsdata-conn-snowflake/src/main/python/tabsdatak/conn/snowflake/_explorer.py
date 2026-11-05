@@ -35,16 +35,13 @@ class SnowflakeConnectionExplorer(SqlAlchemyConnectionExplorer):
     def map_entity_fields(self, conn: SnowflakeDestConn, schema: str | None) -> dict:
         """Map the iterated schema name to entity database/schema fields."""
         return {
-            "database": conn._database() if conn.database is not None else "",
+            "database": conn._database() or "",
             "schema": schema or "",
         }
 
     def make_url(self, conn: SnowflakeDestConn) -> engine.URL:
-        query: dict[str, str] = {}
-        if conn.warehouse is not None:
-            query["warehouse"] = conn._warehouse()
-        if conn.role is not None:
-            query["role"] = conn._role()
+        optional = {"warehouse": conn._warehouse(), "role": conn._role()}
+        query = {key: value for key, value in optional.items() if value is not None}
         user = password = ""
         if conn.credentials is not None:
             user = conn.credentials.user.value()
@@ -55,6 +52,6 @@ class SnowflakeConnectionExplorer(SqlAlchemyConnectionExplorer):
             password=password,
             # The account locator is the host for the snowflake dialect.
             host=conn._account(),
-            database=(conn._database() if conn.database is not None else None),
+            database=conn._database(),
             query=query,
         )

@@ -7,6 +7,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import polars as pl
 import pytest
 
 from tabsdatak.api import Secret
@@ -36,7 +37,7 @@ pytestmark = pytest.mark.snowflake
 
 
 
-def _parquet(path: Path, **columns) -> Path:
+def _parquet(path: Path, **columns) -> pl.LazyFrame:
     """A real one-row parquet at `path`.
 
     `write_all_tables` reads each file's schema before it loads anything, so a
@@ -46,10 +47,10 @@ def _parquet(path: Path, **columns) -> Path:
     import pyarrow.parquet as pq
 
     pq.write_table(pa.table(columns or {"c": pa.array([1], pa.int64())}), str(path))
-    return path
+    return pl.scan_parquet(path)
 
 
-def _cdc_parquet(path: Path, **columns) -> Path:
+def _cdc_parquet(path: Path, **columns) -> pl.LazyFrame:
     """A one-row CDC batch: the key `_merge_cfgs` matches on, plus its marker.
 
     Merge mode coalesces the file before staging it, so the key and marker
@@ -360,7 +361,7 @@ def test_write_all_tables_creates_stage_puts_then_copies(
     # PUT, COPY INTO. Tables go through _fq_for_sql so each part is
     # double-quoted in the emitted SQL.
     assert any(s.startswith("CREATE STAGE IF NOT EXISTS MY_STAGE") for s in sql)
-    assert any(s.startswith("PUT file://") for s in sql)
+    assert any(s.startswith("PUT 'file:///") for s in sql)
     assert any(
         s.startswith('COPY INTO "ANALYTICS"."PUBLIC"."T"') for s in sql
     )
@@ -951,22 +952,18 @@ def _watermark_alters(log):
 
 
 def _staged_files(monkeypatch):
-    """Capture what each ``PUT`` was handed, read while it still exists.
+    """The rows of every frame staged."""
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.snowflake import _staging
 
-    The rewritten batch lives in a temp directory removed as soon as it has
-    been staged, so a test that reads it afterwards finds nothing. Reading it
-    from inside the ``PUT`` is the only moment it is on disk.
-    """
-    import polars as pl
+    staged: list[pl.DataFrame] = []
+    original = _staging.put_frame_to_stage
 
-    staged: list[tuple[Path, pl.DataFrame]] = []
-    original = impl.put_file_to_stage
+    def capture(cursor, frame, stage):
+        staged.append(frame.collect())
+        return original(cursor, frame, stage)
 
-    def capture(cursor, file_path, stage):
-        staged.append((file_path, pl.read_parquet(file_path)))
-        return original(cursor, file_path, stage)
-
-    monkeypatch.setattr(impl, "put_file_to_stage", capture)
+    monkeypatch.setattr(_staging, "put_frame_to_stage", capture)
     return staged
 
 
@@ -976,23 +973,8 @@ def test_append_watermark_stamps_every_staged_row_with_the_trx_id(
     staged = _staged_files(monkeypatch)
     _evolving_connection(monkeypatch, ["C"], [("C", "NUMBER(38,0)")])
     impl.write_all_tables(_watermark_cfg(), [_parquet(tmp_path / "in.parquet")])
-    _, frame = staged[0]
+    frame = staged[0]
     assert frame[_WATERMARK].to_list() == ["TRX_1"]
-
-
-def test_append_watermark_stages_a_copy_keeping_the_original_basename(
-    monkeypatch, tmp_path
-):
-    # Everything downstream is keyed off the staged file's name -- the COPY
-    # names it in FILES, and infer_schema reads it by path -- so the rewrite
-    # has to be indistinguishable from the file the write was handed.
-    staged = _staged_files(monkeypatch)
-    _evolving_connection(monkeypatch, ["C"], [("C", "NUMBER(38,0)")])
-    parquet = _parquet(tmp_path / "in.parquet")
-    impl.write_all_tables(_watermark_cfg(), [parquet])
-    path, _ = staged[0]
-    assert path != parquet
-    assert path.name == parquet.name
 
 
 def test_append_without_a_watermark_stages_the_file_it_was_handed(
@@ -1000,21 +982,9 @@ def test_append_without_a_watermark_stages_the_file_it_was_handed(
 ):
     staged = _staged_files(monkeypatch)
     _evolving_connection(monkeypatch, ["C"], [("C", "NUMBER(38,0)")])
-    parquet = _parquet(tmp_path / "in.parquet")
-    impl.write_all_tables(_write_cfg(), [parquet])
-    path, frame = staged[0]
-    assert path.name == parquet.name
+    impl.write_all_tables(_write_cfg(), [_parquet(tmp_path / "in.parquet")])
+    frame = staged[0]
     assert frame.columns == ["c"]
-
-
-def test_append_watermark_removes_the_rewritten_file_once_it_is_staged(
-    monkeypatch, tmp_path
-):
-    staged = _staged_files(monkeypatch)
-    _evolving_connection(monkeypatch, ["C"], [("C", "NUMBER(38,0)")])
-    impl.write_all_tables(_watermark_cfg(), [_parquet(tmp_path / "in.parquet")])
-    path, _ = staged[0]
-    assert not path.exists()
 
 
 def test_append_watermark_adds_the_column_to_the_target_without_a_default(
@@ -1152,9 +1122,7 @@ def test_a_replace_never_stamps_even_when_handed_a_watermark(
     rather than resting on a validation two layers away."""
     staged = _staged_files(monkeypatch)
     fake = _evolving_connection(monkeypatch, ["C"], [("C", "NUMBER(38,0)")])
-    parquet = _parquet(tmp_path / "in.parquet")
-    impl.write_all_tables(_watermark_cfg(if_table_exists="replace"), [parquet])
-    path, frame = staged[0]
-    assert path.name == parquet.name
+    impl.write_all_tables(_watermark_cfg(if_table_exists="replace"), [_parquet(tmp_path / "in.parquet")])
+    frame = staged[0]
     assert frame.columns == ["c"]
     assert _watermark_alters(fake.log) == []

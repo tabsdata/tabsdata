@@ -269,20 +269,20 @@ class SnowflakeDestConn(Conn):
     def _account(self) -> str:
         return _convert(self.account, str)
 
-    def _role(self) -> str:
-        return _convert(self.role, str)
+    def _role(self) -> str | None:
+        return None if self.role is None else _convert(self.role, str)
 
-    def _database(self) -> str:
-        return _convert(self.database, str)
+    def _database(self) -> str | None:
+        return None if self.database is None else _convert(self.database, str)
 
-    def _schema(self) -> str:
-        return _convert(self.schema, str)
+    def _schema(self) -> str | None:
+        return None if self.schema is None else _convert(self.schema, str)
 
-    def _warehouse(self) -> str:
-        return _convert(self.warehouse, str)
+    def _warehouse(self) -> str | None:
+        return None if self.warehouse is None else _convert(self.warehouse, str)
 
-    def _stage(self) -> str:
-        return _convert(self.stage, str)
+    def _stage(self) -> str | None:
+        return None if self.stage is None else _convert(self.stage, str)
 
     def validate(self) -> None:
         """Cross-field validation: `schema` requires `database`.

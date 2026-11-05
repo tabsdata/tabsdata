@@ -78,6 +78,10 @@ class SnowflakeStore(SqlStore):
     def drop_stage(self, stage: str) -> None:
         self._execute(f"DROP STAGE IF EXISTS {self._database}.{self._schema}.{stage}")
 
+    def list_stage(self, stage: str) -> list[tuple]:
+        rows, _ = self._query(f"LIST @{self._database}.{self._schema}.{stage}")
+        return rows
+
     def copy_history(self, table: str) -> list[tuple]:
         """``(file_name, row_count, status)`` per COPY into ``table`` in the last
         hour, newest first -- what Snowflake's own load metadata recorded.

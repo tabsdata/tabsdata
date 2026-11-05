@@ -23,16 +23,12 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-from tabsdatak.conn.common._validation import fqn, unfqn
+from tabsdatak.conn.common._validation import fqn
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge._driver import merge_batch
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._spool import spooled_parquet
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._watermark import watermarked_batch
@@ -47,15 +43,18 @@ from tabsdatak.conn.snowflake._merge_dialect import SnowflakeMergeDialect
 from tabsdatak.conn.snowflake._staging import (
     copy_into,
     create_file_format,
+    first_part,
     inferred_columns,
     inferred_schema_template,
-    put_file_to_stage,
+    staged_frame,
 )
-from tabsdatak.conn.snowflake._validation import _SNOWFLAKE_FQN_DEF
+from tabsdatak.conn.snowflake._validation import _SNOWFLAKE_FQN_DEF, bare_parts
 from tabsdatak.conn.snowflake.error import SnowflakeErrorCode
 from tabsdatak.spi import DestContext
 
 if TYPE_CHECKING:
+    import polars as pl
+
     import snowflake.connector as sfc
 
 logger = logging.getLogger(__name__)
@@ -121,14 +120,13 @@ def _connection_parameters(conn: SnowflakeDestConn) -> dict[str, str]:
         "user": _convert(creds.user, str),
         "password": _convert(creds.password, str),
     }
-    if conn.role is not None:
-        params["role"] = conn._role()
-    if conn.database is not None:
-        params["database"] = conn._database()
-    if conn.schema is not None:
-        params["schema"] = conn._schema()
-    if conn.warehouse is not None:
-        params["warehouse"] = conn._warehouse()
+    optional = {
+        "role": conn._role(),
+        "database": conn._database(),
+        "schema": conn._schema(),
+        "warehouse": conn._warehouse(),
+    }
+    params.update({key: value for key, value in optional.items() if value is not None})
     return params
 
 
@@ -159,8 +157,7 @@ def _fq_for_sql(fq_table: str) -> str:
     Embedded double quotes inside a part are preserved via the
     Snowflake doubled-quote escape convention (``""``).
     """
-    parts = unfqn(fq_table, _SNOWFLAKE_FQN_DEF)
-    return fqn(parts, _SNOWFLAKE_FQN_DEF)
+    return fqn(bare_parts(fq_table), _SNOWFLAKE_FQN_DEF)
 
 
 # Snowflake's unquoted-identifier grammar: a letter/underscore start followed by
@@ -187,10 +184,10 @@ def _use_namespace(sf_conn, conn: SnowflakeDestConn) -> None:
     session silently falls back to the role's default namespace when the
     requested one can't be adopted, so re-assert it explicitly and fail with a
     clear error if the database/schema is missing or not granted."""
-    if conn.database is None:
-        return
     database = conn._database()
-    schema = conn._schema() if conn.schema is not None else None
+    if database is None:
+        return
+    schema = conn._schema()
     try:
         with sf_conn.cursor() as cur:
             cur.execute(f"USE DATABASE {_use_ident(database)}")
@@ -210,14 +207,22 @@ def _stage(conn: SnowflakeDestConn) -> tuple[str, bool]:
     ``conn.stage`` is set the stage is treated as permanent (caller
     owns its lifecycle); otherwise a session-scoped TEMPORARY stage
     is used."""
-    if conn.stage is not None:
-        return conn._stage(), False
+    stage = conn._stage()
+    if stage is not None:
+        return stage, False
     return _DEFAULT_TEMP_STAGE, True
 
 
 def _create_stage_if_not_exists(cursor, stage: str, is_temp: bool) -> None:
-    kind = "TEMPORARY " if is_temp else ""
-    cursor.execute(f"CREATE {kind}STAGE IF NOT EXISTS {stage}")
+    if is_temp:
+        # Server-side encryption only: a client-side encrypted stage makes the
+        # driver encrypt each part into a second copy in memory before the PUT.
+        cursor.execute(
+            f"CREATE TEMPORARY STAGE IF NOT EXISTS {stage}"
+            f" ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE')"
+        )
+    else:
+        cursor.execute(f"CREATE STAGE IF NOT EXISTS {stage}")
 
 
 def _create_table_from_inferred_schema(
@@ -251,7 +256,7 @@ def _set_copy_into_schema_evolution(
 
 def reject_unsupported_columns(
     target_tables: list[str],
-    files: list[Path],
+    tables: list[pl.LazyFrame],
 ) -> None:
     """Fail before loading anything if a column has a type the bulk load cannot
     carry.
@@ -259,22 +264,16 @@ def reject_unsupported_columns(
     COPY INTO matches columns by name, which routes every parquet value through
     a variant, and a variant cannot be cast to BINARY ("Failed to cast variant
     value ... to BINARY"). Snowflake reports that per file once the stage and the
-    table already exist, so reading the parquet footer up front turns it into one
-    error naming the table and the offending columns.
+    table already exist, so reading the schema up front turns it into one error
+    naming the table and the offending columns.
     """
-    import pyarrow as pa
-    import pyarrow.parquet as pq
+    import polars as pl
 
     from tabsdatak.conn.snowflake.error import SnowflakeErrorCode
 
-    for table, path in zip(target_tables, files):
-        schema = pq.read_schema(str(path))
+    for table, frame in zip(target_tables, tables):
         offenders = [
-            f.name
-            for f in schema
-            if pa.types.is_binary(f.type)
-            or pa.types.is_large_binary(f.type)
-            or pa.types.is_fixed_size_binary(f.type)
+            name for name, dtype in frame.collect_schema().items() if dtype == pl.Binary
         ]
         if offenders:
             raise SnowflakeErrorCode.SNOWFLAKE_8.exception(
@@ -283,11 +282,11 @@ def reject_unsupported_columns(
             )
 
 
-def write_all_tables(cfg: SnowflakeWriteCfg, files: list[Path]) -> None:
-    """Bulk-load each parquet file in ``files`` into its corresponding
-    table in ``cfg.target_tables``. Opens a single Snowflake connection
-    per call and re-uses it across every (file, table) pair."""
-    reject_unsupported_columns(list(cfg.target_tables), files)
+def write_all_tables(cfg: SnowflakeWriteCfg, tables: list[pl.LazyFrame]) -> None:
+    """Bulk-load each frame in ``tables`` into its corresponding table in
+    ``cfg.target_tables``. Opens a single Snowflake connection per call and
+    re-uses it across every (frame, table) pair."""
+    reject_unsupported_columns(list(cfg.target_tables), tables)
 
     logger.debug(
         "snowflake: establishing connection to account %r",
@@ -307,10 +306,12 @@ def write_all_tables(cfg: SnowflakeWriteCfg, files: list[Path]) -> None:
         # ``strict`` also holds the merge configs to one per table: the plugin
         # normalizes them to that shape, and a mismatch here would silently
         # merge one table by another's keys.
-        merge_cfgs = cfg.merge_cfgs or [None] * len(cfg.target_tables)
-        for i, (file_path, table, merge_cfg) in enumerate(
+        merge_cfgs: list[MergeCfg | None] = (
+            list(cfg.merge_cfgs) if cfg.merge_cfgs else [None] * len(cfg.target_tables)
+        )
+        for i, (frame, table, merge_cfg) in enumerate(
             zip(
-                files,
+                tables,
                 cfg.target_tables,
                 merge_cfgs,
                 strict=True,
@@ -328,7 +329,7 @@ def write_all_tables(cfg: SnowflakeWriteCfg, files: list[Path]) -> None:
                 cfg,
                 stage,
                 is_temp,
-                Path(file_path),
+                frame,
                 table,
                 merge_cfg,
             )
@@ -343,19 +344,18 @@ def _write_one(
     cfg: SnowflakeWriteCfg,
     stage: str,
     is_temp: bool,
-    file_path: Path,
+    frame: pl.LazyFrame,
     table: str,
     merge_cfg: MergeCfg | None = None,
 ) -> None:
-    import polars as pl
-
     sql_table = _fq_for_sql(table)
-    logger.info("Uploading %s -> %s", file_path.name, sql_table)
+    logger.info("Staging the table for %s", sql_table)
     cursor = sf_conn.cursor()
     try:
         _create_stage_if_not_exists(cursor, stage, is_temp)
         if cfg.if_table_exists == "merge":
-            _merge_one(cursor, cfg, stage, file_path, sql_table, merge_cfg)
+            assert merge_cfg is not None
+            _merge_one(cursor, cfg, stage, frame, sql_table, merge_cfg)
             return
         # Append is the only disposition that stamps: a merge has returned
         # above, and a replace is refused the column by SnowflakeDest.validate.
@@ -366,8 +366,8 @@ def _write_one(
         if watermark is not None and check_watermark_column(
             cursor, sql_table, watermark, cfg.ctx.transaction_id
         ):
-            # Asked before the batch is rewritten and staged: a rerun that has
-            # nothing to do should not pay to build the file it will not load.
+            # Asked before the batch is staged: a rerun that has nothing to do
+            # should not pay to read and ship rows it will not load.
             logger.info(
                 "Skipping append onto %s: watermark column %s already has value %s",
                 sql_table,
@@ -375,63 +375,63 @@ def _write_one(
                 cfg.ctx.transaction_id,
             )
             return
-        with spooled_parquet(
-            watermarked_batch(
-                pl.scan_parquet(file_path), watermark, cfg.ctx.transaction_id
-            ),
-            file_path.name,
-        ) as batch:
-            file_name = put_file_to_stage(cursor, batch, stage)
-        _create_table_from_inferred_schema(cursor, stage, file_name, sql_table)
-        if watermark is not None:
-            # Strict is what makes this necessary: it adds nothing, so without
-            # this the target never gains the column, the COPY drops what it
-            # cannot match, and the rerun guard reads every run as the first.
-            # The same exception the merge carves out for its own watermark.
-            #
-            # Ahead of the evolution pass so that under "update" the column is
-            # already there when the diff runs, leaving one place that adds it
-            # rather than two engines each having a claim.
-            #
-            # A target that predates the watermark keeps NULL in the rows it
-            # already holds; only the rows this COPY brings in are stamped.
-            ensure_watermark_column(cursor, sql_table, watermark)
-        evolving = cfg.schema_evolution == "update"
-        natively = cfg.schema_evolution_engine == "native"
-        logger.debug(
-            "Setting schema evolution for %s (if_table_exists=%s,"
-            " schema_evolution=%s, engine=%s)",
-            sql_table,
-            cfg.if_table_exists,
-            cfg.schema_evolution,
-            cfg.schema_evolution_engine,
-        )
-        # Emitted whichever engine is in play, and false for both of the cases
-        # that are not native evolution: the mark persists on the table, so a
-        # target an earlier native run set would otherwise go on evolving
-        # underneath the Iceberg pass -- or after the write asked for strict.
-        _set_copy_into_schema_evolution(cursor, evolving and natively, sql_table)
-        if evolving and not natively:
-            # Reads the staged file before the COPY purges it, and runs before
-            # the TRUNCATE so a replace still evolves the table it is about to
-            # refill.
-            SnowflakeSchemaEvolver(cursor).evolve(
-                sql_table, inferred_columns(cursor, stage, file_name)
-            )
-
-        if cfg.if_table_exists == "replace":
-            logger.debug(
-                "Truncating %s before COPY (if_table_exists=replace)", sql_table
-            )
-            cursor.execute(f"TRUNCATE {sql_table}")
-        copy_into(
+        with staged_frame(
             cursor,
+            watermarked_batch(frame, watermark, cfg.ctx.transaction_id),
             stage,
-            file_name,
-            sql_table,
-            match_by_column_name=cfg.match_by_column_name,
-            purge=cfg.purge,
-        )
+        ) as folder:
+            _create_table_from_inferred_schema(
+                cursor, stage, first_part(folder), sql_table
+            )
+            if watermark is not None:
+                # Strict is what makes this necessary: it adds nothing, so without
+                # this the target never gains the column, the COPY drops what it
+                # cannot match, and the rerun guard reads every run as the first.
+                # The same exception the merge carves out for its own watermark.
+                #
+                # Ahead of the evolution pass so that under "update" the column is
+                # already there when the diff runs, leaving one place that adds it
+                # rather than two engines each having a claim.
+                #
+                # A target that predates the watermark keeps NULL in the rows it
+                # already holds; only the rows this COPY brings in are stamped.
+                ensure_watermark_column(cursor, sql_table, watermark)
+            evolving = cfg.schema_evolution == "update"
+            natively = cfg.schema_evolution_engine == "native"
+            logger.debug(
+                "Setting schema evolution for %s (if_table_exists=%s,"
+                " schema_evolution=%s, engine=%s)",
+                sql_table,
+                cfg.if_table_exists,
+                cfg.schema_evolution,
+                cfg.schema_evolution_engine,
+            )
+            # Emitted whichever engine is in play, and false for both of the cases
+            # that are not native evolution: the mark persists on the table, so a
+            # target an earlier native run set would otherwise go on evolving
+            # underneath the Iceberg pass -- or after the write asked for strict.
+            _set_copy_into_schema_evolution(cursor, evolving and natively, sql_table)
+            if evolving and not natively:
+                # Reads the staged file before the COPY purges it, and runs before
+                # the TRUNCATE so a replace still evolves the table it is about to
+                # refill.
+                SnowflakeSchemaEvolver(cursor).evolve(
+                    sql_table, inferred_columns(cursor, stage, first_part(folder))
+                )
+
+            if cfg.if_table_exists == "replace":
+                logger.debug(
+                    "Truncating %s before COPY (if_table_exists=replace)", sql_table
+                )
+                cursor.execute(f"TRUNCATE {sql_table}")
+            copy_into(
+                cursor,
+                stage,
+                folder,
+                sql_table,
+                match_by_column_name=cfg.match_by_column_name,
+                purge=cfg.purge,
+            )
     finally:
         cursor.close()
 
@@ -440,7 +440,7 @@ def _merge_one(
     cursor,
     cfg: SnowflakeWriteCfg,
     stage: str,
-    file_path: Path,
+    frame: pl.LazyFrame,
     sql_table: str,
     merge_cfg: MergeCfg,
 ) -> None:
@@ -455,8 +455,6 @@ def _merge_one(
     scratch table, which is templated from the batch and has nothing to evolve
     onto. A merge evolves its target with ``ALTER`` statements instead.
     """
-    import polars as pl
-
     merge_batch(
         SnowflakeMergeDialect(
             cursor,
@@ -465,7 +463,7 @@ def _merge_one(
             purge=cfg.purge,
         ),
         target=sql_table,
-        batch=pl.scan_parquet(file_path),
+        batch=frame,
         cfg=merge_cfg._sql_merge_cfg(),
         schema_evolution=cfg.schema_evolution,
         ctx=cfg.ctx,

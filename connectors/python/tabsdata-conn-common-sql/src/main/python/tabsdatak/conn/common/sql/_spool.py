@@ -7,10 +7,8 @@ from __future__ import annotations
 import contextlib
 import io
 import queue
-import tempfile
 import threading
 from collections.abc import Buffer, Iterator
-from pathlib import Path
 from typing import IO, TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
@@ -18,14 +16,6 @@ if TYPE_CHECKING:
 
 PIPE_DEPTH = 4
 PUT_WAIT_SECONDS = 0.1
-
-
-@contextlib.contextmanager
-def spooled_parquet(frame: pl.LazyFrame, name: str) -> Iterator[Path]:
-    with tempfile.TemporaryDirectory() as work:
-        path = Path(work) / name
-        frame.sink_parquet(path)
-        yield path
 
 
 class _End:

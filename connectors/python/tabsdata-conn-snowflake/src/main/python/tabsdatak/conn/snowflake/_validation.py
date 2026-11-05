@@ -72,7 +72,16 @@ def merge_column_key(name: str) -> str:
     hit ``ORDER_ID``; a double-quoted name is case-sensitive and kept verbatim.
     """
     (part,) = unfqn(name, _SNOWFLAKE_FQN_DEF)
+    assert part is not None
     return part if name.startswith('"') else part.upper()
+
+
+def bare_parts(name: str) -> list[str]:
+    parts = unfqn(name, _SNOWFLAKE_FQN_DEF)
+    present = [part for part in parts if part is not None]
+    if len(present) != len(parts):
+        raise ValueError(f"Incomplete Snowflake identifier {name!r}")
+    return present
 
 
 SNOWFLAKE_DISTINCT_TABLES_VALIDATION = distinct_names_validate(

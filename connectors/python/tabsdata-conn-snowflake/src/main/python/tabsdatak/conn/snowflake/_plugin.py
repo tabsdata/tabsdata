@@ -8,6 +8,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+import polars as pl
+
 from tabsdatak.conn.snowflake import (
     DestCfgKey,
     DestCfgSpec,
@@ -20,7 +22,6 @@ from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    TableFileSpec,
 )
 
 logger = logging.getLogger(__name__)
@@ -98,13 +99,15 @@ def _is_connection_error(exc: BaseException) -> bool:
     }
 
 
-class SnowflakeDestPlugin(DestPlugin[SnowflakeDestConn, SnowflakeDest]):
+class SnowflakeDestPlugin(
+    DestPlugin[SnowflakeDestConn, SnowflakeDest, list[pl.LazyFrame]],
+):
     def write_out(
         self,
         ctx: DestContext,
         conn: SnowflakeDestConn,
         dest: SnowflakeDest,
-        tables: list[TableFileSpec],
+        tables: list[pl.LazyFrame],
     ) -> None:
         # noinspection PyProtectedMember
         from tabsdatak.conn.snowflake import _impl
@@ -116,7 +119,7 @@ class SnowflakeDestPlugin(DestPlugin[SnowflakeDestConn, SnowflakeDest]):
         # doesn't fight us.
         logging.getLogger("snowflake").setLevel(cfg.logging_level)
 
-        # Verifies that the number of incoming parquet files matches
+        # Verifies that the number of incoming tables matches
         # the destination's declared ``tables`` (SNOWFLAKE_4).
         if len(dest.tables) != len(tables):
             # noinspection PyProtectedMember
@@ -137,7 +140,7 @@ class SnowflakeDestPlugin(DestPlugin[SnowflakeDestConn, SnowflakeDest]):
             merge_cfgs=dest._merge_cfgs(),
         )
         try:
-            _impl.write_all_tables(write_cfg, list(tables))
+            _impl.write_all_tables(write_cfg, tables)
         except Exception as e:  # noqa: BLE001 -- runtime wrapper
             if _is_connection_error(e):
                 # noinspection PyProtectedMember
