@@ -157,6 +157,7 @@ normalized_licenses = {
     "MPL-2.0": "Mozilla Public License Version 2.0",                                                                                                                                           # noqa: E231,E241,E501
     "NVIDIA PROPRIETARY SOFTWARE": "NVIDIA Proprietary License",                                                                                                                               # noqa: E231,E241,E501
     "OpenSSL": "OpenSSL License",                                                                                                                                                              # noqa: E231,E241,E501
+    "Other_Proprietary License": "Apache License Version 2.0 or MIT License or NVIDIA Proprietary License",                                                                                    # noqa: E231,E241,E501
     "OTHER_PROPRIETARY LICENSE": "Apache License Version 2.0 or MIT License or NVIDIA Proprietary License",                                                                                    # noqa: E231,E241,E501
     "PSF-2.0": "Python Software Foundation License Version 2.0",                                                                                                                               # noqa: E231,E241,E501
     "PYTHON SOFTWARE FOUNDATION LICENSE": "Python Software Foundation License Version 2.0",                                                                                                    # noqa: E231,E241,E501
