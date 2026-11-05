@@ -6,6 +6,7 @@ pub mod graphics;
 pub mod readers;
 pub mod symbols;
 pub mod watashi;
+pub mod writers;
 
 use pyo3::prelude::PyModuleMethods;
 use pyo3::types::PyAnyMethods;
@@ -24,6 +25,7 @@ const WATASHI_MODULE_NAME: &str = "watashi";
 const SYMBOLS_MODULE_NAME: &str = "symbols";
 const GRAPHICS_MODULE_NAME: &str = "graphics";
 const READERS_MODULE_NAME: &str = "readers";
+const WRITERS_MODULE_NAME: &str = "writers";
 
 #[pymodule]
 fn _foundation(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -85,6 +87,13 @@ fn _foundation(module: &Bound<'_, PyModule>) -> PyResult<()> {
 
     readers_module.add_class::<readers::ArrowStream>()?;
     readers_module.add_class::<readers::formats::csv::CsvCutter>()?;
+
+    let writers_module = register_py_module(WRITERS_MODULE_NAME, &root_module, py)?;
+
+    writers_module.add_function(wrap_pyfunction!(
+        writers::formats::avro::avro,
+        &writers_module
+    )?)?;
 
     Ok(())
 }
