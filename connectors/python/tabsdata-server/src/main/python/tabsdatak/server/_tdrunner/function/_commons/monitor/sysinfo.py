@@ -83,7 +83,7 @@ class SystemReport:
         self.section("cpu")
         self.record("cgroup", self.cgroup_version)
         self.record("node_cpus", os.cpu_count)
-        self.record("usable_cpus", lambda: len(os.sched_getaffinity(0)))
+        self.record("usable_cpus", self.usable_cpus)
         self.record("cgroup_cpu_limit", self.cpu_quota)
         self.record("cgroup_cpu_throttling", self.cpu_throttling)
 
@@ -242,8 +242,17 @@ class SystemReport:
         return found
 
     @staticmethod
+    def usable_cpus() -> int | str:
+        try:
+            return len(os.sched_getaffinity(0))
+        except (AttributeError, OSError):
+            return UNAVAILABLE
+
+    @staticmethod
     def block_devices() -> list[str]:
         devices: list[str] = []
+        if not os.path.isdir(SYS_BLOCK):
+            return devices
         for name in sorted(os.listdir(SYS_BLOCK)):
             if name.startswith(VIRTUAL_BLOCK_PREFIXES):
                 continue
