@@ -7,8 +7,9 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
+
+import polars as pl
 
 from tabsdatak.conn.bigquery import (
     BigQueryDest,
@@ -26,7 +27,6 @@ from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    TableFileSpec,
 )
 
 # All ``google-cloud-*`` imports stay inside the plugin method bodies
@@ -81,16 +81,16 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
     )
 
 
-class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
+class _BigQueryDestPlugin(
+    DestPlugin[BigQueryDestConn, BigQueryDest, list[pl.LazyFrame]],
+):
     def write_out(
         self,
         ctx: DestContext,
         conn: BigQueryDestConn,
         dest: BigQueryDest,
-        tables: list[TableFileSpec],
+        tables: list[pl.LazyFrame],
     ) -> None:
-        import polars as pl
-
         # noinspection PyProtectedMember
         from tabsdatak.conn.bigquery._evolution import (
             BigQuerySchemaEvolver,
@@ -101,9 +101,11 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
         from tabsdatak.conn.bigquery._impl import (
             BigQueryWriteCfg,
             build_bigquery_client,
-            build_gcs_client,
             build_load_job_config,
+            discard,
             quote_table,
+            stage,
+            staging_store,
         )
 
         # noinspection PyProtectedMember
@@ -111,9 +113,6 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
 
         # noinspection PyProtectedMember
         from tabsdatak.conn.common.sql._merge._driver import merge_batch
-
-        # noinspection PyProtectedMember
-        from tabsdatak.conn.common.sql._spool import spooled_parquet
 
         # noinspection PyProtectedMember
         from tabsdatak.conn.common.sql._watermark import watermarked_batch
@@ -138,7 +137,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                 slots=len(tables),
             )
 
-        project_str = conn._project() if conn.project is not None else None
+        project_str = conn._project()
 
         logger.debug("bigquery: establishing BigQuery client (project=%r)", project_str)
         try:
@@ -153,40 +152,33 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                 project=project_str,
             )
 
-        logger.debug("bigquery: establishing GCS staging client")
-        gcs_client = build_gcs_client(
-            conn.staging.credentials,
-            conn.staging.cfg,
-        )
-
-        staging_bucket = conn.staging._bucket()
-
-        staging_uris: list[str] = []
-        # URIs a rerun guard declined to stage, so neither the load loop nor
-        # the cleanup goes looking for them.
-        skipped: set[str] = set()
-        for index in range(len(tables)):
-            file_name = (f"auxiliary_{index}_{uuid.uuid4().hex[:16]}.parquet").replace(
-                "-", "_"
+        store = staging_store(conn.staging)
+        staging_keys = [
+            cloud_full_path(
+                conn.staging._base_path(),
+                f"auxiliary_{index}_{uuid.uuid4().hex[:16]}.parquet",
             )
-            relative = cloud_full_path(conn.staging._base_path(), file_name)
-            staging_uris.append(f"gs://{staging_bucket}/{relative}")
+            for index in range(len(tables))
+        ]
+        staging_uris = [store.uri(key) for key in staging_keys]
+        # URIs a rerun guard declined to stage, so the load loop skips them.
+        skipped: set[str] = set()
 
         total = len(write_cfg.target_tables)
-        merging = write_cfg.if_table_exists == "merge"
-        # One cfg per table when merging (``validate`` guarantees it),
-        # so the merge config travels with its table rather than
-        # being indexed out by the 1-based progress counter.
-        merge_cfgs = write_cfg.merge_cfgs or [None] * total
         try:
-            if merging:
+            if write_cfg.if_table_exists == "merge":
+                # One cfg per table when merging (``validate`` guarantees it),
+                # so the merge config travels with its table rather than being
+                # indexed out by the 1-based progress counter.
+                merge_cfgs = write_cfg.merge_cfgs
+                assert merge_cfgs is not None
                 # A merge stages, creates, evolves and writes one table at a
                 # time: the driver owns that sequence, and everything BigQuery
                 # contributes to it lives in the dialect.
-                for i, (parquet_path, uri, table_fqn, merge_cfg) in enumerate(
+                for i, (frame, key, table_fqn, merge_cfg) in enumerate(
                     zip(
                         tables,
-                        staging_uris,
+                        staging_keys,
                         write_cfg.target_tables,
                         merge_cfgs,
                     ),
@@ -199,12 +191,12 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                         merge_batch(
                             BigQueryMergeDialect(
                                 bq_client,
-                                gcs_client,
-                                uri=uri,
+                                store,
+                                key=key,
                                 target_fqn=table_fqn,
                             ),
                             target=quote_table(table_fqn),
-                            batch=pl.scan_parquet(parquet_path),
+                            batch=frame,
                             cfg=merge_cfg._sql_merge_cfg(),
                             schema_evolution=write_cfg.schema_evolution,
                             ctx=ctx,
@@ -236,17 +228,17 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                 else None
             )
 
-            # Phase 1: upload each parquet to its staging GCS URI.
-            logger.info("bigquery: staging %d parquet file(s) to GCS", total)
-            for i, (parquet_path, uri, table_fqn) in enumerate(
-                zip(tables, staging_uris, write_cfg.target_tables), 1
+            # Phase 1: stage each table as parquet at its GCS URI.
+            logger.info("bigquery: staging %d table(s) to GCS", total)
+            for i, (frame, key, uri, table_fqn) in enumerate(
+                zip(tables, staging_keys, staging_uris, write_cfg.target_tables), 1
             ):
                 if watermark is not None and check_watermark_column(
                     bq_client, table_fqn, watermark, ctx.transaction_id
                 ):
-                    # Asked before the batch is rewritten and uploaded: a rerun
-                    # that has nothing to do should not pay to build and ship a
-                    # file it will not load.
+                    # Asked before the batch is staged: a rerun that has
+                    # nothing to do should not pay to read and ship rows it
+                    # will not load.
                     logger.info(
                         "bigquery: skipping append onto %r: watermark column %s"
                         " already has value %s",
@@ -258,13 +250,11 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                     continue
                 logger.debug("bigquery: staging %d/%d to %s", i, total, uri)
                 try:
-                    with spooled_parquet(
-                        watermarked_batch(
-                            pl.scan_parquet(parquet_path), watermark, ctx.transaction_id
-                        ),
-                        Path(parquet_path).name,
-                    ) as batch:
-                        _upload_to_gcs(gcs_client, batch, uri)
+                    stage(
+                        store,
+                        key,
+                        watermarked_batch(frame, watermark, ctx.transaction_id),
+                    )
                 except Exception as e:
                     raise BigQueryErrorCode.BIGQUERY_6.exception(
                         cause=e,
@@ -328,46 +318,10 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                     )
                 logger.debug("bigquery: finished table %r", table_fqn)
         finally:
-            # Best-effort cleanup of staging files (mirrors the
-            # legacy behaviour). A failed deletion is logged at WARN
-            # level but never propagates -- the user's load already
-            # succeeded / failed; the auxiliary file's fate is
-            # secondary.
-            for uri in staging_uris:
-                # A URI a rerun guard skipped was never uploaded, so deleting
-                # it would warn about a file that is absent by design.
-                if uri in skipped:
-                    continue
-                logger.debug("bigquery: deleting staged file %s", uri)
-                try:
-                    _delete_gcs_uri(gcs_client, uri)
-                except Exception:  # pragma: no cover - defensive
-                    logger.warning(
-                        "Failed to delete auxiliary file %r from GCS",
-                        uri,
-                    )
-
-
-def _upload_to_gcs(gcs_client: Any, local_path: Path, gs_uri: str) -> None:
-    bucket_name, blob_name = _parse_gs_uri(gs_uri)
-    bucket = gcs_client.bucket(bucket_name)
-    blob = bucket.blob(blob_name)
-    blob.upload_from_filename(str(local_path))
-
-
-def _delete_gcs_uri(gcs_client: Any, gs_uri: str) -> None:
-    bucket_name, blob_name = _parse_gs_uri(gs_uri)
-    bucket = gcs_client.bucket(bucket_name)
-    blob = bucket.blob(blob_name)
-    blob.delete()
-
-
-def _parse_gs_uri(gs_uri: str) -> tuple[str, str]:
-    if not gs_uri.lower().startswith("gs://"):
-        raise ValueError(f"Not a GCS URI: {gs_uri!r}")
-    rest = gs_uri[len("gs://") :]
-    bucket, _, blob = rest.partition("/")
-    return bucket, blob
+            # Best effort: a staged file that cannot be deleted is logged and
+            # never fails the write, and one a rerun guard skipped or a failed
+            # sink left unwritten is simply absent.
+            discard(store, staging_keys)
 
 
 def _load_table_from_uri(

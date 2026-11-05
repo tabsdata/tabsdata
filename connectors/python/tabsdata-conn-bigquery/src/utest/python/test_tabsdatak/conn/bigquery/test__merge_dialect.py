@@ -25,6 +25,7 @@ from tabsdatak.conn.bigquery import MergeCfg, _iceberg, _impl as impl
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery._merge_dialect import BigQueryMergeDialect
 from tabsdatak.conn.bigquery.error import BigQueryErrorCode, BigQueryRuntimeException
+from tabsdatak.conn.common.file._store import FileStore
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge import WatermarkCfg
@@ -94,8 +95,10 @@ def _named_client(schemas: dict[str, list[str]]) -> MagicMock:
     })
 
 
-def _dialect(client, *, uri: str = "gs://bucket/in.parquet") -> BigQueryMergeDialect:
-    return BigQueryMergeDialect(client, MagicMock(), uri=uri, target_fqn=_TARGET)
+def _dialect(client, *, key: str = "in.parquet") -> BigQueryMergeDialect:
+    return BigQueryMergeDialect(
+        client, FileStore("gs://bucket"), key=key, target_fqn=_TARGET
+    )
 
 
 def _staged(fields: list, relation: str = _QUOTED_STAGING) -> Staged:
@@ -507,7 +510,7 @@ def test_staging_loads_the_batch_into_a_table_of_its_own(work_dir, monkeypatch):
     from tabsdatak.conn.bigquery import _plugin
 
     monkeypatch.setattr(_plugin, "_load_table_from_uri", fake_load)
-    monkeypatch.setattr(_plugin, "_upload_to_gcs", lambda *a: None)
+    monkeypatch.setattr(impl, "stage", lambda *a: None)
 
     batch = work_dir / "in.parquet"
     pl.DataFrame({"order_id": [1], "op": ["i"]}).write_parquet(batch)
@@ -529,7 +532,7 @@ def test_staging_drops_the_table_when_the_merge_fails(work_dir, monkeypatch):
     from tabsdatak.conn.bigquery import _plugin
 
     monkeypatch.setattr(_plugin, "_load_table_from_uri", lambda *a, **k: None)
-    monkeypatch.setattr(_plugin, "_upload_to_gcs", lambda *a: None)
+    monkeypatch.setattr(impl, "stage", lambda *a: None)
     monkeypatch.setattr(impl, "temp_table_fqn", lambda table: _STAGING)
 
     batch = work_dir / "in.parquet"
@@ -539,6 +542,19 @@ def test_staging_drops_the_table_when_the_merge_fails(work_dir, monkeypatch):
         with _dialect(client).staging(_QUOTED_TARGET, pl.scan_parquet(batch)):
             raise RuntimeError("merge blew up")
     client.delete_table.assert_called_once_with(_STAGING, not_found_ok=True)
+
+
+def test_staging_reports_a_failed_write_as_bigquery_6(work_dir, monkeypatch):
+    def fail(*args):
+        raise RuntimeError("gcs write boom")
+
+    monkeypatch.setattr(impl, "stage", fail)
+    batch = pl.LazyFrame({"order_id": [1], "op": ["i"]})
+    with pytest.raises(BigQueryRuntimeException) as ei:
+        with _dialect(MagicMock()).staging(_QUOTED_TARGET, batch):
+            pass
+    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_6
+    assert ei.value.extra["uri"] == "gs://bucket/in.parquet"
 
 
 # ---------------------------------------------------------------------------
@@ -679,12 +695,14 @@ def _stage(client, work_dir, monkeypatch, watermark_cfg):
     from tabsdatak.conn.bigquery import _plugin
 
     monkeypatch.setattr(_plugin, "_load_table_from_uri", lambda *a, **k: None)
-    monkeypatch.setattr(_plugin, "_upload_to_gcs", lambda *a: None)
+    monkeypatch.setattr(impl, "stage", lambda *a: None)
     monkeypatch.setattr(impl, "temp_table_fqn", lambda table: _STAGING)
 
     batch = work_dir / "in.parquet"
     pl.DataFrame({"order_id": [1], "op": ["i"]}).write_parquet(batch)
-    with _dialect(client).staging(_QUOTED_TARGET, pl.scan_parquet(batch), watermark_cfg) as staged:
+    with _dialect(client).staging(
+        _QUOTED_TARGET, pl.scan_parquet(batch), watermark_cfg
+    ) as staged:
         return staged
 
 

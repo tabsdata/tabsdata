@@ -5,14 +5,19 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from tabsdatak.common._storage.transfer import GOOGLE_SERVICE_ACCOUNT_KEY_OPTION
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import (
     BigQueryDest,
     BigQueryDestConn,
+    DestCfgSpec,
+    GCSLocation,
     IfTableExistsSpec,
     MergeCfg,
     SchemaEvolutionSpec,
@@ -26,12 +31,18 @@ from tabsdatak.conn.bigquery._validation import _BIGQUERY_FQN_DEF
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._validation import fqn
+from tabsdatak.conn.common.file._store import OBSTORE_PREFIX, FileStore, forwarded
 from tabsdatak.conn.common.sql.cdc.constants import (
     OP_DELETE,
     OP_INSERT,
     OP_UPDATE,
 )
 from tabsdatak.conn.common.types import CfgSpec, GCPJson, _convert
+
+if TYPE_CHECKING:
+    import polars as pl
+
+logger = logging.getLogger(__name__)
 
 # --- Constants -------------------------------------------------------
 
@@ -89,16 +100,38 @@ def build_bigquery_client(
     return bigquery.Client.from_service_account_info(info, **kwargs)
 
 
-def build_gcs_client(
-    credentials: GCPJson,
-    connect_args: CfgSpec | None,
-) -> Any:
-    """Build a ``google.cloud.storage.Client``."""
-    from google.cloud import storage
+def staging_store(location: GCSLocation) -> FileStore:
+    root = f"gs://{location._bucket()}"
+    key = json.dumps(_gcp_json_to_dict(location.credentials))
+    ignored = sorted(k for k in location.cfg or {} if not k.startswith(OBSTORE_PREFIX))
+    if ignored:
+        logger.warning(
+            "bigquery: staging cfg keys %s are ignored; only %r keys apply",
+            ignored,
+            f"{OBSTORE_PREFIX}*",
+        )
+    options = {GOOGLE_SERVICE_ACCOUNT_KEY_OPTION: key}
+    return FileStore(root, {**options, **forwarded(root, location.cfg)})
 
-    info = _gcp_json_to_dict(credentials)
-    kwargs: dict[str, Any] = dict(connect_args or {})
-    return storage.Client.from_service_account_info(info, **kwargs)
+
+def stage(store: FileStore, key: str, frame: pl.LazyFrame) -> None:
+    writer = store.open_writer(key)
+    frame.sink_parquet(writer)
+    writer.close()
+
+
+def discard(store: FileStore, keys: list[str]) -> None:
+    for key in keys:
+        try:
+            store.delete([key])
+        except FileNotFoundError:
+            logger.debug("bigquery: staged file %s was never written", key)
+        except Exception:
+            logger.warning(
+                "bigquery: failed to delete staged file %s",
+                store.uri(key),
+                exc_info=True,
+            )
 
 
 # --- Table FQN helpers -----------------------------------------------
@@ -169,7 +202,7 @@ class BigQueryWriteCfg:
     # form the target names it by; ``None`` when the write names no watermark.
     # A merge reads its own off ``merge_cfgs``.
     watermark_column: str | None = None
-    dest_cfg: CfgSpec | None = None
+    dest_cfg: DestCfgSpec | None = None
 
     @classmethod
     def from_dest(
@@ -180,8 +213,8 @@ class BigQueryWriteCfg:
         # from the upstream input plugin's table list, which the new
         # SPI does not yet surface. The defensive check in
         # ``_plugin.write_out`` raises BIGQUERY_4 in that case.
-        project = conn._project() if conn.project is not None else None
-        dataset = conn._dataset() if conn.dataset is not None else None
+        project = conn._project()
+        dataset = conn._dataset()
         target_tables: list[str] = []
         if dest.tables is not None:
             for t in dest.tables:

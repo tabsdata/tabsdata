@@ -31,6 +31,7 @@ from tabsdatak.conn.bigquery.error import (
     BigQueryValidateException,
 )
 from tabsdatak.conn.common.error import ConnInitException
+from tabsdatak.conn.common.file._store import FileStore
 from tabsdatak.conn.common.types import GCPJson
 
 pytestmark = pytest.mark.bigquery
@@ -66,6 +67,40 @@ def work_dir(tmp_path: Path) -> Path:
     return out
 
 
+class _LocalStaging:
+    """The staging bucket as a local object store, recording the rows of every
+    object staged, read as soon as it is written: the write deletes it later."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.store = FileStore(root.as_uri())
+        self.staged: list[tuple[str, list[dict]]] = []
+        self.fail: Exception | None = None
+
+    def stage(self, store: FileStore, key: str, frame: pl.LazyFrame) -> None:
+        if self.fail is not None:
+            raise self.fail
+        _STAGE(store, key, frame)
+        self.staged.append((key, pl.read_parquet(self.root / key).to_dicts()))
+
+    def objects(self) -> list[Path]:
+        return [path for path in self.root.rglob("*") if path.is_file()]
+
+
+_STAGE = impl.stage
+_STAGING_STORE = impl.staging_store
+
+
+@pytest.fixture(autouse=True)
+def staging(monkeypatch, tmp_path: Path) -> _LocalStaging:
+    root = tmp_path / "bucket"
+    root.mkdir()
+    local = _LocalStaging(root)
+    monkeypatch.setattr(impl, "staging_store", lambda location: local.store)
+    monkeypatch.setattr(impl, "stage", local.stage)
+    return local
+
+
 # ---------------------------------------------------------------------------
 # Minimal connection / dest builders. Credentials are literal secrets so
 # resolution doesn't need a backing secret store; the underlying GCP / BQ
@@ -81,11 +116,12 @@ def _gcp_key() -> str:
     return '{"type": "service_account", "project_id": "p"}'
 
 
-def _staging() -> GCSLocation:
+def _staging(cfg: dict | None = None) -> GCSLocation:
     return GCSLocation(
         bucket="staging-bucket",
         credentials=GCPJson(json=Secret(_gcp_key())),
         base_path="/staging",
+        cfg=cfg,
     )
 
 
@@ -128,10 +164,6 @@ def _evolving_clients(monkeypatch, target_columns, batch_columns, target_exists=
         result=MagicMock(return_value=None)
     )
     monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
-
-    gcs_client = MagicMock(name="gcs")
-    gcs_client.bucket.return_value.blob.return_value = MagicMock()
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
     return bq_client
 
 
@@ -144,7 +176,7 @@ def _write(work_dir, dest_cfg=None, schema_evolution="update"):
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     plugin._BigQueryDestPlugin().write_out(
-        _dest_ctx(work_dir), _bare_conn(), dest, [src]
+        _dest_ctx(work_dir), _bare_conn(), dest, [pl.scan_parquet(src)]
     )
 
 
@@ -675,7 +707,7 @@ def test_dest_plugin_raises_bigquery_4_on_tables_slots_mismatch(work_dir):
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(BigQueryRuntimeException) as ei:
         plugin._BigQueryDestPlugin().write_out(
-            _dest_ctx(work_dir), _bare_conn(), dest, [src]
+            _dest_ctx(work_dir), _bare_conn(), dest, [pl.scan_parquet(src)]
         )
     assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_4
 
@@ -685,7 +717,7 @@ def test_dest_plugin_raises_bigquery_4_when_empty_tables(work_dir):
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(BigQueryRuntimeException) as ei:
         plugin._BigQueryDestPlugin().write_out(
-            _dest_ctx(work_dir), _bare_conn(), dest, [src]
+            _dest_ctx(work_dir), _bare_conn(), dest, [pl.scan_parquet(src)]
         )
     assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_4
 
@@ -698,10 +730,6 @@ def test_dest_plugin_wraps_client_init_failure_as_bigquery_5(
         raise RuntimeError("client boom")
 
     monkeypatch.setattr(impl, "build_bigquery_client", _boom)
-    # GCS client construction shouldn't be reached, but a defensive
-    # stub keeps the test from accidentally creating a real one if the
-    # short-circuit regresses.
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: MagicMock())
 
     dest = BigQueryDest(
         tables=["`my-project.analytics.users`"],
@@ -709,7 +737,7 @@ def test_dest_plugin_wraps_client_init_failure_as_bigquery_5(
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(BigQueryRuntimeException) as ei:
         plugin._BigQueryDestPlugin().write_out(
-            _dest_ctx(work_dir), _bare_conn(), dest, [src]
+            _dest_ctx(work_dir), _bare_conn(), dest, [pl.scan_parquet(src)]
         )
     assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_5
 
@@ -717,6 +745,7 @@ def test_dest_plugin_wraps_client_init_failure_as_bigquery_5(
 def test_dest_plugin_wraps_gcs_upload_failure_as_bigquery_6(
     monkeypatch,
     work_dir,
+    staging,
 ):
     bq_client = MagicMock(name="bq")
     monkeypatch.setattr(
@@ -725,13 +754,7 @@ def test_dest_plugin_wraps_gcs_upload_failure_as_bigquery_6(
         lambda *a, **kw: bq_client,
     )
 
-    gcs_client = MagicMock(name="gcs")
-    bucket = MagicMock(name="bucket")
-    blob = MagicMock(name="blob")
-    gcs_client.bucket.return_value = bucket
-    bucket.blob.return_value = blob
-    blob.upload_from_filename.side_effect = RuntimeError("gcs upload boom")
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
+    staging.fail = RuntimeError("gcs upload boom")
 
     dest = BigQueryDest(
         tables=["`my-project.analytics.users`"],
@@ -739,17 +762,16 @@ def test_dest_plugin_wraps_gcs_upload_failure_as_bigquery_6(
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(BigQueryRuntimeException) as ei:
         plugin._BigQueryDestPlugin().write_out(
-            _dest_ctx(work_dir), _bare_conn(), dest, [src]
+            _dest_ctx(work_dir), _bare_conn(), dest, [pl.scan_parquet(src)]
         )
     assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_6
-    # Best-effort cleanup still attempts to delete the staging URI even
-    # when the upload (which created the partial / nothing) failed.
-    blob.delete.assert_called()
+    assert staging.objects() == []
 
 
 def test_dest_plugin_wraps_load_job_failure_as_bigquery_7(
     monkeypatch,
     work_dir,
+    staging,
 ):
     load_job = MagicMock(name="load_job")
     load_job.result.side_effect = RuntimeError("load_job boom")
@@ -762,24 +784,18 @@ def test_dest_plugin_wraps_load_job_failure_as_bigquery_7(
         lambda *a, **kw: bq_client,
     )
 
-    gcs_client = MagicMock(name="gcs")
-    bucket = MagicMock(name="bucket")
-    blob = MagicMock(name="blob")
-    gcs_client.bucket.return_value = bucket
-    bucket.blob.return_value = blob
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
-
     dest = BigQueryDest(
         tables=["`my-project.analytics.users`"],
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(BigQueryRuntimeException) as ei:
         plugin._BigQueryDestPlugin().write_out(
-            _dest_ctx(work_dir), _bare_conn(), dest, [src]
+            _dest_ctx(work_dir), _bare_conn(), dest, [pl.scan_parquet(src)]
         )
     assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_7
-    # Upload succeeded, so cleanup runs unconditionally.
-    blob.delete.assert_called()
+    # The staged object is deleted however the load ends.
+    assert len(staging.staged) == 1
+    assert staging.objects() == []
 
 
 # ---------------------------------------------------------------------------
@@ -790,6 +806,7 @@ def test_dest_plugin_wraps_load_job_failure_as_bigquery_7(
 def test_dest_plugin_happy_path_calls_load_table_from_uri_per_table(
     monkeypatch,
     work_dir,
+    staging,
 ):
     load_job = MagicMock(name="load_job")
     load_job.result.return_value = None
@@ -803,13 +820,6 @@ def test_dest_plugin_happy_path_calls_load_table_from_uri_per_table(
         lambda *a, **kw: bq_client,
     )
 
-    gcs_client = MagicMock(name="gcs")
-    bucket = MagicMock(name="bucket")
-    blob = MagicMock(name="blob")
-    gcs_client.bucket.return_value = bucket
-    bucket.blob.return_value = blob
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
-
     dest = BigQueryDest(
         tables=[
             "`my-project.analytics.users`",
@@ -822,11 +832,11 @@ def test_dest_plugin_happy_path_calls_load_table_from_uri_per_table(
         _dest_ctx(work_dir),
         _bare_conn(),
         dest,
-        [src1, src2],
+        [pl.scan_parquet(src1), pl.scan_parquet(src2)],
     )
 
-    # Two parquet -> GCS uploads.
-    assert blob.upload_from_filename.call_count == 2
+    # Two tables staged to GCS.
+    assert len(staging.staged) == 2
     # Two BQ load jobs, one per table.
     assert bq_client.load_table_from_uri.call_count == 2
     # Load job called with bare (unquoted) table names.
@@ -837,8 +847,8 @@ def test_dest_plugin_happy_path_calls_load_table_from_uri_per_table(
         "my-project.analytics.users",
         "my-project.analytics.orders",
     ]
-    # Cleanup attempted for both staging URIs.
-    assert blob.delete.call_count == 2
+    # Both staged objects are deleted.
+    assert staging.objects() == []
 
 
 def _merge_ready_client() -> MagicMock:
@@ -870,13 +880,6 @@ def test_dest_plugin_loads_a_merge_batch_into_a_staging_table(monkeypatch, work_
     bq_client = _merge_ready_client()
     monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
 
-    gcs_client = MagicMock(name="gcs")
-    bucket = MagicMock(name="bucket")
-    blob = MagicMock(name="blob")
-    gcs_client.bucket.return_value = bucket
-    bucket.blob.return_value = blob
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
-
     dest = BigQueryDest(
         tables=["`my-project.analytics.users`"],
         if_table_exists="merge",
@@ -885,7 +888,7 @@ def test_dest_plugin_loads_a_merge_batch_into_a_staging_table(monkeypatch, work_
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
     plugin._BigQueryDestPlugin().write_out(
-        _dest_ctx(work_dir), _bare_conn(), dest, [src]
+        _dest_ctx(work_dir), _bare_conn(), dest, [pl.scan_parquet(src)]
     )
 
     (call,) = bq_client.load_table_from_uri.call_args_list
@@ -911,13 +914,6 @@ def test_dest_plugin_gives_each_merge_table_its_own_staging_table(
     bq_client = _merge_ready_client()
     monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
 
-    gcs_client = MagicMock(name="gcs")
-    bucket = MagicMock(name="bucket")
-    blob = MagicMock(name="blob")
-    gcs_client.bucket.return_value = bucket
-    bucket.blob.return_value = blob
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
-
     dest = BigQueryDest(
         tables=["`p.ds.users`", "`p.ds.orders`"],
         if_table_exists="merge",
@@ -927,7 +923,10 @@ def test_dest_plugin_gives_each_merge_table_its_own_staging_table(
     src1 = _make_parquet(work_dir / "in1.parquet", [{"id": 1, "op": "i"}])
     src2 = _make_parquet(work_dir / "in2.parquet", [{"id": 2, "op": "i"}])
     plugin._BigQueryDestPlugin().write_out(
-        _dest_ctx(work_dir), _bare_conn(), dest, [src1, src2]
+        _dest_ctx(work_dir),
+        _bare_conn(),
+        dest,
+        [pl.scan_parquet(src1), pl.scan_parquet(src2)],
     )
 
     loaded = [c.args[1] for c in bq_client.load_table_from_uri.call_args_list]
@@ -938,13 +937,6 @@ def test_dest_plugin_merges_the_staging_table_then_drops_it(monkeypatch, work_di
     bq_client = _merge_ready_client()
     monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
 
-    gcs_client = MagicMock(name="gcs")
-    bucket = MagicMock(name="bucket")
-    blob = MagicMock(name="blob")
-    gcs_client.bucket.return_value = bucket
-    bucket.blob.return_value = blob
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
-
     dest = BigQueryDest(
         tables=["`my-project.analytics.users`"],
         if_table_exists="merge",
@@ -953,7 +945,7 @@ def test_dest_plugin_merges_the_staging_table_then_drops_it(monkeypatch, work_di
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
     plugin._BigQueryDestPlugin().write_out(
-        _dest_ctx(work_dir), _bare_conn(), dest, [src]
+        _dest_ctx(work_dir), _bare_conn(), dest, [pl.scan_parquet(src)]
     )
 
     staged = bq_client.load_table_from_uri.call_args_list[0].args[1]
@@ -1019,11 +1011,10 @@ def _merge_dest(schema_evolution):
 def test_dest_plugin_evolves_the_target_before_merging(monkeypatch, work_dir):
     bq_client = _widening_client()
     monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: MagicMock())
 
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "note": "n", "op": "i"}])
     plugin._BigQueryDestPlugin().write_out(
-        _dest_ctx(work_dir), _bare_conn(), _merge_dest("update"), [src]
+        _dest_ctx(work_dir), _bare_conn(), _merge_dest("update"), [pl.scan_parquet(src)]
     )
 
     statements = _statements(bq_client)
@@ -1043,11 +1034,10 @@ def test_dest_plugin_evolves_the_target_before_merging(monkeypatch, work_dir):
 def test_dest_plugin_does_not_evolve_the_target_in_strict_mode(monkeypatch, work_dir):
     bq_client = _widening_client()
     monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: MagicMock())
 
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "note": "n", "op": "i"}])
     plugin._BigQueryDestPlugin().write_out(
-        _dest_ctx(work_dir), _bare_conn(), _merge_dest("strict"), [src]
+        _dest_ctx(work_dir), _bare_conn(), _merge_dest("strict"), [pl.scan_parquet(src)]
     )
 
     assert _statements(bq_client, "ALTER TABLE") == []
@@ -1056,35 +1046,15 @@ def test_dest_plugin_does_not_evolve_the_target_in_strict_mode(monkeypatch, work
     assert "`note`" not in merge
 
 
-def _uploaded_rows(blob: MagicMock) -> list[dict]:
-    """The rows of the parquet that reached GCS.
-
-    Read inside the upload call, since the coalesced file lives in a temp
-    directory that is gone by the time ``write_out`` returns.
-    """
-    return blob.captured
+def _uploaded_rows(staging: _LocalStaging) -> list[dict]:
+    return [row for _, rows in staging.staged for row in rows]
 
 
-def _capturing_gcs() -> tuple[MagicMock, MagicMock]:
-    gcs_client = MagicMock(name="gcs")
-    bucket = MagicMock(name="bucket")
-    blob = MagicMock(name="blob")
-    gcs_client.bucket.return_value = bucket
-    bucket.blob.return_value = blob
-    blob.captured = []
-
-    def upload_from_filename(path: str) -> None:
-        blob.captured.extend(pl.read_parquet(path).to_dicts())
-
-    blob.upload_from_filename.side_effect = upload_from_filename
-    return gcs_client, blob
-
-
-def test_dest_plugin_coalesces_the_batch_before_uploading_it(monkeypatch, work_dir):
+def test_dest_plugin_coalesces_the_batch_before_uploading_it(
+    monkeypatch, work_dir, staging
+):
     bq_client = _merge_ready_client()
     monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
-    gcs_client, blob = _capturing_gcs()
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
 
     src = _make_parquet(
         work_dir / "in.parquet",
@@ -1096,50 +1066,49 @@ def test_dest_plugin_coalesces_the_batch_before_uploading_it(monkeypatch, work_d
         ],
     )
     plugin._BigQueryDestPlugin().write_out(
-        _dest_ctx(work_dir), _bare_conn(), _merge_dest("strict"), [src]
+        _dest_ctx(work_dir), _bare_conn(), _merge_dest("strict"), [pl.scan_parquet(src)]
     )
 
     # Key 1 reduced to its net state; key 2 never existed.
-    assert _uploaded_rows(blob) == [{"id": 1, "other_id": 11, "op": "i"}]
+    assert _uploaded_rows(staging) == [{"id": 1, "other_id": 11, "op": "i"}]
 
 
 def test_dest_plugin_uploads_the_batch_untouched_outside_merge_mode(
-    monkeypatch, work_dir
+    monkeypatch, work_dir, staging
 ):
     load_job = MagicMock(name="load_job")
     load_job.result.return_value = None
     bq_client = MagicMock(name="bq")
     bq_client.load_table_from_uri.return_value = load_job
     monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
-    gcs_client, blob = _capturing_gcs()
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
 
     rows = [{"id": 1, "op": "i"}, {"id": 1, "op": "u"}]
     src = _make_parquet(work_dir / "in.parquet", rows)
     dest = BigQueryDest(tables=["`my-project.analytics.users`"])
     plugin._BigQueryDestPlugin().write_out(
-        _dest_ctx(work_dir), _bare_conn(), dest, [src]
+        _dest_ctx(work_dir), _bare_conn(), dest, [pl.scan_parquet(src)]
     )
 
-    assert _uploaded_rows(blob) == rows
+    assert _uploaded_rows(staging) == rows
 
 
 def test_dest_plugin_refuses_a_batch_without_the_marker_before_uploading(
-    monkeypatch, work_dir
+    monkeypatch, work_dir, staging
 ):
     bq_client = _merge_ready_client()
     monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
-    gcs_client, blob = _capturing_gcs()
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
 
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(BigQueryRuntimeException) as ei:
         plugin._BigQueryDestPlugin().write_out(
-            _dest_ctx(work_dir), _bare_conn(), _merge_dest("strict"), [src]
+            _dest_ctx(work_dir),
+            _bare_conn(),
+            _merge_dest("strict"),
+            [pl.scan_parquet(src)],
         )
     assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_15
     # Nothing was staged, so nothing was loaded either.
-    blob.upload_from_filename.assert_not_called()
+    assert staging.staged == []
     bq_client.load_table_from_uri.assert_not_called()
 
 
@@ -1187,11 +1156,13 @@ def test_dest_plugin_creates_a_missing_target_before_merging(
     able to bootstrap a target too."""
     bq_client = _creating_client()
     monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: MagicMock())
 
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "note": "n", "op": "i"}])
     plugin._BigQueryDestPlugin().write_out(
-        _dest_ctx(work_dir), _bare_conn(), _merge_dest(schema_evolution), [src]
+        _dest_ctx(work_dir),
+        _bare_conn(),
+        _merge_dest(schema_evolution),
+        [pl.scan_parquet(src)],
     )
 
     statements = _statements(bq_client)
@@ -1210,11 +1181,10 @@ def test_dest_plugin_does_not_create_a_target_that_already_exists(
 ):
     bq_client = _merge_ready_client()
     monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: MagicMock())
 
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
     plugin._BigQueryDestPlugin().write_out(
-        _dest_ctx(work_dir), _bare_conn(), _merge_dest("update"), [src]
+        _dest_ctx(work_dir), _bare_conn(), _merge_dest("update"), [pl.scan_parquet(src)]
     )
 
     assert _statements(bq_client, "CREATE TABLE") == []
@@ -1227,12 +1197,14 @@ def test_dest_plugin_wraps_a_failed_schema_evolution_as_bigquery_18(
     bq_client = _widening_client()
     bq_client.query_and_wait.side_effect = RuntimeError("alter boom")
     monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: MagicMock())
 
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "note": "n", "op": "i"}])
     with pytest.raises(BigQueryRuntimeException) as ei:
         plugin._BigQueryDestPlugin().write_out(
-            _dest_ctx(work_dir), _bare_conn(), _merge_dest("update"), [src]
+            _dest_ctx(work_dir),
+            _bare_conn(),
+            _merge_dest("update"),
+            [pl.scan_parquet(src)],
         )
     assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_18
     assert "my-project.analytics.users" in str(ei.value)
@@ -1244,12 +1216,14 @@ def test_dest_plugin_wraps_a_failed_merge_as_bigquery_18(monkeypatch, work_dir):
     bq_client = _merge_ready_client()
     bq_client.query_and_wait.side_effect = RuntimeError("merge boom")
     monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: MagicMock())
 
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
     with pytest.raises(BigQueryRuntimeException) as ei:
         plugin._BigQueryDestPlugin().write_out(
-            _dest_ctx(work_dir), _bare_conn(), _merge_dest("strict"), [src]
+            _dest_ctx(work_dir),
+            _bare_conn(),
+            _merge_dest("strict"),
+            [pl.scan_parquet(src)],
         )
     assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_18
     bq_client.delete_table.assert_called_once()
@@ -1268,12 +1242,14 @@ def test_dest_plugin_keeps_a_classified_merge_error_unwrapped(monkeypatch, work_
         schema=[_field("id", "INTEGER")]
     )
     monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: MagicMock())
 
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
     with pytest.raises(BigQueryRuntimeException) as ei:
         plugin._BigQueryDestPlugin().write_out(
-            _dest_ctx(work_dir), _bare_conn(), _merge_dest("strict"), [src]
+            _dest_ctx(work_dir),
+            _bare_conn(),
+            _merge_dest("strict"),
+            [pl.scan_parquet(src)],
         )
     assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_15
     bq_client.delete_table.assert_called_once()
@@ -1284,13 +1260,6 @@ def test_dest_plugin_pairs_each_table_with_its_own_merge_cfg(monkeypatch, work_d
     with ``tables``, first with first."""
     bq_client = _merge_ready_client()
     monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
-
-    gcs_client = MagicMock(name="gcs")
-    bucket = MagicMock(name="bucket")
-    blob = MagicMock(name="blob")
-    gcs_client.bucket.return_value = bucket
-    bucket.blob.return_value = blob
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
 
     dest = BigQueryDest(
         tables=["`p.ds.users`", "`p.ds.orders`"],
@@ -1305,7 +1274,10 @@ def test_dest_plugin_pairs_each_table_with_its_own_merge_cfg(monkeypatch, work_d
     src1 = _make_parquet(work_dir / "in1.parquet", rows)
     src2 = _make_parquet(work_dir / "in2.parquet", rows)
     plugin._BigQueryDestPlugin().write_out(
-        _dest_ctx(work_dir), _bare_conn(), dest, [src1, src2]
+        _dest_ctx(work_dir),
+        _bare_conn(),
+        dest,
+        [pl.scan_parquet(src1), pl.scan_parquet(src2)],
     )
 
     first, second = _statements(bq_client, "MERGE INTO")
@@ -1314,7 +1286,7 @@ def test_dest_plugin_pairs_each_table_with_its_own_merge_cfg(monkeypatch, work_d
 
 
 def test_dest_plugin_names_the_staging_table_in_a_failed_merge_load(
-    monkeypatch, work_dir
+    monkeypatch, work_dir, staging
 ):
     load_job = MagicMock(name="load_job")
     load_job.result.side_effect = RuntimeError("load_job boom")
@@ -1322,13 +1294,6 @@ def test_dest_plugin_names_the_staging_table_in_a_failed_merge_load(
     bq_client = MagicMock(name="bq")
     bq_client.load_table_from_uri.return_value = load_job
     monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
-
-    gcs_client = MagicMock(name="gcs")
-    bucket = MagicMock(name="bucket")
-    blob = MagicMock(name="blob")
-    gcs_client.bucket.return_value = bucket
-    bucket.blob.return_value = blob
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
 
     dest = BigQueryDest(
         tables=["`my-project.analytics.users`"],
@@ -1339,11 +1304,11 @@ def test_dest_plugin_names_the_staging_table_in_a_failed_merge_load(
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
     with pytest.raises(BigQueryRuntimeException) as ei:
         plugin._BigQueryDestPlugin().write_out(
-            _dest_ctx(work_dir), _bare_conn(), dest, [src]
+            _dest_ctx(work_dir), _bare_conn(), dest, [pl.scan_parquet(src)]
         )
     assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_7
     assert "my-project.analytics.users_" in str(ei.value)
-    blob.delete.assert_called()
+    assert staging.objects() == []
 
 
 def test_dest_plugin_loads_straight_into_the_table_outside_merge_mode(
@@ -1356,17 +1321,10 @@ def test_dest_plugin_loads_straight_into_the_table_outside_merge_mode(
     bq_client.load_table_from_uri.return_value = load_job
     monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
 
-    gcs_client = MagicMock(name="gcs")
-    bucket = MagicMock(name="bucket")
-    blob = MagicMock(name="blob")
-    gcs_client.bucket.return_value = bucket
-    bucket.blob.return_value = blob
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
-
     dest = BigQueryDest(tables=["`my-project.analytics.users`"])
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     plugin._BigQueryDestPlugin().write_out(
-        _dest_ctx(work_dir), _bare_conn(), dest, [src]
+        _dest_ctx(work_dir), _bare_conn(), dest, [pl.scan_parquet(src)]
     )
 
     (call,) = bq_client.load_table_from_uri.call_args_list
@@ -1388,24 +1346,13 @@ def test_dest_plugin_forwards_project_to_bigquery_client(monkeypatch, work_dir):
         )
 
     monkeypatch.setattr(impl, "build_bigquery_client", _build_bq)
-    monkeypatch.setattr(
-        impl,
-        "build_gcs_client",
-        lambda *a, **kw: MagicMock(
-            bucket=MagicMock(
-                return_value=MagicMock(
-                    blob=MagicMock(return_value=MagicMock()),
-                )
-            ),
-        ),
-    )
 
     dest = BigQueryDest(
         tables=["`my-project.analytics.users`"],
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     plugin._BigQueryDestPlugin().write_out(
-        _dest_ctx(work_dir), _bare_conn(), dest, [src]
+        _dest_ctx(work_dir), _bare_conn(), dest, [pl.scan_parquet(src)]
     )
 
     assert captured["project"] == "my-project"
@@ -1483,26 +1430,6 @@ _WATERMARK = "wm"
 _TARGET_FQN = "my-project.analytics.users"
 
 
-def _staging_gcs() -> tuple[MagicMock, list[tuple[Path, list[dict]]]]:
-    """A GCS client recording the path and rows of every upload.
-
-    Read inside the upload call: the rewritten batch lives in a temp directory
-    removed as soon as it has been staged, so a test that looks afterwards
-    finds nothing. The path is kept so a test can tell the copy from the
-    original and check it was cleaned up.
-    """
-    gcs_client = MagicMock(name="gcs")
-    blob = MagicMock(name="blob")
-    gcs_client.bucket.return_value.blob.return_value = blob
-    staged: list[tuple[Path, list[dict]]] = []
-
-    def upload_from_filename(path: str) -> None:
-        staged.append((Path(path), pl.read_parquet(path).to_dicts()))
-
-    blob.upload_from_filename.side_effect = upload_from_filename
-    return gcs_client, staged
-
-
 def _watermark_clients(
     monkeypatch,
     target_columns=(("id", "INTEGER"), (_WATERMARK, "STRING")),
@@ -1511,8 +1438,7 @@ def _watermark_clients(
     stamped=False,
     target_exists=True,
 ):
-    """A bq client whose target really gains the columns its own DDL adds, plus
-    a GCS client that records what it was given.
+    """A bq client whose target really gains the columns its own DDL adds.
 
     The target's schema has to move: two passes read it -- the watermark's and
     the Iceberg diff's -- and a fake that answered the first from a frozen
@@ -1553,10 +1479,7 @@ def _watermark_clients(
         result=MagicMock(return_value=None)
     )
     monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
-
-    gcs_client, staged = _staging_gcs()
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
-    return bq_client, staged
+    return bq_client
 
 
 def _watermark_write(
@@ -1577,7 +1500,7 @@ def _watermark_write(
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}, {"id": 2}])
     plugin._BigQueryDestPlugin().write_out(
-        _dest_ctx(work_dir, transaction_id), _bare_conn(), dest, [src]
+        _dest_ctx(work_dir, transaction_id), _bare_conn(), dest, [pl.scan_parquet(src)]
     )
     return src
 
@@ -1592,45 +1515,36 @@ def _watermark_alters(bq_client):
     ]
 
 
-def test_dest_plugin_append_watermark_stamps_every_uploaded_row(monkeypatch, work_dir):
-    _, staged = _watermark_clients(monkeypatch)
+def test_dest_plugin_append_watermark_stamps_every_uploaded_row(
+    monkeypatch, work_dir, staging
+):
+    _watermark_clients(monkeypatch)
     _watermark_write(work_dir)
-    _, rows = staged[0]
+    _, rows = staging.staged[0]
     assert [row[_WATERMARK] for row in rows] == ["TRX_1", "TRX_1"]
 
 
-def test_dest_plugin_append_watermark_uploads_a_copy_not_the_original(
-    monkeypatch, work_dir
-):
-    _, staged = _watermark_clients(monkeypatch)
-    src = _watermark_write(work_dir)
-    path, _ = staged[0]
-    assert path != src
-
-
 def test_dest_plugin_append_without_a_watermark_uploads_what_it_was_handed(
-    monkeypatch, work_dir
+    monkeypatch, work_dir, staging
 ):
-    _, staged = _watermark_clients(monkeypatch)
-    src = _watermark_write(work_dir, watermark_column=None)
-    path, rows = staged[0]
-    assert path.name == src.name
+    _watermark_clients(monkeypatch)
+    _watermark_write(work_dir, watermark_column=None)
+    _, rows = staging.staged[0]
     assert rows == [{"id": 1}, {"id": 2}]
 
 
-def test_dest_plugin_append_watermark_removes_the_copy_once_it_is_uploaded(
-    monkeypatch, work_dir
+def test_dest_plugin_append_watermark_deletes_the_staged_object_after_the_load(
+    monkeypatch, work_dir, staging
 ):
-    _, staged = _watermark_clients(monkeypatch)
+    _watermark_clients(monkeypatch)
     _watermark_write(work_dir)
-    path, _ = staged[0]
-    assert not path.exists()
+    assert staging.objects() == []
 
 
 def test_dest_plugin_append_watermark_adds_the_column_to_the_target(
     monkeypatch, work_dir
 ):
-    bq_client, _ = _watermark_clients(monkeypatch, target_columns=(("id", "INTEGER"),))
+    bq_client = _watermark_clients(monkeypatch, target_columns=(("id", "INTEGER"),))
     _watermark_write(work_dir)
     assert _watermark_alters(bq_client) == [
         f"ALTER TABLE `{_TARGET_FQN}` ADD COLUMN IF NOT EXISTS `{_WATERMARK}` STRING"
@@ -1640,7 +1554,7 @@ def test_dest_plugin_append_watermark_adds_the_column_to_the_target(
 def test_dest_plugin_append_watermark_leaves_an_existing_column_alone(
     monkeypatch, work_dir
 ):
-    bq_client, _ = _watermark_clients(monkeypatch)
+    bq_client = _watermark_clients(monkeypatch)
     _watermark_write(work_dir)
     assert _watermark_alters(bq_client) == []
 
@@ -1650,23 +1564,21 @@ def test_dest_plugin_append_watermark_adds_the_column_before_the_load(
 ):
     # A load job handed a batch carrying a column the target has not got fails
     # outright rather than dropping it, so the ALTER cannot come afterwards.
-    bq_client, _ = _watermark_clients(monkeypatch, target_columns=(("id", "INTEGER"),))
+    bq_client = _watermark_clients(monkeypatch, target_columns=(("id", "INTEGER"),))
     _watermark_write(work_dir)
     assert _watermark_alters(bq_client)
     bq_client.load_table_from_uri.assert_called_once()
 
 
 def test_dest_plugin_append_watermark_leaves_a_missing_target_to_the_load(
-    monkeypatch, work_dir
+    monkeypatch, work_dir, staging
 ):
     """The load job creates the target from the batch, which already carries
     the column, so there is nothing to ALTER onto a table that is not there."""
-    bq_client, staged = _watermark_clients(
-        monkeypatch, target_columns=(), target_exists=False
-    )
+    bq_client = _watermark_clients(monkeypatch, target_columns=(), target_exists=False)
     _watermark_write(work_dir)
     assert _watermark_alters(bq_client) == []
-    assert [row[_WATERMARK] for row in staged[0][1]] == ["TRX_1", "TRX_1"]
+    assert [row[_WATERMARK] for row in staging.staged[0][1]] == ["TRX_1", "TRX_1"]
 
 
 def test_dest_plugin_append_watermark_leaves_the_iceberg_pass_nothing_to_add(
@@ -1674,7 +1586,7 @@ def test_dest_plugin_append_watermark_leaves_the_iceberg_pass_nothing_to_add(
 ):
     """Added ahead of the diff, so the engine that may also add columns finds
     it already there -- one statement, not two claims on the same column."""
-    bq_client, _ = _watermark_clients(
+    bq_client = _watermark_clients(
         monkeypatch,
         target_columns=(("id", "INTEGER"),),
         batch_columns=(("id", "INTEGER"), (_WATERMARK, "STRING")),
@@ -1684,20 +1596,20 @@ def test_dest_plugin_append_watermark_leaves_the_iceberg_pass_nothing_to_add(
 
 
 def test_dest_plugin_append_skips_entirely_when_the_trx_is_already_stamped(
-    monkeypatch, work_dir
+    monkeypatch, work_dir, staging
 ):
-    bq_client, staged = _watermark_clients(monkeypatch, stamped=True)
+    bq_client = _watermark_clients(monkeypatch, stamped=True)
     _watermark_write(work_dir)
-    assert staged == []
+    assert staging.staged == []
     bq_client.load_table_from_uri.assert_not_called()
 
 
 def test_dest_plugin_append_proceeds_when_the_target_carries_another_trx(
-    monkeypatch, work_dir
+    monkeypatch, work_dir, staging
 ):
-    bq_client, staged = _watermark_clients(monkeypatch, stamped=False)
+    bq_client = _watermark_clients(monkeypatch, stamped=False)
     _watermark_write(work_dir)
-    assert len(staged) == 1
+    assert len(staging.staged) == 1
     bq_client.load_table_from_uri.assert_called_once()
 
 
@@ -1706,7 +1618,7 @@ def test_dest_plugin_append_checks_the_watermark_before_it_uploads(
 ):
     # A rerun with nothing to do should not pay to rewrite and ship a file it is
     # about to decline to load.
-    bq_client, _ = _watermark_clients(monkeypatch)
+    bq_client = _watermark_clients(monkeypatch)
     _watermark_write(work_dir)
     probe = f"SELECT COUNT(*) > 0 FROM `{_TARGET_FQN}` WHERE `{_WATERMARK}` = 'TRX_1'"
     assert _alters(bq_client)[0] == probe
@@ -1724,17 +1636,17 @@ def test_dest_plugin_append_escapes_the_trx_id_in_the_probe(
     monkeypatch, work_dir, transaction_id, literal
 ):
     # There is nowhere to bind a value in a statement built by hand.
-    bq_client, _ = _watermark_clients(monkeypatch)
+    bq_client = _watermark_clients(monkeypatch)
     _watermark_write(work_dir, transaction_id=transaction_id)
     assert _alters(bq_client)[0].endswith(f"= {literal}")
 
 
 def test_dest_plugin_replace_never_stamps_even_when_handed_a_watermark(
-    monkeypatch, work_dir
+    monkeypatch, work_dir, staging
 ):
     """BigQueryDest refuses the pairing, and the write path declines it again
     rather than resting on a validation two layers away."""
-    bq_client, staged = _watermark_clients(monkeypatch)
+    bq_client = _watermark_clients(monkeypatch)
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     write_cfg = impl.BigQueryWriteCfg(
         conn=_bare_conn(),
@@ -1752,19 +1664,55 @@ def test_dest_plugin_replace_never_stamps_even_when_handed_a_watermark(
         schema_evolution="strict",
     )
     plugin._BigQueryDestPlugin().write_out(
-        _dest_ctx(work_dir), _bare_conn(), dest, [src]
+        _dest_ctx(work_dir), _bare_conn(), dest, [pl.scan_parquet(src)]
     )
-    path, rows = staged[0]
-    assert path.name == src.name
+    _, rows = staging.staged[0]
     assert rows == [{"id": 1}]
     assert _watermark_alters(bq_client) == []
 
 
 def test_dest_plugin_append_does_not_clean_up_a_file_it_never_uploaded(
-    monkeypatch, work_dir
+    monkeypatch, work_dir, staging
 ):
     # Deleting a URI the guard declined to stage would warn about a file that is
     # absent by design.
-    _, staged = _watermark_clients(monkeypatch, stamped=True)
+    _watermark_clients(monkeypatch, stamped=True)
     _watermark_write(work_dir)
-    assert staged == []
+    assert staging.staged == []
+
+
+# ---------------------------------------------------------------------------
+# The staging store
+# ---------------------------------------------------------------------------
+
+
+def test_staging_store_is_the_bucket_root_with_the_service_account_key():
+    store = _STAGING_STORE(_staging())
+    assert store.root == "gs://staging-bucket"
+    assert store.uri("staging/a.parquet") == "gs://staging-bucket/staging/a.parquet"
+    assert any("service_account_key" in key for key in store.options)
+
+
+def test_staging_store_forwards_the_obstore_cfg_keys():
+    store = _STAGING_STORE(_staging({"obstore.allow_http": True}))
+    assert "true" in store.options.values()
+
+
+def test_staging_store_warns_about_cfg_keys_it_ignores(caplog):
+    with caplog.at_level("WARNING", logger=impl.logger.name):
+        _STAGING_STORE(_staging({"timeout": 5}))
+    assert any("'timeout'" in r.getMessage() for r in caplog.records)
+
+
+def test_discard_deletes_what_was_staged_and_skips_what_was_not(staging):
+    _STAGE(staging.store, "a.parquet", pl.LazyFrame({"id": [1]}))
+    impl.discard(staging.store, ["a.parquet", "never.parquet"])
+    assert staging.objects() == []
+
+
+def test_discard_never_raises(caplog):
+    store = MagicMock(uri=lambda key: f"gs://b/{key}")
+    store.delete.side_effect = RuntimeError("denied")
+    with caplog.at_level("WARNING", logger=impl.logger.name):
+        impl.discard(store, ["a.parquet"])
+    assert any("gs://b/a.parquet" in r.getMessage() for r in caplog.records)

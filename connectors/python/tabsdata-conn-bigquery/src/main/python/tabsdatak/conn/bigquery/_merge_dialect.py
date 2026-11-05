@@ -28,6 +28,7 @@ from tabsdatak.conn.bigquery._evolution import (
     string_literal,
 )
 from tabsdatak.conn.bigquery.error import BigQueryErrorCode
+from tabsdatak.conn.common.file._store import FileStore
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._evolution import evolve_with_iceberg
@@ -43,15 +44,10 @@ from tabsdatak.conn.common.sql._merge.dialect import (
     Staged,
 )
 
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._spool import spooled_parquet
-
 if TYPE_CHECKING:
     import polars as pl
 
 logger = logging.getLogger(__name__)
-
-_BATCH_FILE = "batch.parquet"
 
 _SYNTAX = MergeSyntax(
     target_alias="target",
@@ -81,15 +77,15 @@ _ERRORS = MergeErrors(
 class BigQueryMergeDialect(MergeDialect):
     """Drives a merge over one BigQuery client, one GCS object and one target.
 
-    Built per (file, table) pair by ``_plugin``, which already holds the
-    clients and has worked out where the batch is to be staged.
+    Built per (batch, table) pair by ``_plugin``, which already holds the
+    client and has worked out where the batch is to be staged.
 
     Args:
         bq_client: The BigQuery client every statement and load job runs on.
-        gcs_client: The storage client the batch is uploaded through.
-        uri: The ``gs://`` object the batch is uploaded to. Deleting it is the
-            plugin's business, not this object's -- it owns the best-effort
-            cleanup of every staged file a write made, merge or not.
+        store: The staging bucket the batch is written to.
+        key: The object the batch is written to. Deleting it is the plugin's
+            business, not this object's -- it owns the best-effort cleanup of
+            every staged file a write made, merge or not.
         target_fqn: The target's bare ``project.dataset.table``. The quoted form
             the statements use is what the driver passes as ``target``.
     """
@@ -97,14 +93,15 @@ class BigQueryMergeDialect(MergeDialect):
     def __init__(
         self,
         bq_client: Any,
-        gcs_client: Any,
+        store: FileStore,
         *,
-        uri: str,
+        key: str,
         target_fqn: str,
     ) -> None:
         self._bq_client = bq_client
-        self._gcs_client = gcs_client
-        self._uri = uri
+        self._store = store
+        self._key = key
+        self._uri = store.uri(key)
         self._target_fqn = target_fqn
 
     @property
@@ -132,7 +129,7 @@ class BigQueryMergeDialect(MergeDialect):
         batch: pl.LazyFrame,
         watermark_cfg: WatermarkCfg | None = None,
     ) -> Iterator[Staged]:
-        """Upload the batch to GCS and load it into a staging table.
+        """Write the batch to GCS and load it into a staging table.
 
         A ``MERGE`` cannot read a parquet object, so the batch is loaded into a
         table of its own and the statement takes that as its source. The staging
@@ -152,16 +149,16 @@ class BigQueryMergeDialect(MergeDialect):
         # noinspection PyProtectedMember
         from tabsdatak.conn.bigquery._impl import (
             build_merge_staging_load_job_config,
+            stage,
             table_column_types,
             temp_table_fqn,
         )
 
         # noinspection PyProtectedMember
-        from tabsdatak.conn.bigquery._plugin import _load_table_from_uri, _upload_to_gcs
+        from tabsdatak.conn.bigquery._plugin import _load_table_from_uri
 
         try:
-            with spooled_parquet(batch, _BATCH_FILE) as spooled:
-                _upload_to_gcs(self._gcs_client, spooled, self._uri)
+            stage(self._store, self._key, batch)
         except Exception as e:
             raise BigQueryErrorCode.BIGQUERY_6.exception(cause=e, uri=self._uri)
 

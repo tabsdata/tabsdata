@@ -150,7 +150,7 @@ class GCSLocation(CloudLocation):
 
     :categories: destination
 
-    The plugin uploads parquet here, then runs a `load_table_from_uri`
+    The plugin writes parquet here, then runs a `load_table_from_uri`
     load job against BigQuery referencing the object.
 
     Args:
@@ -160,7 +160,9 @@ class GCSLocation(CloudLocation):
             `/`, has no trailing `/` and no empty segments (`//`)
             (the leading `/` is trimmed when forming the key).
             Defaults to `/`.
-        cfg: Optional connector-config dict for the GCS client.
+        cfg: Optional config dict; its `obstore.*` keys configure the
+            object store parquet is staged through (a custom endpoint,
+            `allow_http`, ...). Other keys are ignored.
     """
 
     __kind__ = "bigQueryGCSLocation"
@@ -298,11 +300,11 @@ class BigQueryDestConn(Conn):
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
 
-    def _project(self) -> str:
-        return _convert(self.project, str)
+    def _project(self) -> str | None:
+        return None if self.project is None else _convert(self.project, str)
 
-    def _dataset(self) -> str:
-        return _convert(self.dataset, str)
+    def _dataset(self) -> str | None:
+        return None if self.dataset is None else _convert(self.dataset, str)
 
     def validate(self) -> None:
         """Cross-field validation: `dataset` requires `project`.
