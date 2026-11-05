@@ -42,7 +42,7 @@ _KEY_DEST_SCHEMA_EVOLUTION_ENGINE: DestCfgKey = "bigquery.schema_evolution_engin
 
 _DEST_CFGS_DEFAULTS: dict[DestCfgKey, Any] = {
     _KEY_DEST_LOGGING_LEVEL: logging.ERROR,
-    _KEY_DEST_SCHEMA_EVOLUTION_ENGINE: "native",
+    _KEY_DEST_SCHEMA_EVOLUTION_ENGINE: "iceberg",
 }
 
 _SCHEMA_EVOLUTION_ENGINES = ("native", "iceberg")
@@ -68,8 +68,8 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
 
     engine = _get(_KEY_DEST_SCHEMA_EVOLUTION_ENGINE)
     if engine not in _SCHEMA_EVOLUTION_ENGINES:
-        # A typo here would otherwise fall back to native evolution and lose
-        # the widening the write asked for, with nothing said about it.
+        # A typo here would otherwise fall back to the default engine, with
+        # nothing said about it.
         raise BigQueryErrorCode.BIGQUERY_21.exception(
             value=engine,
             allowed=" or ".join(repr(e) for e in _SCHEMA_EVOLUTION_ENGINES),
@@ -212,7 +212,10 @@ class _BigQueryDestPlugin(
                     logger.debug("bigquery: finished table %r", table_fqn)
                 return
 
-            evolving_with_iceberg = (
+            # Not under "strict": a load job with no schema update options
+            # already refuses a new column or a type the column cannot hold,
+            # and the pass would load the whole batch once more to read it.
+            diffing = (
                 write_cfg.schema_evolution == "update"
                 and cfg.schema_evolution_engine == "iceberg"
             )
@@ -285,7 +288,7 @@ class _BigQueryDestPlugin(
                     # place that adds it rather than two engines each having a
                     # claim.
                     ensure_watermark_column(bq_client, table_fqn, watermark)
-                if evolving_with_iceberg:
+                if diffing:
                     # Before the load, so the rows land in a target already
                     # shaped to hold them -- and before a replace truncates the
                     # table it is about to refill.

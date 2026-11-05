@@ -146,11 +146,11 @@ class BigQueryErrorCode(ErrorCode):
     )  # _resolve_dest_cfg
     BIGQUERY_22 = ErrorDef(
         BigQueryValidateException,
-        'BigQueryDest.if_table_exists="merge" requires'
-        " dest_cfg={{'bigquery.schema_evolution_engine': 'iceberg'}}."
+        'BigQueryDest.if_table_exists="merge" does not take'
+        " dest_cfg={{'bigquery.schema_evolution_engine': 'native'}}."
         " A MERGE takes no schema_update_options, so the connector evolves a"
-        " merge target with ALTER statements or not at all -- which the write"
-        " has to say out loud",
+        " merge target with ALTER statements: leave the engine unset or set it"
+        " to 'iceberg'",
     )  # BigQueryDest.validate()
     BIGQUERY_23 = ErrorDef(
         BigQueryRuntimeException,

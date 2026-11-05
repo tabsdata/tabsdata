@@ -356,17 +356,17 @@ class BigQueryDest(Dest):
             rows behind.
         dest_cfg: Optional connector config. Supported keys:
             `bigquery.logging_level`, and
-            `bigquery.schema_evolution_engine` -- `"native"` (the default
-            when unset) or `"iceberg"`. Native evolution is BigQuery's
-            `schema_update_options` on the load job, which only ever adds a
-            column or relaxes one to nullable. `"iceberg"` has the connector
-            diff the target against the incoming batch instead, which also
-            widens a column whose type the batch has outgrown and refuses a
-            change BigQuery could not make. It applies only where the schema
-            is allowed to move, so it does nothing under
-            `schema_evolution="strict"`; `if_table_exists="merge"` requires
-            `bigquery.schema_evolution_engine="iceberg"`, since a `MERGE` takes no
-            load-job options at all.
+            `bigquery.schema_evolution_engine` -- `"iceberg"` (the default
+            when unset) or `"native"`. `"iceberg"` diffs the target against
+            the incoming batch and runs the `ALTER` statements itself: it adds
+            a column and widens one whose type the batch has outgrown, and
+            refuses a change BigQuery could not make. `"native"` leaves
+            `schema_evolution="update"` to BigQuery's `schema_update_options`
+            on the load job, which only ever adds a column or relaxes one to
+            nullable, never widens one; a `MERGE` takes no load-job options,
+            so `if_table_exists="merge"` refuses `"native"`. Under
+            `schema_evolution="strict"` both engines refuse a batch with a new
+            column or a wider type.
 
     Examples:
         Overwrite the target table each run with `if_table_exists="replace"`:
@@ -442,8 +442,8 @@ class BigQueryDest(Dest):
     def validate(self) -> None:
         """Cross-field validation: `merge_cfg` and `if_table_exists="merge"`
         require each other, a list of configs must line up with `tables`,
-        `watermark_column` is not a replace's to name, and merging requires
-        `schema_evolution_engine="iceberg"`.
+        `watermark_column` is not a replace's to name, and merging refuses
+        `schema_evolution_engine="native"`.
 
         Called by the framework; raises `BigQueryValidateException`.
         """
@@ -471,6 +471,6 @@ class BigQueryDest(Dest):
         # Last, so a merge that is malformed in a more basic way reports that
         # instead: a missing merge_cfg is the thing to fix first.
         engine = (self.dest_cfg or {}).get("bigquery.schema_evolution_engine")
-        if merging and engine != "iceberg":
+        if merging and engine == "native":
             # noinspection PyProtectedMember
             raise BigQueryErrorCode.BIGQUERY_22.exception()

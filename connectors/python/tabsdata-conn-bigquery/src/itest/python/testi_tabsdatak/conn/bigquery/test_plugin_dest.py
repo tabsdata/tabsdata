@@ -177,6 +177,7 @@ def test_dest_plugin_write_out_resolves_table_name_spelling(
 # A MERGE takes no load-job options, so the connector evolves its target with
 # ALTER statements or not at all -- and the write has to say so.
 _ICEBERG = {"bigquery.schema_evolution_engine": "iceberg"}
+_NATIVE = {"bigquery.schema_evolution_engine": "native"}
 
 
 def _batch(path: Path, columns: dict[str, list | pl.Series]) -> Path:
@@ -720,7 +721,7 @@ def test_dest_plugin_write_out_native_engine_cannot_widen(
     )
     try:
         with pytest.raises(BigQueryRuntimeException):
-            _load_out(conn, work, table, batch)
+            _load_out(conn, work, table, batch, dest_cfg=_NATIVE)
         assert db.column_types(table)["amount"][0] == "INTEGER"
     finally:
         db.drop_table(table)

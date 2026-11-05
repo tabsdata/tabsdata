@@ -484,3 +484,22 @@ def test_bigquery_dest_rejects_a_table_listed_twice(tables):
 
 def test_bigquery_dest_keeps_names_its_backend_tells_apart():
     assert BigQueryDest(tables=['`p.ds.t`', '`p.ds.T`']).tables == ['`p.ds.t`', '`p.ds.T`']
+
+
+def test_bigquery_dest_merges_on_the_default_engine():
+    BigQueryDest(
+        tables=["`p.d.t`"],
+        if_table_exists="merge",
+        merge_cfg=[MergeCfg(on=["id"], op_column="op")],
+    )
+
+
+def test_bigquery_dest_refuses_the_native_engine_for_a_merge():
+    with pytest.raises(BigQueryValidateException) as ei:
+        BigQueryDest(
+            tables=["`p.d.t`"],
+            if_table_exists="merge",
+            merge_cfg=[MergeCfg(on=["id"], op_column="op")],
+            dest_cfg={"bigquery.schema_evolution_engine": "native"},
+        )
+    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_22

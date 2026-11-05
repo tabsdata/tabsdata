@@ -186,6 +186,7 @@ def _alters(bq_client):
 
 
 _ICEBERG_ENGINE = {"bigquery.schema_evolution_engine": "iceberg"}
+_NATIVE_ENGINE = {"bigquery.schema_evolution_engine": "native"}
 
 
 def test_dest_plugin_iceberg_engine_widens_a_column(monkeypatch, work_dir):
@@ -258,7 +259,7 @@ def test_dest_plugin_native_engine_emits_no_alters_of_its_own(monkeypatch, work_
     bq_client = _evolving_clients(
         monkeypatch, [("id", "INTEGER")], [("id", "INTEGER"), ("note", "STRING")]
     )
-    _write(work_dir)
+    _write(work_dir, _NATIVE_ENGINE)
     assert _alters(bq_client) == []
     assert bq_client.load_table_from_uri.call_count == 1
 
@@ -275,8 +276,8 @@ def test_dest_plugin_iceberg_engine_skips_a_target_that_does_not_exist(
     assert _alters(bq_client) == []
 
 
-def test_dest_plugin_defaults_to_the_native_engine():
-    assert plugin._resolve_dest_cfg(None).schema_evolution_engine == "native"
+def test_dest_plugin_defaults_to_the_iceberg_engine():
+    assert plugin._resolve_dest_cfg(None).schema_evolution_engine == "iceberg"
 
 
 @pytest.mark.parametrize("engine", ["native", "iceberg"])
