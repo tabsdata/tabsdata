@@ -44,11 +44,18 @@ def env_variables(value: str) -> list[str]:
     return variables
 
 
+def missing_variables(stub: Path, environment: Mapping[str, str]) -> list[str]:
+    return [
+        variable
+        for value in scalars(read_yaml(stub, "stub"))
+        for variable in env_variables(value)
+        if environment.get(variable, "").strip() == ""
+    ]
+
+
 def check_variables(stub: Path, owner: str, environment: Mapping[str, str]):
-    for value in scalars(read_yaml(stub, "stub")):
-        for variable in env_variables(value):
-            if environment.get(variable, "").strip() == "":
-                raise click.ClickException(
-                    f"Environment variable '{variable}' required by stub '{stub}' "
-                    f"of '{owner}' is not defined or is empty."
-                )
+    for variable in missing_variables(stub, environment)[:1]:
+        raise click.ClickException(
+            f"Environment variable '{variable}' required by stub '{stub}' "
+            f"of '{owner}' is not defined or is empty."
+        )

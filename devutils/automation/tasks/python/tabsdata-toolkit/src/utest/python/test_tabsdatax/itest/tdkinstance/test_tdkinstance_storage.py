@@ -47,7 +47,7 @@ def config(tmp_path):
     (tmp_path / "stubs" / "commons.yaml").write_text("tdk_jwt_expiry: '10'\n")
     (tmp_path / "stubs" / "storages" / "awse.yaml").write_text(AWSE_STUB)
     config = tmp_path / "kubernetes.yaml"
-    config.write_text("tdtest:\n  stubs:\n    - stubs/commons.yaml\n")
+    config.write_text("tdtest:\n  stubs:\n    mandatory:\n      - stubs/commons.yaml\n")
     return config
 
 
@@ -166,6 +166,76 @@ def test_the_storage_stub_comes_after_the_instance_type_stubs(config):
 def test_the_file_storage_adds_no_stub(config):
     result = CliRunner().invoke(main, ["arguments", str(config), "tdtest"])
     assert result.output.count("--config") == 1
+
+
+@pytest.fixture
+def optional_config(config):
+    agents = config.parent / "stubs" / "agents"
+    agents.mkdir()
+    (agents / "anthropic.yaml").write_text("anthropic-key: env:TD_TEST_ANTHROPIC\n")
+    (agents / "openai.yaml").write_text("openai-key: env:TD_TEST_OPENAI\n")
+    config.write_text(
+        "tdtest:\n  stubs:\n    mandatory:\n      - stubs/commons.yaml\n"
+        "    optional:\n      - stubs/agents/*.yaml\n"
+    )
+    return config
+
+
+def test_each_optional_stub_a_pattern_matches_is_used_when_its_variables_are_set(
+    optional_config, monkeypatch
+):
+    monkeypatch.setenv("TD_TEST_ANTHROPIC", "a")
+    monkeypatch.setenv("TD_TEST_OPENAI", "o")
+    result = CliRunner().invoke(main, ["arguments", str(optional_config), "tdtest"])
+    assert result.exit_code == 0
+    folder = optional_config.parent.resolve()
+    assert result.stdout.splitlines() == [
+        "--config",
+        f"@{folder / 'stubs' / 'commons.yaml'}",
+        "--config",
+        f"@{folder / 'stubs' / 'agents' / 'anthropic.yaml'}",
+        "--config",
+        f"@{folder / 'stubs' / 'agents' / 'openai.yaml'}",
+    ]
+    assert result.stderr == ""
+
+
+def test_an_optional_stub_is_left_out_alone_when_its_variable_is_missing(
+    optional_config, monkeypatch
+):
+    monkeypatch.setenv("TD_TEST_ANTHROPIC", "a")
+    monkeypatch.delenv("TD_TEST_OPENAI", raising=False)
+    result = CliRunner().invoke(main, ["arguments", str(optional_config), "tdtest"])
+    assert result.exit_code == 0
+    assert "anthropic.yaml" in result.stdout and "openai.yaml" not in result.stdout
+    assert "openai.yaml" in result.stderr and "TD_TEST_OPENAI" in result.stderr
+
+
+def test_a_required_pattern_must_match_a_file(config):
+    config.write_text(
+        "tdtest:\n  stubs:\n    mandatory:\n      - stubs/missing/*.yaml\n"
+    )
+    result = CliRunner().invoke(main, ["arguments", str(config), "tdtest"])
+    assert result.exit_code != 0
+    assert "matches no file" in result.output
+
+
+def test_stubs_take_only_mandatory_and_optional_groups(config):
+    config.write_text("tdtest:\n  stubs:\n    required:\n      - stubs/commons.yaml\n")
+    result = CliRunner().invoke(main, ["arguments", str(config), "tdtest"])
+    assert result.exit_code != 0
+    assert "'mandatory' and 'optional'" in result.output
+
+
+def test_a_required_stub_still_fails_on_a_missing_variable(config, monkeypatch):
+    for variable in ("TD_TEST_AGENT_KEY", "FORCE_COLOR", "GITHUB_ACTIONS", "PY_COLORS"):
+        monkeypatch.delenv(variable, raising=False)
+    (config.parent / "stubs" / "commons.yaml").write_text(
+        "anthropic-key: env:TD_TEST_AGENT_KEY\n"
+    )
+    result = CliRunner().invoke(main, ["arguments", str(config), "tdtest"])
+    assert result.exit_code != 0
+    assert "TD_TEST_AGENT_KEY" in result.output
 
 
 def test_only_the_uri_and_the_storage_options_are_read():
