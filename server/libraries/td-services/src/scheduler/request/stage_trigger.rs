@@ -4,6 +4,7 @@
 
 use crate::internal_api::InternalApi;
 use crate::scheduler::message_builder::build_external_location;
+use crate::scheduler::partial::Partial;
 use crate::scheduler::request::function_runner::WorkerMessages;
 use std::collections::HashMap;
 use td_bridge::messaging::{
@@ -24,7 +25,7 @@ use td_objects::types::basic::{AtTime, FunctionVersionId, WorkerConfig};
 use td_queries::Queries;
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
-use tracing::{instrument, warn};
+use tracing::instrument;
 
 #[instrument(
     name = "scheduler.create_stage_trigger_workers_start",
@@ -63,28 +64,21 @@ pub async fn create_locked_stage_trigger_workers_start_request<S: DbScope, M: Ac
 
     let kubernetes = matches!(orchestrator, Orchestrator::Kubernetes);
 
-    // One worker's failure must not abort the tick: skip it (it stays
-    // `Scheduled`, re-picked next tick) and keep the rest.
     let mut kept = Vec::with_capacity(stage_trigger_workers.len());
-    for stage_trigger_worker in stage_trigger_workers {
-        let built = stage_trigger_start_message(
+    let built = Partial::build(stage_trigger_workers, |worker| {
+        let message = stage_trigger_start_message(
             storage,
             internal_api,
             &function_by_fvid,
             kubernetes,
-            &stage_trigger_worker,
-        );
-        match built {
-            Ok((id, payload)) => {
-                messages.push((id, payload));
-                kept.push(stage_trigger_worker);
-            }
-            Err(e) => warn!(
-                worker_id = %stage_trigger_worker.id,
-                reason = ?e,
-                "request: skipping stage-trigger start; will retry next tick"
-            ),
-        }
+            worker,
+        )?;
+        Ok((worker.clone(), message))
+    })
+    .left_for_next_pass("stage trigger starts", |worker| worker.id.to_string());
+    for (worker, (id, payload)) in built {
+        messages.push((id, payload));
+        kept.push(worker);
     }
     Ok(kept)
 }
@@ -253,11 +247,9 @@ pub fn create_locked_stage_trigger_workers_stop_request(
 ) -> Result<Vec<WorkerDBWithNames>, TdError> {
     let kubernetes = matches!(orchestrator, Orchestrator::Kubernetes);
 
-    // A worker whose message cannot be built must not abort the tick: skip it
-    // (it stays `StopScheduled`, re-picked next tick) and keep the rest.
     let mut kept = Vec::with_capacity(stage_trigger_workers.len());
-    for stage_trigger_worker in stage_trigger_workers {
-        let built = (|| {
+    let built = Partial::build(stage_trigger_workers, |stage_trigger_worker| {
+        let message = (|| {
             let worker_id = stage_trigger_worker.id.to_string();
 
             // Kubernetes ships a lean Stop keyed by the worker id (so the
@@ -292,18 +284,13 @@ pub fn create_locked_stage_trigger_workers_stop_request(
             };
 
             Ok::<_, TdError>((message_id, payload))
-        })();
-        match built {
-            Ok((id, payload)) => {
-                messages.push((id, payload));
-                kept.push(stage_trigger_worker);
-            }
-            Err(e) => warn!(
-                worker_id = %stage_trigger_worker.id,
-                reason = ?e,
-                "request: skipping stage-trigger stop; will retry next tick"
-            ),
-        }
+        })()?;
+        Ok((stage_trigger_worker.clone(), message))
+    })
+    .left_for_next_pass("stage trigger stops", |worker| worker.id.to_string());
+    for (worker, (id, payload)) in built {
+        messages.push((id, payload));
+        kept.push(worker);
     }
     Ok(kept)
 }

@@ -3,6 +3,7 @@
 //
 
 use crate::internal_api::InternalApi;
+use crate::scheduler::partial::Partial;
 use crate::scheduler::request::function_runner::WorkerMessages;
 use std::collections::HashMap;
 use td_bridge::messaging::{
@@ -16,7 +17,7 @@ use td_objects::dxo::worker::{CronTriggerConfig, WorkerDBWithNames};
 use td_objects::dxo::worker_input::cron_trigger::CronTriggerInput;
 use td_objects::dxo::worker_input::{WorkerInput, cron_trigger};
 use td_objects::types::basic::{AtTime, WorkerConfig};
-use tracing::{instrument, warn};
+use tracing::instrument;
 
 #[instrument(
     name = "scheduler.create_cron_trigger_workers_start",
@@ -36,21 +37,15 @@ pub fn create_locked_cron_trigger_workers_start_request(
     // from `WorkerDBWithNames` alone — no extra fetch.
     let kubernetes = matches!(orchestrator, Orchestrator::Kubernetes);
 
-    // One worker's failure must not abort the tick: skip it (it stays
-    // `Scheduled`, re-picked next tick) and keep the rest.
     let mut kept = Vec::with_capacity(cron_trigger_workers.len());
-    for cron_trigger_worker in cron_trigger_workers {
-        match cron_trigger_start_message(internal_api, kubernetes, &cron_trigger_worker) {
-            Ok((id, payload)) => {
-                messages.push((id, payload));
-                kept.push(cron_trigger_worker);
-            }
-            Err(e) => warn!(
-                worker_id = %cron_trigger_worker.id,
-                reason = ?e,
-                "request: skipping cron-trigger start; will retry next tick"
-            ),
-        }
+    let built = Partial::build(cron_trigger_workers, |worker| {
+        let message = cron_trigger_start_message(internal_api, kubernetes, worker)?;
+        Ok((worker.clone(), message))
+    })
+    .left_for_next_pass("cron trigger starts", |worker| worker.id.to_string());
+    for (worker, (id, payload)) in built {
+        messages.push((id, payload));
+        kept.push(worker);
     }
     Ok(kept)
 }
@@ -180,11 +175,9 @@ pub fn create_locked_cron_trigger_workers_stop_request(
 ) -> Result<Vec<WorkerDBWithNames>, TdError> {
     let kubernetes = matches!(orchestrator, Orchestrator::Kubernetes);
 
-    // A worker whose message cannot be built must not abort the tick: skip it
-    // (it stays `StopScheduled`, re-picked next tick) and keep the rest.
     let mut kept = Vec::with_capacity(cron_trigger_workers.len());
-    for cron_trigger_worker in cron_trigger_workers {
-        let built = (|| {
+    let built = Partial::build(cron_trigger_workers, |cron_trigger_worker| {
+        let message = (|| {
             let worker_id = cron_trigger_worker.id.to_string();
 
             // Kubernetes ships a lean Stop keyed by the worker id (so the
@@ -219,18 +212,13 @@ pub fn create_locked_cron_trigger_workers_stop_request(
             };
 
             Ok::<_, TdError>((message_id, payload))
-        })();
-        match built {
-            Ok((id, payload)) => {
-                messages.push((id, payload));
-                kept.push(cron_trigger_worker);
-            }
-            Err(e) => warn!(
-                worker_id = %cron_trigger_worker.id,
-                reason = ?e,
-                "request: skipping cron-trigger stop; will retry next tick"
-            ),
-        }
+        })()?;
+        Ok((cron_trigger_worker.clone(), message))
+    })
+    .left_for_next_pass("cron trigger stops", |worker| worker.id.to_string());
+    for (worker, (id, payload)) in built {
+        messages.push((id, payload));
+        kept.push(worker);
     }
     Ok(kept)
 }

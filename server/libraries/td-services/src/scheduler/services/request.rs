@@ -8,7 +8,6 @@ use crate::execution::settlement::settle_transactions;
 use crate::internal_api::InternalApi;
 use crate::logical::dispatch_mint::mint_function_runs_on_dispatch;
 use crate::project::active::active_project_ids;
-use crate::scheduler::cursor::TickCursor;
 use crate::scheduler::request::{
     WorkerMessages, create_locked_cron_trigger_workers_start_request,
     create_locked_cron_trigger_workers_stop_request,
@@ -19,16 +18,21 @@ use crate::scheduler::request::{
     materialize_replay_dispatch, pfr_ids_from_dispatched_workers, put_worker_messages,
     stop_worker_update,
 };
+use crate::scheduler::stats;
+use std::future::Future;
+use std::time::Instant;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_bridge::{BridgeProviderHandle, Orchestrator};
 use td_database::access::{
-    AcrossProjects, DbPool, Grant, InProject, LockInstant, SeesProjectRows, WriteMode, conflicted,
-    retrying,
+    AcrossProjects, DbPool, Grant, Holds, InProject, LockInstant, ProjectLock, conflicted, retrying,
 };
 use td_database::domain::{Apiserver, DomainConnection};
+use td_database::pool::SystemPool;
 use td_error::TdError;
-use td_execution::{SchedulerConfig, SchedulerNotify};
+use td_execution::{Concerns, ProjectWakes, SchedulerConfig};
+use td_objects::dxo::logical::LogicalFunctionRunDB;
+use td_objects::dxo::project::ProjectDB;
 use td_objects::dxo::worker::{WorkerDB, WorkerDBWithNames, WorkerUpdateDB};
 use td_objects::sql_condition::SqlCondition;
 use td_objects::types::basic::{AtTime, LogicalFunctionRunStatus, ProjectId, WorkerId, WorkerType};
@@ -36,121 +40,205 @@ use td_queries::Queries;
 use td_storage::Storage;
 use tracing::{debug, error};
 
-#[allow(clippy::too_many_arguments)]
+pub struct ProjectPass {
+    pub project: ProjectId,
+    pub concerns: Concerns,
+}
+
+/// Marks every concern of every live project, and of every deleted one still
+/// owed cleanup: a "pending work" predicate missing one concern would stall a
+/// project forever, and an idle project's pass costs a few empty lookups.
 #[service_factory]
-async fn request(
-    storage: Ctx<Storage>,
-    bridge: Ctx<BridgeProviderHandle>,
-    internal_api: Ctx<InternalApi>,
-    scheduler_notify: Ctx<SchedulerNotify>,
-    config: Ctx<SchedulerConfig>,
-    cursor: Ctx<TickCursor>,
-    db: DbPool<AcrossProjects>,
+async fn sweep(
+    wakes: Ctx<ProjectWakes>,
+    db: DbPool<AcrossProjects, SystemPool>,
     _request: (),
 ) -> Result<(), TdError> {
-    let grant = Grant::asserted("scheduler dispatch tick");
-    // The saturation flag; the capped function-runner readiness fetches raise
-    // it when they return a full batch, in any project.
-    let mut saturated = false;
-
-    // A step that lost a conflict rolled back and runs again on the next tick,
-    // which the scheduler is woken for instead of waiting out its timer.
-    let mut rerun = false;
-
-    let active = cursor.order(projects_to_tick(&db, grant).await?);
-    let draining = projects_to_drain(&db, grant).await?;
-    let tick = |project| ProjectTick {
-        project,
-        storage: &storage,
-        bridge: &bridge,
-        internal_api: &internal_api,
-        config: &config,
-        db: db.in_project(project),
-        grant,
+    let grant = Grant::asserted("scheduler sweep");
+    let live = active_project_ids(&db, grant).await?;
+    let draining = {
+        let mut conn = db.read().await?;
+        conn.get(grant).projects().draining().await?
     };
-    for project in &active {
-        tick(project).run(&mut saturated, &mut rerun).await;
-        cursor.finished(project);
-    }
-    for project in &draining {
-        tick(project).drain(&mut rerun).await;
-    }
-
-    if saturated {
-        debug!("scheduler.dispatch_tick: capped; re-notifying the scheduler");
-    }
-    if rerun {
-        debug!("scheduler.dispatch_tick: a step conflicted; re-notifying the scheduler");
-    }
-    if saturated || rerun {
-        scheduler_notify.notify_scheduler();
+    for project in live.iter().chain(&draining) {
+        wakes.wake(project, Concerns::ALL);
     }
     Ok(())
 }
 
-/// Every live project gets a tick. Deliberately not "projects with pending
-/// work": that predicate would have to union every sub-pipeline's readiness
-/// condition, and missing one would silently stall a project forever, whereas
-/// an idle project's tick is a handful of indexed lookups that return nothing.
-async fn projects_to_tick(
-    db: &DbPool<AcrossProjects>,
-    grant: Grant,
-) -> Result<Vec<ProjectId>, TdError> {
-    active_project_ids(db, grant).await
+/// One project's pass over its concerns. Answers the concerns left undone: a
+/// capped dispatch, or a step that lost its conflicts.
+#[service_factory]
+async fn pass(
+    storage: Ctx<Storage>,
+    bridge: Ctx<BridgeProviderHandle>,
+    internal_api: Ctx<InternalApi>,
+    config: Ctx<SchedulerConfig>,
+    db: DbPool<AcrossProjects, SystemPool>,
+    request: ProjectPass,
+) -> Result<Concerns, TdError> {
+    let grant = Grant::asserted("scheduler pass");
+    let ProjectPass { project, concerns } = request;
+    let live: Option<ProjectDB> = {
+        let mut conn = db.read().await?;
+        conn.get(grant).scd2().fetch_optional(&project).await?
+    };
+    let pass = ProjectTick {
+        project: &project,
+        storage: &storage,
+        bridge: &bridge,
+        internal_api: &internal_api,
+        config: &config,
+        db: db.in_project(&project),
+        grant,
+    };
+    Ok(match live {
+        Some(_) => pass.run(concerns).await,
+        None => pass.drain().await,
+    })
 }
 
-/// Deleted projects whose runs and triggers are not ended yet: the delete
-/// takes a project out of the tick before the tick ended what its last
-/// collection left behind.
-async fn projects_to_drain(
-    db: &DbPool<AcrossProjects>,
-    grant: Grant,
-) -> Result<Vec<ProjectId>, TdError> {
-    let mut conn = db.read().await?;
-    Ok(conn.get(grant).projects().draining().await?)
-}
-
-/// One project's tick. Each step is its own write unit, reads and stamps at
+/// One project's pass. Each step is its own write unit, reads and stamps at
 /// that unit's own instant, and sends its worker messages once it commits:
 /// housekeeping first, so dispatch reads what it decided, then each dispatch
-/// path. A step that fails rolls back alone and the rest go on; the next tick
-/// runs it again.
+/// path. A step that fails rolls back alone and the rest go on.
 struct ProjectTick<'a> {
     project: &'a ProjectId,
     storage: &'a Storage,
     bridge: &'a BridgeProviderHandle,
     internal_api: &'a InternalApi,
     config: &'a SchedulerConfig,
-    db: DbPool<InProject>,
+    db: DbPool<InProject, SystemPool>,
     grant: Grant,
 }
 
 impl ProjectTick<'_> {
-    async fn run(&self, saturated: &mut bool, rerun: &mut bool) {
-        let steps = [
-            ("housekeeping", self.housekeep().await),
-            ("function runners", self.dispatch_runners(saturated).await),
-            ("replays", self.dispatch_replays(saturated).await),
-            ("cron triggers", self.dispatch_cron_triggers().await),
-            ("stage triggers", self.dispatch_stage_triggers().await),
-        ];
-        report(self.project, steps, rerun);
+    async fn run(&self, concerns: Concerns) -> Concerns {
+        stats::pass_ran();
+        let mut again = Concerns::NONE;
+        if concerns.contains(Concerns::HOUSEKEEPING) {
+            again |= self
+                .step_once("housekeeping", Concerns::HOUSEKEEPING, self.housekeep())
+                .await;
+        }
+        if concerns.contains(Concerns::RUNNERS) {
+            again |= self
+                .step(
+                    "function runners",
+                    Concerns::RUNNERS,
+                    self.dispatch_runners(),
+                )
+                .await;
+        }
+        if concerns.contains(Concerns::REPLAYS) {
+            again |= self
+                .step("replays", Concerns::REPLAYS, self.dispatch_replays())
+                .await;
+        }
+        if concerns.contains(Concerns::TRIGGERS) {
+            again |= self
+                .step_once(
+                    "cron triggers",
+                    Concerns::TRIGGERS,
+                    self.dispatch_cron_triggers(),
+                )
+                .await;
+            again |= self
+                .step_once(
+                    "stage triggers",
+                    Concerns::TRIGGERS,
+                    self.dispatch_stage_triggers(),
+                )
+                .await;
+        }
+        again
     }
 
     /// A deleted project's pass: only what ends its runs and stops its
     /// triggers, never a dispatch, a release or a start.
-    async fn drain(&self, rerun: &mut bool) {
-        let steps = [
-            ("deleted runs", self.end_deleted_runs().await),
-            ("cron triggers", self.stop_cron_triggers().await),
-            ("stage triggers", self.stop_stage_triggers().await),
-        ];
-        report(self.project, steps, rerun);
+    async fn drain(&self) -> Concerns {
+        let mut again = Concerns::NONE;
+        again |= self
+            .step_once(
+                "deleted runs",
+                Concerns::HOUSEKEEPING,
+                self.end_deleted_runs(),
+            )
+            .await;
+        again |= self
+            .step_once(
+                "cron triggers",
+                Concerns::TRIGGERS,
+                self.stop_only(WorkerType::CronTrigger),
+            )
+            .await;
+        again |= self
+            .step_once(
+                "stage triggers",
+                Concerns::TRIGGERS,
+                self.stop_only(WorkerType::StageTrigger),
+            )
+            .await;
+        again
+    }
+
+    /// [`step`](Self::step) for a step that never caps.
+    async fn step_once(
+        &self,
+        step: &str,
+        owed: Concerns,
+        run: impl Future<Output = Result<(), TdError>>,
+    ) -> Concerns {
+        self.step(step, owed, async { run.await.map(|()| false) })
+            .await
+    }
+
+    async fn step(
+        &self,
+        step: &str,
+        owed: Concerns,
+        run: impl Future<Output = Result<bool, TdError>>,
+    ) -> Concerns {
+        let started = Instant::now();
+        let outcome = run.await;
+        let elapsed = started.elapsed();
+        debug!(
+            project_id = %self.project,
+            step,
+            elapsed_us = elapsed.as_micros() as u64,
+            "scheduler.pass: step done"
+        );
+        stats::step_took(step, elapsed);
+        self.left(owed, step, outcome)
+    }
+
+    fn left(&self, owed: Concerns, step: &str, outcome: Result<bool, TdError>) -> Concerns {
+        let project = self.project;
+        match outcome {
+            Ok(false) => Concerns::NONE,
+            Ok(true) => {
+                debug!(project_id = %project, step, "scheduler.pass: capped, running again");
+                owed
+            }
+            Err(e) if conflicted(&e) => {
+                debug!(project_id = %project, step, "scheduler.pass: step conflicted: {e}");
+                owed
+            }
+            Err(e) => {
+                error!(
+                    project_id = %project,
+                    step,
+                    "scheduler.pass: step failed, continuing with the rest: {e:?}"
+                );
+                stats::step_failed(step);
+                Concerns::NONE
+            }
+        }
     }
 
     async fn end_deleted_runs(&self) -> Result<(), TdError> {
         let stops = retrying(|attempt| async {
-            let mut trx = self.db.begin(attempt).await?;
+            let mut trx = self.db.lock_project().begin(attempt).await?;
             let at = trx.locked_at();
             let conn = trx.get(self.grant);
             let orphaned = conn.logical_runs().of_deleted_functions().await?;
@@ -170,7 +258,7 @@ impl ProjectTick<'_> {
     /// held on hold that nothing blocks any more.
     async fn housekeep(&self) -> Result<(), TdError> {
         let stops = retrying(|attempt| async {
-            let mut trx = self.db.begin(attempt).await?;
+            let mut trx = self.db.lock_project().begin(attempt).await?;
             let at = trx.locked_at();
             let conn = trx.get(self.grant);
             let orphaned = conn.logical_runs().of_deleted_functions().await?;
@@ -187,9 +275,11 @@ impl ProjectTick<'_> {
     }
 
     /// Scheduled and ReScheduled runs: mint, bind, and flip them to Requested.
-    async fn dispatch_runners(&self, saturated: &mut bool) -> Result<(), TdError> {
-        let (messages, filled) = retrying(|attempt| async {
-            let mut trx = self.db.begin(attempt).await?;
+    /// A run whose attempt cannot be minted from its plan is cancelled, with
+    /// its transaction, so the rest of the project keeps dispatching.
+    async fn dispatch_runners(&self) -> Result<bool, TdError> {
+        let (messages, filled, stops) = retrying(|attempt| async {
+            let mut trx = self.db.lock_project().begin(attempt).await?;
             let locked_at = trx.locked_at();
             let at = AtTime::from(locked_at);
             let conn = trx.get(self.grant);
@@ -197,7 +287,25 @@ impl ProjectTick<'_> {
             let mut filled = false;
 
             let ready = fetch_lfr_to_dispatch(conn, &at, self.config, &mut filled).await?;
-            let minted = mint_function_runs_on_dispatch(conn, &ready, locked_at).await?;
+            let dispatch = mint_function_runs_on_dispatch(conn, &ready, locked_at).await?;
+            let mut stops = Vec::new();
+            if !dispatch.unmintable.is_empty() {
+                let unmintable: Vec<LogicalFunctionRunDB> = dispatch
+                    .unmintable
+                    .iter()
+                    .map(|parked| {
+                        error!(
+                            lfr_id = %parked.item.id,
+                            error = ?parked.error,
+                            "scheduler.dispatch: cannot mint the run's attempt, cancelling the run"
+                        );
+                        parked.item.clone()
+                    })
+                    .collect();
+                stops = cancel_runs(conn, locked_at, &unmintable).await?.stops;
+                stats::cancelled_unmintable(unmintable.len() as u64);
+            }
+            let minted = dispatch.minted;
             let enriched = enrich_minted_dispatch(conn, &minted).await?;
             let workers = create_locked_function_runner_workers_start_request(
                 self.bridge.orchestrator(),
@@ -218,20 +326,20 @@ impl ProjectTick<'_> {
             let pfr_ids = pfr_ids_from_dispatched_workers(&workers)?;
             conn.physical_runs().dispatched(&pfr_ids, locked_at).await?;
             trx.commit().await?;
-            Ok((messages, filled))
+            Ok((messages, filled, stops))
         })
         .await?;
-        *saturated |= filled;
 
+        stop_function_workers(self.bridge, stops).await;
         put_worker_messages(self.bridge, messages).await;
-        Ok(())
+        Ok(filled)
     }
 
     /// Attempts the replay endpoint minted (Requested, no worker): no mint, no
     /// bind, no LFR status change.
-    async fn dispatch_replays(&self, saturated: &mut bool) -> Result<(), TdError> {
+    async fn dispatch_replays(&self) -> Result<bool, TdError> {
         let (messages, filled) = retrying(|attempt| async {
-            let mut trx = self.db.begin(attempt).await?;
+            let mut trx = self.db.lock_project().begin(attempt).await?;
             let locked_at = trx.locked_at();
             let at = AtTime::from(locked_at);
             let conn = trx.get(self.grant);
@@ -258,24 +366,15 @@ impl ProjectTick<'_> {
             Ok((messages, filled))
         })
         .await?;
-        *saturated |= filled;
 
         put_worker_messages(self.bridge, messages).await;
-        Ok(())
-    }
-
-    async fn stop_cron_triggers(&self) -> Result<(), TdError> {
-        self.stop_only(WorkerType::CronTrigger).await
-    }
-
-    async fn stop_stage_triggers(&self) -> Result<(), TdError> {
-        self.stop_only(WorkerType::StageTrigger).await
+        Ok(filled)
     }
 
     async fn stop_only(&self, worker_type: WorkerType) -> Result<(), TdError> {
         let orchestrator = self.bridge.orchestrator();
         let messages = retrying(|attempt| async move {
-            let mut trx = self.db.begin(attempt).await?;
+            let mut trx = self.db.lock_project().begin(attempt).await?;
             let at = trx.locked_at();
             let conn = trx.get(self.grant);
             let mut messages = WorkerMessages::default();
@@ -292,7 +391,7 @@ impl ProjectTick<'_> {
     async fn dispatch_cron_triggers(&self) -> Result<(), TdError> {
         let orchestrator = self.bridge.orchestrator();
         let messages = retrying(|attempt| async {
-            let mut trx = self.db.begin(attempt).await?;
+            let mut trx = self.db.lock_project().begin(attempt).await?;
             let at = trx.locked_at();
             let conn = trx.get(self.grant);
             let mut messages = WorkerMessages::default();
@@ -330,7 +429,7 @@ impl ProjectTick<'_> {
     async fn dispatch_stage_triggers(&self) -> Result<(), TdError> {
         let orchestrator = self.bridge.orchestrator();
         let messages = retrying(|attempt| async {
-            let mut trx = self.db.begin(attempt).await?;
+            let mut trx = self.db.lock_project().begin(attempt).await?;
             let at = trx.locked_at();
             let conn = trx.get(self.grant);
             let mut messages = WorkerMessages::default();
@@ -369,30 +468,9 @@ impl ProjectTick<'_> {
     }
 }
 
-fn report<const N: usize>(
-    project: &ProjectId,
-    steps: [(&str, Result<(), TdError>); N],
-    rerun: &mut bool,
-) {
-    for (step, outcome) in steps {
-        match outcome {
-            Err(e) if conflicted(&e) => {
-                *rerun = true;
-                debug!(project_id = %project, step, "scheduler.dispatch_tick: step conflicted: {e}");
-            }
-            Err(e) => error!(
-                project_id = %project,
-                step,
-                "scheduler.dispatch_tick: step failed, continuing with the rest: {e:?}"
-            ),
-            Ok(()) => {}
-        }
-    }
-}
-
 /// Sends the stops of the triggers of `worker_type` waiting for one.
 async fn stop_triggers(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     orchestrator: Orchestrator,
     at: LockInstant,
     worker_type: WorkerType,
@@ -408,11 +486,8 @@ async fn stop_triggers(
     update_worker_statuses(conn, orchestrator, at, &to_stop, true).await
 }
 
-/// The trigger workers `readiness` matches. One that another unit changes
-/// meanwhile makes this unit's status update conflict, so the tick never acts
-/// on a stale worker.
-async fn trigger_workers<S: SeesProjectRows, M: WriteMode>(
-    conn: &mut DomainConnection<Apiserver, S, M>,
+async fn trigger_workers(
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     readiness: impl SqlCondition<WorkerDB>,
 ) -> Result<Vec<WorkerDBWithNames>, TdError> {
     let ready: Vec<WorkerDB> = conn.fetch_all(readiness).await?;
@@ -429,8 +504,8 @@ async fn trigger_workers<S: SeesProjectRows, M: WriteMode>(
 
 /// Flip the trigger workers' status: Requested, or the orchestrator-specific
 /// stop status.
-async fn update_worker_statuses<S: SeesProjectRows, M: WriteMode>(
-    conn: &mut DomainConnection<Apiserver, S, M>,
+async fn update_worker_statuses(
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     orchestrator: Orchestrator,
     at: LockInstant,
     workers: &[WorkerDBWithNames],
@@ -557,7 +632,7 @@ mod tests {
         let execution = service.execute_function(request).await?.data;
 
         let (context, sent) = supervisor_scheduler_context(&db);
-        context.clone().request(()).await?;
+        context.clone().tick().await?;
 
         let created_message = sent.messages();
         assert_eq!(created_message.len(), 1);
@@ -799,7 +874,7 @@ mod tests {
         assert_eq!(frs.len(), 2);
 
         let (context, sent) = supervisor_scheduler_context(&db);
-        context.clone().request(()).await?;
+        context.clone().tick().await?;
 
         let messages = sent.messages();
         assert_eq!(
@@ -853,7 +928,7 @@ mod tests {
         // message — `to_dispatch` filters on PFR.status=Requested,
         // and we just flipped to Dispatched.
         let prior_messages_count = messages.len();
-        context.clone().request(()).await?;
+        context.clone().tick().await?;
         let messages_after = sent.messages();
         assert_eq!(
             messages_after.len(),
@@ -923,7 +998,7 @@ mod tests {
         dispatch_services(&db).execute_function(request).await?;
 
         let (context, sent) = kubernetes_scheduler_context(&db);
-        context.clone().request(()).await?;
+        context.clone().tick().await?;
 
         let created = sent.messages();
         assert_eq!(created.len(), 1);
@@ -1035,7 +1110,7 @@ mod tests {
             .await?;
 
         let (context, sent) = kubernetes_scheduler_context(&db);
-        context.clone().request(()).await?;
+        context.clone().tick().await?;
 
         assert!(sent.messages().is_empty());
         let lfrs: Vec<LogicalFunctionRunDB> = db.fetch_all(&execution.id).await?;
@@ -1120,7 +1195,7 @@ mod tests {
         }
 
         let (context, sent) = kubernetes_scheduler_context(&db);
-        context.clone().request(()).await?;
+        context.clone().tick().await?;
 
         assert_eq!(
             sent.messages().len(),
@@ -1134,35 +1209,6 @@ mod tests {
                 .await?;
             assert_eq!(pfrs.len(), 1, "each project must dispatch its own run");
         }
-        Ok(())
-    }
-
-    /// A tick resumes after the last project the previous one finished, so a
-    /// tick cancelled part-way leaves its unticked projects first in line.
-    #[td_test::test(db)]
-    async fn test_tick_resumes_after_the_last_project_it_finished(
-        db: TdPool,
-    ) -> Result<(), TdError> {
-        let mut projects = Vec::new();
-        for name in ["p_one", "p_two", "p_three"] {
-            projects.push(
-                db.seed()
-                    .project(ProjectName::try_from(name)?)
-                    .await?
-                    .project_id,
-            );
-        }
-        projects.sort();
-
-        let (context, _sent) = kubernetes_scheduler_context(&db);
-        context.tick_cursor.finished(&projects[0]);
-        context.clone().request(()).await?;
-
-        assert_eq!(
-            context.tick_cursor.last(),
-            Some(projects[0]),
-            "the walk started after the cursor and wrapped around to it"
-        );
         Ok(())
     }
 
@@ -1316,7 +1362,7 @@ mod tests {
                 .await?;
 
         let (context, sent) = kubernetes_scheduler_context(db);
-        context.clone().request(()).await?;
+        context.clone().tick().await?;
 
         let mut created = sent.messages();
         assert_eq!(created.len(), 1);
@@ -1353,7 +1399,7 @@ mod tests {
         let queue = FailPutQueue::failing_ids([poisoned.id.to_string()]);
         let sent = queue.inner.clone();
         let context = kubernetes_scheduler_context_with_queue(&db, queue);
-        context.clone().request(()).await?;
+        context.clone().tick().await?;
 
         for id in [&poisoned.id, &healthy.id] {
             let stopped: WorkerDB = db.fetch_one::<WorkerDB>(id).await?;
@@ -1383,7 +1429,7 @@ mod tests {
         .await?;
 
         let context = dispatch_services(&db);
-        context.clone().request(()).await?;
+        context.clone().tick().await?;
 
         let updated: WorkerDB = db.fetch_one::<WorkerDB>(&worker.id).await?;
         assert_eq!(updated.status, WorkerStatus::StopRequested);
@@ -1467,7 +1513,7 @@ mod tests {
         let queue = FailPutQueue::failing_first(1);
         let sent = queue.inner.clone();
         let context = kubernetes_scheduler_context_with_queue(&db, queue);
-        context.clone().request(()).await?;
+        context.clone().tick().await?;
         let created = sent.messages();
         assert_eq!(created.len(), 1);
         for execution in &executions {
@@ -1486,7 +1532,7 @@ mod tests {
         // The run with the lost put is NOT re-picked by the readiness
         // queries (its WorkerDB exists): a normal tick dispatches nothing.
         let (context, sent) = kubernetes_scheduler_context(&db);
-        context.clone().request(()).await?;
+        context.clone().tick().await?;
         assert!(sent.messages().is_empty());
 
         // The stuck-dispatched sweep (recovery tick) is the recovery path:
@@ -1499,7 +1545,7 @@ mod tests {
         });
         recovery.recovery(()).await?;
         let (context, sent) = kubernetes_scheduler_context(&db);
-        context.clone().request(()).await?;
+        context.clone().tick().await?;
         for execution in &executions {
             let pfrs: Vec<PhysicalFunctionRunDB> = db
                 .timeline()
@@ -1520,10 +1566,6 @@ mod tests {
         Ok(())
     }
 
-    /// With `max_functions_per_tick` = 1, a tick dispatches only the oldest
-    /// ready run and re-notifies the scheduler post-commit; the backlog
-    /// drains across back-to-back ticks and the re-notify stops once a tick
-    /// comes in under the cap.
     #[td_test::test(db)]
     async fn test_dispatch_cap_oldest_first_and_self_notify(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
@@ -1589,16 +1631,7 @@ mod tests {
             max_functions_per_tick: MaxFunctionsPerTick(1),
             ..SchedulerConfig::default()
         });
-        // Drain any notify permit stored by the execute calls above.
-        let _ = tokio::time::timeout(
-            Duration::from_millis(10),
-            context.scheduler_notify.notified_scheduler(),
-        )
-        .await;
-
-        // Tick 1: only the oldest ready run dispatches; the full batch
-        // stores a scheduler re-notify.
-        context.clone().request(()).await?;
+        context.tick().await?;
         assert_eq!(sent.messages().len(), 1);
         let pfrs_oldest: Vec<PhysicalFunctionRunDB> = db
             .timeline()
@@ -1610,40 +1643,35 @@ mod tests {
             .fetch_all::<PhysicalFunctionRunDB>(&(&executions[1].manual_trigger))
             .await?;
         assert!(pfrs_newest.is_empty());
-        tokio::time::timeout(
-            Duration::from_millis(100),
-            context.scheduler_notify.notified_scheduler(),
-        )
-        .await
-        .expect("capped tick must re-notify the scheduler");
+        assert!(
+            context
+                .wakes
+                .marked(&p.project_id)
+                .contains(Concerns::RUNNERS),
+            "a capped pass must leave runners marked"
+        );
 
-        // Tick 2: the remaining run dispatches — still a full batch, so
-        // the re-notify fires again.
-        context.clone().request(()).await?;
+        context.tick().await?;
         assert_eq!(sent.messages().len(), 2);
         let pfrs_newest: Vec<PhysicalFunctionRunDB> = db
             .timeline()
             .fetch_all::<PhysicalFunctionRunDB>(&(&executions[1].manual_trigger))
             .await?;
         assert_eq!(pfrs_newest.len(), 1);
-        tokio::time::timeout(
-            Duration::from_millis(100),
-            context.scheduler_notify.notified_scheduler(),
-        )
-        .await
-        .expect("second full-batch tick must re-notify the scheduler");
-
-        // Tick 3: nothing ready — under the cap, no re-notify.
-        context.clone().request(()).await?;
-        assert_eq!(sent.messages().len(), 2);
         assert!(
-            tokio::time::timeout(
-                Duration::from_millis(100),
-                context.scheduler_notify.notified_scheduler(),
-            )
-            .await
-            .is_err(),
-            "an under-cap tick must not re-notify the scheduler"
+            context
+                .wakes
+                .marked(&p.project_id)
+                .contains(Concerns::RUNNERS),
+            "a second full-batch pass must leave runners marked"
+        );
+
+        context.tick().await?;
+        assert_eq!(sent.messages().len(), 2);
+        assert_eq!(
+            context.wakes.marked(&p.project_id),
+            Concerns::NONE,
+            "an under-cap pass must leave nothing marked"
         );
         Ok(())
     }

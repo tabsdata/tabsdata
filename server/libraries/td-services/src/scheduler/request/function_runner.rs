@@ -7,6 +7,7 @@ use crate::internal_api::InternalApi;
 use crate::logical::dispatch_mint::MintedDispatch;
 use crate::logical::index_lfrs_by_exec_fn;
 use crate::scheduler::message_builder::{build_function_v2, prefetch_dispatch};
+use crate::scheduler::partial::Partial;
 use std::collections::HashMap;
 use td_bridge::messaging::{FunctionRequest, FunctionStartRequest, OrchestratorMessagePayload};
 use td_bridge::{BridgeProviderHandle, Orchestrator};
@@ -148,32 +149,32 @@ pub async fn materialize_replay_dispatch<S: SeesProjectRows, M: AccessMode>(
             .push(t.base);
     }
 
-    let mut output = Vec::with_capacity(pfrs.len());
-    for pfr in pfrs.iter() {
-        let Some(lfr) = lfr_by_exec_fn
+    let output = Partial::build(pfrs.iter(), |pfr| {
+        let lfr = lfr_by_exec_fn
             .get(&pfr.execution_id)
             .and_then(|inner| inner.get(&pfr.function_id))
-        else {
-            return Err(api_error!(
-                ApiError::InternalError,
-                "replay-dispatch: no LFR for PFR {} via (execution_id={}, function_id={})",
-                pfr.id,
-                pfr.execution_id,
-                pfr.function_id,
-            ));
-        };
+            .ok_or_else(|| {
+                api_error!(
+                    ApiError::InternalError,
+                    "replay-dispatch: no LFR for PFR {} via (execution_id={}, function_id={})",
+                    pfr.id,
+                    pfr.execution_id,
+                    pfr.function_id,
+                )
+            })?;
         let runnable = RunnableVersion {
             function_version_id: pfr.function_version_id.clone(),
             function_version_patch_id: pfr.function_version_patch_id.clone(),
         };
         let tdvs = tdvs_by_fr.remove(&pfr.id).unwrap_or_default();
-        output.push(MintedDispatch {
+        Ok(MintedDispatch {
             lfr: lfr.clone(),
             fr: pfr.base.clone(),
             runnable,
             tdvs,
-        });
-    }
+        })
+    })
+    .left_for_next_pass("replays", |pfr| pfr.id.to_string());
 
     debug!(
         replay_count = output.len(),
@@ -277,10 +278,7 @@ pub async fn create_locked_function_runner_workers_start_request<
         Orchestrator::Kubernetes => None,
     };
 
-    // One run's failure must not abort the tick: skip it (its PFR stays
-    // `Requested` with no WorkerDB, re-picked by the replay-side readiness
-    // next tick) and keep the rest.
-    let mut results = Vec::new();
+    let mut partial = Partial::default();
     for f in physical_function_runs.iter() {
         let result = async {
             let worker_id = WorkerId::new();
@@ -364,16 +362,14 @@ pub async fn create_locked_function_runner_workers_start_request<
         }
         .await;
         match result {
-            Ok((message, payload)) => {
-                messages.push((message.id.to_string(), payload));
-                results.push(message);
-            }
-            Err(e) => warn!(
-                pfr_id = %f.id,
-                reason = ?e,
-                "request: skipping function-run dispatch; will retry next tick"
-            ),
+            Ok(built) => partial.built.push(built),
+            Err(error) => partial.park(f, error),
         }
+    }
+    let mut results = Vec::new();
+    for (message, payload) in partial.left_for_next_pass("function runners", |f| f.id.to_string()) {
+        messages.push((message.id.to_string(), payload));
+        results.push(message);
     }
 
     if !results.is_empty() {
