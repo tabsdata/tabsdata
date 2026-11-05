@@ -84,3 +84,8 @@ class SqlCommonErrorCode(ErrorCode):
         " this destination cannot apply: its rows replace the target's, and"
         " merging them would keep rows the source no longer has",
     )  # _merge._driver.merge_batch()
+    SQL_COMMON_10 = ErrorDef(
+        SqlCommonRuntimeException,
+        "The batch for {table} does not match it and schema_evolution={evolution!r}"
+        " does not allow the change: {changes}",
+    )  # _schema.policy.governed()
