@@ -4,18 +4,24 @@
 
 from __future__ import annotations
 
+import collections
 import contextlib
 import io
 import queue
+import struct
 import threading
 from collections.abc import Buffer, Iterator
 from typing import IO, TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     import polars as pl
+    import pyarrow.parquet as pq
 
 PIPE_DEPTH = 4
 PUT_WAIT_SECONDS = 0.1
+# The most of the stream's end kept to read its Parquet footer from: footers
+# run to kilobytes, and one too large to fit is simply not read.
+TAIL_BYTES = 8 * 1024 * 1024
 
 
 class _End:
@@ -32,6 +38,9 @@ class ParquetPipe(io.RawIOBase):
         self._abandoned = threading.Event()
         self._pending = memoryview(b"")
         self._ended = False
+        self._tail: collections.deque[bytes] = collections.deque()
+        self._tail_size = 0
+        self._produced = False
 
     def readable(self) -> bool:
         return True
@@ -63,7 +72,30 @@ class ParquetPipe(io.RawIOBase):
         except BaseException as error:
             self._put(error)
         else:
+            self._produced = True
             self._put(_END)
+
+    def _keep(self, chunk: bytes) -> None:
+        self._tail.append(chunk)
+        self._tail_size += len(chunk)
+        while self._tail_size - len(self._tail[0]) >= TAIL_BYTES:
+            self._tail_size -= len(self._tail.popleft())
+
+    def footer(self) -> pq.FileMetaData | None:
+        """The Parquet footer of the stream, once it was produced whole: its
+        last bytes, kept as they went by, so reading it costs nothing. ``None``
+        when the stream did not end or its footer did not fit the kept tail."""
+        import pyarrow.parquet as pq
+
+        if not self._produced:
+            return None
+        tail = b"".join(self._tail)
+        if len(tail) < 8 or tail[-4:] != b"PAR1":
+            return None
+        length = struct.unpack("<I", tail[-8:-4])[0]
+        if length + 8 > len(tail):
+            return None
+        return pq.read_metadata(io.BytesIO(b"PAR1" + tail[-(length + 8) :]))
 
     def abandon(self) -> None:
         self._abandoned.set()
@@ -91,6 +123,7 @@ class _Sink:
     def write(self, data: Buffer) -> int:
         chunk = bytes(data)
         if chunk:
+            self._pipe._keep(chunk)
             self._pipe._put(chunk)
         return len(chunk)
 

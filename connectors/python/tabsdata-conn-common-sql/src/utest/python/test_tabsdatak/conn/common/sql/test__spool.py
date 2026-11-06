@@ -11,6 +11,12 @@ import polars as pl
 import pytest
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common.sql import _spool
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.footer import column_range
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._spool import piped_parquet
 
 pytestmark = pytest.mark.sql_common
@@ -71,3 +77,33 @@ def test_the_pipe_is_a_non_seekable_reader():
         assert pipe.readable()
         assert not pipe.seekable()
         assert not pipe.writable()
+
+
+def test_the_footer_is_read_off_the_tail_of_the_stream():
+    frame = pl.LazyFrame({"n": list(range(100_000))}, schema={"n": pl.Int64})
+    with piped_parquet(frame) as pipe:
+        pipe.read()
+    footer = pipe.footer()
+    assert footer.num_rows == 100_000
+    assert column_range([footer], "n") == (0, 99_999)
+
+
+def test_a_stream_that_failed_has_no_footer():
+    frame = pl.LazyFrame({"n": [1]}).select(pl.col("missing"))
+    with piped_parquet(frame) as pipe:
+        with pytest.raises(Exception):
+            pipe.read()
+    assert pipe.footer() is None
+
+
+def test_a_footer_larger_than_the_kept_tail_is_not_read(monkeypatch):
+    """The tail is bounded: a footer it no longer holds whole is not read."""
+    monkeypatch.setattr(_spool, "TAIL_BYTES", 16)
+    stream = io.BytesIO()
+    pl.DataFrame({"n": list(range(1_000))}).write_parquet(stream)
+    pipe = _spool.ParquetPipe()
+    for byte in stream.getvalue():
+        pipe._keep(bytes([byte]))
+    pipe._produced = True
+    assert pipe._tail_size == 16
+    assert pipe.footer() is None
