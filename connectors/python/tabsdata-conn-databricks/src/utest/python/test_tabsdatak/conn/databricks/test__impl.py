@@ -794,6 +794,11 @@ class _BulkCursor:
             wanted = statement.rsplit("= '", 1)[1].rstrip("'")
             self._rows = [(1 if wanted in self._columns else 0,)]
             return
+        if statement.startswith("DESCRIBE"):
+            # The batch and the target alike: strict finds nothing to refuse.
+            self.description = [("col_name",), ("data_type",)]
+            self._rows = [(name, "string") for name in sorted(self._columns)]
+            return
         if "ADD COLUMNS" in statement:
             self._columns.add(statement.rsplit("(`", 1)[1].split("`", 1)[0].lower())
         self._rows = []

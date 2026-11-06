@@ -888,6 +888,63 @@ def ensure_type_widening(cursor, sql_fq: str, enabled: bool) -> None:
         )
 
 
+def _described_columns(cursor) -> list[tuple[str, str]]:
+    """``(name, type)`` per column of the last ``DESCRIBE``, up to the
+    partition or metadata block a table's description goes on with."""
+    rows = cursor.fetchall()
+    fields = [field[0].lower() for field in cursor.description]
+    name_at, type_at = fields.index("col_name"), fields.index("data_type")
+    columns = []
+    for row in rows:
+        name = row[name_at]
+        if not name or name.startswith("#"):
+            break
+        columns.append((name, row[type_at]))
+    return columns
+
+
+class _StrictTarget:
+    """The append's target as the policy reads it under ``strict``, which
+    changes nothing."""
+
+    def __init__(self, cursor) -> None:
+        self._cursor = cursor
+
+    def fold(self, name: str) -> str:
+        return name.lower()
+
+    def target_columns(self, target: str) -> list[tuple[str, str]]:
+        self._cursor.execute(f"DESCRIBE TABLE {target}")
+        return _described_columns(self._cursor)
+
+    def execute(self, statement: str) -> None:
+        raise AssertionError(f"strict changes nothing: {statement}")
+
+
+def _hold_to_strict(cursor, sql_fq: str, file_in_volume: str) -> None:
+    """Refuse, before the ``COPY INTO``, a batch the target cannot take as it is
+    (``SQL_COMMON_10``, as a strict merge does), rather than leave it to the
+    ``COPY INTO``'s own schema mismatch."""
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._schema.evolution import evolve_with_iceberg
+    from tabsdatak.conn.databricks import _types
+
+    cursor.execute(
+        f"DESCRIBE QUERY SELECT * FROM read_files("
+        f"'{file_in_volume}', {_READ_FILES_OPTIONS})"
+    )
+    evolve_with_iceberg(
+        _StrictTarget(cursor),
+        sql_fq,
+        _described_columns(cursor),
+        renderer=_types.CheckOnlyRenderer(),
+        widening_map=_types.TYPE_WIDENING_MAP,
+        can_safely_widen=_types.can_widen,
+        same_base=_types.same_base,
+        evolution="strict",
+    )
+
+
 def copy_into_table(
     sql_conn,
     cfg: DatabricksWriteCfg,
@@ -946,6 +1003,8 @@ def copy_into_table(
             # just written, leaving the guard to read the next rerun as the
             # first.
             ensure_watermark_column(cursor, fq_table, sql_fq, cfg.watermark_column)
+        if cfg.schema_evolution == "strict":
+            _hold_to_strict(cursor, sql_fq, file_in_volume)
         _execute_volume_statement(cursor, copy_stmt, cfg.support_append_copy_into)
         return
     raise ValueError(

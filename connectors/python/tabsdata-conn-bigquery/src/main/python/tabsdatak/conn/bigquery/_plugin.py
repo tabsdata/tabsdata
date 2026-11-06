@@ -212,12 +212,12 @@ class _BigQueryDestPlugin(
                     logger.debug("bigquery: finished table %r", table_fqn)
                 return
 
-            # Not under "strict": a load job with no schema update options
-            # already refuses a new column or a type the column cannot hold,
-            # and the pass would load the whole batch once more to read it.
+            # "strict" whatever the engine: the load job would refuse the same
+            # batch, but with its own error rather than SQL_COMMON_10. "update"
+            # only under iceberg: the native engine's load job evolves itself.
             diffing = (
-                write_cfg.schema_evolution == "update"
-                and cfg.schema_evolution_engine == "iceberg"
+                write_cfg.schema_evolution == "strict"
+                or cfg.schema_evolution_engine == "iceberg"
             )
 
             # Append is the only disposition that stamps: a merge has returned

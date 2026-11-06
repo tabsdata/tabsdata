@@ -245,15 +245,19 @@ def test_dest_plugin_iceberg_engine_drops_the_table_it_read_the_batch_from(
     assert len(dropped) == 1 and dropped[0].startswith("my-project.analytics.users_")
 
 
-def test_dest_plugin_iceberg_engine_does_nothing_under_strict(monkeypatch, work_dir):
-    """Strict pins the target's schema; the engine only says *how* a schema
-    that is allowed to move is moved."""
+@pytest.mark.parametrize("engine", [_ICEBERG_ENGINE, _NATIVE_ENGINE])
+def test_dest_plugin_strict_refuses_a_new_column_before_the_load(
+    monkeypatch, work_dir, engine
+):
+    """Strict pins the target's schema whatever the engine, and refuses with
+    the policy's error rather than the load job's."""
     bq_client = _evolving_clients(
         monkeypatch, [("id", "INTEGER")], [("id", "INTEGER"), ("note", "STRING")]
     )
-    _write(work_dir, _ICEBERG_ENGINE, schema_evolution="strict")
+    with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
+        _write(work_dir, engine, schema_evolution="strict")
     assert _alters(bq_client) == []
-    assert bq_client.delete_table.call_count == 0
+    assert bq_client.load_table_from_uri.call_count == 0
 
 
 def test_dest_plugin_native_engine_emits_no_alters_of_its_own(monkeypatch, work_dir):

@@ -328,14 +328,8 @@ class DatabricksMergeDialect(MergeDialect):
         )
 
     def _relation_columns(self, relation: str) -> list[tuple[str, str]]:
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.databricks._impl import _described_columns
+
         self._cursor.execute(f"DESCRIBE TABLE {relation}")
-        rows = self._cursor.fetchall()
-        fields = [field[0].lower() for field in self._cursor.description]
-        name_at, type_at = fields.index("col_name"), fields.index("data_type")
-        columns = []
-        for row in rows:
-            name = row[name_at]
-            if not name or name.startswith("#"):
-                break
-            columns.append((name, row[type_at]))
-        return columns
+        return _described_columns(self._cursor)
