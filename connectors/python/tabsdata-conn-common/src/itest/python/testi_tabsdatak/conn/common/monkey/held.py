@@ -35,8 +35,7 @@ STALLED = transaction_status_to_mapping(TransactionStatus.STALLED.value)
 
 
 def _name(run) -> str:
-    # The server hands a Function; the fleet names functions by their name.
-    return getattr(run.function, "name", run.function)
+    return run.function.name
 
 
 def held_transactions(

@@ -19,7 +19,9 @@ def tx(id: str, status: str):
 
 
 def run(function: str, status: str):
-    return SimpleNamespace(function=function, status=status)
+    return SimpleNamespace(
+        function=SimpleNamespace(name=function, collection="c"), status=status
+    )
 
 
 def held(transactions: list, runs: dict[str, list]) -> set[str]:
@@ -59,25 +61,6 @@ def test_a_transaction_queued_behind_a_failed_run_holds_its_readers():
         "t4": [run("sub02", "Done")],
     }
     assert held(transactions, runs) == {"t2", "t3", "t4"}
-
-
-def test_runs_naming_their_function_as_the_server_does_are_held_through_upstreams():
-    def served(function: str, status: str):
-        return SimpleNamespace(
-            function=SimpleNamespace(name=function, collection="c"), status=status
-        )
-
-    transactions = [
-        tx("t1", "Stalled"),
-        tx("t2", "Running"),
-        tx("t3", "Running"),
-    ]
-    runs = {
-        "t1": [served("tfr04", "Failed")],
-        "t2": [served("tfr04", "Scheduled"), served("tfr06", "Done")],
-        "t3": [served("sub01", "Done")],
-    }
-    assert held(transactions, runs) == {"t2", "t3"}
 
 
 def test_a_transaction_scheduled_behind_nothing_stalled_is_not_held():
