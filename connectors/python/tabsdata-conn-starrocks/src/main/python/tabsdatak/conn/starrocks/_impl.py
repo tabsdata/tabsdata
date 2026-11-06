@@ -300,6 +300,18 @@ def stage(
     return key, staged_uri(staging, rel)
 
 
+def _footer(store: FileStore, key: str):
+    """The Parquet footer of the object staged at ``key``: a ranged read of a
+    few kilobytes, not of the data."""
+    import pyarrow.parquet as pq
+
+    source = store.ranged(key)
+    try:
+        return pq.read_metadata(source)
+    finally:
+        source.close()
+
+
 def discard(store: FileStore, keys: list[str]) -> None:
     try:
         store.delete(keys)
@@ -390,10 +402,13 @@ def execute(
             try:
                 files_fn = build_files_function(cfg.staging, [staged])
                 qualified = _qualify(cfg.database, table_name)
+                footer = (
+                    _footer(store, key) if cfg.schema_evolution == "strict" else None
+                )
                 with engine.begin() as conn:
                     StarRocksSchemaEvolver(
                         conn, *_parts(cfg.database, table_name)
-                    ).evolve(qualified, files_fn, cfg.schema_evolution)
+                    ).evolve(qualified, files_fn, cfg.schema_evolution, footer)
                 _load_one(qualified, files_fn, frame.collect_schema().names())
             finally:
                 discard(store, [key])

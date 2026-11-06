@@ -8,6 +8,7 @@ import logging
 import re
 import time
 from decimal import Decimal
+from typing import Any
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._schema.delta import (
@@ -19,6 +20,9 @@ from tabsdatak.conn.common.sql._schema.delta import (
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._schema.evolution import evolve_with_iceberg
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.footer import column_range
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._schema.policy import STRICT, SchemaEvolution
@@ -42,12 +46,15 @@ ALTER_TIMEOUT_SECONDS = 1800.0
 
 
 def normalized(type_: str) -> str:
-    """``type_`` as ``DESC FILES`` spells it: lower case, and an integer
-    without the display width ``information_schema`` adds to it."""
+    """``type_`` as ``DESC FILES`` spells it: lower case, an integer without
+    the display width ``information_schema`` adds to it, and no space in its
+    parameters (``information_schema`` says ``decimal(10, 2)``)."""
     lowered = type_.strip().lower()
     match = _TYPE.match(lowered)
     if match and match[1] in _INTEGERS:
         return match[1]
+    if match and match[3] is not None:
+        return f"{match[1]}({match[2]},{match[3]})"
     return lowered
 
 
@@ -75,12 +82,20 @@ def can_widen(old: str, new: str) -> bool:
 
 
 def _narrower(stored: str, batch: str) -> bool:
-    """Whether a ``stored`` integer or decimal column is narrower than the
-    ``batch`` type of the same kind."""
+    """Whether a ``stored`` integer column is narrower than a ``batch``
+    integer, or a ``stored`` decimal has fewer integer digits than the
+    ``batch`` decimal while keeping at least its fractional digits (more would
+    be rounded away)."""
     stored_base, batch_base = _parsed(stored)[0], _parsed(batch)[0]
     if stored_base in TYPE_WIDENING_MAP.get(batch_base, ()):
         return stored_base in _INTEGERS
-    return stored_base == batch_base == "decimal" and can_widen(stored, batch)
+    if stored_base == batch_base == "decimal":
+        _, precision, scale = _parsed(stored)
+        _, wide_precision, wide_scale = _parsed(batch)
+        if precision is None or wide_precision is None:
+            return False
+        return wide_scale <= scale and wide_precision - wide_scale > precision - scale
+    return False
 
 
 def _holds(stored: str, low, high) -> bool:
@@ -185,7 +200,11 @@ class StarRocksSchemaEvolver:
             self._wait(before, *self.retypes[statement])
 
     def evolve(
-        self, target: str, files_fn: str, evolution: SchemaEvolution
+        self,
+        target: str,
+        files_fn: str,
+        evolution: SchemaEvolution,
+        footer: Any = None,
     ) -> list[str]:
         """``ALTER`` ``target`` to meet the staged file as far as ``evolution``
         allows, returning what changed. The file's types are the ones
@@ -194,15 +213,17 @@ class StarRocksSchemaEvolver:
         Under ``strict`` no type difference is left to StarRocks unchecked: it
         refuses a text value its column cannot hold, but loads a number its
         column cannot hold as NULL. So a text column takes any text, and a
-        narrower number column takes the batch only when every value fits
-        (:meth:`_fitting`); any other difference is refused.
+        narrower number column takes the batch only when every value fits,
+        as the staged file's Parquet ``footer`` tells without reading the data
+        (no footer, no value is known to fit); any other difference is
+        refused.
         """
         from sqlalchemy import text
 
         rows = self._conn.execute(text(f"DESC {files_fn}")).fetchall()
         columns = [(row[0], normalized(row[1])) for row in rows]
         if evolution == STRICT:
-            columns = self._as_stored(target, files_fn, columns)
+            columns = self._as_stored(target, footer, columns)
         return evolve_with_iceberg(
             self,
             target,
@@ -215,7 +236,7 @@ class StarRocksSchemaEvolver:
         )
 
     def _as_stored(
-        self, target: str, files_fn: str, columns: list[tuple[str, str]]
+        self, target: str, footer: Any, columns: list[tuple[str, str]]
     ) -> list[tuple[str, str]]:
         """``columns`` with the stored type in place of each batch type the
         stored column takes as it is."""
@@ -230,24 +251,14 @@ class StarRocksSchemaEvolver:
                 elif _narrower(held, type_):
                     narrower[name] = held
             aligned.append((name, type_))
-        fitting = self._fitting(files_fn, narrower) if narrower else set()
-        return [(name, narrower[name] if name in fitting else t) for name, t in aligned]
-
-    def _fitting(self, files_fn: str, narrower: dict[str, str]) -> set[str]:
-        """The ``narrower`` columns whose stored type holds every value the
-        staged file has for them, read in one pass over those columns."""
-        from sqlalchemy import text
-
-        names = list(narrower)
-        bounds = ", ".join(
-            f"MIN({_quote(name)}), MAX({_quote(name)})" for name in names
-        )
-        row = self._conn.execute(text(f"SELECT {bounds} FROM {files_fn}")).fetchall()[0]
-        return {
+        fitting = {
             name
-            for i, name in enumerate(names)
-            if _holds(narrower[name], row[2 * i], row[2 * i + 1])
+            for name, held in narrower.items()
+            if footer is not None
+            and (values := column_range([footer], name)) is not None
+            and _holds(held, *values)
         }
+        return [(name, narrower[name] if name in fitting else t) for name, t in aligned]
 
     def _latest_job(self) -> tuple | None:
         from sqlalchemy import text

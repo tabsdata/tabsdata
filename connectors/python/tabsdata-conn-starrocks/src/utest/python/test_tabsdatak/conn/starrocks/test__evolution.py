@@ -5,7 +5,10 @@
 from __future__ import annotations
 
 import re
+from decimal import Decimal
 
+import polars as pl
+import pyarrow.parquet as pq
 import pytest
 
 from tabsdatak.conn.common.sql.error import SqlCommonRuntimeException
@@ -35,13 +38,12 @@ class _Conn:
     ``MODIFY COLUMN`` retypes the column, and starts the next of ``jobs``
     (``None`` for a change made at once, with no job)."""
 
-    def __init__(self, table, batch, jobs=(None,), bounds=None):
+    def __init__(self, table, batch, jobs=(None,)):
         self._table = [
             (*column, "", "YES") if len(column) == 2 else column for column in table
         ]
         self._batch = batch
         self._jobs = list(jobs)
-        self._bounds = bounds or {}
         self.statements: list[str] = []
         self.scans: list[str] = []
         self.job: dict | None = None
@@ -50,10 +52,9 @@ class _Conn:
         sql = str(statement)
         if "information_schema.columns" in sql:
             return _Result(self._table)
-        if sql.startswith("SELECT MIN("):
+        if sql.startswith("SELECT"):
             self.scans.append(sql)
-            names = re.findall(r"MIN\(`(\w+)`\)", sql)
-            return _Result([tuple(v for n in names for v in self._bounds[n])])
+            return _Result([])
         if sql.startswith("DESC "):
             return _Result([(name, type_, "YES") for name, type_ in self._batch])
         if sql.startswith("SHOW ALTER TABLE COLUMN"):
@@ -71,16 +72,43 @@ class _Conn:
         return _Result([])
 
 
-def _evolve(conn, evolution):
+_POLARS = {"bigint": pl.Int64, "decimal(20,2)": pl.Decimal(20, 2)}
+
+
+def _footer(tmp_path, columns: dict[str, tuple[str, list]]):
+    """The Parquet footer of a staged file holding ``columns``: name ->
+    (batch type, values)."""
+    path = tmp_path / "staged.parquet"
+    pl.DataFrame(
+        {
+            name: [None if v is None else _value(type_, v) for v in values]
+            for name, (type_, values) in columns.items()
+        },
+        schema={name: _POLARS[type_] for name, (type_, _) in columns.items()},
+    ).write_parquet(path)
+    return pq.read_metadata(path)
+
+
+def _value(type_: str, value):
+    return Decimal(value) if type_.startswith("decimal") else value
+
+
+def _evolve(conn, evolution, footer=None):
     evolver = _evolution.StarRocksSchemaEvolver(conn, "db", "t")
-    return evolver.evolve(_TARGET, "FILES(...)", evolution)
+    return evolver.evolve(_TARGET, "FILES(...)", evolution, footer)
 
 
 @pytest.mark.parametrize(
     "stored,normal",
-    [("bigint(20)", "bigint"), ("INT(11)", "int"), ("varchar(255)", "varchar(255)")],
+    [
+        ("bigint(20)", "bigint"),
+        ("INT(11)", "int"),
+        ("varchar(255)", "varchar(255)"),
+        ("decimal(10, 2)", "decimal(10,2)"),
+        ("DECIMAL(38,9)", "decimal(38,9)"),
+    ],
 )
-def test_an_integer_loses_its_display_width(stored, normal):
+def test_a_type_is_spelled_as_desc_files_spells_it(stored, normal):
     assert _evolution.normalized(stored) == normal
 
 
@@ -176,11 +204,14 @@ def test_strict_leaves_a_text_length_to_starrocks(stored, batch):
         ("decimal(10,2)", "decimal(20,2)", "-99999999.99", "99999999.99"),
     ],
 )
-def test_strict_takes_numbers_their_narrower_column_holds(stored, batch, low, high):
-    conn = _Conn([("n", stored)], [("n", batch)], bounds={"n": (low, high)})
-    assert _evolve(conn, "strict") == []
-    assert conn.statements == []
-    assert conn.scans == ["SELECT MIN(`n`), MAX(`n`) FROM FILES(...)"]
+def test_strict_takes_numbers_their_narrower_column_holds(
+    tmp_path, stored, batch, low, high
+):
+    """Read off the staged file's footer: no query reads the data."""
+    conn = _Conn([("n", stored)], [("n", batch)])
+    footer = _footer(tmp_path, {"n": (batch, [low, high])})
+    assert _evolve(conn, "strict", footer) == []
+    assert conn.statements == [] and conn.scans == []
 
 
 @pytest.mark.parametrize(
@@ -192,13 +223,33 @@ def test_strict_takes_numbers_their_narrower_column_holds(stored, batch, low, hi
     ],
 )
 def test_strict_refuses_a_number_its_narrower_column_cannot_hold(
-    stored, batch, low, high
+    tmp_path, stored, batch, low, high
 ):
     """StarRocks would load it as NULL, not refuse it."""
-    conn = _Conn([("n", stored)], [("n", batch)], bounds={"n": (low, high)})
+    conn = _Conn([("n", stored)], [("n", batch)])
+    footer = _footer(tmp_path, {"n": (batch, [low, high])})
+    with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
+        _evolve(conn, "strict", footer)
+    assert conn.statements == [] and conn.scans == []
+
+
+def test_strict_without_a_footer_takes_no_narrower_number():
+    conn = _Conn([("n", "int(11)")], [("n", "bigint")])
     with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
         _evolve(conn, "strict")
-    assert conn.statements == []
+
+
+def test_strict_takes_a_decimal_spelled_with_a_space_as_its_own_type():
+    conn = _Conn([("d", "decimal(10, 2)")], [("d", "decimal(10,2)")])
+    assert _evolve(conn, "strict") == []
+
+
+@pytest.mark.parametrize("batch", ["decimal(20,4)", "decimal(10,4)"])
+def test_strict_refuses_a_decimal_that_would_lose_fractional_digits(batch):
+    """More fractional digits than the column keeps would be rounded."""
+    conn = _Conn([("n", "decimal(10,2)")], [("n", batch)])
+    with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
+        _evolve(conn, "strict")
 
 
 def test_strict_refuses_a_number_of_another_kind_without_a_scan():
@@ -208,14 +259,14 @@ def test_strict_refuses_a_number_of_another_kind_without_a_scan():
     assert conn.scans == []
 
 
-def test_strict_scans_every_narrower_column_in_one_pass():
+def test_strict_takes_every_narrower_column_from_one_footer(tmp_path):
     conn = _Conn(
         [("a", "int(11)"), ("b", "smallint(6)"), ("s", "char(2)")],
         [("a", "bigint"), ("b", "bigint"), ("s", "varchar(1048576)")],
-        bounds={"a": (1, 2), "b": (3, 4)},
     )
-    assert _evolve(conn, "strict") == []
-    assert conn.scans == ["SELECT MIN(`a`), MAX(`a`), MIN(`b`), MAX(`b`) FROM FILES(...)"]
+    footer = _footer(tmp_path, {"a": ("bigint", [1, 2]), "b": ("bigint", [3, 4])})
+    assert _evolve(conn, "strict", footer) == []
+    assert conn.scans == []
 
 
 def test_a_key_column_keeps_its_key_and_nullability(monkeypatch):

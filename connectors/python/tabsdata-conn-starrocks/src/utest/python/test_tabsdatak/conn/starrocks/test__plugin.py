@@ -42,7 +42,7 @@ def _evolutions(monkeypatch):
         def __init__(self, conn, database, table):
             pass
 
-        def evolve(self, target, files_fn, evolution):
+        def evolve(self, target, files_fn, evolution, footer=None):
             seen.append((target, evolution))
             return []
 
@@ -76,6 +76,8 @@ def _staged(monkeypatch, calls: list | None = None) -> None:
 
     monkeypatch.setattr(impl, "stage", stage)
     monkeypatch.setattr(impl, "discard", lambda store, keys: None)
+    # Nothing is staged, so there is no footer to read.
+    monkeypatch.setattr(impl, "_footer", lambda store, key: None)
 
 
 @pytest.fixture
@@ -364,6 +366,7 @@ def test_execute_evolves_each_table_before_loading_it(monkeypatch, _evolutions):
     monkeypatch.setattr(impl, "build_starrocks_engine", lambda **kw: engine)
     monkeypatch.setattr(impl, "stage", lambda *a: ("k", "s3://b/k"))
     monkeypatch.setattr(impl, "discard", lambda *a: None)
+    monkeypatch.setattr(impl, "_footer", lambda *a: None)
     cfg = impl.StarRocksWriteCfg(
         host="h",
         port=9030,

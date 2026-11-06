@@ -48,7 +48,7 @@ def _evolutions(monkeypatch):
         def __init__(self, conn, database, table):
             pass
 
-        def evolve(self, target, files_fn, evolution):
+        def evolve(self, target, files_fn, evolution, footer=None):
             seen.append((target, evolution))
             return []
 
@@ -338,6 +338,8 @@ def _staging(monkeypatch, fail: Exception | None = None) -> list[str]:
 
     monkeypatch.setattr(impl, "stage", stage)
     monkeypatch.setattr(impl, "discard", lambda store, keys: discarded.extend(keys))
+    # Nothing is staged, so there is no footer to read.
+    monkeypatch.setattr(impl, "_footer", lambda store, key: None)
     return discarded
 
 
