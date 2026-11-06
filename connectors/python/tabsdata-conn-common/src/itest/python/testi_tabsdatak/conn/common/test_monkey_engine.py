@@ -611,9 +611,10 @@ def test_a_transaction_waiting_to_commit_behind_a_stalled_one_is_not_reported():
         part("tx1", "Stalled", execution=SimpleNamespace(id="ep1")),
         part("tx2", "Running", execution=SimpleNamespace(id="ep2")),
     ]
+    function = SimpleNamespace(name=reader.name, collection="c")
     server.runs = [
-        part("fr", "Done", transaction=SimpleNamespace(id="tx1"), function=reader.name),
-        part("fr", "Done", transaction=SimpleNamespace(id="tx2"), function=reader.name),
+        part("fr", "Done", transaction=SimpleNamespace(id="tx1"), function=function),
+        part("fr", "Done", transaction=SimpleNamespace(id="tx2"), function=function),
     ]
     module = SimpleNamespace(**{spec.name: object() for spec in plan.fleet.functions})
     run = runner.MonkeyRun(
