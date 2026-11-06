@@ -235,6 +235,9 @@ class BigQueryWriteCfg:
 # --- Load-job config -------------------------------------------------
 
 
+DECIMAL_TARGET_TYPES = ["NUMERIC", "BIGNUMERIC"]
+
+
 def build_load_job_config(
     if_table_exists: IfTableExistsSpec,
     schema_evolution: SchemaEvolutionSpec,
@@ -291,7 +294,7 @@ def build_load_job_config(
         write_disposition=write_disposition,
         schema_update_options=schema_update_options,
         create_disposition=bigquery.CreateDisposition.CREATE_IF_NEEDED,
-        decimal_target_types=["NUMERIC", "BIGNUMERIC"],
+        decimal_target_types=DECIMAL_TARGET_TYPES,
     )
 
 
@@ -316,7 +319,7 @@ def build_merge_staging_load_job_config() -> Any:
         source_format=bigquery.SourceFormat.PARQUET,
         write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
         create_disposition=bigquery.CreateDisposition.CREATE_IF_NEEDED,
-        decimal_target_types=["NUMERIC", "BIGNUMERIC"],
+        decimal_target_types=DECIMAL_TARGET_TYPES,
     )
 
 

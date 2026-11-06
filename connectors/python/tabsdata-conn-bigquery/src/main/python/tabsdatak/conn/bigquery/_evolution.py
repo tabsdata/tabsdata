@@ -132,42 +132,42 @@ def ensure_watermark_column(bq_client: Any, target_fqn: str, column: str) -> boo
 def batch_columns(bq_client: Any, uri: str, target_fqn: str) -> list[tuple[str, str]]:
     """The ``(name, type)`` pairs the batch at ``uri`` carries.
 
-    Read by loading it into a table of its own and describing that, rather than
-    by walking the parquet footer: the types then are the ones BigQuery itself
-    settled on for this file, which is what the target's own schema will be
-    compared against. A mapping written here could disagree with the load job
-    about a decimal's precision or an int's width, and the diff would act on the
-    difference.
+    Read off an external table over the staged file rather than by walking the
+    parquet footer: the types then are the ones BigQuery itself settles on for
+    this file, which is what the target's own schema will be compared against.
+    A mapping written here could disagree with the load job about a decimal's
+    precision or an int's width, and the diff would act on the difference. An
+    external table reads the file's metadata only, so the batch is not loaded
+    a second time just to learn its types; it reports the types a load does.
 
     The table is dropped on the way out. The GCS object is not -- the plugin
     deletes every URI a write staged, and the real load still has to read it.
     """
+    from google.cloud import bigquery
+
     # noinspection PyProtectedMember
     from tabsdatak.conn.bigquery._impl import (
-        build_merge_staging_load_job_config,
+        DECIMAL_TARGET_TYPES,
         table_column_types,
         temp_table_fqn,
     )
 
-    # noinspection PyProtectedMember
-    from tabsdatak.conn.bigquery._plugin import _load_table_from_uri
-
-    staging_table = temp_table_fqn(target_fqn)
+    external = temp_table_fqn(target_fqn)
     logger.debug(
-        "bigquery: reading the batch schema for %r out of %r",
+        "bigquery: reading the batch schema for %r through %r",
         target_fqn,
-        staging_table,
+        external,
     )
-    _load_table_from_uri(
-        bq_client,
-        uri=uri,
-        table=staging_table,
-        job_config=build_merge_staging_load_job_config(),
-    )
+    config = bigquery.ExternalConfig(bigquery.SourceFormat.PARQUET)
+    config.source_uris = [uri]
+    config.decimal_target_types = DECIMAL_TARGET_TYPES
+    table = bigquery.Table(external)
+    table.external_data_configuration = config
+    bq_client.create_table(table)
     try:
-        return table_column_types(bq_client, staging_table)
+        return table_column_types(bq_client, external)
     finally:
-        bq_client.delete_table(staging_table, not_found_ok=True)
+        bq_client.delete_table(external, not_found_ok=True)
 
 
 class BigQuerySchemaEvolver:

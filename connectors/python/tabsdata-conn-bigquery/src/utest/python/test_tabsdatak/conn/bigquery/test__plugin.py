@@ -150,7 +150,7 @@ def _evolving_clients(monkeypatch, target_columns, batch_columns, target_exists=
     target = "my-project.analytics.users"
 
     def get_table(fqn):
-        if fqn.startswith(f"{target}_"):  # the staging table the batch loads to
+        if fqn.startswith(f"{target}_"):  # the external table over the batch
             return SimpleNamespace(
                 schema=[_schema_field(n, t) for n, t in batch_columns]
             )
@@ -226,10 +226,13 @@ def test_dest_plugin_iceberg_engine_evolves_before_it_loads(monkeypatch, work_di
         monkeypatch, [("id", "INTEGER")], [("id", "INTEGER"), ("note", "STRING")]
     )
     _write(work_dir, _ICEBERG_ENGINE)
-    # The final load is the last one; the batch-schema read comes before it.
+    # The batch is loaded once, into the target; its types are read off an
+    # external table over the staged file, created before that load.
     loaded = [c.args[1] for c in bq_client.load_table_from_uri.call_args_list]
-    assert loaded[-1] == "my-project.analytics.users"
-    assert loaded[0].startswith("my-project.analytics.users_")
+    assert loaded == ["my-project.analytics.users"]
+    (external,) = [c.args[0] for c in bq_client.create_table.call_args_list]
+    assert external.table_id.startswith("users_")
+    assert external.external_data_configuration.source_format == "PARQUET"
     assert bq_client.query_and_wait.called
 
 
