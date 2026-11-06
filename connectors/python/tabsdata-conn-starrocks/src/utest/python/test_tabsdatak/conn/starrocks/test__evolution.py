@@ -35,19 +35,25 @@ class _Conn:
     ``MODIFY COLUMN`` retypes the column, and starts the next of ``jobs``
     (``None`` for a change made at once, with no job)."""
 
-    def __init__(self, table, batch, jobs=(None,)):
+    def __init__(self, table, batch, jobs=(None,), bounds=None):
         self._table = [
             (*column, "", "YES") if len(column) == 2 else column for column in table
         ]
         self._batch = batch
         self._jobs = list(jobs)
+        self._bounds = bounds or {}
         self.statements: list[str] = []
+        self.scans: list[str] = []
         self.job: dict | None = None
 
     def execute(self, statement, params=None):
         sql = str(statement)
         if "information_schema.columns" in sql:
             return _Result(self._table)
+        if sql.startswith("SELECT MIN("):
+            self.scans.append(sql)
+            names = re.findall(r"MIN\(`(\w+)`\)", sql)
+            return _Result([tuple(v for n in names for v in self._bounds[n])])
         if sql.startswith("DESC "):
             return _Result([(name, type_, "YES") for name, type_ in self._batch])
         if sql.startswith("SHOW ALTER TABLE COLUMN"):
@@ -149,6 +155,67 @@ def test_a_lacking_column_and_a_bounded_varchar_change_nothing_on_strict(
         assert conn.statements == []
     else:
         assert _evolve(conn, evolution) == ["s"]
+
+
+@pytest.mark.parametrize(
+    "stored,batch",
+    [("char(3)", "varchar(1048576)"), ("varchar(10)", "string"), ("string", "char(2)")],
+)
+def test_strict_leaves_a_text_length_to_starrocks(stored, batch):
+    """StarRocks refuses a text value its column cannot hold."""
+    conn = _Conn([("c", stored)], [("c", batch)])
+    assert _evolve(conn, "strict") == []
+    assert conn.statements == [] and conn.scans == []
+
+
+@pytest.mark.parametrize(
+    "stored,batch,low,high",
+    [
+        ("int(11)", "bigint", -(2**31), 2**31 - 1),
+        ("smallint(6)", "bigint", None, None),
+        ("decimal(10,2)", "decimal(20,2)", "-99999999.99", "99999999.99"),
+    ],
+)
+def test_strict_takes_numbers_their_narrower_column_holds(stored, batch, low, high):
+    conn = _Conn([("n", stored)], [("n", batch)], bounds={"n": (low, high)})
+    assert _evolve(conn, "strict") == []
+    assert conn.statements == []
+    assert conn.scans == ["SELECT MIN(`n`), MAX(`n`) FROM FILES(...)"]
+
+
+@pytest.mark.parametrize(
+    "stored,batch,low,high",
+    [
+        ("int(11)", "bigint", 1, 2**40),
+        ("int(11)", "bigint", -(2**31) - 1, 0),
+        ("decimal(10,2)", "decimal(20,2)", "0", "100000000.00"),
+    ],
+)
+def test_strict_refuses_a_number_its_narrower_column_cannot_hold(
+    stored, batch, low, high
+):
+    """StarRocks would load it as NULL, not refuse it."""
+    conn = _Conn([("n", stored)], [("n", batch)], bounds={"n": (low, high)})
+    with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
+        _evolve(conn, "strict")
+    assert conn.statements == []
+
+
+def test_strict_refuses_a_number_of_another_kind_without_a_scan():
+    conn = _Conn([("d", "decimal(10,2)")], [("d", "double")])
+    with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
+        _evolve(conn, "strict")
+    assert conn.scans == []
+
+
+def test_strict_scans_every_narrower_column_in_one_pass():
+    conn = _Conn(
+        [("a", "int(11)"), ("b", "smallint(6)"), ("s", "char(2)")],
+        [("a", "bigint"), ("b", "bigint"), ("s", "varchar(1048576)")],
+        bounds={"a": (1, 2), "b": (3, 4)},
+    )
+    assert _evolve(conn, "strict") == []
+    assert conn.scans == ["SELECT MIN(`a`), MAX(`a`), MIN(`b`), MAX(`b`) FROM FILES(...)"]
 
 
 def test_a_key_column_keeps_its_key_and_nullability(monkeypatch):

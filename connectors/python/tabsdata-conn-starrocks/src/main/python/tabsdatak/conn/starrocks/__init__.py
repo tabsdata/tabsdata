@@ -322,9 +322,11 @@ class StarRocksDest(Dest):
             `INSERT INTO` against the existing table.
         schema_evolution: What a write does when the batch's columns differ from
             the table's. `"strict"` (the default) refuses a batch with a column
-            the table lacks or a wider type; `"update"` adds the column and
-            widens the type, and refuses a change StarRocks cannot make. A
-            column the batch lacks is written NULL either way.
+            the table lacks or a wider type, except that a text column takes
+            any text (StarRocks refuses a value too long for it) and a narrower
+            number column takes a batch whose values all fit it; `"update"`
+            adds the column and widens the type, and refuses a change StarRocks
+            cannot make. A column the batch lacks is written NULL either way.
         dest_cfg: Optional connector config. Supported keys:
             `starrocks.logging_level`, and
             `starrocks.schema_evolution_engine` -- `"iceberg"`, the default
