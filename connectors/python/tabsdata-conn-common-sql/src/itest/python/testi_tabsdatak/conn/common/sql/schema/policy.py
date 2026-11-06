@@ -173,6 +173,15 @@ APPEND_CASES = [
     pytest.param(update_widens_a_type, id="update-wider-type"),
 ]
 
+SCHEMALESS_CASES = [
+    pytest.param(created_table_has_only_the_batch_columns, id="created-exact"),
+    pytest.param(update_adds_a_new_column, id="new-column"),
+    pytest.param(
+        lambda policy, table: a_missing_column_is_silent(policy, table, UPDATE),
+        id="missing-column",
+    ),
+]
+
 MERGE_CASES = [
     pytest.param(
         lambda policy, table: merge_keeps_what_the_batch_lacks(policy, table, STRICT),
