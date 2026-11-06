@@ -56,11 +56,15 @@ class TableFrame(EngineFrame):
             "sort", (self,), {}, call=lambda lf: lf.sort(*u_args, **u_kwargs)
         )
 
-    def cast(self, *args, **kwargs):
+    def cast(self, dtypes, *args, **kwargs):
+        from tabsdatak.tableframe._engine.column.scope import user_cast
+
+        u_dtypes = unwrap(dtypes)
         u_args = unwrap(args)
         u_kwargs = unwrap(kwargs)
+        mapping = user_cast(self._lf.collect_schema(), self._user_columns(), u_dtypes)
         return compute(
-            "cast", (self,), {}, call=lambda lf: lf.cast(*u_args, **u_kwargs)
+            "cast", (self,), {}, call=lambda lf: lf.cast(mapping, *u_args, **u_kwargs)
         )
 
     def clear(self, *args, **kwargs):
@@ -206,10 +210,18 @@ class TableFrame(EngineFrame):
         )
 
     def fill_null(self, *args, **kwargs):
+        from tabsdatak.tableframe._engine.column.scope import on_user_columns
+
         u_args = unwrap(args)
         u_kwargs = unwrap(kwargs)
+        user = self._user_columns()
         return compute(
-            "fill_null", (self,), {}, call=lambda lf: lf.fill_null(*u_args, **u_kwargs)
+            "fill_null",
+            (self,),
+            {},
+            call=lambda lf: on_user_columns(
+                lf, user, lambda part: part.fill_null(*u_args, **u_kwargs)
+            ),
         )
 
     def fill_nan(self, *args, **kwargs):
@@ -235,14 +247,12 @@ class TableFrame(EngineFrame):
             "drop_nans", (self,), {}, call=lambda lf: lf.drop_nans(*u_args, **u_kwargs)
         )
 
-    def drop_nulls(self, *args, **kwargs):
-        u_args = unwrap(args)
-        u_kwargs = unwrap(kwargs)
+    def drop_nulls(self, subset=None):
+        u_subset = unwrap(subset)
+        if u_subset is None:
+            u_subset = self._user_columns()
         return compute(
-            "drop_nulls",
-            (self,),
-            {},
-            call=lambda lf: lf.drop_nulls(*u_args, **u_kwargs),
+            "drop_nulls", (self,), {}, call=lambda lf: lf.drop_nulls(u_subset)
         )
 
     def unnest(self, *args, **kwargs):

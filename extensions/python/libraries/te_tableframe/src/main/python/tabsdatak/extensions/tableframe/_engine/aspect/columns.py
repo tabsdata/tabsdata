@@ -31,7 +31,7 @@ def _offending(op, params) -> set[str]:
     if op in ("select", "with_columns"):
         return _written_system(params["exprs"], params["named"])
     if op == "rename":
-        return _system(_rename_targets(params["mapping"]))
+        return _system_renames(params["mapping"])
     if op == "drop":
         return _system(_drop_names(params["columns"]))
     if op == "udf":
@@ -77,10 +77,18 @@ def _drop_names(columns) -> list[str]:
     return names
 
 
-def _rename_targets(mapping) -> list[str]:
-    if isinstance(mapping, dict):
-        return list(mapping.values())
-    return []
+def _system_renames(mapping) -> set[str]:
+    """The $td.* columns a rename would move: renaming one away is a drop, and
+    renaming onto one an overwrite."""
+    if not isinstance(mapping, dict):
+        return set()
+    return {
+        name
+        for old, new in mapping.items()
+        if old != new
+        for name in (old, new)
+        if name.startswith(TD_SYSTEM_COLUMN_PREFIX)
+    }
 
 
 def _flatten(values) -> list:

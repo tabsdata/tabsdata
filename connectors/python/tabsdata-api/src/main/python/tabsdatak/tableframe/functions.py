@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import polars as pl
 
+from tabsdatak.tableframe._core.hooks import compute
 from tabsdatak.tableframe._core.translate import unwrap, wrap
 
 
@@ -27,12 +28,19 @@ def concat(items=None, how="vertical"):
         raise ValueError(
             f"Invalid concatenation method: {how!r}. Expected one of {_CONCAT_METHODS}."
         )
-    kept = [unwrap(item) for item in items if item is not None]
-    if not kept:
+    frames = tuple(item for item in items if item is not None)
+    if not frames:
         return None
-    empties = [pl.DataFrame(schema=lf.collect_schema()) for lf in kept]
+    empties = [pl.DataFrame(schema=unwrap(frame).collect_schema()) for frame in frames]
     pl.concat(empties, how=how, rechunk=False, parallel=True)
-    return wrap(pl.concat(kept, how=how, rechunk=False, parallel=True))
+    return compute(
+        "concat",
+        frames,
+        {"how": how},
+        call=lambda *lazyframes: pl.concat(
+            list(lazyframes), how=how, rechunk=False, parallel=True
+        ),
+    )
 
 
 def lit(*args, **kwargs):

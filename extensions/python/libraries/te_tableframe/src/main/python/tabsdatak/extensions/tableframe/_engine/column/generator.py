@@ -45,18 +45,28 @@ class IdentifierGenerator:
 
         from tabsdata.expansions.tableframe.expressions import PLUGIN_PATH
 
-        lf = seed_default(lf, column, self.dtype, self.default, context)
+        if context.is_void:
+            return seed_default(lf, column, self.dtype, self.default, context)
+        # The plugin makes one id per value it is handed. A literal reaches it as
+        # a single value broadcast afterwards, so every row of a batch would share
+        # one id; a row index is a real value per row.
+        rows = temp_column()
         expression = register_plugin_function(
             plugin_path=PLUGIN_PATH,
             function_name="_identifier_generator",
-            args=pl.col(column),
+            args=pl.col(rows),
             kwargs={
                 "temp_column": temp_column(),
                 "index": context.index,
             },
             is_elementwise=True,
         )
-        return lf.with_columns_seq(expression.alias(column))
+        return (
+            lf
+            .with_row_index(rows)
+            .with_columns_seq(expression.alias(column))
+            .drop(rows)
+        )
 
 
 class ConstantVersionGenerator:

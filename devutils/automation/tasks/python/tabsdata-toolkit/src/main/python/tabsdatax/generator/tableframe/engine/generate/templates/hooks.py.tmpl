@@ -189,6 +189,7 @@ def compute(op: str, sources: tuple, params: dict, call: Callable) -> "TableFram
         lazyframe,
         CreationMode.TAB,
         idx=genesis.idx if genesis is not None else None,
+        version=views[0].version,
         source=primary,
     )
 

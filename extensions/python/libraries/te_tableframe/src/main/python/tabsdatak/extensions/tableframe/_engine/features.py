@@ -28,9 +28,11 @@ def install(frame_cls) -> None:
 
 
 def aggregations(op) -> list:
-    """Expressions aggregating system columns within a group-by ``op``. The OS
-    edition has no self-aggregating system column, so it contributes none."""
-    return []
+    """Expressions aggregating system columns within a group-by ``op``: a group
+    carries the latest version among its rows."""
+    from tabsdatak.tableframe._engine.column.versions import latest_version
+
+    return latest_version()
 
 
 def _join_hook_after(lazyframe, op, views, params):
@@ -44,5 +46,18 @@ def _join_hook_after(lazyframe, op, views, params):
     from tabsdatak.extensions.tableframe._engine.column.assembly import (
         assemble_system_columns,
     )
+    from tabsdatak.tableframe._engine.constant.column.prefixes import (
+        TD_CONNECTOR_SYSTEM_COLUMN_PREFIX,
+    )
 
-    return assemble_system_columns(lazyframe)
+    lazyframe = assemble_system_columns(lazyframe)
+    # A connector column is single-valued metadata, like the version: where both
+    # sides carry one the left side's is kept, and the suffixed copy polars
+    # makes of the right side's -- a name neither input had -- is dropped.
+    known = {column for view in views for column in view.columns}
+    twins = [
+        column
+        for column in lazyframe.collect_schema().names()
+        if column.startswith(TD_CONNECTOR_SYSTEM_COLUMN_PREFIX) and column not in known
+    ]
+    return lazyframe.drop(twins) if twins else lazyframe

@@ -749,6 +749,7 @@ def _render_functions_py(symbols: list[Symbol], root: str) -> str:
         "",
         "import polars as pl",
         "",
+        f"from {root}._core.hooks import compute",
         f"from {root}._core.translate import unwrap, wrap",
         "",
     ]
@@ -811,6 +812,8 @@ def _concat_function_lines() -> list[str]:
     # concat(None) and concat of an all-None/empty iterable return None, None
     # entries within the iterable are skipped, and `how` is validated up front. A
     # throwaway concat of empty frames first surfaces schema mismatches clearly.
+    # The result is built through compute like every other op, so it gets the
+    # frame state and its system columns from the first input.
     methods = ", ".join(repr(method) for method in _CONCAT_METHODS)
     return [
         "",
@@ -825,14 +828,22 @@ def _concat_function_lines() -> list[str]:
         '            f"Invalid concatenation method: {how!r}. "',
         '            f"Expected one of {_CONCAT_METHODS}."',
         "        )",
-        "    kept = [unwrap(item) for item in items if item is not None]",
-        "    if not kept:",
+        "    frames = tuple(item for item in items if item is not None)",
+        "    if not frames:",
         "        return None",
         "    empties = [",
-        "        pl.DataFrame(schema=lf.collect_schema()) for lf in kept",
+        "        pl.DataFrame(schema=unwrap(frame).collect_schema())",
+        "        for frame in frames",
         "    ]",
         "    pl.concat(empties, how=how, rechunk=False, parallel=True)",
-        "    return wrap(pl.concat(kept, how=how, rechunk=False, parallel=True))",
+        "    return compute(",
+        '        "concat",',
+        "        frames,",
+        '        {"how": how},',
+        "        call=lambda *lazyframes: pl.concat(",
+        "            list(lazyframes), how=how, rechunk=False, parallel=True",
+        "        ),",
+        "    )",
     ]
 
 
@@ -1132,10 +1143,15 @@ _HOOKED_BODIES = {
 # Frame methods with a custom generated body (keyed by member name, not
 # hook_name, so they need no manifest hook; each still routes through compute()).
 # sort forces a perf default (signature preserved); unique / __getitem__ are
-# system-column-aware so their user-visible result matches polars.
+# system-column-aware so their user-visible result matches polars; drop_nulls /
+# fill_null / cast reach the user columns only, so they never rewrite the system
+# and connector columns as a side effect.
 _CUSTOM_BODIES = {
     "sort": lambda name, root: _sort_body(),
     "unique": lambda name, root: _unique_body(),
+    "drop_nulls": lambda name, root: _drop_nulls_body(),
+    "fill_null": lambda name, root: _fill_null_body(root),
+    "cast": lambda name, root: _cast_body(root),
     "__getitem__": lambda name, root: _getitem_body(),
 }
 
@@ -1287,6 +1303,51 @@ def _unique_body() -> list[str]:
         "        u_kwargs = unwrap(kwargs)",
         '        return compute("unique", (self,), {},',
         "            call=lambda lf: lf.unique(u_subset, **u_kwargs))",
+        "",
+    ]
+
+
+def _drop_nulls_body() -> list[str]:
+    # With no subset, only USER columns count: a null connector value (a stacked
+    # frame that lacks the column) must not drop the row.
+    return [
+        "    def drop_nulls(self, subset=None):",
+        "        u_subset = unwrap(subset)",
+        "        if u_subset is None:",
+        "            u_subset = self._user_columns()",
+        '        return compute("drop_nulls", (self,), {},',
+        "            call=lambda lf: lf.drop_nulls(u_subset))",
+        "",
+    ]
+
+
+def _fill_null_body(root: str) -> list[str]:
+    return [
+        "    def fill_null(self, *args, **kwargs):",
+        f"        from {root}._engine.column.scope import on_user_columns",
+        "",
+        "        u_args = unwrap(args)",
+        "        u_kwargs = unwrap(kwargs)",
+        "        user = self._user_columns()",
+        '        return compute("fill_null", (self,), {},',
+        "            call=lambda lf: on_user_columns(",
+        "                lf, user, lambda part: part.fill_null(*u_args, **u_kwargs)))",
+        "",
+    ]
+
+
+def _cast_body(root: str) -> list[str]:
+    return [
+        "    def cast(self, dtypes, *args, **kwargs):",
+        f"        from {root}._engine.column.scope import user_cast",
+        "",
+        "        u_dtypes = unwrap(dtypes)",
+        "        u_args = unwrap(args)",
+        "        u_kwargs = unwrap(kwargs)",
+        "        mapping = user_cast(",
+        "            self._lf.collect_schema(), self._user_columns(), u_dtypes)",
+        '        return compute("cast", (self,), {},',
+        "            call=lambda lf: lf.cast(mapping, *u_args, **u_kwargs))",
         "",
     ]
 

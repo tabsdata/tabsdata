@@ -72,4 +72,10 @@ def add_system_columns(
             row_index_column=context.row_index_column,
             is_void=False,
         )
+    if mode is CreationMode.TAB and version is not None and not is_void:
+        from tabsdatak.tableframe._engine.column.versions import (
+            fill_missing_version,
+        )
+
+        lf = fill_missing_version(lf, version)
     return lf
