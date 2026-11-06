@@ -1,0 +1,9 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+kminus:
+  stubs:
+    mandatory:
+      - stubs/commons.yaml
+    optional:
