@@ -134,6 +134,11 @@ _ALIAS = {
     "CHAR": "VARCHAR",
     "CHARACTER": "VARCHAR",
     "NCHAR": "VARCHAR",
+    # One 64-bit floating-point type under every name Snowflake accepts.
+    "FLOAT4": "FLOAT",
+    "FLOAT8": "FLOAT",
+    "DOUBLE": "FLOAT",
+    "REAL": "FLOAT",
 }
 _FIXED_CHAR = {"CHAR", "CHARACTER", "NCHAR"}  # default length 1, not max
 _ALTERABLE = {"NUMBER": (38, 0), "VARCHAR": (16777216, 0)}
@@ -145,7 +150,7 @@ class ParseError(ValueError):
 
 def _parse(t):
     """-> (base, precision_or_length, scale). Defaults filled in."""
-    m = _RE.match(t)
+    m = _RE.match(re.sub(r"(?i)^\s*DOUBLE\s+PRECISION", "DOUBLE", t))
     if not m:
         raise ParseError(f"cannot parse type: {t!r}")
 
