@@ -38,9 +38,7 @@ def test_src_plugin_read_in_returns_the_rows(
         PluginSrcCtx(work_dir(tmp_path)), src_conn(domain), src
     )
     assert len(out) == 1
-    assert slot_rows(out)["emp_no"].to_list() == emp_nos(
-        entity_rows(domain, EMPLOYEES)
-    )
+    assert slot_rows(out)["emp_no"].to_list() == emp_nos(entity_rows(domain, EMPLOYEES))
 
 
 @postgres_domain("postgres_employees_xs")

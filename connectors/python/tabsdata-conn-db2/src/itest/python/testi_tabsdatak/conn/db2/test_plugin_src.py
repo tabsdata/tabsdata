@@ -39,9 +39,7 @@ def test_src_plugin_read_in_returns_the_rows(
         PluginSrcCtx(work_dir(tmp_path)), src_conn(domain), src
     )
     assert len(out) == 1
-    assert slot_rows(out)["EMP_NO"].to_list() == emp_nos(
-        entity_rows(domain, EMPLOYEES)
-    )
+    assert slot_rows(out)["EMP_NO"].to_list() == emp_nos(entity_rows(domain, EMPLOYEES))
 
 
 @db2_domain("db2_employees_xs")
@@ -95,8 +93,7 @@ def test_src_plugin_read_in_resumes_from_advanced_initial_values(
     # matching no rows yields no table, so its input comes back empty.
     ctx.set_attr("cursor", all_emp_nos[-1])
     assert [
-        list(slot)
-        for slot in plugin.Db2SrcPlugin().read_in(ctx, src_conn(domain), src)
+        list(slot) for slot in plugin.Db2SrcPlugin().read_in(ctx, src_conn(domain), src)
     ] == [[]]
 
     # A run whose ctx never stored the bind falls back to the seed.

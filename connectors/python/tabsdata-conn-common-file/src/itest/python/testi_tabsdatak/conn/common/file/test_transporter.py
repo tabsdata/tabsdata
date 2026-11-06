@@ -22,7 +22,6 @@ from tabsdatak.common._interpreter.python.error import BinaryNotFoundError
 from tabsdatak.common._interpreter.python.venv import PythonEnvironment
 from tabsdatak.common._transporter.handler.handler2 import TRANSPORTER_BINARY_NAME
 
-
 # ---------------------------------------------------------------------------
 # Gate: skip the whole module if the binary isn't available
 # ---------------------------------------------------------------------------

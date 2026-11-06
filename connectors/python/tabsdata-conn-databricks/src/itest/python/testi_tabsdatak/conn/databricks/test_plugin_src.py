@@ -45,9 +45,7 @@ def test_src_plugin_read_in_returns_the_rows(
         PluginSrcCtx(work_dir(tmp_path)), src_conn(domain), src
     )
     assert len(out) == 1
-    assert slot_rows(out)["emp_no"].to_list() == emp_nos(
-        entity_rows(domain, EMPLOYEES)
-    )
+    assert slot_rows(out)["emp_no"].to_list() == emp_nos(entity_rows(domain, EMPLOYEES))
 
 
 @databricks_domain("databricks_employees_xs")
@@ -117,9 +115,7 @@ def test_src_plugin_read_in_resumes_from_advanced_initial_values(
     )
     ctx = WatermarkSrcCtx(work_dir(tmp_path))
 
-    first = slot_rows(
-        plugin._DatabricksSrcPlugin().read_in(ctx, src_conn(domain), src)
-    )
+    first = slot_rows(plugin._DatabricksSrcPlugin().read_in(ctx, src_conn(domain), src))
     assert first["emp_no"].to_list() == [n for n in all_emp_nos if n > cursor]
 
     # What a publisher does with the watermark it just consumed; the next run must
@@ -127,9 +123,7 @@ def test_src_plugin_read_in_resumes_from_advanced_initial_values(
     # manifest types a zero-row result, so the input still holds a typed empty
     # table rather than nothing at all.
     ctx.set_attr("cursor", all_emp_nos[-1])
-    empty = slot_rows(
-        plugin._DatabricksSrcPlugin().read_in(ctx, src_conn(domain), src)
-    )
+    empty = slot_rows(plugin._DatabricksSrcPlugin().read_in(ctx, src_conn(domain), src))
     assert empty.height == 0
     assert empty.columns == ["emp_no"]
 
@@ -225,6 +219,4 @@ def test_src_plugin_read_in_ignores_seed_no_query_binds(
     out = plugin._DatabricksSrcPlugin().read_in(
         PluginSrcCtx(work_dir(tmp_path)), src_conn(domain), src
     )
-    assert slot_rows(out)["emp_no"].to_list() == emp_nos(
-        entity_rows(domain, EMPLOYEES)
-    )
+    assert slot_rows(out)["emp_no"].to_list() == emp_nos(entity_rows(domain, EMPLOYEES))
