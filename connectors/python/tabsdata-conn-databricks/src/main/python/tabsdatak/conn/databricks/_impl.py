@@ -810,16 +810,19 @@ def has_watermark_column(cursor, fq_table: str, column: str) -> bool:
     Read off ``information_schema`` rather than ``DESCRIBE TABLE`` because the
     target may not be there at all: every watermark pass can run before anything
     has been written to it, and a missing table is not an error here -- it simply
-    has no such column. Unity Catalog stores an identifier lower-cased, which is
-    also how both paths fold one, so both sides of each comparison are lowered
-    and the two agree.
+    has no such column. Unity Catalog stores a schema and a table name
+    lower-cased, so those are compared as they are: a function around either
+    column keeps Databricks from narrowing the scan to the one table, and the
+    lookup then reads every column of every table in the catalog -- over a
+    minute in a large one. A column name keeps its case, so only that one is
+    lowered.
     """
     catalog, schema, table = _bare_parts(fq_table)
     cursor.execute(
         f"SELECT COUNT(*) FROM {fqn([catalog], _DATABRICKS_FQN_DEF)}"
         f".information_schema.columns"
-        f" WHERE lower(table_schema) = {string_literal(schema.lower())}"
-        f" AND lower(table_name) = {string_literal(table.lower())}"
+        f" WHERE table_schema = {string_literal(schema.lower())}"
+        f" AND table_name = {string_literal(table.lower())}"
         f" AND lower(column_name) = {string_literal(column.lower())}"
     )
     row = cursor.fetchone()

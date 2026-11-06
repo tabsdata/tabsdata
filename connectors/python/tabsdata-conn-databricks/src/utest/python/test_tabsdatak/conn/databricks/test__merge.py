@@ -603,14 +603,18 @@ class TestCheckWatermark:
         _dialect(cursor).check_watermark_column(_TARGET, _watermark())
         assert "`main`.information_schema.columns" in _probes(cursor)[0]
 
-    def test_compares_the_names_lower_cased(self):
-        """Unity Catalog stores an identifier lower-cased, which is also how
-        this dialect folds one, so both sides of each comparison agree."""
+    def test_narrows_by_table_before_folding_the_column(self):
+        """Unity Catalog stores a schema and a table name lower-cased, so they
+        are compared bare: a function around either would make the lookup scan
+        every table in the catalog. A column name keeps its case, so only it is
+        folded."""
         cursor = _RecordingCursor(has_watermark=False)
         _dialect(cursor).check_watermark_column(_TARGET, _watermark(column="WM"))
         probe = _probes(cursor)[0]
-        assert "lower(table_schema) = 'analytics'" in probe
-        assert "lower(table_name) = 'orders'" in probe
+        assert "table_schema = 'analytics'" in probe
+        assert "table_name = 'orders'" in probe
+        assert "lower(table_schema)" not in probe
+        assert "lower(table_name)" not in probe
         assert "lower(column_name) = 'wm'" in probe
 
     def test_reads_the_stamp_off_the_target(self):
