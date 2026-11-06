@@ -91,6 +91,9 @@ path = "../../devutils/automation/tasks/cargo/td-build"
 [workspace.dependencies.tm-pyo3]
 path = "../../macros/facets/tm-pyo3"
 
+[workspace.dependencies.tm-workspace]
+path = "../../macros/facets/tm-workspace"
+
 [workspace.dependencies.ta-system]
 path = "../../server/libraries/ta-system"
 
@@ -178,6 +181,9 @@ default-features = false
 [workspace.dependencies.ratatui-image]
 version = "11.1.0"
 default-features = false
+
+[workspace.dependencies.serde_json]
+version = "1.0.154"
 
 [workspace.dependencies.thiserror]
 version = "2.0.21"

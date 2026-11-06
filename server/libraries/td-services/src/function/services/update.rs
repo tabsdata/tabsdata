@@ -6,6 +6,7 @@ use crate::collection::resolve_collection_id;
 use crate::function::children::ensure_user_managed_now;
 use crate::function::children::reconcile_children;
 use crate::function::lifecycle::update_one;
+use crate::function::workers::validate_workers;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -34,6 +35,7 @@ async fn update_function(
 ) -> Result<Function, TdError> {
     let (project, request) = request.into_parts();
     let (ctx, (collection_param, function_param), update) = request.into_parts();
+    validate_workers(&bridge, &update.workers)?;
     let read = retrying(|attempt| async {
         let mut gated_trx = db.lock_project().begin(attempt).await?;
         let grant = authz

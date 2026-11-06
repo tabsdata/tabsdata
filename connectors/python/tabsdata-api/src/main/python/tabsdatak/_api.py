@@ -53,7 +53,6 @@ import warnings
 from datetime import datetime, timezone
 from typing import Any, Callable, ClassVar, TypeVar, Union, dataclass_transform
 
-from croniter import croniter
 from pydantic import (
     Field,
     GetCoreSchemaHandler,
@@ -67,6 +66,7 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 from pydantic.errors import PydanticSchemaGenerationError
 from pydantic_core import core_schema
 
+from tabsdata.expansions.foundation.checkers import cron  # noqa: TID251
 from tabsdatak._annotations import deprecated_category
 
 # Error codes and exceptions live in `tabsdatak.api_error` so callers
@@ -533,36 +533,6 @@ VERSIONED_TABLE_PATTERN = (
 )
 VERSIONED_TABLE_REGEX = re.compile(VERSIONED_TABLE_PATTERN)
 
-# --- Kubernetes CronJob schedule: 5-field standard Unix cron + the descriptors
-# --- K8s documents. Quartz/Jenkins extensions and @reboot/@every are excluded.
-#
-# Two-layer validation:
-#   1. Regex enforces *syntax* -- 5 whitespace-separated fields, each made of
-#      `*`, digit-runs, or 3-letter month/DOW names, with `-` ranges, `/`
-#      steps, and `,` lists. The {3} on names rejects Quartz tokens (L, W, H)
-#      and composites (5L, 15W, 5#3) by shape, before croniter sees them.
-#   2. croniter enforces *semantics* -- per-field ranges (minute 0-59,
-#      hour 0-23, dom 1-31, month 1-12 or named, dow 0-7 or named) and
-#      validates name spellings (JAN..DEC, SUN..SAT).
-#
-# Descriptors are accepted by exact (case-sensitive) string match because
-# both layers above would otherwise reject them: the regex requires 5 fields,
-# and croniter accepts non-K8s descriptors like @reboot / @every.
-_K8S_CRON_DESCRIPTORS = frozenset({
-    "@yearly",
-    "@annually",
-    "@monthly",
-    "@weekly",
-    "@daily",
-    "@midnight",
-    "@hourly",
-})
-
-_CRON_TOKEN_RE_STR = r"(?:\d+|[A-Za-z]{3})"
-_CRON_ATOM_RE_STR = rf"(?:\*|{_CRON_TOKEN_RE_STR}(?:-{_CRON_TOKEN_RE_STR})?)"
-_CRON_FIELD_RE_STR = rf"{_CRON_ATOM_RE_STR}(?:/\d+)?(?:,{_CRON_ATOM_RE_STR}(?:/\d+)?)*"
-_UNIX_CRON_RE = re.compile(rf"^{_CRON_FIELD_RE_STR}(?:\s+{_CRON_FIELD_RE_STR}){{4}}$")
-
 
 def _is_coll_table_versions_name(value: str) -> bool:
     match = VERSIONED_TABLE_REGEX.match(value)
@@ -594,14 +564,12 @@ def _is_coll_table_versions_name(value: str) -> bool:
     return True
 
 
-def _is_cron_syntax(value: str) -> bool:
-    return value in _K8S_CRON_DESCRIPTORS or bool(_UNIX_CRON_RE.fullmatch(value))
-
-
-def _is_cron_semantics(value: str) -> bool:
-    # A descriptor never reaches croniter (it rejects some of the ones K8s
-    # documents); the syntax rule already accepted it.
-    return value in _K8S_CRON_DESCRIPTORS or croniter.is_valid(value)
+def _cron_refusal(value: str) -> str | None:
+    try:
+        cron(value)
+    except ValueError as error:
+        return str(error)
+    return None
 
 
 TABLE_NAME_VALIDATION = ValueConstraints(
@@ -614,8 +582,11 @@ COLL_TABLE_VERSIONS_NAME_VALIDATION = ValueConstraints(
     Rule.check(_is_coll_table_versions_name, ApiErrorCode.API_26)
 )
 CRON_MASK_VALIDATION = ValueConstraints(
-    Rule.check(_is_cron_syntax, ApiErrorCode.API_27),
-    Rule.check(_is_cron_semantics, ApiErrorCode.API_28),
+    Rule(
+        ApiErrorCode.API_28,
+        lambda value: _cron_refusal(value) is None,
+        lambda value: {"reason": _cron_refusal(value)},
+    )
 )
 
 NON_EMPTY_LIST_FIELD = Field(min_length=1)

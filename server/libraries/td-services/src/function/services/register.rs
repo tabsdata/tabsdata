@@ -4,6 +4,7 @@
 
 use crate::function::children::reconcile_children;
 use crate::function::lifecycle::register_one;
+use crate::function::workers::validate_workers;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -29,6 +30,7 @@ async fn register_function(
 ) -> Result<Function, TdError> {
     let (project, request) = request.into_parts();
     let (ctx, param, register) = request.into_parts();
+    validate_workers(&bridge, &register.workers)?;
     let read = retrying(|attempt| async {
         let mut gated_trx = db.lock_project().begin(attempt).await?;
         let grant = authz
@@ -1598,6 +1600,70 @@ mod tests {
         assert!(res.is_err());
         let err = res.err().unwrap();
         assert!(format!("{err}").contains("Multiple workers are not supported."));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_unrunnable_worker_registers_nothing(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection_name = CollectionName::try_from("collection")?;
+        db.scoped(p.project_id)
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+
+        let create = FunctionRegister {
+            child_functions: None,
+            name: "function".try_into()?,
+            description: "description".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: None,
+            table_types: None,
+            parent_tables: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: Some(HashMap::from([(
+                WorkerTypeDto::CronTrigger,
+                WorkerConfig::default(),
+            )])),
+        };
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam {
+                    collection: CollectionIdName::from_str(collection_name.as_str())?,
+                },
+                create,
+            )
+            .in_project(p.project_id);
+        let bridge = Ctx::new(BridgeProviderHandle::new(std::sync::Arc::new(
+            td_bridge::test::TestBridgeProvider::default()
+                .with_workload_validator(td_bridge::test::RefusingWorkloadValidator),
+        )));
+        let err = Services {
+            bridge,
+            ..Services::with_defaults(db.clone())
+        }
+        .register_function(request)
+        .await
+        .expect_err("an unrunnable worker must refuse the registration");
+        assert_eq!(err.api_error(), td_error::ApiError::InputError);
+        assert!(
+            err.to_string().contains("refused by the test validator"),
+            "{err}"
+        );
+        let active: Vec<FunctionDB> = db
+            .timeline()
+            .fetch_all::<FunctionDB>(&FunctionStatus::Active)
+            .await?;
+        assert!(active.is_empty());
         Ok(())
     }
 

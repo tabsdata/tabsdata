@@ -8,6 +8,8 @@
 
 use crate::execution::update_status::move_workers;
 use std::collections::HashMap;
+use td_bridge::BridgeProviderHandle;
+use td_bridge::validator::WorkloadDefinition;
 use td_database::access::{
     AccessMode, Holds, InProject, LockInstant, ProjectLock, SeesProjectRows,
 };
@@ -21,6 +23,22 @@ use td_objects::types::basic::{
 use td_objects::{and, or};
 use td_queries::Queries;
 use tracing::{debug, error};
+
+pub fn validate_workers(
+    bridge: &BridgeProviderHandle,
+    workers: &Option<HashMap<WorkerTypeDto, WorkerConfig>>,
+) -> Result<(), TdError> {
+    let (Some(validator), Some(workers)) = (bridge.workload_validator(), workers) else {
+        return Ok(());
+    };
+    for (worker_type, worker_config) in workers {
+        validator.validate(&WorkloadDefinition {
+            worker_type,
+            worker_config,
+        })?;
+    }
+    Ok(())
+}
 
 pub async fn register_workers(
     conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,

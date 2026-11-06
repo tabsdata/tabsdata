@@ -92,6 +92,9 @@ zstd = { workspace = true }
 
 [dev-dependencies]
 
+tm-workspace = { workspace = true }
+
 brotli = { workspace = true }
+serde_json = { workspace = true }
 
 

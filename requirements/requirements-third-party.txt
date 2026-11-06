@@ -17,7 +17,6 @@ click-repl==0.4.1
 clickhouse-connect==1.11.0
 colorama==0.4.6
 connectorx==0.4.6
-croniter==6.2.4
 cryptography==50.0.2
 fastavro==1.13.1
 fastparquet==2026.9.0

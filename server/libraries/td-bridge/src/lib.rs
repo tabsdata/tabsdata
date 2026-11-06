@@ -15,6 +15,7 @@ pub mod observer;
 pub mod secret;
 #[cfg(feature = "test-utils")]
 pub mod test;
+pub mod validator;
 pub mod worker;
 
 mod supervisor;
@@ -27,6 +28,7 @@ use crate::messaging::OrchestratorMessageQueue;
 use crate::observer::WorkloadObserver;
 use crate::secret::SecretStore;
 use crate::secret::project::ProjectSecrets;
+use crate::validator::WorkloadValidator;
 use crate::worker::WorkerHandler;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -81,6 +83,10 @@ pub trait BridgeProvider: Send + Sync {
     /// `None` (the default) means the orchestrator manages worker liveness
     /// itself and recovery stays on its time-based sweep.
     fn workload_observer(&self) -> Option<&dyn WorkloadObserver> {
+        None
+    }
+
+    fn workload_validator(&self) -> Option<&dyn WorkloadValidator> {
         None
     }
 }

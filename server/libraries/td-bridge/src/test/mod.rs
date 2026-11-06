@@ -16,6 +16,7 @@ use crate::messaging::memory::InMemoryOrchestratorMessageQueue;
 use crate::observer::{ObserverError, WorkloadObservation, WorkloadObserver};
 use crate::secret::SecretStore;
 use crate::secret::memory::InMemorySecretStore;
+use crate::validator::{ValidatorError, WorkloadDefinition, WorkloadValidator};
 use crate::worker::{LogBridgeError, WorkerHandler, WorkerLogStream, WorkerLogTarget};
 use crate::{BridgeProvider, BridgeProviderHandle, Orchestrator};
 use async_trait::async_trait;
@@ -29,6 +30,7 @@ pub struct TestBridgeProvider {
     secret_store: Box<dyn SecretStore>,
     message_queue: Box<dyn OrchestratorMessageQueue>,
     workload_observer: Option<Box<dyn WorkloadObserver>>,
+    workload_validator: Option<Box<dyn WorkloadValidator>>,
 }
 
 impl TestBridgeProvider {
@@ -61,6 +63,22 @@ impl TestBridgeProvider {
         self.workload_observer = Some(Box::new(observer));
         self
     }
+
+    pub fn with_workload_validator(mut self, validator: impl WorkloadValidator + 'static) -> Self {
+        self.workload_validator = Some(Box::new(validator));
+        self
+    }
+}
+
+pub struct RefusingWorkloadValidator;
+
+impl WorkloadValidator for RefusingWorkloadValidator {
+    fn validate(&self, _: &WorkloadDefinition<'_>) -> Result<(), ValidatorError> {
+        Err(ValidatorError::Unrunnable {
+            worker: "test".to_string(),
+            cause: "refused by the test validator".to_string(),
+        })
+    }
 }
 
 /// Observer that answers every `observe` with the same fixed observation.
@@ -84,6 +102,7 @@ impl Default for TestBridgeProvider {
             secret_store: Box::new(InMemorySecretStore::default()),
             message_queue: Box::new(InMemoryOrchestratorMessageQueue::default()),
             workload_observer: None,
+            workload_validator: None,
         }
     }
 }
@@ -115,6 +134,10 @@ impl BridgeProvider for TestBridgeProvider {
 
     fn workload_observer(&self) -> Option<&dyn WorkloadObserver> {
         self.workload_observer.as_deref()
+    }
+
+    fn workload_validator(&self) -> Option<&dyn WorkloadValidator> {
+        self.workload_validator.as_deref()
     }
 }
 

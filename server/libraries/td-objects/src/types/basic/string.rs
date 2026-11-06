@@ -40,36 +40,16 @@ pub struct ProjectName(String);
 pub struct Connector(String);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
-#[typed(parser = CronMask::parse_cron)]
 pub struct CronMask(String);
 
 impl CronMask {
-    fn create_cron(s: String) -> Result<croner::Cron, td_error::TdError> {
-        if s.contains("@") {
-            return Err(api_error!(
-                ApiError::InputError,
-                "Invalid cron expression: '@' aliases not supported"
-            ));
-        }
-        // We do not allow seconds precision in the parsed cron masks.
-        let parser = croner::parser::CronParser::builder()
+    pub fn into_cron(self) -> Result<croner::Cron, td_error::TdError> {
+        croner::parser::CronParser::builder()
             .alternative_weekdays(false)
             .seconds(croner::parser::Seconds::Disallowed)
-            .build();
-        let cron = parser
-            .parse(&s)
-            .map_err(|e| api_error!(ApiError::InputError, "Invalid cron expression: {e}"))?;
-        Ok(cron)
-    }
-
-    fn parse_cron(s: String) -> Result<String, td_error::TdError> {
-        let cron = Self::create_cron(s)?;
-        Ok(cron.to_string())
-    }
-
-    pub fn into_cron(self) -> Result<croner::Cron, td_error::TdError> {
-        let cron = Self::create_cron(self.0)?;
-        Ok(cron)
+            .build()
+            .parse(&self.0)
+            .map_err(|e| api_error!(ApiError::InputError, "Invalid cron expression: {e}"))
     }
 }
 
@@ -347,7 +327,7 @@ impl WorkerConfig {
     fn parse_json(value: String) -> Result<String, td_error::TdError> {
         serde_json::from_str::<serde_json::Value>(&value).map_err(|e| {
             api_error!(
-                ApiError::InternalError,
+                ApiError::InputError,
                 "Could not parse worker config as json. Value: {value}. Error: {e}"
             )
         })?;

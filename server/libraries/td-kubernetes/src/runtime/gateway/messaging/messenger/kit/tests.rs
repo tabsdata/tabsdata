@@ -112,3 +112,13 @@ fn every_worker_carries_the_secret_of_its_project() {
         ))
     );
 }
+
+#[test]
+fn a_cron_descriptor_reaches_the_schedule_as_written() {
+    let request = CronStartRequest {
+        schedule: CronMask::try_from("@daily").unwrap(),
+        ..cron_request()
+    };
+    let kit = build_cron_run_kit("crn-wkr20260101-1", "tabsdata", &request).unwrap();
+    assert_eq!(kit.cron_schedule.as_deref(), Some("@daily"));
+}

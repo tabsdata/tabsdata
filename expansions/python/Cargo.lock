@@ -6371,11 +6371,13 @@ dependencies = [
  "pyo3-stub-gen",
  "ratatui",
  "ratatui-image",
+ "serde_json",
  "td-build",
  "td-common",
  "td-error",
  "thiserror 2.0.21",
  "tm-pyo3",
+ "tm-workspace",
  "tracing",
  "zstd",
 ]

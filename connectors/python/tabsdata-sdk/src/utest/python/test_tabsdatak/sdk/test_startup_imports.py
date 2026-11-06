@@ -7,10 +7,10 @@ import subprocess
 import sys
 
 DEFERRED = (
-    "croniter",
     "packaging",
     "polars",
     "pydantic",
+    "tabsdata.expansions.foundation.checkers",
     "tabsdatak.api",
     "tabsdatak.common._archive.bundle",
     "yaml",

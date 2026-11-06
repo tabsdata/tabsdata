@@ -7,10 +7,10 @@ import subprocess
 import sys
 
 DEFERRED = (
-    "croniter",
     "pydantic",
     "rich.live",
     "ruamel",
+    "tabsdata.expansions.foundation.checkers",
     "tabsdatak._api",
     "tabsdatak.api",
     "tabsdatak.sdk.tabsdata_server",

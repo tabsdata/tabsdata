@@ -6,6 +6,7 @@ pub mod about;
 pub mod absolute_path;
 pub mod attach;
 pub mod bucket;
+pub mod cron;
 pub mod crypto;
 pub mod datetime;
 pub mod env;

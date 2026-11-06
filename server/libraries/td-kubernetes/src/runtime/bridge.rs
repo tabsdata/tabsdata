@@ -9,6 +9,7 @@ use td_bridge::connection::ConnectionStore;
 use td_bridge::messaging::OrchestratorMessageQueue;
 use td_bridge::observer::WorkloadObserver;
 use td_bridge::secret::SecretStore;
+use td_bridge::validator::WorkloadValidator;
 use td_bridge::worker::WorkerHandler;
 use td_bridge::{BridgeProvider, Orchestrator};
 use td_common::crypto::install_crypto_provider;
@@ -26,6 +27,7 @@ use crate::runtime::gateway::messaging::messenger::template::PodTemplateIndex;
 use crate::runtime::gateway::messaging::reconciler::Reconciler;
 use crate::runtime::gateway::messaging::reconciler::run::run;
 use crate::runtime::gateway::observer::KubernetesWorkloadObserver;
+use crate::runtime::gateway::validator::KubernetesWorkloadValidator;
 use crate::runtime::gateway::workload::KubernetesWorkerHandler;
 use crate::runtime::reporting::build_pod_kube_client;
 
@@ -37,6 +39,7 @@ pub struct KubernetesBridgeProvider {
     secret_store: KubernetesSecretStore,
     message_queue: KubernetesOrchestratorMessageQueue,
     workload_observer: KubernetesWorkloadObserver,
+    workload_validator: KubernetesWorkloadValidator,
     reconciliation: JoinHandle<()>,
 }
 
@@ -68,6 +71,7 @@ impl KubernetesBridgeProvider {
             secret_store,
             message_queue,
             workload_observer,
+            workload_validator: KubernetesWorkloadValidator,
             reconciliation,
         })
     }
@@ -117,5 +121,9 @@ impl BridgeProvider for KubernetesBridgeProvider {
 
     fn workload_observer(&self) -> Option<&dyn WorkloadObserver> {
         Some(&self.workload_observer)
+    }
+
+    fn workload_validator(&self) -> Option<&dyn WorkloadValidator> {
+        Some(&self.workload_validator)
     }
 }

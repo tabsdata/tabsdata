@@ -957,6 +957,8 @@ def test_publisher_signature_accepts_explicit_table_frame_or_none():
         "0 0 * * MON",  # named DOW
         "0 0 * JAN *",  # named month
         "0 0 * * MON-FRI",  # DOW range
+        "0 0 * * fri",
+        "? * * * *",
         # --- K8s descriptors ---
         "@yearly",
         "@annually",
@@ -965,6 +967,8 @@ def test_publisher_signature_accepts_explicit_table_frame_or_none():
         "@daily",
         "@midnight",
         "@hourly",
+        "@every 5m",
+        "@every 1h30m",
     ],
 )
 def test_cron_mask_accepts_valid(mask):
@@ -976,23 +980,24 @@ def test_cron_mask_accepts_valid(mask):
     [
         "",
         "0 0 * *",  # 4 fields
-        "0 0 * * * *",  # 6 fields (seconds precision -- not K8s)
+        "0 0 * * * *",
         "garbage",
         "60 0 * * *",  # minute out of range (semantic)
         "0 24 * * *",  # hour out of range
         "0 0 32 * *",  # dom out of range
         "0 0 * 13 *",  # month out of range
-        "0 0 * * 8",  # dow out of range (>7)
+        "0 0 * * 7",
+        "0 0 * * 8",
+        "TZ=UTC 0 0 * * *",
         # --- descriptors NOT supported by K8s ---
         "@reboot",
-        "@every 5m",
         "@EVERY 1h",
-        "@YEARLY",  # case-sensitive (docs are lowercase)
+        "@YEARLY",
+        "@every 5d",
         # --- Quartz / Jenkins extensions -- not K8s ---
         "L * * * *",  # Quartz L (last)
-        "? * * * *",  # Quartz ? (no-care)
         "15W * * * *",  # Quartz W (nearest weekday)
-        "0 0 * * 5#3",  # Quartz # (nth DOW)
+        "0 0 * * 5#3",
         "H * * * *",  # Jenkins H (hash)
         "LW * * * *",
     ],
@@ -1001,6 +1006,12 @@ def test_cron_mask_rejects_invalid(mask):
     with pytest.raises(ApiException) as excinfo:
         m.CronTrigger(mask=mask)
     assert excinfo.value.api_error is ApiErrorCode.API_2
+
+
+def test_cron_mask_refusal_says_why():
+    with pytest.raises(ApiException) as excinfo:
+        m.CronTrigger(mask="0 0 * * 7")
+    assert "end of range (7) above maximum (6)" in str(excinfo.value)
 
 
 # ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+pub mod checkers;
 pub mod graphics;
 pub mod readers;
 pub mod symbols;
@@ -26,6 +27,7 @@ const SYMBOLS_MODULE_NAME: &str = "symbols";
 const GRAPHICS_MODULE_NAME: &str = "graphics";
 const READERS_MODULE_NAME: &str = "readers";
 const WRITERS_MODULE_NAME: &str = "writers";
+const CHECKERS_MODULE_NAME: &str = "checkers";
 
 #[pymodule]
 fn _foundation(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -94,6 +96,10 @@ fn _foundation(module: &Bound<'_, PyModule>) -> PyResult<()> {
         writers::formats::avro::avro,
         &writers_module
     )?)?;
+
+    let checkers_module = register_py_module(CHECKERS_MODULE_NAME, &root_module, py)?;
+
+    checkers_module.add_function(wrap_pyfunction!(checkers::cron::cron, &checkers_module)?)?;
 
     Ok(())
 }

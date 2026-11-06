@@ -1162,6 +1162,16 @@ fn an_empty_global_job_ttl_keeps_the_template_one() {
 }
 
 #[test]
+fn a_cron_job_schedule_runs_in_utc() {
+    let mut cronjob_spec = CronJobSpec {
+        time_zone: Some("Europe/Madrid".to_owned()),
+        ..Default::default()
+    };
+    apply_schedule_time_zone(&mut cronjob_spec);
+    assert_eq!(cronjob_spec.time_zone.as_deref(), Some("Etc/UTC"));
+}
+
+#[test]
 fn the_global_job_ttl_reaches_jobs_and_cron_jobs() {
     let profile = build_profile(&[(TABSDATA_FILE, JOB_TTL_CONFIG)]);
     let mut job = Job {

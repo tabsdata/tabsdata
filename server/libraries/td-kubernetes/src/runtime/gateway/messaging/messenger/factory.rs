@@ -30,7 +30,9 @@ use crate::runtime::gateway::messaging::messenger::template::{
     PodTemplate, PodTemplateIndex, TemplateKind,
 };
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues, WorkerSettings};
-use crate::runtime::instance::injection::{apply_dataflow_envs, apply_global_envs, apply_job_ttl};
+use crate::runtime::instance::injection::{
+    apply_dataflow_envs, apply_global_envs, apply_job_ttl, apply_schedule_time_zone,
+};
 use crate::runtime::instance::ports::apply_ports;
 use crate::runtime::instance::sizing::{PodPlacement, apply_sizing};
 use crate::runtime::provider::ClusterProvider;
@@ -121,6 +123,7 @@ impl WorkloadFactory {
             }
             TemplateKind::CronJob => {
                 let mut cronjob = self.manifest_cronjob(template, name, kit.as_ref()).await?;
+                apply_schedule_time_zone(&mut cronjob.spec);
                 self.apply_job_ttl(cronjob.spec.job_template.spec.as_mut())?;
                 let (configmaps, secrets, latch) = match kit {
                     Some(kit) => {

@@ -5,12 +5,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use k8s_openapi::api::apps::v1::Deployment;
-use k8s_openapi::api::batch::v1::{CronJob, Job, JobSpec};
+use k8s_openapi::api::batch::v1::{CronJob, CronJobSpec, Job, JobSpec};
 use k8s_openapi::api::core::v1::{
     Container, EnvVar, EnvVarSource, Pod, PodSpec, PodTemplateSpec, SecretKeySelector,
 };
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 
+use td_common::cron::SCHEDULE_TIME_ZONE;
 use td_log_archive::{
     ENV_TD_WORKER_LOGS_BUCKET, ENV_TD_WORKER_LOGS_LOCATION, ENV_TD_WORKER_LOGS_WORKSPACE,
 };
@@ -201,6 +202,10 @@ pub fn apply_job_ttl(config_yaml: &str, job_spec: &mut JobSpec) -> Result<(), se
         job_spec.ttl_seconds_after_finished = Some(ttl);
     }
     Ok(())
+}
+
+pub fn apply_schedule_time_zone(cronjob_spec: &mut CronJobSpec) {
+    cronjob_spec.time_zone = Some(SCHEDULE_TIME_ZONE.to_owned());
 }
 
 pub fn inject_component_settings(

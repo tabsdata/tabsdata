@@ -92,7 +92,6 @@ CollTableVersionsNamesSpec: TypeAlias = Annotated[
     list[CollTableVersionsNameSpec], _api.NON_EMPTY_LIST_FIELD
 ]
 
-# Five-field cron expression understood by `croniter`.
 CronMaskSpec: TypeAlias = Annotated[str, _api.CRON_MASK_VALIDATION]
 
 
@@ -118,7 +117,9 @@ class CronTrigger(Trigger):
     :categories: trigger
 
     Args:
-        mask: Five-field cron expression (UTC).
+        mask: A Kubernetes CronJob schedule: five fields, one of
+            `@yearly`, `@annually`, `@monthly`, `@weekly`, `@daily`,
+            `@midnight`, `@hourly`, or `@every <duration>`. Always UTC.
     """
 
     mask: CronMaskSpec

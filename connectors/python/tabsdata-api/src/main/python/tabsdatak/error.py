@@ -444,15 +444,7 @@ class ApiErrorCode(ErrorCode):
         "comma-separated list, and a version HEAD / INITIAL with an optional ^ "
         "or ~N offset, or a fixed id): {value!r}",
     )  # CollTableVersionsNameSpec
-    API_27 = ErrorDef(
-        ApiInitException,
-        "not a Kubernetes CronJob schedule (5 whitespace-separated fields, or "
-        "one of @yearly / @annually / @monthly / @weekly / @daily / @midnight / "
-        "@hourly): {value!r}",
-    )  # CronMaskSpec -- syntax
-    API_28 = ErrorDef(
-        ApiInitException, "invalid cron expression: {value!r}"
-    )  # CronMaskSpec -- semantics
+    API_28 = ErrorDef(ApiInitException, "{reason}")  # CronMaskSpec
     API_29 = ErrorDef(
         ApiInitException, "@stream_publisher thresholds validation failed"
     )  # StreamThresholds and its levels
