@@ -9,7 +9,7 @@ from datetime import date
 from typing import Any, Callable, Iterator, Literal
 
 import polars as pl
-from sqlalchemy import Connection, Numeric
+from sqlalchemy import BigInteger, Connection, Numeric, cast
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.types import TypeDecorator
@@ -244,6 +244,22 @@ class _ExactDecimal(TypeDecorator):
         return None
 
 
+class _CheckedInteger(TypeDecorator):
+    """A BIGINT whose values reach DB2 as BIGINT.
+
+    ibm_db binds a value as the type of the column it lands in, and cuts one an
+    INTEGER or SMALLINT column cannot hold to its low bits (2**40 is stored as
+    0). Bound as a BIGINT, DB2 converts it itself and refuses the overflow
+    (SQL0413N), as every other database does.
+    """
+
+    impl = BigInteger
+    cache_ok = True
+
+    def bind_expression(self, bindvalue):
+        return cast(bindvalue, BigInteger)
+
+
 # The date a time-of-day column carries on a target with no time type. Arbitrary
 # but fixed, and documented in TYPE_MAPPING.md: a reader drops it to recover the
 # original time.
@@ -275,6 +291,8 @@ def _dialect_type_fixes(
     * oracle -- there is no time-of-day type, and oracledb rejects a Python
       ``time`` whatever the target column is (DPY-3002), so the column is stored
       as a ``TIMESTAMP`` on `_SENTINEL_DATE`.
+    * ibm_db_sa -- an integer is bound as the column it lands in, and a value
+      that column cannot hold is silently cut (`_CheckedInteger`).
 
     A transform is keyed off the type being forced rather than off the dialect, so
     a user-supplied override resolving to the same type reuses it.
@@ -298,6 +316,8 @@ def _dialect_type_fixes(
         ):
             dtype[name] = oracle.TIMESTAMP()
             transforms[name] = _sentinel_datetime(name)
+        elif dialect == "ibm_db_sa" and pa.types.is_integer(arrow):
+            dtype[name] = _CheckedInteger()
     return dtype, transforms
 
 

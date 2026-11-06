@@ -26,6 +26,7 @@ WIDE = {
     "d": [Decimal("123456789012345678.25")],
 }
 FITTING = {"id": [1], "n": [5], "f": [1.5], "d": [Decimal("1.25")]}
+OVERFLOWING = {**FITTING, "n": [2**40]}
 
 
 def _create(engine: Engine, table: str) -> None:
@@ -75,9 +76,25 @@ def strict_leaves_a_fitting_number_to_the_database(
     assert (int(row["n"]), float(row["f"])) == (5, 1.5)
 
 
+def strict_fails_a_number_its_column_cannot_hold(
+    policy: Policy, table: str, engine: Engine
+) -> None:
+    policy.drop(table)
+    _create(engine, table)
+    narrow = _types(engine, table)
+    batch = pl.LazyFrame(OVERFLOWING, schema=BATCH_SCHEMA)
+    with pytest.raises(Exception):
+        policy.write(table, batch, APPEND, "strict")
+    assert _types(engine, table) == narrow
+    assert policy.read(table).height == 0
+
+
 WIDENING_CASES = [
     pytest.param(update_widens_a_number_column, id="update-widens-numbers"),
     pytest.param(
         strict_leaves_a_fitting_number_to_the_database, id="strict-fitting-numbers"
+    ),
+    pytest.param(
+        strict_fails_a_number_its_column_cannot_hold, id="strict-overflowing-number"
     ),
 ]
