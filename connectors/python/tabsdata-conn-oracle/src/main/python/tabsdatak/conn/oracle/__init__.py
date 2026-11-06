@@ -102,6 +102,7 @@ names that differ only in quoting, or in the case of an unquoted part
 (upper-cased, as Oracle folds them), are the same table."""
 
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
+SchemaEvolutionSpec: TypeAlias = Literal["strict", "update"]
 """Write disposition when the target table exists: `"append"` adds
 rows; `"replace"` truncates before insert."""
 
@@ -122,6 +123,7 @@ SrcCfgSpec: TypeAlias = Annotated[
 # --- OracleDest.dest_cfg keys ---------------------------------------
 DestCfgKey: TypeAlias = Literal[
     "oracle.logging_level",
+    "oracle.schema_evolution_engine",
     "tabsdata.sql.write_engine",
     "tabsdata.sql.chunk_size",
 ]
@@ -299,9 +301,16 @@ class OracleDest(Dest):
             truncates the table before inserting.
         transactional: When `True` (default), wrap every table write
             in one transactional session.
+        schema_evolution: `"strict"` (the default) rejects a batch with a
+            column the table lacks; `"update"` adds the column to the table
+            first. A column the batch lacks is written NULL either way. Column
+            types are not changed: a value a column cannot hold fails the
+            write.
         dest_cfg: Optional config mapping over the allowed keys only
             (`oracle.logging_level`, `tabsdata.sql.write_engine`,
             `tabsdata.sql.chunk_size`).
+            `oracle.schema_evolution_engine` takes only `"iceberg"`, the
+            default.
 
     Note:
         Column types are picked only when the target table is created (with
@@ -317,4 +326,5 @@ class OracleDest(Dest):
     tables: OracleTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     transactional: bool = True
+    schema_evolution: SchemaEvolutionSpec = "strict"
     dest_cfg: DestCfgSpec | None = None

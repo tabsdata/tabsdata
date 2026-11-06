@@ -49,6 +49,21 @@ def _retry() -> Retrying:
 
 WriteLoader = Callable[..., None]
 
+_ENGINE_KEY_SUFFIX = ".schema_evolution_engine"
+_ENGINES = ("iceberg",)
+
+
+def _check_schema_evolution_engine(cfg) -> None:
+    from tabsdatak.conn.common.sql.error import SqlCommonErrorCode
+
+    for key, value in (cfg or {}).items():
+        if key.endswith(_ENGINE_KEY_SUFFIX) and value not in _ENGINES:
+            raise SqlCommonErrorCode.SQL_COMMON_11.exception(
+                key=key,
+                value=value,
+                allowed=" or ".join(repr(engine) for engine in _ENGINES),
+            )
+
 
 class SqlAlchemyWriteEngine(SqlWriteEngine, ABC):
     @abstractmethod
@@ -59,6 +74,7 @@ class SqlAlchemyWriteEngine(SqlWriteEngine, ABC):
         dest: SqlWriteCfg,
         tables: list[pl.LazyFrame],
     ) -> None:
+        _check_schema_evolution_engine(dest.cfg)
         write_loader = self.loader()
         frames = list(tables)
         if len(frames) != len(dest.target_tables):
@@ -110,6 +126,7 @@ class SqlAlchemyWriteEngine(SqlWriteEngine, ABC):
                 table=table,
                 if_table_exists=dest.if_table_exists,
                 chunk_size=chunk_size,
+                schema_evolution=dest.schema_evolution,
             )
             logger.debug("sql-writer: finished table %r", table)
         logger.info("sql-writer: finished writing %d table(s)", total)
@@ -305,6 +322,91 @@ def _qualify_for_write(connection: Connection, table: str) -> str:
     return f"{schema}.{table}" if schema else table
 
 
+# Dialects that match a column name whatever its case, quoted or not. Elsewhere
+# SQLAlchemy reflects a name in the same form pandas writes it, so the two are
+# compared as they are.
+_CASE_INSENSITIVE_COLUMNS = frozenset({"mysql", "mssql"})
+
+
+def _add_new_columns(
+    connection: Connection,
+    table: str,
+    schema: pl.Schema,
+    dtype: dict[str, Any],
+    evolution: Literal["strict", "update"],
+) -> None:
+    """Add to an existing `table` the columns the batch has and it lacks, as far
+    as `evolution` allows. A new column takes the type pandas would give it in a
+    table it creates, so both paths agree.
+
+    A column the batch lacks is left alone and written NULL by the insert. Type
+    changes are not compared: a value the column cannot hold fails the insert.
+    """
+    from pandas.io.sql import SQLDatabase, SQLTable
+    from sqlalchemy import inspect, text
+
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._schema.delta import (
+        Action,
+        SchemaChange,
+        SchemaDelta,
+    )
+
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._schema.policy import governed
+
+    *prefix, name = table.split(".")
+    db_schema = prefix[-1] if prefix else None
+    inspector = inspect(connection)
+    if not inspector.has_table(name, schema=db_schema):
+        return
+    insensitive = connection.dialect.name in _CASE_INSENSITIVE_COLUMNS
+
+    def fold(column: str) -> str:
+        return column.lower() if insensitive else column
+
+    stored = {fold(c["name"]) for c in inspector.get_columns(name, schema=db_schema)}
+    new = [column for column in schema.names() if fold(column) not in stored]
+    if not new:
+        return
+    delta = governed(
+        SchemaDelta(
+            table_name=table,
+            is_create=False,
+            changes=[
+                SchemaChange(action=Action.ADD_COLUMN, column=column, safe=True)
+                for column in new
+            ],
+        ),
+        evolution,
+    )
+    frame = pl.DataFrame(schema=schema).to_pandas(use_pyarrow_extension_array=True)
+    with SQLDatabase(connection, schema=db_schema) as database:
+        columns = SQLTable(
+            name,
+            database,
+            frame=frame,
+            index=False,
+            schema=db_schema,
+            dtype=dtype or None,
+        ).table.columns
+    preparer = connection.dialect.identifier_preparer
+    target = ".".join(preparer.quote(part) for part in [*prefix, name])
+    add = _ADD_COLUMN.get(connection.dialect.name, "ADD COLUMN {column} {type}")
+    for change in delta.changes:
+        column = preparer.quote(change.column)
+        type_ = columns[change.column].type.compile(dialect=connection.dialect)
+        statement = f"ALTER TABLE {target} " + add.format(column=column, type=type_)
+        logger.info("sql-writer: evolving %s: %s", table, statement)
+        connection.execute(text(statement))
+
+
+_ADD_COLUMN: dict[str, str] = {
+    "mssql": "ADD {column} {type}",
+    "oracle": "ADD ({column} {type})",
+}
+
+
 def _polars_write(
     *,
     connection: Connection,
@@ -312,6 +414,7 @@ def _polars_write(
     table: str,
     if_table_exists: Literal["append", "replace"],
     chunk_size: int,
+    schema_evolution: Literal["strict", "update"] = "strict",
 ) -> None:
     schema = frame.collect_schema()
     arrow_schema = pl.DataFrame(schema=schema).to_arrow().schema
@@ -333,6 +436,8 @@ def _polars_write(
     if if_table_exists == "replace":
         _drop_table_if_exists(connection, table)
         if_table_exists = "append"
+    else:
+        _add_new_columns(connection, table, schema, _dtype, schema_evolution)
     wrote_any = False
     for df in frame.collect_batches(chunk_size=chunk_size):
         if _transforms:

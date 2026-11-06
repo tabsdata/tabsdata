@@ -1,0 +1,46 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import polars as pl
+import pytest
+from tabsdatax.itest.fixture.backends.mysql import MysqlDomain, mysql_domain
+from tabsdatax.itest.fixture.functions.files import PluginDestCtx
+from testi_tabsdatak.conn.common.sql.plugin_io import work_dir
+from testi_tabsdatak.conn.common.sql.schema.policy import (
+    APPEND_CASES,
+    Policy,
+    run,
+    table_for,
+)
+from testi_tabsdatak.conn.mysql.backend import dest_conn, store
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.mysql import MySQLDest, _plugin as plugin
+
+pytestmark = pytest.mark.mysql
+
+
+def _policy(domain: MysqlDomain, work: Path) -> Policy:
+    db = store(domain)
+    conn = dest_conn(domain)
+
+    def write(table: str, frame: pl.LazyFrame, mode: str, evolution: str) -> None:
+        plugin.MySQLDestPlugin().write_out(
+            PluginDestCtx(work),
+            conn,
+            MySQLDest(tables=[table], if_table_exists=mode, schema_evolution=evolution),
+            [frame],
+        )
+
+    return Policy(write=write, read=db.read_table, drop=db.drop_table)
+
+
+@pytest.mark.parametrize("case", APPEND_CASES)
+@mysql_domain("mysql")
+def test_schema_policy(domain_mysql: MysqlDomain, tmp_path: Path, case, request):
+    run(case, _policy(domain_mysql, work_dir(tmp_path)), table_for(request))

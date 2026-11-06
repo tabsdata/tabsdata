@@ -20,6 +20,7 @@ class SqlWriteCfg[C: Conn](ABC):
     if_table_exists: Literal["append", "replace"]
     transactional: bool
     cfg: CfgSpec | None
+    schema_evolution: Literal["strict", "update"] = "strict"
 
     def create_sql_alchemy_engine(self) -> Engine:
         """

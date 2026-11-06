@@ -13,16 +13,21 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._engine import constants as const
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._engine import sqlalchemy_writer as saw
-
+from tabsdatak.conn.common.sql._engine import (
+    constants as const,
+    sqlalchemy_writer as saw,
+)
+from tabsdatak.conn.common.sql.error import (
+    SqlCommonErrorCode,
+    SqlCommonRuntimeException,
+    SqlCommonValidateException,
+)
 from test_tabsdatak.conn.common.sql import _sqlite_helpers
 from test_tabsdatak.conn.common.sql._sqlite_helpers import (
     _SqliteSqlWriteCfg,
     sqlite_uri,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -531,3 +536,61 @@ def test_unmasked_ibm_db_errors_noop_without_driver(monkeypatch):
     monkeypatch.setattr(builtins, "__import__", _no_ibm_db)
     with saw._unmasked_ibm_db_errors():
         pass  # must not raise
+
+
+def _seeded(tmp_path: Path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'evolve.db'}")
+    with engine.begin() as conn:
+        saw._polars_write(
+            connection=conn,
+            frame=pl.LazyFrame({"id": [1], "name": ["a"]}),
+            table="t",
+            if_table_exists="replace",
+            chunk_size=100,
+        )
+    return engine
+
+
+def _append(engine, frame: pl.LazyFrame, evolution: str) -> None:
+    with engine.begin() as conn:
+        saw._polars_write(
+            connection=conn,
+            frame=frame,
+            table="t",
+            if_table_exists="append",
+            chunk_size=100,
+            schema_evolution=evolution,
+        )
+
+
+def _rows(engine) -> list[tuple]:
+    with engine.connect() as conn:
+        return sorted(conn.execute(text("SELECT * FROM t")).fetchall(), key=repr)
+
+
+def test_update_adds_a_new_column_before_appending(tmp_path):
+    engine = _seeded(tmp_path)
+    _append(engine, pl.LazyFrame({"id": [2], "name": ["b"], "x": [7]}), "update")
+    assert _rows(engine) == [(1, "a", None), (2, "b", 7)]
+
+
+def test_strict_refuses_a_new_column(tmp_path):
+    engine = _seeded(tmp_path)
+    with pytest.raises(SqlCommonRuntimeException) as raised:
+        _append(engine, pl.LazyFrame({"id": [2], "name": ["b"], "x": [7]}), "strict")
+    assert raised.value.api_error is SqlCommonErrorCode.SQL_COMMON_10
+    assert _rows(engine) == [(1, "a")]
+
+
+@pytest.mark.parametrize("evolution", ["strict", "update"])
+def test_a_column_the_batch_lacks_is_written_null(tmp_path, evolution):
+    engine = _seeded(tmp_path)
+    _append(engine, pl.LazyFrame({"id": [2]}), evolution)
+    assert _rows(engine) == [(1, "a"), (2, None)]
+
+
+def test_the_schema_evolution_engine_takes_only_iceberg():
+    saw._check_schema_evolution_engine({"x.schema_evolution_engine": "iceberg"})
+    with pytest.raises(SqlCommonValidateException) as raised:
+        saw._check_schema_evolution_engine({"x.schema_evolution_engine": "native"})
+    assert raised.value.api_error is SqlCommonErrorCode.SQL_COMMON_11

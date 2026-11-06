@@ -89,3 +89,8 @@ class SqlCommonErrorCode(ErrorCode):
         "The batch for {table} does not match it and schema_evolution={evolution!r}"
         " does not allow the change: {changes}",
     )  # _schema.policy.governed()
+    SQL_COMMON_11 = ErrorDef(
+        SqlCommonValidateException,
+        "dest_cfg[{key!r}]={value!r} is not a schema evolution engine; it is"
+        " {allowed} or unset",
+    )  # _engine.sqlalchemy_writer._check_schema_evolution_engine()

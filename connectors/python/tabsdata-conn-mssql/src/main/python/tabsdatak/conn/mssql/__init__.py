@@ -87,6 +87,7 @@ once: names that differ only in quoting or in case are the same table,
 as SQL Server's default collation ignores the case of a name, quoted
 or not."""
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
+SchemaEvolutionSpec: TypeAlias = Literal["strict", "update"]
 
 
 # --- MSSQLSrc.src_cfg keys ------------------------------------------
@@ -105,6 +106,7 @@ SrcCfgSpec: TypeAlias = Annotated[
 # --- MSSQLDest.dest_cfg keys ----------------------------------------
 DestCfgKey: TypeAlias = Literal[
     "mssql.logging_level",
+    "mssql.schema_evolution_engine",
     "tabsdata.sql.write_engine",
     "tabsdata.sql.chunk_size",
 ]
@@ -283,9 +285,16 @@ class MSSQLDest(Dest):
             `"replace"` truncates the table before inserting.
         transactional: When `True` (the default), wrap every table
             write in one transactional session.
+        schema_evolution: `"strict"` (the default) rejects a batch with a
+            column the table lacks; `"update"` adds the column to the table
+            first. A column the batch lacks is written NULL either way. Column
+            types are not changed: a value a column cannot hold fails the
+            write.
         dest_cfg: Optional connector config; supported keys are
             `mssql.logging_level`, `tabsdata.sql.write_engine`
             and `tabsdata.sql.chunk_size`.
+            `mssql.schema_evolution_engine` takes only `"iceberg"`, the
+            default.
 
     Note:
         Column types are picked only when the target table is created (with
@@ -299,4 +308,5 @@ class MSSQLDest(Dest):
     tables: MSSQLTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     transactional: bool = True
+    schema_evolution: SchemaEvolutionSpec = "strict"
     dest_cfg: DestCfgSpec | None = None

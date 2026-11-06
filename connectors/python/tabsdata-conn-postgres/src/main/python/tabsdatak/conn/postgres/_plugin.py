@@ -210,6 +210,7 @@ class PostgresDestPlugin(
             target_tables=list(dest.tables),
             if_table_exists=dest.if_table_exists,
             transactional=dest.transactional,
+            schema_evolution=dest.schema_evolution,
             cfg=dest.dest_cfg,
         )
 
