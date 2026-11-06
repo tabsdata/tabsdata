@@ -7,6 +7,8 @@ from __future__ import annotations
 import logging
 import re
 import time
+from decimal import Decimal
+from typing import Any, Callable
 
 import polars as pl
 import pyarrow.parquet as pq
@@ -33,6 +35,9 @@ from tabsdatak.conn.clickhouse._statuses import BulkLoadStatus
 from tabsdatak.conn.common.sql._schema.delta import Action, SchemaChange, SchemaDelta
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.footer import column_range
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._schema.policy import (
     STRICT,
     SchemaEvolution,
@@ -42,66 +47,52 @@ from tabsdatak.conn.common.sql._schema.policy import (
 logger = logging.getLogger(__name__)
 
 _INTEGER = re.compile(r"^(?:Nullable\()?(U?)Int(8|16|32|64|128|256)\)?$")
+_DECIMAL = re.compile(r"^(?:Nullable\()?Decimal\((\d+),\s*(\d+)\)\)?$")
 
 
-def _integer_range(type_: str) -> tuple[int, int] | None:
-    match = _INTEGER.match(type_.strip())
-    if not match:
-        return None
-    bits = int(match[2])
-    if match[1]:
-        return 0, 2**bits - 1
-    return -(2 ** (bits - 1)), 2 ** (bits - 1) - 1
+def _holds(stored: str, batch: str) -> Callable[[Any], bool] | None:
+    """Whether a ``stored`` column holds a given value of the ``batch`` type,
+    when both are integers or both decimals; ``None`` for any other pair, and
+    for a batch decimal with more fractional digits than the column keeps,
+    which ClickHouse would round away."""
+    integer = _INTEGER.match(stored.strip())
+    if integer and _INTEGER.match(batch.strip()):
+        bits = int(integer[2])
+        if integer[1]:
+            low, high = 0, 2**bits - 1
+        else:
+            low, high = -(2 ** (bits - 1)), 2 ** (bits - 1) - 1
+        return lambda value: low <= value <= high
+    held, wider = _DECIMAL.match(stored.strip()), _DECIMAL.match(batch.strip())
+    if held and wider and int(wider[2]) <= int(held[2]):
+        limit = Decimal(10) ** (int(held[1]) - int(held[2]))
+        return lambda value: -limit < Decimal(value) < limit
+    return None
 
 
-def _batch_range(footers, column: str) -> tuple[int, int] | None:
-    """The smallest and largest value of ``column`` across every row group the
-    footers describe; ``None`` when a row group carries no statistics for it,
-    so its values cannot be bounded."""
-    if not footers:
-        return None
-    low = high = None
-    for meta in footers:
-        for index in range(meta.num_row_groups):
-            group = meta.row_group(index)
-            chunks = [
-                group.column(i)
-                for i in range(group.num_columns)
-                if group.column(i).path_in_schema == column
-            ]
-            if not chunks:
-                return None
-            stats = chunks[0].statistics
-            if stats is None:
-                return None
-            if not stats.has_min_max:
-                if stats.has_null_count and stats.null_count == group.num_rows:
-                    continue
-                return None
-            low = stats.min if low is None else min(low, stats.min)
-            high = stats.max if high is None else max(high, stats.max)
-    return (low, high) if low is not None else (0, 0)
-
-
-def _fitting_integers(delta: SchemaDelta, footers) -> SchemaDelta:
-    """``delta`` with each widening of an integer column marked as fitting when
-    every value of the batch fits the column as it is, which the footers'
-    statistics tell without reading the data. ClickHouse would cut a value
-    that does not fit to the column's width rather than refuse it, so under
-    strict a batch that needs the wider type is refused."""
+def _fitting_numbers(delta: SchemaDelta, footers) -> SchemaDelta:
+    """``delta`` with each change of an integer or decimal column to a wider
+    type of its kind marked as fitting when every value of the batch fits the
+    column as it is, which the footers' statistics tell without reading the
+    data. ClickHouse would cut an integer that does not fit to the column's
+    width rather than refuse it, so under strict a batch that needs the wider
+    type is refused."""
     changes = []
     for change in delta.changes:
-        if change.action is Action.ALTER_TYPE and change.safe:
-            held = _integer_range(change.detail.get("old_type", ""))
-            if held is not None and _integer_range(change.detail.get("new_type", "")):
-                values = _batch_range(footers, change.column)
-                if values is not None and held[0] <= values[0] <= values[1] <= held[1]:
-                    change = SchemaChange(
-                        action=change.action,
-                        column=change.column,
-                        safe=change.safe,
-                        detail={**change.detail, "fits": True},
-                    )
+        if change.action is Action.ALTER_TYPE:
+            holds = _holds(
+                change.detail.get("old_type", ""), change.detail.get("new_type", "")
+            )
+            values = column_range(footers, change.column) if holds else None
+            if values is not None and (
+                values[0] is None or (holds(values[0]) and holds(values[1]))
+            ):
+                change = SchemaChange(
+                    action=change.action,
+                    column=change.column,
+                    safe=change.safe,
+                    detail={**change.detail, "fits": True},
+                )
         changes.append(change)
     return SchemaDelta(
         table_name=delta.table_name, is_create=delta.is_create, changes=changes
@@ -235,7 +226,7 @@ class CloudStagedBulkLoader:
             self.load_mode, table_name, arrow_schema, column_nulls
         )
         if self.schema_evolution == STRICT:
-            delta = _fitting_integers(delta, footers)
+            delta = _fitting_numbers(delta, footers)
         delta = governed(delta, self.schema_evolution)
         if delta.changes:
             self.dialect.apply_schema_delta(self.load_mode, table_name, delta)

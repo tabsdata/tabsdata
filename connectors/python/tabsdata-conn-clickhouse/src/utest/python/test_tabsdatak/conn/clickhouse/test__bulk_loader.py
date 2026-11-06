@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from decimal import Decimal
+
 import polars as pl
 import pytest
 
@@ -197,6 +199,59 @@ def test_strict_refuses_integers_their_narrower_column_cannot_hold(
     loader = _loader(tmp_path, _Evolving([_widened(old)]), WriteMode.APPEND, STRICT)
     with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
         loader.phase_validate_and_prepare(_staged_ids(loader, ids))
+
+
+def _decimal_change(stored: str, batch: str) -> SchemaChange:
+    return SchemaChange(
+        action=Action.ALTER_TYPE,
+        column="d",
+        safe=False,
+        detail={"old_type": stored, "new_type": batch, "nullable": True},
+    )
+
+
+def _staged_decimals(loader: CloudStagedBulkLoader, values: list, scale: int) -> dict:
+    frame = pl.LazyFrame(
+        {"d": [None if v is None else Decimal(v) for v in values]},
+        schema={"d": pl.Decimal(38, scale)},
+    )
+    return loader.phase_upload({"users": [("0.parquet", frame)]})
+
+
+@pytest.mark.parametrize(
+    "stored,batch,values,scale",
+    [
+        ("Decimal(10, 2)", "Decimal(38, 2)", ["-99999999.99", "99999999.99"], 2),
+        ("Decimal(10, 2)", "Decimal(38, 1)", ["12.5"], 1),
+        ("Decimal(10, 2)", "Decimal(38, 2)", [None], 2),
+    ],
+)
+def test_strict_takes_decimals_their_narrower_column_holds(
+    tmp_path, stored, batch, values, scale
+):
+    dialect = _Evolving([_decimal_change(stored, batch)])
+    loader = _loader(tmp_path, dialect, WriteMode.APPEND, STRICT)
+    loader.phase_validate_and_prepare(_staged_decimals(loader, values, scale))
+    assert dialect.applied == []
+
+
+@pytest.mark.parametrize(
+    "stored,batch,values,scale",
+    [
+        ("Decimal(10, 2)", "Decimal(38, 2)", ["100000000.00"], 2),
+        ("Decimal(10, 2)", "Decimal(38, 2)", ["-100000000.00"], 2),
+        # More fractional digits than the column keeps would be rounded away.
+        ("Decimal(10, 2)", "Decimal(38, 4)", ["1.2500"], 4),
+    ],
+)
+def test_strict_refuses_decimals_their_narrower_column_cannot_hold(
+    tmp_path, stored, batch, values, scale
+):
+    loader = _loader(
+        tmp_path, _Evolving([_decimal_change(stored, batch)]), WriteMode.APPEND, STRICT
+    )
+    with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
+        loader.phase_validate_and_prepare(_staged_decimals(loader, values, scale))
 
 
 def test_update_widens_a_column_whatever_its_values(tmp_path):
