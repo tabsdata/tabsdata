@@ -41,7 +41,7 @@ def main(root: str, options: str, name: str, file_format: str, target: str) -> N
         ),
         store=FileStore(root, json.loads(options)),
         origin=lambda store, path: path,
-        errors=FilePluginErrors(ERROR, ERROR, ERROR, ERROR),
+        errors=FilePluginErrors(read_failed=ERROR, write_failed=ERROR),
     )
     (table,) = list(slot)
     table.frame.sink_parquet(target)
