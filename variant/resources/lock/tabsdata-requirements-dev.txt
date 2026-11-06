@@ -66,7 +66,7 @@ google-crc32c==1.9.0
 google-resumable-media==2.11.0
 googleapis-common-protos==1.76.0
 greenlet==3.5.6 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
-grimp==3.18
+grimp==3.19
 gtts==2.2.4
 h11==0.16.0
 headerparser==0.5.2
