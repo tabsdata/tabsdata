@@ -4,7 +4,7 @@
 
 use std::fmt::Debug;
 use std::future::Future;
-use std::pin::pin;
+use std::pin::Pin;
 use std::time::Duration;
 
 use humantime::format_duration;
@@ -121,14 +121,14 @@ where
     let started = Instant::now();
     let mut budget = AWAIT_CONDITION_TIMEOUT;
     loop {
-        let waiting = await_condition(api.clone(), name, condition.clone());
+        let mut waiting = Box::pin(await_condition(api.clone(), name, condition.clone()));
         let remaining = match patience {
             AwaitPatience::Bounded | AwaitPatience::Resumable => {
                 Some(budget.saturating_sub(started.elapsed()))
             }
             AwaitPatience::Forever => None,
         };
-        let outcome = match heartbeat(waiting, name, started, remaining).await {
+        let outcome = match heartbeat(waiting.as_mut(), name, started, remaining).await {
             Some(outcome) => outcome,
             None => {
                 if patience == AwaitPatience::Resumable
@@ -163,7 +163,7 @@ where
 }
 
 async fn heartbeat<F, T>(
-    waiting: F,
+    mut waiting: Pin<&mut F>,
     name: &str,
     started: Instant,
     budget: impl Into<Option<Duration>>,
@@ -173,7 +173,6 @@ where
 {
     let budget = budget.into();
     let deadline = budget.map(|budget| Instant::now() + budget);
-    let mut waiting = pin!(waiting);
     loop {
         let tick = match deadline {
             Some(deadline) => {
@@ -181,7 +180,7 @@ where
             }
             None => AWAIT_CONDITION_HEARTBEAT,
         };
-        match timeout(tick, &mut waiting).await {
+        match timeout(tick, waiting.as_mut()).await {
             Ok(outcome) => return Some(outcome),
             Err(_) => {
                 if deadline.is_some_and(|deadline| Instant::now() >= deadline) {

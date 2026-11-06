@@ -3,11 +3,18 @@
 //
 
 use super::*;
+use std::pin::pin;
 
 #[tokio::test]
 async fn a_wait_inside_the_budget_returns_its_outcome() {
     let waiting = async { "settled" };
-    let outcome = heartbeat(waiting, "probe", Instant::now(), Duration::from_secs(5)).await;
+    let outcome = heartbeat(
+        pin!(waiting),
+        "probe",
+        Instant::now(),
+        Duration::from_secs(5),
+    )
+    .await;
     assert_eq!(outcome, Some("settled"));
 }
 
@@ -17,7 +24,13 @@ async fn a_wait_beyond_the_budget_gives_up() {
         tokio::time::sleep(Duration::from_secs(30)).await;
         "never"
     };
-    let outcome = heartbeat(waiting, "probe", Instant::now(), Duration::from_millis(50)).await;
+    let outcome = heartbeat(
+        pin!(waiting),
+        "probe",
+        Instant::now(),
+        Duration::from_millis(50),
+    )
+    .await;
     assert_eq!(outcome, None);
 }
 
@@ -27,7 +40,7 @@ async fn a_wait_with_no_budget_never_gives_up() {
         tokio::time::sleep(Duration::from_millis(80)).await;
         "settled"
     };
-    let outcome = heartbeat(waiting, "probe", Instant::now(), None).await;
+    let outcome = heartbeat(pin!(waiting), "probe", Instant::now(), None).await;
     assert_eq!(outcome, Some("settled"));
 }
 

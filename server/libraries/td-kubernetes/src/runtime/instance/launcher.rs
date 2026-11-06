@@ -321,15 +321,15 @@ async fn apply_init_phase(
 
 async fn apply_init_group(
     context: &KubeContext,
-    group: Vec<(String, Job)>,
+    group: &[(String, Job)],
     multi: &MultiProgress,
 ) -> CommandResult<Vec<String>> {
     let phase = phase_spinner_in(multi, &format!("Applying {} init job(s)", group.len()));
     let mut applied: Vec<String> = Vec::new();
     for (key, job) in group {
-        let bar = phase.add_resource(&key);
+        let bar = phase.add_resource(key);
         let created =
-            match job_api::create_job(context, &job, Vec::new(), Vec::new(), None, None).await {
+            match job_api::create_job(context, job, Vec::new(), Vec::new(), None, None).await {
                 Ok(created) => {
                     bar.finish_with_message(format!("{key} (applied)"));
                     created
@@ -357,7 +357,7 @@ pub async fn run_init_phase(
 ) -> CommandResult {
     let groups = apply_init_phase(context, cluster_provider, system, profile).await?;
     for (_, group) in groups {
-        let applied = apply_init_group(context, group, multi).await?;
+        let applied = apply_init_group(context, &group, multi).await?;
         wait_init_phase(context, &applied, multi).await?;
     }
     Ok(())
@@ -1059,28 +1059,29 @@ async fn clear_settled_job(
     component: &str,
     name: &str,
 ) -> CommandResult<bool> {
-    let Some(existing) = job_api::get_job(context, name).await? else {
-        return Ok(false);
-    };
-    if !is_job_reclaimable(&existing) {
-        let active = job_active_pods(&existing);
-        return Err(LauncherError::ProvisionJobInProgress {
-            component: component.to_owned(),
-            name: name.to_owned(),
-            started: existing
-                .status
-                .as_ref()
-                .and_then(|status| status.start_time.as_ref())
-                .map(|time| {
-                    format!(
-                        "at {}",
-                        DateTime::<Utc>::from(SystemTime::from(time.0)).to_rfc3339()
-                    )
-                })
-                .unwrap_or_else(|| "at an unknown time".to_owned()),
-            active,
+    match job_api::get_job(context, name).await? {
+        None => return Ok(false),
+        Some(existing) if !is_job_reclaimable(&existing) => {
+            let active = job_active_pods(&existing);
+            return Err(LauncherError::ProvisionJobInProgress {
+                component: component.to_owned(),
+                name: name.to_owned(),
+                started: existing
+                    .status
+                    .as_ref()
+                    .and_then(|status| status.start_time.as_ref())
+                    .map(|time| {
+                        format!(
+                            "at {}",
+                            DateTime::<Utc>::from(SystemTime::from(time.0)).to_rfc3339()
+                        )
+                    })
+                    .unwrap_or_else(|| "at an unknown time".to_owned()),
+                active,
+            }
+            .into());
         }
-        .into());
+        Some(_) => {}
     }
     job_api::delete_job(context, name).await?;
     job_api::await_job_absent_resumable(context, name, is_job_absent()).await?;
@@ -1110,9 +1111,11 @@ pub async fn provision_pyvenvs(
         bar.set_message(format!("{setup_key} (replacing previous run)"));
     }
     job_api::create_job(context, &setup, Vec::new(), Vec::new(), None, None).await?;
-    let settled =
-        job_api::await_job_condition_resumable(context, &setup_name, is_job_settled()).await?;
-    if settled.as_ref().is_some_and(has_failed_condition) {
+    let failed = job_api::await_job_condition_resumable(context, &setup_name, is_job_settled())
+        .await?
+        .as_ref()
+        .is_some_and(has_failed_condition);
+    if failed {
         bar.finish_with_message(format!("{setup_key} (failed)"));
         return Err(LauncherError::JobFailed { name: setup_name }.into());
     }
@@ -1279,9 +1282,11 @@ pub async fn provision_database(
         bar.set_message(format!("{setup_key} (replacing previous run)"));
     }
     job_api::create_job(context, &setup, Vec::new(), Vec::new(), None, None).await?;
-    let settled =
-        job_api::await_job_condition_resumable(context, &setup_name, is_job_settled()).await?;
-    if settled.as_ref().is_some_and(has_failed_condition) {
+    let failed = job_api::await_job_condition_resumable(context, &setup_name, is_job_settled())
+        .await?
+        .as_ref()
+        .is_some_and(has_failed_condition);
+    if failed {
         bar.finish_with_message(format!("{setup_key} (failed)"));
         if let Some((_, workload, server_name)) = &server {
             delete_database_workload(context, workload, server_name).await?;
@@ -1356,9 +1361,10 @@ pub async fn provision_system(
         bar.set_message(format!("{manager_key} (replacing previous run)"));
     }
     job_api::create_job(context, &manager, Vec::new(), Vec::new(), None, None).await?;
-    let settled =
-        job_api::await_job_condition_resumable(context, &manager_name, is_job_settled()).await?;
-    let failed = settled.as_ref().is_some_and(has_failed_condition);
+    let failed = job_api::await_job_condition_resumable(context, &manager_name, is_job_settled())
+        .await?
+        .as_ref()
+        .is_some_and(has_failed_condition);
     bar.finish_with_message(format!(
         "{manager_key} ({})",
         if failed { "failed" } else { "completed" }
