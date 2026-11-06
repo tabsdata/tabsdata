@@ -12,6 +12,7 @@ use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::role::{Role, RoleDBWithNames, RoleParam, RoleUpdate, RoleUpdateDB};
+use td_objects::errors::SqlError;
 use td_queries::Queries;
 
 #[service_factory]
@@ -37,7 +38,9 @@ async fn update_role(
     // Fixed roles carry names other rules derive (a project's roles follow
     // its name), so they are not renamed or redescribed by hand.
     assert_not_fixed(&current)?;
-    conn.update::<RoleUpdateDB>(&update_db, current.id).await?;
+    conn.update::<RoleUpdateDB>(&update_db, current.id)
+        .await
+        .map_err(SqlError::already_exists)?;
 
     let with_names: RoleDBWithNames = conn.fetch_one(&current.id).await?;
     let read = Role::from_dao(with_names)?;

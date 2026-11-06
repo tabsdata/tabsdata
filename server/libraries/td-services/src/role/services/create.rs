@@ -11,6 +11,7 @@ use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::CreateRequest;
 use td_objects::dxo::role::{Role, RoleCreate, RoleDBWithNames};
+use td_objects::errors::SqlError;
 use td_queries::Queries;
 
 #[service_factory]
@@ -28,7 +29,7 @@ async fn create_role(
         let conn = trx.get(grant);
 
         let role = create.clone().to_dao(&ctx);
-        conn.insert(&role).await?;
+        conn.insert(&role).await.map_err(SqlError::already_exists)?;
 
         let with_names: RoleDBWithNames = conn.fetch_one(&role.id).await?;
         let read = Role::from_dao(with_names)?;

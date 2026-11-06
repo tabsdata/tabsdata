@@ -15,8 +15,16 @@ use td_database::pool::TdPool;
 use td_error::{ApiError, TdError};
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::RequestContext;
+use td_objects::dxo::role::{RoleCreate, RoleDB};
 use td_objects::dxo::service_token::{ServiceTokenDB, TokenCreate, TokenSlotParam};
-use td_objects::types::basic::{AccessTokenId, CollectionName, ExpiresInDays, TokenSlot, UserId};
+use td_objects::dxo::simple_permission::SimplePermissionGrant;
+use td_objects::dxo::user::{UserCreate, UserDB};
+use td_objects::dxo::user_role::UserRoleDB;
+use td_objects::errors::SqlError;
+use td_objects::types::basic::{
+    AccessTokenId, CollectionName, Description, ExpiresInDays, FullName, Password, RoleId,
+    RoleName, SimplePermissionType, TokenSlot, UserEnabled, UserId, UserName,
+};
 use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
 use td_queries::test_utils::probes::show_setting;
@@ -37,6 +45,24 @@ fn one_winner<T>(outcomes: Vec<Result<T, TdError>>) {
             .all(|refusal| !refusal.is_internal() && *refusal != ApiError::Unavailable),
         "{refusals:?}"
     );
+}
+
+/// Exactly one winner; every other contender told the value already exists.
+fn already_exists_but_one<T>(outcomes: Vec<Result<T, TdError>>) {
+    for refusal in outcomes.iter().filter_map(|outcome| outcome.as_ref().err()) {
+        assert!(
+            matches!(
+                refusal.domain_err::<SqlError>(),
+                SqlError::EntityAlreadyExists(_, _)
+            ),
+            "{refusal:?}"
+        );
+    }
+    one_winner(outcomes);
+}
+
+fn as_admin() -> RequestContext {
+    RequestContext::with(AccessTokenId::default(), UserId::admin())
 }
 
 #[td_test::test(db)]
@@ -84,15 +110,13 @@ async fn test_concurrent_creates_of_one_token_slot_leave_one(db: TdPool) -> Resu
     let services = Services::with_defaults(db.clone());
     let slot = TokenSlot::try_from(1)?;
     let outcomes = join_all((0..CONTENDERS).map(|_| {
-        services.create_service_token(
-            RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
-                TokenSlotParam { slot },
-                TokenCreate {
-                    expires_in_days: ExpiresInDays::NEVER,
-                    comment: None,
-                },
-            ),
-        )
+        services.create_service_token(as_admin().create(
+            TokenSlotParam { slot },
+            TokenCreate {
+                expires_in_days: ExpiresInDays::NEVER,
+                comment: None,
+            },
+        ))
     }))
     .await;
     for refusal in outcomes.iter().filter_map(|outcome| outcome.as_ref().err()) {
@@ -104,6 +128,74 @@ async fn test_concurrent_creates_of_one_token_slot_leave_one(db: TdPool) -> Resu
         tokens.iter().filter(|token| token.slot == slot).count(),
         1,
         "{tokens:?}"
+    );
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn test_concurrent_creates_of_one_user_name_leave_one(db: TdPool) -> Result<(), TdError> {
+    let services = Services::with_defaults(db.clone());
+    let create = UserCreate {
+        name: UserName::try_from("u_twin")?,
+        full_name: FullName::try_from("Twin")?,
+        email: None,
+        password: Password::try_from("password")?,
+        enabled: UserEnabled::TRUE,
+    };
+    let outcomes = join_all(
+        (0..CONTENDERS).map(|_| services.create_user(as_admin().create((), create.clone()))),
+    )
+    .await;
+    already_exists_but_one(outcomes);
+    let users: Vec<UserDB> = db.fetch_all(&UserName::try_from("u_twin")?).await?;
+    assert_eq!(users.len(), 1, "{users:?}");
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn test_concurrent_creates_of_one_role_name_leave_one(db: TdPool) -> Result<(), TdError> {
+    let services = Services::with_defaults(db.clone());
+    let create = RoleCreate {
+        name: RoleName::try_from("r_twin")?,
+        description: Description::default(),
+    };
+    let outcomes = join_all(
+        (0..CONTENDERS).map(|_| services.create_role(as_admin().create((), create.clone()))),
+    )
+    .await;
+    already_exists_but_one(outcomes);
+    let roles: Vec<RoleDB> = db.fetch_all(&RoleName::try_from("r_twin")?).await?;
+    assert_eq!(roles.len(), 1, "{roles:?}");
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn test_concurrent_grants_of_one_permission_leave_one(db: TdPool) -> Result<(), TdError> {
+    let user = db
+        .seed()
+        .user(&UserName::try_from("u_grantee")?, &UserEnabled::TRUE)
+        .await?;
+    let services = Services::with_defaults(db.clone());
+    let grant = SimplePermissionGrant {
+        user: UserName::try_from("u_grantee")?,
+        permission: SimplePermissionType::CreateProjects,
+        project: None,
+    };
+    let outcomes = join_all(
+        (0..CONTENDERS)
+            .map(|_| services.grant_simple_permission(as_admin().create((), grant.clone()))),
+    )
+    .await;
+    already_exists_but_one(outcomes);
+    let memberships: Vec<UserRoleDB> = db.fetch_all(()).await?;
+    assert_eq!(
+        memberships
+            .iter()
+            .filter(|membership| membership.user_id == user.id
+                && membership.role_id == RoleId::project_creator())
+            .count(),
+        1,
+        "{memberships:?}"
     );
     Ok(())
 }

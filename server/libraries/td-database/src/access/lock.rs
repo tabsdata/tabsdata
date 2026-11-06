@@ -10,7 +10,8 @@
 //! One lock: a project's, held exclusively ([`ProjectLock`]) by the units
 //! that decide over the project's rows. Every other write holds nothing and
 //! reads nothing another unit decides on, so no two units wait on each other
-//! in a cycle. What a unit holds is part of its connection's type, `RW<L>`,
+//! in a cycle: a value two such units can both claim, such as a name, is
+//! the unique index's to refuse, not a read's before the write. What a unit holds is part of its connection's type, `RW<L>`,
 //! and work that needs the lock asks for it with [`Holds`].
 //!
 //! The lock kind is also the unit's isolation. A unit holding nothing is

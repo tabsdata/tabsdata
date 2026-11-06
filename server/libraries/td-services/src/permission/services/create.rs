@@ -14,6 +14,7 @@ use td_objects::FromDao;
 use td_objects::dxo::crudl::CreateRequest;
 use td_objects::dxo::permission::{Permission, PermissionCreate, PermissionDBWithNames};
 use td_objects::dxo::role::{RoleDB, RoleParam};
+use td_objects::errors::SqlError;
 use td_queries::Queries;
 
 #[service_factory]
@@ -37,7 +38,9 @@ async fn create_permission(
         // registry, so an unregistered permission is already rejected here.
         let permission = build_permission_db(&authz, conn, &ctx, &role, &create).await?;
         authorize_permission_target(&authz, conn, &ctx, &permission).await?;
-        conn.insert(&permission).await?;
+        conn.insert(&permission)
+            .await
+            .map_err(SqlError::already_exists)?;
 
         let with_names: PermissionDBWithNames = conn.fetch_one(&permission.id).await?;
         let read = Permission::from_dao(with_names)?;

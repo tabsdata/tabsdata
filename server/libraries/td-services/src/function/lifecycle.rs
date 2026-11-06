@@ -25,6 +25,7 @@ use td_objects::dxo::function::{
     FunctionDB, FunctionDBWithNames, FunctionInsertDB, FunctionRegister, FunctionUpdate,
 };
 use td_objects::dxo::topology::TopologyInstant;
+use td_objects::errors::SqlError;
 use td_objects::types::basic::{
     FunctionId, FunctionType, TableNameDto, WorkerConfig, WorkerTypeDto,
 };
@@ -76,7 +77,10 @@ pub async fn register_one(
         .map(|child_of| child_of.stamp(&mut function))
         .unzip();
     ensure_connection_kind_matches(conn, bridge, &function, parent, collection).await?;
-    conn.scd2().open(&function, topology_at).await?;
+    conn.scd2()
+        .open(&function, topology_at)
+        .await
+        .map_err(SqlError::already_exists)?;
     if let Some(parent) = parent {
         stamp_parent(conn, ctx, function.function_id, *parent, topology_at).await?;
     }
@@ -128,7 +132,10 @@ pub async fn update_one(
         .map(|child_of| child_of.stamp(&mut function))
         .unzip();
     ensure_connection_kind_matches(conn, bridge, &function, parent, collection).await?;
-    conn.scd2().open(&function, topology_at).await?;
+    conn.scd2()
+        .open(&function, topology_at)
+        .await
+        .map_err(SqlError::already_exists)?;
     if let Some(parent) = parent {
         stamp_parent(conn, ctx, function.function_id, *parent, topology_at).await?;
     }

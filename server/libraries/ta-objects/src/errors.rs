@@ -210,8 +210,10 @@ fn classify(entity: String, error: sqlx::Error, values: &[(String, String)]) -> 
 }
 
 impl SqlError {
-    /// A unique violation as the "already exists" its pre-check reports: a
-    /// concurrent write can take the value after the check passed.
+    /// A unique violation as "already exists", the one answer to a duplicate:
+    /// every write a unique index can refuse maps its error with it, as the
+    /// index, not a read before the write, decides whether a concurrent
+    /// write took the value first.
     pub fn already_exists(self) -> Self {
         match self {
             SqlError::UniqueViolation(entity, hint, _) => {

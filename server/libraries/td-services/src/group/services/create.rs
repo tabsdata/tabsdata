@@ -99,7 +99,8 @@ mod tests {
     /// Creating a group with a name that already exists in the project is
     /// rejected up front with a clean `SqlError::EntityAlreadyExists` (via the
     /// `assert_not_exists` pre-check) rather than the raw
-    /// `UniqueViolation` from the `groups___project_id__name___uidx` constraint.
+    /// `UniqueViolation` from the `groups___project_id__name___current_uidx`
+    /// index.
     /// (Case-insensitive uniqueness is a follow-up; for now the check is
     /// exact-match, matching the collections convention.)
     #[td_test::test(db)]

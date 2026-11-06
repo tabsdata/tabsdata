@@ -10,8 +10,9 @@ use td_database::access::{DbPool, Global, retrying};
 use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::CreateRequest;
-use td_objects::dxo::user::{UserCreate, UserDB, UserDBWithNames, UserRead};
+use td_objects::dxo::user::{UserCreate, UserDBWithNames, UserRead};
 use td_objects::dxo::user_role::UserRoleDB;
+use td_objects::errors::SqlError;
 use td_objects::types::basic::Fixed;
 use td_objects::types::basic::RoleId;
 use td_queries::Queries;
@@ -33,10 +34,7 @@ async fn create_user(
         let conn = trx.get(grant);
 
         let user = create.clone().to_dao(&ctx, &password_hashing_config)?;
-        // A duplicate user name reports a clean "already exists" error
-        // instead of the raw unique-constraint violation from the insert.
-        conn.assert_not_exists::<UserDB>(&user.name).await?;
-        conn.insert(&user).await?;
+        conn.insert(&user).await.map_err(SqlError::already_exists)?;
 
         let user_role = UserRoleDB::new(user.id, RoleId::default_role(), &ctx, Fixed::TRUE);
         conn.insert(&user_role).await?;

@@ -15,6 +15,7 @@ use td_objects::dxo::role::RoleDB;
 use td_objects::dxo::role::RoleParam;
 use td_objects::dxo::user::UserDB;
 use td_objects::dxo::user_role::{UserRole, UserRoleCreate, UserRoleDB, UserRoleDBWithNames};
+use td_objects::errors::SqlError;
 use td_objects::types::basic::Fixed;
 use td_queries::Queries;
 
@@ -38,7 +39,9 @@ async fn create_user_role(
         assert_user_is_not_system(&user)?;
 
         let user_role = UserRoleDB::new(user.id, role.id, &ctx, Fixed::FALSE);
-        conn.insert(&user_role).await?;
+        conn.insert(&user_role)
+            .await
+            .map_err(SqlError::already_exists)?;
 
         let with_names: UserRoleDBWithNames = conn.fetch_one(&user_role.id).await?;
         let read = UserRole::from_dao(with_names)?;

@@ -140,8 +140,11 @@ impl<E, G> Reader<E, G> {
         }
     }
 
-    /// Fails with "already exists" rather than the unique-constraint
-    /// violation a later write would raise.
+    /// Fails with "already exists" before a write the unique index would
+    /// refuse. Only for a unit holding the lock that keeps the value still:
+    /// in an unlocked, `SERIALIZABLE` unit, this read turns a concurrent
+    /// duplicate into a serialization failure, so the write's own refusal,
+    /// mapped with [`SqlError::already_exists`], answers it alone.
     pub async fn assert_not_exists<D: SelectDao>(
         self,
         condition: impl SqlCondition<D>,

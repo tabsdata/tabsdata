@@ -16,6 +16,7 @@ use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::user::{
     UserDB, UserDBWithNames, UserParam, UserRead, UserUpdate, UserUpdateDB,
 };
+use td_objects::errors::SqlError;
 use td_objects::types::basic::{SessionStatus, UserEnabled, UserId};
 use td_queries::Queries;
 use td_security::config::PasswordHashingConfig;
@@ -51,7 +52,9 @@ async fn update_user(
             None
         };
         let update_db = update.clone().to_dao(&ctx, &password_hashing_config)?;
-        conn.update::<UserUpdateDB>(&update_db, user_id).await?;
+        conn.update::<UserUpdateDB>(&update_db, user_id)
+            .await
+            .map_err(SqlError::already_exists)?;
         if let Some(status) = retired {
             retire_sessions(conn, &user_id, ctx.time, status).await?;
         }

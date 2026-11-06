@@ -7,9 +7,8 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{SelfUser, User};
-use td_database::access::{DbPool, Global, retrying};
+use td_database::access::{DbPool, Global, retrying, unique_violation_on};
 use td_error::{ApiError, TdError, api_error};
-use td_objects::and;
 use td_objects::dxo::crudl::CreateRequest;
 use td_objects::dxo::service_token::{ServiceTokenDB, TokenCreate, TokenCreated, TokenSlotParam};
 use td_objects::types::basic::{ServiceToken, TokenScope, TokenSlot, TokenSystem};
@@ -17,6 +16,8 @@ use td_queries::Queries;
 use td_security::token;
 use td_security::token::config::ServiceTokenConfig;
 use tracing::info;
+
+const SLOT_INDEX: &str = "service_tokens___user_id__slot___idx";
 
 /// Its route admits sessions only, so a token cannot mint its successor: an
 /// identity token carries [`SelfUser`].
@@ -42,26 +43,23 @@ async fn create_service_token(
         TokenSystem::FALSE,
     )?;
 
-    // A concurrent create of the slot fails to serialize with this one, and
-    // its retry finds the slot taken.
-    retrying(|attempt| async {
+    // The slot's unique index refuses a taken slot, a concurrent create's
+    // included: reading the slot first would turn that refusal into a
+    // serialization failure.
+    let inserted = retrying(|attempt| async {
         let mut trx = db.begin(attempt).await?;
         let grant = authz
             .require::<User, SelfUser>(&mut trx, &ctx, &ctx.user_id)
             .await?;
-        let conn = trx.get(grant);
-        if conn
-            .fetch_optional::<ServiceTokenDB>(and!(&row.user_id, &row.slot))
-            .await?
-            .is_some()
-        {
-            Err(occupied(&row.slot))?
-        }
-        conn.insert(&row).await?;
+        trx.get(grant).insert(&row).await?;
         trx.commit().await?;
         Ok(())
     })
-    .await?;
+    .await;
+    match inserted {
+        Err(e) if unique_violation_on(&e, SLOT_INDEX) => Err(occupied(&row.slot))?,
+        inserted => inserted?,
+    }
 
     info!(
         user_id = %row.user_id,

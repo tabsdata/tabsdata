@@ -9,10 +9,10 @@ use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_database::access::{DbPool, Global, retrying};
 use td_error::TdError;
-use td_objects::and;
 use td_objects::dxo::crudl::CreateRequest;
 use td_objects::dxo::simple_permission::SimplePermissionGrant;
 use td_objects::dxo::user_role::UserRoleDB;
+use td_objects::errors::SqlError;
 use td_objects::types::basic::Fixed;
 use td_queries::Queries;
 
@@ -32,12 +32,10 @@ async fn grant_simple_permission(
         let resolved = resolve_grant(conn, &grant).await?;
         authorize_permission_target(&authz, conn, &ctx, &resolved).await?;
 
-        // a duplicate grant reports the membership already exists instead of
-        // surfacing the raw user_role unique-constraint SQL error.
-        conn.assert_not_exists::<UserRoleDB>(and!(&resolved.user_id, &resolved.role_id))
-            .await?;
         let user_role = UserRoleDB::new(resolved.user_id, resolved.role_id, &ctx, Fixed::FALSE);
-        conn.insert(&user_role).await?;
+        conn.insert(&user_role)
+            .await
+            .map_err(SqlError::already_exists)?;
         trx.commit().await?;
         Ok(())
     })
