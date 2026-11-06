@@ -27,10 +27,27 @@ from tabsdatak.conn.starrocks import _plugin as plugin
 from tabsdatak.conn.starrocks.error import (
     StarRocksErrorCode,
     StarRocksRuntimeException,
+    StarRocksValidateException,
 )
 from tabsdatak.conn.starrocks._explorer import StarRocksConnectionExplorer
 
 pytestmark = pytest.mark.starrocks
+
+
+@pytest.fixture(autouse=True)
+def _evolutions(monkeypatch):
+    seen: list[tuple[str, str]] = []
+
+    class _Evolver:
+        def __init__(self, conn, database, table):
+            pass
+
+        def evolve(self, target, files_fn, evolution):
+            seen.append((target, evolution))
+            return []
+
+    monkeypatch.setattr(impl, "StarRocksSchemaEvolver", _Evolver)
+    return seen
 
 
 # ---------------------------------------------------------------------------
@@ -316,3 +333,45 @@ def test_resolve_dest_cfg_warns_on_unknown_key_via_raw_dict(caplog):
     with caplog.at_level("WARNING", logger=plugin.logger.name):
         plugin._resolve_dest_cfg({"bogus.key": "value"})
     assert any("Unknown dest_cfg key" in r.getMessage() for r in caplog.records)
+
+
+def test_dest_cfg_takes_the_iceberg_engine():
+    plugin._resolve_dest_cfg({"starrocks.schema_evolution_engine": "iceberg"})
+
+
+def test_dest_cfg_rejects_another_engine():
+    with pytest.raises(StarRocksValidateException) as ei:
+        plugin._resolve_dest_cfg({"starrocks.schema_evolution_engine": "native"})
+    assert ei.value.api_error is StarRocksErrorCode.STARROCKS_13
+
+
+def test_execute_evolves_each_table_before_loading_it(monkeypatch, _evolutions):
+    executed: list[str] = []
+
+    class _Conn:
+        def execute(self, stmt):
+            executed.append(str(stmt))
+
+    class _BeginCtx:
+        def __enter__(self):
+            return _Conn()
+
+        def __exit__(self, *a):
+            return False
+
+    engine = MagicMock()
+    engine.begin.side_effect = lambda: _BeginCtx()
+    monkeypatch.setattr(impl, "build_starrocks_engine", lambda **kw: engine)
+    monkeypatch.setattr(impl, "stage", lambda *a: ("k", "s3://b/k"))
+    monkeypatch.setattr(impl, "discard", lambda *a: None)
+    cfg = impl.StarRocksWriteCfg(
+        host="h",
+        port=9030,
+        database="db",
+        credentials=UserPassword(user=Secret("u"), password=Secret("p")),
+        staging=_staging(),
+        target_tables=["users"],
+        schema_evolution="update",
+    )
+    impl.execute(cfg, [pl.LazyFrame({"id": [1]})], upload_id="up1")
+    assert _evolutions == [("`db`.`users`", "update")]

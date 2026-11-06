@@ -30,10 +30,14 @@ logger = logging.getLogger(__name__)
 
 # --- dest_cfg keys --------------------------------------------------
 _KEY_DEST_LOGGING_LEVEL: DestCfgKey = "starrocks.logging_level"
+_KEY_DEST_SCHEMA_EVOLUTION_ENGINE: DestCfgKey = "starrocks.schema_evolution_engine"
 
 _DEST_CFGS_DEFAULTS: dict[DestCfgKey, Any] = {
     _KEY_DEST_LOGGING_LEVEL: logging.ERROR,
+    _KEY_DEST_SCHEMA_EVOLUTION_ENGINE: "iceberg",
 }
+
+_SCHEMA_EVOLUTION_ENGINES = ("iceberg",)
 
 
 @dataclass(frozen=True)
@@ -52,6 +56,13 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
 
     def _get(key: DestCfgKey) -> Any:
         return cfg.get(key, _DEST_CFGS_DEFAULTS[key])
+
+    engine = _get(_KEY_DEST_SCHEMA_EVOLUTION_ENGINE)
+    if engine not in _SCHEMA_EVOLUTION_ENGINES:
+        raise StarRocksErrorCode.STARROCKS_13.exception(
+            value=engine,
+            allowed=" or ".join(repr(e) for e in _SCHEMA_EVOLUTION_ENGINES),
+        )
 
     return _WriterCfg(
         logging_level=int(_get(_KEY_DEST_LOGGING_LEVEL)),

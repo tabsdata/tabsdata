@@ -81,3 +81,15 @@ class StarRocksErrorCode(ErrorCode):
         "not a valid StarRocks database name (letters, digits and underscores, "
         "not starting with a digit): {value!r}",
     )  # DatabaseSpec
+
+    # --- Schema evolution (tabsdatak.conn.starrocks) ----------------
+    STARROCKS_12 = ErrorDef(
+        StarRocksRuntimeException,
+        "StarRocks did not finish changing a column type of {table}"
+        " (state={state}): {msg}",
+    )  # StarRocksSchemaEvolver: MODIFY COLUMN job
+    STARROCKS_13 = ErrorDef(
+        StarRocksValidateException,
+        "StarRocksDest.dest_cfg['starrocks.schema_evolution_engine']={value!r}"
+        " is not a schema evolution engine; it is {allowed} or unset",
+    )  # _resolve_dest_cfg

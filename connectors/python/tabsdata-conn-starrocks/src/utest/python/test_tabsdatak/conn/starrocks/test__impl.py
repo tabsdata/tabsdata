@@ -40,6 +40,22 @@ from tabsdatak.conn.starrocks.error import (
 pytestmark = pytest.mark.starrocks
 
 
+@pytest.fixture(autouse=True)
+def _evolutions(monkeypatch):
+    seen: list[tuple[str, str]] = []
+
+    class _Evolver:
+        def __init__(self, conn, database, table):
+            pass
+
+        def evolve(self, target, files_fn, evolution):
+            seen.append((target, evolution))
+            return []
+
+    monkeypatch.setattr(impl, "StarRocksSchemaEvolver", _Evolver)
+    return seen
+
+
 
 # ---------------------------------------------------------------------------
 # build_starrocks_engine

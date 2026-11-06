@@ -101,10 +101,18 @@ names that differ only in quoting, or in the case of an unquoted part
 (unchanged, as StarRocks table names are case-sensitive), are the same table."""
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 SchemaEvolutionSpec: TypeAlias = Literal["strict", "update"]
+SchemaEvolutionEngineSpec: TypeAlias = Literal["iceberg"]
+"""Which machinery evolves the target's schema. StarRocks has no schema
+evolution of its own, so the only engine is `"iceberg"`: the connector diffs
+the target against the incoming batch and emits the `ALTER` statements
+itself."""
 
 
 # --- StarRocksDest.dest_cfg keys ------------------------------------
-DestCfgKey: TypeAlias = Literal["starrocks.logging_level",]
+DestCfgKey: TypeAlias = Literal[
+    "starrocks.logging_level",
+    "starrocks.schema_evolution_engine",
+]
 
 DestCfgSpec: TypeAlias = Annotated[
     Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
@@ -315,8 +323,12 @@ class StarRocksDest(Dest):
         schema_evolution: `"strict"` (the default) rejects schema changes;
             `"update"` adds new columns and widens column types of the target
             to match the schema of the incoming data.
-        dest_cfg: Optional connector config; the only supported key is
-            `starrocks.logging_level`.
+        dest_cfg: Optional connector config. Supported keys:
+            `starrocks.logging_level`, and
+            `starrocks.schema_evolution_engine` -- `"iceberg"`, the default
+            and only engine: StarRocks has no schema evolution of its own. A
+            column type change runs as a StarRocks job, which the write waits
+            for before loading.
 
     Examples:
         Append to an existing table -- row count grows each run:

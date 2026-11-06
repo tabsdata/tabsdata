@@ -29,6 +29,9 @@ from tabsdatak.conn.starrocks import (
     S3Location,
 )
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.starrocks._evolution import StarRocksSchemaEvolver
+
 logger = logging.getLogger(__name__)
 
 # Mirror the StarRocks retry policy used by
@@ -263,15 +266,22 @@ def _quote_ident(name: str) -> str:
     return f"`{name}`"
 
 
-def _qualify(database: str, table: str) -> str:
-    r"""Return ``\`db\`.\`tbl\``` -- handling pre-qualified inputs
-    (``a.b``) by splitting at the unquoted dot."""
+def _parts(database: str, table: str) -> tuple[str, str]:
+    """``(database, table)`` of *table*, a pre-qualified name (``a.b``) split
+    at its unquoted dot, completed with *database*."""
     from tabsdatak.conn.common._validation import complete_levels, split_fqn
 
     raw = split_fqn(table, quote="`")
     parts: list[str | None] = [None] * (2 - len(raw)) + list(raw)
     db, tbl = complete_levels(parts, [database, None])
     assert db is not None and tbl is not None
+    return db, tbl
+
+
+def _qualify(database: str, table: str) -> str:
+    r"""Return ``\`db\`.\`tbl\``` -- handling pre-qualified inputs
+    (``a.b``) by splitting at the unquoted dot."""
+    db, tbl = _parts(database, table)
     return f"{_quote_ident(db)}.{_quote_ident(tbl)}"
 
 
@@ -380,6 +390,10 @@ def execute(
             try:
                 files_fn = build_files_function(cfg.staging, [staged])
                 qualified = _qualify(cfg.database, table_name)
+                with engine.begin() as conn:
+                    StarRocksSchemaEvolver(
+                        conn, *_parts(cfg.database, table_name)
+                    ).evolve(qualified, files_fn, cfg.schema_evolution)
                 _load_one(qualified, files_fn, frame.collect_schema().names())
             finally:
                 discard(store, [key])
