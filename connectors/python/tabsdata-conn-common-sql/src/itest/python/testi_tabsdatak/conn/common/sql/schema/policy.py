@@ -25,6 +25,8 @@ REPLACE = "replace"
 
 BEYOND_INT32 = 2**40
 
+REFUSAL = "SQL_COMMON_10"
+
 
 @dataclass(frozen=True)
 class Policy:
@@ -75,6 +77,13 @@ def _wide() -> pl.LazyFrame:
     )
 
 
+def _fitting() -> pl.LazyFrame:
+    return pl.LazyFrame(
+        {ID: [2], NAME: ["two"], SCORE: [20]},
+        schema={ID: pl.Int64, NAME: pl.String, SCORE: pl.Int64},
+    )
+
+
 def _seed(policy: Policy, table: str, frame: pl.LazyFrame) -> None:
     policy.drop(table)
     policy.write(table, frame, REPLACE, STRICT)
@@ -116,6 +125,12 @@ def strict_refuses_a_wider_type(policy: Policy, table: str) -> None:
         _expect(policy.rows(table, [ID, SCORE]), [(1, 10), (2, BEYOND_INT32)])
 
 
+def strict_takes_a_wider_type_whose_values_fit(policy: Policy, table: str) -> None:
+    _seed(policy, table, _narrow())
+    policy.write(table, _fitting(), APPEND, STRICT)
+    _expect(policy.rows(table, [ID, SCORE]), [(1, 10), (2, 20)])
+
+
 def update_widens_a_type(policy: Policy, table: str) -> None:
     _seed(policy, table, _narrow())
     policy.write(table, _wide(), APPEND, UPDATE)
@@ -149,6 +164,15 @@ def merge_strict_refuses_a_new_column(policy: Policy, table: str) -> None:
     _expect(policy.columns(table), {ID, NAME, SCORE})
 
 
+def merge_strict_takes_a_wider_type_whose_values_fit(
+    policy: Policy, table: str
+) -> None:
+    policy.drop(table)
+    policy.write(table, _cdc(_narrow(), "i"), MERGE, STRICT)
+    policy.write(table, _cdc(_fitting(), "i"), MERGE, STRICT)
+    _expect(policy.rows(table, [ID, SCORE]), [(1, 10), (2, 20)])
+
+
 def merge_update_adds_a_new_column(policy: Policy, table: str) -> None:
     policy.drop(table)
     policy.write(table, _cdc(_base(), "i"), MERGE, UPDATE)
@@ -170,6 +194,7 @@ APPEND_CASES = [
         id="update-missing-column",
     ),
     pytest.param(strict_refuses_a_wider_type, id="strict-wider-type"),
+    pytest.param(strict_takes_a_wider_type_whose_values_fit, id="strict-fitting-type"),
     pytest.param(update_widens_a_type, id="update-wider-type"),
 ]
 
@@ -192,6 +217,9 @@ MERGE_CASES = [
         id="merge-update-missing-column",
     ),
     pytest.param(merge_strict_refuses_a_new_column, id="merge-strict-new-column"),
+    pytest.param(
+        merge_strict_takes_a_wider_type_whose_values_fit, id="merge-strict-fitting-type"
+    ),
     pytest.param(merge_update_adds_a_new_column, id="merge-update-new-column"),
 ]
 
@@ -214,7 +242,8 @@ def _expect(actual, expected) -> None:
 def _refused(policy: Policy, table: str, write: Callable[[], None]) -> None:
     try:
         write()
-    except Exception:
+    except Exception as e:
+        assert str(e).startswith(REFUSAL), f"refused with another error: {e}"
         return
     pytest.fail(
         f"strict accepted the batch; {table} has {sorted(policy.columns(table))}"

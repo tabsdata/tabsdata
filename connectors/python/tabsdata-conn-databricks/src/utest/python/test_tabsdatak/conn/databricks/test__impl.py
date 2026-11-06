@@ -19,6 +19,7 @@ import pyarrow as pa
 import pytest
 
 from tabsdatak.api import Secret
+from tabsdatak.conn.common.sql.error import SqlCommonRuntimeException
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.databricks import DatabricksDestConn, DatabricksSrcConn, _impl
@@ -862,6 +863,62 @@ def _wm_parquet(tmp_path):
 
 def _alters(cursor) -> list[str]:
     return [s for s in cursor.log if s.startswith("ALTER TABLE")]
+
+
+class _NarrowCursor(_BulkCursor):
+    """A target whose ``n`` is an INT, receiving a file whose ``n`` is a BIGINT
+    holding values from ``low`` to ``high``."""
+
+    def __init__(self, low, high) -> None:
+        super().__init__(("id", "n"))
+        self._bounds = (low, high)
+
+    def execute(self, statement: str, **parameters) -> None:
+        if statement.startswith("DESCRIBE"):
+            self.log.append(statement)
+            narrow = statement.startswith("DESCRIBE TABLE")
+            self.description = [("col_name",), ("data_type",)]
+            self._rows = [("id", "bigint"), ("n", "int" if narrow else "bigint")]
+            return
+        if statement.startswith("SELECT MIN("):
+            self.log.append(statement)
+            self._rows = [self._bounds]
+            return
+        super().execute(statement, **parameters)
+
+
+def _narrow_parquet(tmp_path, n: int):
+    import polars as pl
+
+    path = tmp_path / "in.parquet"
+    pl.DataFrame({"id": [1], "n": [n]}).write_parquet(path)
+    return pl.scan_parquet(path)
+
+
+def test_strict_append_casts_a_wider_integer_its_column_holds(monkeypatch, tmp_path):
+    """Delta refuses a BIGINT into an INT column whatever its values, so the
+    load casts what the column was read to hold."""
+    cursor = _NarrowCursor(1, 2**31 - 1)
+    _bulk_clients(monkeypatch, cursor)
+    _staged_batches(monkeypatch)
+    _impl.write_all_tables(
+        _wm_cfg(watermark_column=None), [_narrow_parquet(tmp_path, 7)]
+    )
+    [copy] = [s for s in cursor.log if s.startswith("COPY INTO")]
+    assert "FROM (SELECT `id`, CAST(`n` AS int) AS `n` FROM '" in copy
+
+
+def test_strict_append_refuses_a_wider_integer_its_column_cannot_hold(
+    monkeypatch, tmp_path
+):
+    cursor = _NarrowCursor(1, 2**40)
+    _bulk_clients(monkeypatch, cursor)
+    _staged_batches(monkeypatch)
+    with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
+        _impl.write_all_tables(
+            _wm_cfg(watermark_column=None), [_narrow_parquet(tmp_path, 2**40)]
+        )
+    assert not any(s.startswith("COPY INTO") for s in cursor.log)
 
 
 def test_append_watermark_stamps_every_staged_row(monkeypatch, tmp_path):

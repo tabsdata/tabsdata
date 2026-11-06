@@ -921,28 +921,73 @@ class _StrictTarget:
         raise AssertionError(f"strict changes nothing: {statement}")
 
 
-def _hold_to_strict(cursor, sql_fq: str, file_in_volume: str) -> None:
+_INTEGER_BITS = {"tinyint": 8, "smallint": 16, "int": 32, "bigint": 64}
+
+
+def as_stored(
+    cursor,
+    relation: str,
+    stored: list[tuple[str, str]],
+    batch: list[tuple[str, str]],
+) -> tuple[list[tuple[str, str]], dict[str, str]]:
+    """``batch`` with the stored type in place of each integer the stored
+    column is narrower than but holds every value of, and those columns'
+    stored types. The values are read in one pass over those columns of
+    ``relation``. Delta refuses a wider integer into a narrower column outright,
+    so a write casts these columns to their stored types."""
+    from tabsdatak.conn.databricks import _types
+
+    held = {name.lower(): type_ for name, type_ in stored}
+    narrower = {}
+    for name, type_ in batch:
+        base = _types._base(held.get(name.lower(), ""))
+        if base in _INTEGER_BITS and base in _types.TYPE_WIDENING_MAP.get(
+            _types._base(type_), ()
+        ):
+            narrower[name] = held[name.lower()]
+    casts = {}
+    if narrower:
+        bounds = ", ".join(
+            f"MIN({_quote_column(name)}), MAX({_quote_column(name)})"
+            for name in narrower
+        )
+        cursor.execute(f"SELECT {bounds} FROM {relation}")
+        row = cursor.fetchone()
+        for i, (name, type_) in enumerate(narrower.items()):
+            low, high = row[2 * i], row[2 * i + 1]
+            half = 2 ** (_INTEGER_BITS[_types._base(type_)] - 1)
+            if low is None or (-half <= low and high < half):
+                casts[name] = type_
+    return [(name, casts.get(name, type_)) for name, type_ in batch], casts
+
+
+def _hold_to_strict(cursor, sql_fq: str, file_in_volume: str) -> dict[str, str]:
     """Refuse, before the ``COPY INTO``, a batch the target cannot take as it is
     (``SQL_COMMON_10``, as a strict merge does), rather than leave it to the
-    ``COPY INTO``'s own schema mismatch."""
+    ``COPY INTO``'s own schema mismatch. Returns the columns the load casts to
+    the target's narrower integer type (:func:`as_stored`)."""
     # noinspection PyProtectedMember
     from tabsdatak.conn.common.sql._schema.evolution import evolve_with_iceberg
     from tabsdatak.conn.databricks import _types
 
-    cursor.execute(
-        f"DESCRIBE QUERY SELECT * FROM read_files("
-        f"'{file_in_volume}', {_READ_FILES_OPTIONS})"
-    )
+    files = f"read_files('{file_in_volume}', {_READ_FILES_OPTIONS})"
+    cursor.execute(f"DESCRIBE QUERY SELECT * FROM {files}")
+    batch = _described_columns(cursor)
+    target = _StrictTarget(cursor)
+    columns, casts = as_stored(cursor, files, target.target_columns(sql_fq), batch)
     evolve_with_iceberg(
-        _StrictTarget(cursor),
+        target,
         sql_fq,
-        _described_columns(cursor),
+        columns,
         renderer=_types.CheckOnlyRenderer(),
         widening_map=_types.TYPE_WIDENING_MAP,
         can_safely_widen=_types.can_widen,
         same_base=_types.same_base,
         evolution="strict",
     )
+    if not casts:
+        return {}
+    return {name: casts.get(name) for name, _ in batch}
 
 
 def copy_into_table(
@@ -1004,7 +1049,19 @@ def copy_into_table(
             # first.
             ensure_watermark_column(cursor, fq_table, sql_fq, cfg.watermark_column)
         if cfg.schema_evolution == "strict":
-            _hold_to_strict(cursor, sql_fq, file_in_volume)
+            casts = _hold_to_strict(cursor, sql_fq, file_in_volume)
+            if casts:
+                projection = ", ".join(
+                    f"CAST({_quote_column(name)} AS {type_}) AS {_quote_column(name)}"
+                    if type_
+                    else _quote_column(name)
+                    for name, type_ in casts.items()
+                )
+                copy_stmt = copy_stmt.replace(
+                    f"FROM '{file_in_volume}'",
+                    f"FROM (SELECT {projection} FROM '{file_in_volume}')",
+                    1,
+                )
         _execute_volume_statement(cursor, copy_stmt, cfg.support_append_copy_into)
         return
     raise ValueError(

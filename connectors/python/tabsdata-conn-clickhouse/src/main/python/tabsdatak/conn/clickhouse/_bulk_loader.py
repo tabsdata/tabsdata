@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 
 import polars as pl
@@ -29,9 +30,82 @@ from tabsdatak.conn.clickhouse._results import BulkLoadResult
 from tabsdatak.conn.clickhouse._statuses import BulkLoadStatus
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._schema.policy import SchemaEvolution, governed
+from tabsdatak.conn.common.sql._schema.delta import Action, SchemaChange, SchemaDelta
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.policy import (
+    STRICT,
+    SchemaEvolution,
+    governed,
+)
 
 logger = logging.getLogger(__name__)
+
+_INTEGER = re.compile(r"^(?:Nullable\()?(U?)Int(8|16|32|64|128|256)\)?$")
+
+
+def _integer_range(type_: str) -> tuple[int, int] | None:
+    match = _INTEGER.match(type_.strip())
+    if not match:
+        return None
+    bits = int(match[2])
+    if match[1]:
+        return 0, 2**bits - 1
+    return -(2 ** (bits - 1)), 2 ** (bits - 1) - 1
+
+
+def _batch_range(footers, column: str) -> tuple[int, int] | None:
+    """The smallest and largest value of ``column`` across every row group the
+    footers describe; ``None`` when a row group carries no statistics for it,
+    so its values cannot be bounded."""
+    if not footers:
+        return None
+    low = high = None
+    for meta in footers:
+        for index in range(meta.num_row_groups):
+            group = meta.row_group(index)
+            chunks = [
+                group.column(i)
+                for i in range(group.num_columns)
+                if group.column(i).path_in_schema == column
+            ]
+            if not chunks:
+                return None
+            stats = chunks[0].statistics
+            if stats is None:
+                return None
+            if not stats.has_min_max:
+                if stats.has_null_count and stats.null_count == group.num_rows:
+                    continue
+                return None
+            low = stats.min if low is None else min(low, stats.min)
+            high = stats.max if high is None else max(high, stats.max)
+    return (low, high) if low is not None else (0, 0)
+
+
+def _fitting_integers(delta: SchemaDelta, footers) -> SchemaDelta:
+    """``delta`` with each widening of an integer column marked as fitting when
+    every value of the batch fits the column as it is, which the footers'
+    statistics tell without reading the data. ClickHouse would cut a value
+    that does not fit to the column's width rather than refuse it, so under
+    strict a batch that needs the wider type is refused."""
+    changes = []
+    for change in delta.changes:
+        if change.action is Action.ALTER_TYPE and change.safe:
+            held = _integer_range(change.detail.get("old_type", ""))
+            if held is not None and _integer_range(change.detail.get("new_type", "")):
+                values = _batch_range(footers, change.column)
+                if values is not None and held[0] <= values[0] <= values[1] <= held[1]:
+                    change = SchemaChange(
+                        action=change.action,
+                        column=change.column,
+                        safe=change.safe,
+                        detail={**change.detail, "fits": True},
+                    )
+        changes.append(change)
+    return SchemaDelta(
+        table_name=delta.table_name, is_create=delta.is_create, changes=changes
+    )
 
 
 class CloudStagedBulkLoader:
@@ -142,7 +216,12 @@ class CloudStagedBulkLoader:
             logger.debug("Creating table: %s", table_name)
             self.dialect.create_table(self.load_mode, table_name, arrow_schema)
         else:
-            self.evolve(table_name, arrow_schema, self._detect_nullability(footers))
+            self.evolve(
+                table_name,
+                arrow_schema,
+                self._detect_nullability(footers),
+                footers,
+            )
         return list(arrow_schema.names)
 
     def evolve(
@@ -150,10 +229,13 @@ class CloudStagedBulkLoader:
         table_name: str,
         arrow_schema,
         column_nulls: dict[str, bool | None],
+        footers: list[pq.FileMetaData] | None = None,
     ) -> None:
         delta = self.dialect.compute_evolution_delta(
             self.load_mode, table_name, arrow_schema, column_nulls
         )
+        if self.schema_evolution == STRICT:
+            delta = _fitting_integers(delta, footers)
         delta = governed(delta, self.schema_evolution)
         if delta.changes:
             self.dialect.apply_schema_delta(self.load_mode, table_name, delta)

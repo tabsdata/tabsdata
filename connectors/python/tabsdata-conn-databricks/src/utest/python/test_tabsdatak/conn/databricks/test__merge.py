@@ -13,6 +13,8 @@ and not assumed.
 
 from __future__ import annotations
 
+import re
+
 from pathlib import Path
 
 import pytest
@@ -66,7 +68,9 @@ class _RecordingCursor:
         has_watermark: bool = False,
         stamped: bool = False,
         widening: str | None = None,
+        bounds: dict[str, tuple] | None = None,
     ) -> None:
+        self._bounds = bounds or {}
         self.log: list[tuple[str, dict]] = []
         self._widening = widening
         self._columns = columns or []
@@ -92,6 +96,11 @@ class _RecordingCursor:
                 if self._widening is None
                 else [("delta.enableTypeWidening", self._widening)]
             )
+            return
+        if statement.startswith("SELECT MIN("):
+            names = re.findall(r"MIN\(`(\w+)`\)", statement)
+            self.description = [("bound",)] * (2 * len(names))
+            self._rows = [tuple(v for name in names for v in self._bounds[name])]
             return
         if statement.startswith("SELECT COUNT(*) > 0"):
             self.description, self._rows = [("stamped",)], [(self._stamped,)]
@@ -530,13 +539,29 @@ class TestEvolve:
         assert "new column 'note'" in str(raised.value)
         assert not any(s.startswith("ALTER") for s in cursor.statements)
 
-    def test_strict_refuses_a_wider_type(self):
-        cursor = _RecordingCursor([("order_id", "bigint"), ("n", "int")])
+    @pytest.mark.parametrize("low,high", [(1, 2**40), (-(2**31) - 1, 0)])
+    def test_strict_refuses_a_wider_integer_its_column_cannot_hold(self, low, high):
+        cursor = _RecordingCursor(
+            [("order_id", "bigint"), ("n", "int")], bounds={"n": (low, high)}
+        )
         staged = _staged([("order_id", "bigint"), ("n", "bigint"), ("op", "string")])
-        with pytest.raises(SqlCommonRuntimeException):
+        with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
             _dialect(cursor, schema_evolution="strict").evolve(
                 _TARGET, staged, "op", "strict"
             )
+
+    @pytest.mark.parametrize("low,high", [(-(2**31), 2**31 - 1), (None, None)])
+    def test_strict_takes_a_wider_integer_its_column_holds(self, low, high):
+        """Read in one pass over the narrowed columns of the scratch table."""
+        cursor = _RecordingCursor(
+            [("order_id", "bigint"), ("n", "int")], bounds={"n": (low, high)}
+        )
+        staged = _staged([("order_id", "bigint"), ("n", "bigint"), ("op", "string")])
+        evolved = _dialect(cursor, schema_evolution="strict").evolve(
+            _TARGET, staged, "op", "strict"
+        )
+        assert evolved == []
+        assert f"SELECT MIN(`n`), MAX(`n`) FROM {_SCRATCH}" in cursor.statements
 
     def test_strict_takes_a_lacking_or_narrower_column(self):
         cursor = _RecordingCursor([

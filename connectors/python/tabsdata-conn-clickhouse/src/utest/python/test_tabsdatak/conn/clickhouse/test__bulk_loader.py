@@ -162,6 +162,50 @@ def test_strict_refuses_a_new_column(tmp_path):
         loader.phase_validate_and_prepare(_staged(loader))
 
 
+def _widened(old: str = "Int32") -> SchemaChange:
+    return SchemaChange(
+        action=Action.ALTER_TYPE,
+        column="id",
+        safe=True,
+        detail={"old_type": old, "new_type": "Int64", "nullable": True},
+    )
+
+
+def _staged_ids(loader: CloudStagedBulkLoader, ids: list) -> dict:
+    frame = pl.LazyFrame({"id": ids}, schema={"id": pl.Int64})
+    return loader.phase_upload({"users": [("0.parquet", frame)]})
+
+
+@pytest.mark.parametrize(
+    "ids", [[1, 2], [-(2**31), 2**31 - 1], [None, None], [None, 7]]
+)
+def test_strict_takes_integers_their_narrower_column_holds(tmp_path, ids):
+    """Read off the staged footer's statistics, with no pass over the data."""
+    dialect = _Evolving([_widened()])
+    loader = _loader(tmp_path, dialect, WriteMode.APPEND, STRICT)
+    loader.phase_validate_and_prepare(_staged_ids(loader, ids))
+    assert dialect.applied == []
+
+
+@pytest.mark.parametrize(
+    "old,ids", [("Int32", [1, 2**40]), ("Int32", [-(2**31) - 1]), ("UInt32", [-1, 5])]
+)
+def test_strict_refuses_integers_their_narrower_column_cannot_hold(
+    tmp_path, old, ids
+):
+    """ClickHouse would cut them to the column's width."""
+    loader = _loader(tmp_path, _Evolving([_widened(old)]), WriteMode.APPEND, STRICT)
+    with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
+        loader.phase_validate_and_prepare(_staged_ids(loader, ids))
+
+
+def test_update_widens_a_column_whatever_its_values(tmp_path):
+    dialect = _Evolving([_widened()])
+    loader = _loader(tmp_path, dialect, WriteMode.APPEND, UPDATE)
+    loader.phase_validate_and_prepare(_staged_ids(loader, [1, 2]))
+    assert dialect.applied == [_widened()]
+
+
 def test_update_adds_a_new_column(tmp_path):
     dialect = _Evolving([_ADDED, _DROPPED])
     loader = _loader(tmp_path, dialect, WriteMode.APPEND, UPDATE)

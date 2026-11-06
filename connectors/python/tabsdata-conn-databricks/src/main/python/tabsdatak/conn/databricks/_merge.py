@@ -243,14 +243,21 @@ class DatabricksMergeDialect(MergeDialect):
         Under ``"strict"`` the statement writes the columns both sides share, so
         a batch the target cannot take as it is -- a new column, a wider type --
         is refused here, before the statement runs, rather than merged without
-        it.
+        it. A wider integer is taken into a narrower column when every value of
+        the batch fits it (``as_stored``); the ``MERGE`` assigns it there.
         """
         if evolution == UPDATE:
             return []
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.databricks._impl import as_stored
+
+        columns, _ = as_stored(
+            self._cursor, staged.relation, self.target_columns(target), staged.columns
+        )
         return evolve_with_iceberg(
             self,
             target,
-            staged.columns,
+            columns,
             marker=marker,
             renderer=_types.CheckOnlyRenderer(),
             widening_map=_types.TYPE_WIDENING_MAP,
