@@ -83,6 +83,7 @@ class DatabricksMergeDialect(MergeDialect):
         self._conn = conn
         self._fq_table = fq_table
         self._schema_evolution = schema_evolution
+        self._footer = None
 
     @property
     def _evolving(self) -> bool:
@@ -162,7 +163,7 @@ class DatabricksMergeDialect(MergeDialect):
             upload_frame_to_volume,
         )
 
-        staged_file = upload_frame_to_volume(
+        staged_file, self._footer = upload_frame_to_volume(
             self._ws_client, self._conn, self._fq_table, batch
         )
         try:
@@ -243,8 +244,9 @@ class DatabricksMergeDialect(MergeDialect):
         Under ``"strict"`` the statement writes the columns both sides share, so
         a batch the target cannot take as it is -- a new column, a wider type --
         is refused here, before the statement runs, rather than merged without
-        it. A wider integer is taken into a narrower column when every value of
-        the batch fits it (``as_stored``); the ``MERGE`` assigns it there.
+        it. A wider integer or decimal is taken into a narrower column when every
+        value of the batch fits it (``as_stored``); the ``MERGE`` assigns it
+        there. Any other type difference is refused, as Delta would refuse it.
         """
         if evolution == UPDATE:
             return []
@@ -252,7 +254,7 @@ class DatabricksMergeDialect(MergeDialect):
         from tabsdatak.conn.databricks._impl import as_stored
 
         columns, _ = as_stored(
-            self._cursor, staged.relation, self.target_columns(target), staged.columns
+            self._footer, self.target_columns(target), staged.columns
         )
         return evolve_with_iceberg(
             self,
@@ -262,7 +264,6 @@ class DatabricksMergeDialect(MergeDialect):
             renderer=_types.CheckOnlyRenderer(),
             widening_map=_types.TYPE_WIDENING_MAP,
             can_safely_widen=_types.can_widen,
-            same_base=_types.same_base,
             evolution=evolution,
         )
 

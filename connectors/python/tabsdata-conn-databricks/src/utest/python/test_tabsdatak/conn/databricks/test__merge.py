@@ -14,9 +14,12 @@ and not assumed.
 from __future__ import annotations
 
 import re
+from decimal import Decimal
 
 from pathlib import Path
 
+import polars as pl
+import pyarrow.parquet as pq
 import pytest
 
 # noinspection PyProtectedMember
@@ -68,9 +71,7 @@ class _RecordingCursor:
         has_watermark: bool = False,
         stamped: bool = False,
         widening: str | None = None,
-        bounds: dict[str, tuple] | None = None,
     ) -> None:
-        self._bounds = bounds or {}
         self.log: list[tuple[str, dict]] = []
         self._widening = widening
         self._columns = columns or []
@@ -96,11 +97,6 @@ class _RecordingCursor:
                 if self._widening is None
                 else [("delta.enableTypeWidening", self._widening)]
             )
-            return
-        if statement.startswith("SELECT MIN("):
-            names = re.findall(r"MIN\(`(\w+)`\)", statement)
-            self.description = [("bound",)] * (2 * len(names))
-            self._rows = [tuple(v for name in names for v in self._bounds[name])]
             return
         if statement.startswith("SELECT COUNT(*) > 0"):
             self.description, self._rows = [("stamped",)], [(self._stamped,)]
@@ -147,6 +143,13 @@ def _conn():
         volume=Secret("main.analytics.staging"),
         warehouse_id=Secret("0123456789abcdef"),
     )
+
+
+def _footer(tmp_path, column: str, dtype, values: list):
+    """The Parquet footer of a staged file holding ``values`` in ``column``."""
+    path = tmp_path / "staged.parquet"
+    pl.DataFrame({column: values}, schema={column: dtype}).write_parquet(path)
+    return pq.read_metadata(path)
 
 
 def _dialect(
@@ -540,28 +543,59 @@ class TestEvolve:
         assert not any(s.startswith("ALTER") for s in cursor.statements)
 
     @pytest.mark.parametrize("low,high", [(1, 2**40), (-(2**31) - 1, 0)])
-    def test_strict_refuses_a_wider_integer_its_column_cannot_hold(self, low, high):
-        cursor = _RecordingCursor(
-            [("order_id", "bigint"), ("n", "int")], bounds={"n": (low, high)}
+    def test_strict_refuses_a_wider_integer_its_column_cannot_hold(
+        self, tmp_path, low, high
+    ):
+        cursor = _RecordingCursor([("order_id", "bigint"), ("n", "int")])
+        staged = _staged([("order_id", "bigint"), ("n", "bigint"), ("op", "string")])
+        dialect = _dialect(cursor, schema_evolution="strict")
+        dialect._footer = _footer(tmp_path, "n", pl.Int64, [low, high])
+        with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
+            dialect.evolve(_TARGET, staged, "op", "strict")
+
+    @pytest.mark.parametrize(
+        "batch,low,high,taken",
+        [
+            ("decimal(38,2)", "-99999999.99", "99999999.99", True),
+            ("decimal(38,1)", "12.5", "12.5", True),
+            ("decimal(38,2)", "0", "100000000.00", False),
+            # More fractional digits than the column keeps would be rounded.
+            ("decimal(38,4)", "1.2500", "1.2500", False),
+        ],
+    )
+    def test_strict_takes_a_wider_decimal_only_when_its_column_holds_it(
+        self, tmp_path, batch, low, high, taken
+    ):
+        cursor = _RecordingCursor([("order_id", "bigint"), ("d", "decimal(10,2)")])
+        staged = _staged([("order_id", "bigint"), ("d", batch), ("op", "string")])
+        dialect = _dialect(cursor, schema_evolution="strict")
+        scale = int(batch.rstrip(")").split(",")[1])
+        dialect._footer = _footer(
+            tmp_path, "d", pl.Decimal(38, scale), [Decimal(low), Decimal(high)]
         )
+        if taken:
+            assert dialect.evolve(_TARGET, staged, "op", "strict") == []
+        else:
+            with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
+                dialect.evolve(_TARGET, staged, "op", "strict")
+
+    @pytest.mark.parametrize("low,high", [(-(2**31), 2**31 - 1), (None, None)])
+    def test_strict_takes_a_wider_integer_its_column_holds(self, tmp_path, low, high):
+        """Read off the staged file's footer: no query reads the data."""
+        cursor = _RecordingCursor([("order_id", "bigint"), ("n", "int")])
+        staged = _staged([("order_id", "bigint"), ("n", "bigint"), ("op", "string")])
+        dialect = _dialect(cursor, schema_evolution="strict")
+        dialect._footer = _footer(tmp_path, "n", pl.Int64, [low, high])
+        assert dialect.evolve(_TARGET, staged, "op", "strict") == []
+        assert not any(s.startswith("SELECT MIN") for s in cursor.statements)
+
+    def test_strict_without_a_footer_takes_no_narrower_integer(self):
+        cursor = _RecordingCursor([("order_id", "bigint"), ("n", "int")])
         staged = _staged([("order_id", "bigint"), ("n", "bigint"), ("op", "string")])
         with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
             _dialect(cursor, schema_evolution="strict").evolve(
                 _TARGET, staged, "op", "strict"
             )
-
-    @pytest.mark.parametrize("low,high", [(-(2**31), 2**31 - 1), (None, None)])
-    def test_strict_takes_a_wider_integer_its_column_holds(self, low, high):
-        """Read in one pass over the narrowed columns of the scratch table."""
-        cursor = _RecordingCursor(
-            [("order_id", "bigint"), ("n", "int")], bounds={"n": (low, high)}
-        )
-        staged = _staged([("order_id", "bigint"), ("n", "bigint"), ("op", "string")])
-        evolved = _dialect(cursor, schema_evolution="strict").evolve(
-            _TARGET, staged, "op", "strict"
-        )
-        assert evolved == []
-        assert f"SELECT MIN(`n`), MAX(`n`) FROM {_SCRATCH}" in cursor.statements
 
     def test_strict_takes_a_lacking_or_narrower_column(self):
         cursor = _RecordingCursor([

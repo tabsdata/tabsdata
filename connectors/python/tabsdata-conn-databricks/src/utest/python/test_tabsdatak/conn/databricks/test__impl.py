@@ -866,12 +866,11 @@ def _alters(cursor) -> list[str]:
 
 
 class _NarrowCursor(_BulkCursor):
-    """A target whose ``n`` is an INT, receiving a file whose ``n`` is a BIGINT
-    holding values from ``low`` to ``high``."""
+    """A target whose ``n`` is an INT, receiving a file whose ``n`` is a
+    BIGINT."""
 
-    def __init__(self, low, high) -> None:
+    def __init__(self) -> None:
         super().__init__(("id", "n"))
-        self._bounds = (low, high)
 
     def execute(self, statement: str, **parameters) -> None:
         if statement.startswith("DESCRIBE"):
@@ -879,10 +878,6 @@ class _NarrowCursor(_BulkCursor):
             narrow = statement.startswith("DESCRIBE TABLE")
             self.description = [("col_name",), ("data_type",)]
             self._rows = [("id", "bigint"), ("n", "int" if narrow else "bigint")]
-            return
-        if statement.startswith("SELECT MIN("):
-            self.log.append(statement)
-            self._rows = [self._bounds]
             return
         super().execute(statement, **parameters)
 
@@ -897,8 +892,9 @@ def _narrow_parquet(tmp_path, n: int):
 
 def test_strict_append_casts_a_wider_integer_its_column_holds(monkeypatch, tmp_path):
     """Delta refuses a BIGINT into an INT column whatever its values, so the
-    load casts what the column was read to hold."""
-    cursor = _NarrowCursor(1, 2**31 - 1)
+    load casts what the staged file's footer shows the column holds -- read as
+    the file streams out, with no query over the data."""
+    cursor = _NarrowCursor()
     _bulk_clients(monkeypatch, cursor)
     _staged_batches(monkeypatch)
     _impl.write_all_tables(
@@ -906,12 +902,13 @@ def test_strict_append_casts_a_wider_integer_its_column_holds(monkeypatch, tmp_p
     )
     [copy] = [s for s in cursor.log if s.startswith("COPY INTO")]
     assert "FROM (SELECT `id`, CAST(`n` AS int) AS `n` FROM '" in copy
+    assert not any(s.startswith("SELECT MIN") for s in cursor.log)
 
 
 def test_strict_append_refuses_a_wider_integer_its_column_cannot_hold(
     monkeypatch, tmp_path
 ):
-    cursor = _NarrowCursor(1, 2**40)
+    cursor = _NarrowCursor()
     _bulk_clients(monkeypatch, cursor)
     _staged_batches(monkeypatch)
     with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):

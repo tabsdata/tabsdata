@@ -30,6 +30,7 @@ from collections import deque
 from collections.abc import Callable, Collection, Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Final
 
 from tenacity import (
@@ -655,15 +656,16 @@ def upload_frame_to_volume(
     conn: _AnyDatabricksConn,
     fq_table: str,
     frame: pl.LazyFrame,
-) -> str:
+) -> tuple[str, Any]:
     """Stream ``frame`` as parquet to the conn's volume and return the
     in-volume absolute path (suitable for ``read_files`` /
-    ``COPY INTO``)."""
+    ``COPY INTO``), and the file's Parquet footer, kept from the stream as it
+    went by (``None`` when it could not be)."""
     target = f"{_volume_path(conn, fq_table)}/{uuid.uuid4().hex}.parquet"
     logger.debug("Streaming parquet to volume %s", target)
     with piped_parquet(frame) as stream:
         ws_client.files.upload(target, stream, use_parallel=False)
-    return target
+    return target, stream.footer()
 
 
 def _is_volume_path_not_found(exc: BaseException) -> bool:
@@ -924,48 +926,63 @@ class _StrictTarget:
 _INTEGER_BITS = {"tinyint": 8, "smallint": 16, "int": 32, "bigint": 64}
 
 
+def _holds(stored: str, batch: str) -> Callable[[Any], bool] | None:
+    """Whether a ``stored`` column holds a given value of the ``batch`` type
+    when the column is a narrower integer, or a narrower decimal keeping at
+    least the batch's fractional digits (more would be rounded away);
+    ``None`` for any other pair."""
+    from tabsdatak.conn.databricks import _types
+
+    base = _types._base(stored)
+    if base in _INTEGER_BITS and base in _types.TYPE_WIDENING_MAP.get(
+        _types._base(batch), ()
+    ):
+        half = 2 ** (_INTEGER_BITS[base] - 1)
+        return lambda value: -half <= value < half
+    held, wider = _types._DECIMAL.match(stored), _types._DECIMAL.match(batch)
+    if held and wider:
+        precision, scale = (int(group) for group in held.groups())
+        wide_precision, wide_scale = (int(group) for group in wider.groups())
+        if wide_scale <= scale and wide_precision - wide_scale > precision - scale:
+            limit = Decimal(10) ** (precision - scale)
+            return lambda value: -limit < Decimal(value) < limit
+    return None
+
+
 def as_stored(
-    cursor,
-    relation: str,
+    footer: Any,
     stored: list[tuple[str, str]],
     batch: list[tuple[str, str]],
 ) -> tuple[list[tuple[str, str]], dict[str, str]]:
-    """``batch`` with the stored type in place of each integer the stored
-    column is narrower than but holds every value of, and those columns'
-    stored types. The values are read in one pass over those columns of
-    ``relation``. Delta refuses a wider integer into a narrower column outright,
-    so a write casts these columns to their stored types."""
-    from tabsdatak.conn.databricks import _types
+    """``batch`` with the stored type in place of each integer or decimal the
+    stored column is narrower than but holds every value of (:func:`_holds`),
+    and those columns' stored types. The values are read off the staged
+    file's Parquet ``footer``, not the data; with no footer, none is known to
+    fit. Delta refuses a wider number into a narrower column outright, so a
+    write casts these columns to their stored types."""
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._schema.footer import column_range
 
     held = {name.lower(): type_ for name, type_ in stored}
-    narrower = {}
-    for name, type_ in batch:
-        base = _types._base(held.get(name.lower(), ""))
-        if base in _INTEGER_BITS and base in _types.TYPE_WIDENING_MAP.get(
-            _types._base(type_), ()
-        ):
-            narrower[name] = held[name.lower()]
     casts = {}
-    if narrower:
-        bounds = ", ".join(
-            f"MIN({_quote_column(name)}), MAX({_quote_column(name)})"
-            for name in narrower
-        )
-        cursor.execute(f"SELECT {bounds} FROM {relation}")
-        row = cursor.fetchone()
-        for i, (name, type_) in enumerate(narrower.items()):
-            low, high = row[2 * i], row[2 * i + 1]
-            half = 2 ** (_INTEGER_BITS[_types._base(type_)] - 1)
-            if low is None or (-half <= low and high < half):
-                casts[name] = type_
+    for name, type_ in batch:
+        holds = _holds(held.get(name.lower(), ""), type_)
+        values = column_range([footer], name) if holds and footer else None
+        if values is not None and (
+            values[0] is None or (holds(values[0]) and holds(values[1]))
+        ):
+            casts[name] = held[name.lower()]
     return [(name, casts.get(name, type_)) for name, type_ in batch], casts
 
 
-def _hold_to_strict(cursor, sql_fq: str, file_in_volume: str) -> dict[str, str]:
+def _hold_to_strict(
+    cursor, sql_fq: str, file_in_volume: str, footer: Any
+) -> dict[str, str]:
     """Refuse, before the ``COPY INTO``, a batch the target cannot take as it is
     (``SQL_COMMON_10``, as a strict merge does), rather than leave it to the
     ``COPY INTO``'s own schema mismatch. Returns the columns the load casts to
-    the target's narrower integer type (:func:`as_stored`)."""
+    the target's narrower number type (:func:`as_stored`); any other type
+    difference is refused, as Delta would refuse it."""
     # noinspection PyProtectedMember
     from tabsdatak.conn.common.sql._schema.evolution import evolve_with_iceberg
     from tabsdatak.conn.databricks import _types
@@ -974,7 +991,7 @@ def _hold_to_strict(cursor, sql_fq: str, file_in_volume: str) -> dict[str, str]:
     cursor.execute(f"DESCRIBE QUERY SELECT * FROM {files}")
     batch = _described_columns(cursor)
     target = _StrictTarget(cursor)
-    columns, casts = as_stored(cursor, files, target.target_columns(sql_fq), batch)
+    columns, casts = as_stored(footer, target.target_columns(sql_fq), batch)
     evolve_with_iceberg(
         target,
         sql_fq,
@@ -982,7 +999,6 @@ def _hold_to_strict(cursor, sql_fq: str, file_in_volume: str) -> dict[str, str]:
         renderer=_types.CheckOnlyRenderer(),
         widening_map=_types.TYPE_WIDENING_MAP,
         can_safely_widen=_types.can_widen,
-        same_base=_types.same_base,
         evolution="strict",
     )
     if not casts:
@@ -995,6 +1011,7 @@ def copy_into_table(
     cfg: DatabricksWriteCfg,
     file_in_volume: str,
     fq_table: str,
+    footer: Any = None,
 ) -> None:
     """Execute the CREATE-OR-REPLACE / CREATE-IF-NOT-EXISTS + COPY INTO
     sequence against ``fq_table`` from ``file_in_volume``.
@@ -1049,7 +1066,7 @@ def copy_into_table(
             # first.
             ensure_watermark_column(cursor, fq_table, sql_fq, cfg.watermark_column)
         if cfg.schema_evolution == "strict":
-            casts = _hold_to_strict(cursor, sql_fq, file_in_volume)
+            casts = _hold_to_strict(cursor, sql_fq, file_in_volume, footer)
             if casts:
                 projection = ", ".join(
                     f"CAST({_quote_column(name)} AS {type_}) AS {_quote_column(name)}"
@@ -1245,7 +1262,7 @@ def write_all_tables(
                 )
                 continue
             logger.info("databricks: staging parquet for %s", fq_table)
-            file_in_volume = upload_frame_to_volume(
+            file_in_volume, footer = upload_frame_to_volume(
                 ws_client,
                 cfg.conn,
                 fq_table,
@@ -1254,7 +1271,7 @@ def write_all_tables(
                 ),
             )
             try:
-                copy_into_table(sql_conn, cfg, file_in_volume, fq_table)
+                copy_into_table(sql_conn, cfg, file_in_volume, fq_table, footer)
             finally:
                 logger.debug("databricks: deleting staged file %s", file_in_volume)
                 delete_from_volume(ws_client, file_in_volume)

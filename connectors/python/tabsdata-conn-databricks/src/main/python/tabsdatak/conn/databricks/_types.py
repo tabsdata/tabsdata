@@ -28,10 +28,6 @@ def _base(type_: str) -> str:
     return re.split(r"[\s(<]", type_.strip().lower(), maxsplit=1)[0]
 
 
-def same_base(old: str, new: str) -> bool:
-    return _base(old) == _base(new)
-
-
 def can_widen(old: str, new: str) -> bool:
     old_decimal, new_decimal = _DECIMAL.match(old), _DECIMAL.match(new)
     if not (old_decimal and new_decimal):
