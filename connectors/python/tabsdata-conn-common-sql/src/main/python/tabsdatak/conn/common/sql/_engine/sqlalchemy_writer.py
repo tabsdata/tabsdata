@@ -9,9 +9,10 @@ from datetime import date
 from typing import Any, Callable, Iterator, Literal
 
 import polars as pl
-from sqlalchemy import Connection
+from sqlalchemy import Connection, Numeric
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
+from sqlalchemy.types import TypeDecorator
 from tenacity import (
     Retrying,
     before_sleep_log,
@@ -214,7 +215,6 @@ def _decimal_dtype_overrides(connection: Connection, arrow_schema) -> dict:
     if limits is None:
         return {}
     import pyarrow as pa
-    from sqlalchemy import Numeric
 
     max_precision, max_scale = limits
     overrides: dict[str, Any] = {}
@@ -224,8 +224,24 @@ def _decimal_dtype_overrides(connection: Connection, arrow_schema) -> dict:
         precision = min(field.type.precision, max_precision)
         # Scale can exceed neither the clamped precision nor the engine's max.
         scale = min(field.type.scale, max_scale, precision)
-        overrides[field.name] = Numeric(precision, scale)
+        numeric = _ExactDecimal if connection.dialect.name == "ibm_db_sa" else Numeric
+        overrides[field.name] = numeric(precision, scale)
     return overrides
+
+
+class _ExactDecimal(TypeDecorator):
+    """A DECIMAL whose values reach the driver as they are.
+
+    ibm_db_sa declares no native decimal support, so SQLAlchemy turns every
+    Decimal into a float on the way in and a DB2 DECIMAL keeps only the float's
+    digits. The ibm_db driver binds a Decimal exactly.
+    """
+
+    impl = Numeric
+    cache_ok = True
+
+    def bind_processor(self, dialect):
+        return None
 
 
 # The date a time-of-day column carries on a target with no time type. Arbitrary

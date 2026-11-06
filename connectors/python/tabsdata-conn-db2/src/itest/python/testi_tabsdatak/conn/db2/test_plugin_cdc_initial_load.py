@@ -1085,3 +1085,50 @@ def test_a_key_taken_again_after_its_row_moved_fails_the_load_safely(
                 with pytest.raises(SqlCdcException, match="CDC_23"):
                     _run_plugin(ctx, cdc_src_conn(domain), _src([first_cd, second_cd]))
             assert ctx.staged == []
+
+
+@db2cdc_domain("db2cdc_employees_xs")
+def test_decimals_keep_every_digit_in_the_initial_load_and_the_capture(
+    domain_db2cdc_employees_xs: Db2CdcDomain, tmp_path: Path
+):
+    # More digits than a float holds: a read that goes through a float on the
+    # way loses the last ones.
+    from decimal import Decimal
+
+    from sqlalchemy import text
+
+    domain = domain_db2cdc_employees_xs
+    loaded, captured = (
+        Decimal("12345678901234567890123456.25"),
+        Decimal("98765432109876543210987654.75"),
+    )
+    columns = "ID INTEGER NOT NULL PRIMARY KEY, AMOUNT DECIMAL(31,2)"
+
+    def insert(id_: int, amount: Decimal) -> None:
+        engine = cdc_engine(domain)
+        try:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        f"insert into {domain.schema.upper()}.{table} (id, amount)"
+                        " values (:id, :amount)"
+                    ),
+                    {"id": id_, "amount": amount},
+                )
+        finally:
+            engine.dispose()
+
+    with cdc_source_table(domain, columns=columns) as (table, cd_table):
+        insert(1, loaded)
+        ctx = _CdcCtx(tmp_path / "work", until=_captured({2}))
+        ctx.work_dir.mkdir()
+        threading.Timer(5.0, lambda: insert(2, captured)).start()
+        _run_plugin(ctx, cdc_src_conn(domain), _src([cd_table]))
+
+        frame = _frame(ctx)
+        amounts = {
+            row["ID"]: Decimal(str(row["AMOUNT"]))
+            for row in frame.select("ID", "AMOUNT").to_dicts()
+            if row["ID"] is not None
+        }
+        assert amounts == {1: loaded, 2: captured}

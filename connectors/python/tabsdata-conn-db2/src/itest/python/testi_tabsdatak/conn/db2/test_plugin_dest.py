@@ -93,3 +93,29 @@ def test_dest_plugin_write_out_replace_clears_existing(
         assert set(got.columns) == set(expected.columns)
     finally:
         db.drop_table(table)
+
+
+@db2_domain("db2")
+def test_dest_plugin_write_out_keeps_every_decimal_digit(
+    domain_db2: Db2Domain,
+    tmp_path: Path,
+):
+    # ibm_db_sa has SQLAlchemy turn a Decimal into a float on the way in; the
+    # value has more digits than a float holds, so only an exact bind keeps it.
+    from decimal import Decimal
+
+    db = store(domain_db2)
+    table = "td_dest_exact_decimal"
+    value = Decimal("123456789012345678.25")
+    frame = pl.LazyFrame({"d": [value]}, schema={"d": pl.Decimal(20, 2)})
+    try:
+        plugin.Db2DestPlugin().write_out(
+            PluginDestCtx(work_dir(tmp_path)),
+            dest_conn(domain_db2),
+            Db2Dest(tables=[table], if_table_exists="replace"),
+            [frame],
+        )
+        stored = db.read_table(table)
+        assert Decimal(str(stored[stored.columns[0]][0])) == value
+    finally:
+        db.drop_table(table)
