@@ -19,6 +19,7 @@ use crate::scheduler::request::{
     stop_worker_update,
 };
 use crate::scheduler::stats;
+use futures_util::FutureExt;
 use std::future::Future;
 use std::time::Instant;
 use ta_services::factory::service_factory;
@@ -183,33 +184,33 @@ impl ProjectTick<'_> {
     }
 
     /// [`step`](Self::step) for a step that never caps.
-    async fn step_once(
+    fn step_once(
         &self,
-        step: &str,
+        step: &'static str,
         owed: Concerns,
         run: impl Future<Output = Result<(), TdError>>,
-    ) -> Concerns {
-        self.step(step, owed, async { run.await.map(|()| false) })
-            .await
+    ) -> impl Future<Output = Concerns> {
+        self.step(step, owed, run.map(|r| r.map(|()| false)))
     }
 
-    async fn step(
+    fn step(
         &self,
-        step: &str,
+        step: &'static str,
         owed: Concerns,
         run: impl Future<Output = Result<bool, TdError>>,
-    ) -> Concerns {
+    ) -> impl Future<Output = Concerns> {
         let started = Instant::now();
-        let outcome = run.await;
-        let elapsed = started.elapsed();
-        debug!(
-            project_id = %self.project,
-            step,
-            elapsed_us = elapsed.as_micros() as u64,
-            "scheduler.pass: step done"
-        );
-        stats::step_took(step, elapsed);
-        self.left(owed, step, outcome)
+        run.map(move |outcome| {
+            let elapsed = started.elapsed();
+            debug!(
+                project_id = %self.project,
+                step,
+                elapsed_us = elapsed.as_micros() as u64,
+                "scheduler.pass: step done"
+            );
+            stats::step_took(step, elapsed);
+            self.left(owed, step, outcome)
+        })
     }
 
     fn left(&self, owed: Concerns, step: &str, outcome: Result<bool, TdError>) -> Concerns {

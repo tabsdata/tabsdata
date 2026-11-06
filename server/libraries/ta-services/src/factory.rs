@@ -4,7 +4,7 @@
 
 use std::time::Instant;
 use td_error::TdError;
-use tracing::Instrument;
+use tracing::instrument::{Instrument, Instrumented};
 
 pub use tm_services::{FieldAccessors, service_factory};
 
@@ -35,11 +35,10 @@ pub trait Extract<Srv, Req>: Sized {
     fn extract(srv: &Srv, req: &Req) -> impl Future<Output = Result<Self, TdError>> + Send;
 }
 
-/// Runs a service in its own span, so every event it logs names it.
-pub async fn in_service<F: Future>(name: &'static str, service: F) -> F::Output {
-    service
-        .instrument(tracing::info_span!("service", name))
-        .await
+/// Runs a service in its own span, so every event it logs names it. A plain
+/// `fn`: an `async fn` taking the future by value would store it twice.
+pub fn in_service<F: Future>(name: &'static str, service: F) -> Instrumented<F> {
+    service.instrument(tracing::info_span!("service", name))
 }
 
 /// One run of a service by its wrapper.

@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use futures::FutureExt;
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -193,49 +194,52 @@ impl TickBudget {
     }
 
     /// Runs one tick under the current budget, warning once it uses half of it.
-    pub(crate) async fn run<T, E: Into<BoxError>>(
+    pub(crate) fn run<T, E: Into<BoxError>>(
         &mut self,
         fut: impl Future<Output = Result<T, E>>,
-    ) -> Result<T, BoxError> {
-        match self.within(fut).await {
+    ) -> impl Future<Output = Result<T, BoxError>> {
+        let tick = self.tick;
+        self.within(fut).map(move |outcome| match outcome {
             Some(result) => result.map_err(Into::into),
-            None => Err(format!("scheduler {} tick timed out", self.tick).into()),
-        }
+            None => Err(format!("scheduler {tick} tick timed out").into()),
+        })
     }
 
     /// [`run`](Self::run) for any output: `None` when it overran the budget.
-    async fn within<T>(&mut self, fut: impl Future<Output = T>) -> Option<T> {
+    fn within<T>(&mut self, fut: impl Future<Output = T>) -> impl Future<Output = Option<T>> {
         let tick = self.tick;
         let budget = self.current;
         let started = tokio::time::Instant::now();
-        let result = tokio::time::timeout(budget, fut).await.ok();
-        let timed_out = result.is_none();
-        let elapsed = started.elapsed();
-        if elapsed >= budget / 2 {
-            warn!(
-                tick,
-                elapsed_ms = elapsed.as_millis() as u64,
-                tick_timeout_ms = budget.as_millis() as u64,
-                "slow scheduler tick"
-            );
-        }
-        self.settle(elapsed, timed_out);
-        if self.current > budget {
-            warn!(
-                tick,
-                from_ms = budget.as_millis() as u64,
-                to_ms = self.current.as_millis() as u64,
-                "scheduler tick budget raised"
-            );
-        } else if self.current < budget {
-            debug!(
-                tick,
-                from_ms = budget.as_millis() as u64,
-                to_ms = self.current.as_millis() as u64,
-                "scheduler tick budget lowered"
-            );
-        }
-        result
+        tokio::time::timeout(budget, fut).map(move |outcome| {
+            let result = outcome.ok();
+            let timed_out = result.is_none();
+            let elapsed = started.elapsed();
+            if elapsed >= budget / 2 {
+                warn!(
+                    tick,
+                    elapsed_ms = elapsed.as_millis() as u64,
+                    tick_timeout_ms = budget.as_millis() as u64,
+                    "slow scheduler tick"
+                );
+            }
+            self.settle(elapsed, timed_out);
+            if self.current > budget {
+                warn!(
+                    tick,
+                    from_ms = budget.as_millis() as u64,
+                    to_ms = self.current.as_millis() as u64,
+                    "scheduler tick budget raised"
+                );
+            } else if self.current < budget {
+                debug!(
+                    tick,
+                    from_ms = budget.as_millis() as u64,
+                    to_ms = self.current.as_millis() as u64,
+                    "scheduler tick budget lowered"
+                );
+            }
+            result
+        })
     }
 }
 
