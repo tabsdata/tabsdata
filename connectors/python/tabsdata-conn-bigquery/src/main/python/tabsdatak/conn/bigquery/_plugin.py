@@ -212,12 +212,17 @@ class _BigQueryDestPlugin(
                     logger.debug("bigquery: finished table %r", table_fqn)
                 return
 
-            # "strict" whatever the engine: the load job would refuse the same
-            # batch, but with its own error rather than SQL_COMMON_10. "update"
-            # only under iceberg: the native engine's load job evolves itself.
+            # A strict append whatever the engine: the load job would refuse the
+            # same batch, but with its own error rather than SQL_COMMON_10. A
+            # replace's load job takes the batch's schema, so there is nothing
+            # for strict to refuse. "update" only under iceberg: the native
+            # engine's load job evolves itself.
             diffing = (
                 write_cfg.schema_evolution == "strict"
-                or cfg.schema_evolution_engine == "iceberg"
+                and write_cfg.if_table_exists == "append"
+            ) or (
+                write_cfg.schema_evolution == "update"
+                and cfg.schema_evolution_engine == "iceberg"
             )
 
             # Append is the only disposition that stamps: a merge has returned

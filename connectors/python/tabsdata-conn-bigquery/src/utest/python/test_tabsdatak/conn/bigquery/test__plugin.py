@@ -260,6 +260,24 @@ def test_dest_plugin_strict_refuses_a_new_column_before_the_load(
     assert bq_client.load_table_from_uri.call_count == 0
 
 
+def test_dest_plugin_strict_replace_takes_the_batch_schema(monkeypatch, work_dir):
+    """A replace's load job replaces the table's schema, so strict has
+    nothing to refuse."""
+    bq_client = _evolving_clients(
+        monkeypatch, [("id", "INTEGER")], [("id", "INTEGER"), ("note", "STRING")]
+    )
+    dest = BigQueryDest(
+        tables=["`my-project.analytics.users`"],
+        if_table_exists="replace",
+        schema_evolution="strict",
+    )
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "note": "x"}])
+    plugin._BigQueryDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), dest, [pl.scan_parquet(src)]
+    )
+    assert bq_client.load_table_from_uri.call_count == 1
+
+
 def test_dest_plugin_native_engine_emits_no_alters_of_its_own(monkeypatch, work_dir):
     """The counterpart: native evolution is the load-job options and nothing
     else, so a target short a column is left to the load job."""

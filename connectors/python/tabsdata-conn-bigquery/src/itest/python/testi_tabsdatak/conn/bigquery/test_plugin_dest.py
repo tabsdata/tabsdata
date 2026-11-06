@@ -21,7 +21,7 @@ from testi_tabsdatak.conn.common.sql.plugin_io import provisioned_parquet, work_
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import BigQueryDest, MergeCfg, _plugin as plugin
-from tabsdatak.conn.bigquery.error import BigQueryErrorCode, BigQueryRuntimeException
+from tabsdatak.conn.bigquery.error import BigQueryRuntimeException
 from tabsdatak.conn.common.sql.error import (
     SqlCommonErrorCode,
     SqlCommonRuntimeException,
@@ -789,11 +789,8 @@ def test_dest_plugin_write_out_iceberg_engine_still_refuses_a_widened_batch_on_s
 ):
     # Strict pins the target's schema, and asking for the Iceberg engine does
     # not lift that -- the engine only says *how* a schema that is allowed to
-    # move is moved. So the new column is never added, and the load job that
-    # would have to write it fails: BigQuery does not drop a field the target
-    # has no home for, it refuses the batch. That failure is the proof the
-    # Iceberg pass held off; had it run, the column would be there and the load
-    # would have succeeded.
+    # move is moved. So the new column is refused before any load, with the
+    # policy's error, and the target is left as it was.
     db = store(domain_bigquery)
     table = "td_dest_iceberg_strict"
     work = work_dir(tmp_path)
@@ -805,11 +802,10 @@ def test_dest_plugin_write_out_iceberg_engine_still_refuses_a_widened_batch_on_s
         {"order_id": [1], "status": ["new"], "priority": ["high"]},
     )
     try:
-        with pytest.raises(BigQueryRuntimeException) as ei:
+        with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
             _load_out(
                 conn, work, table, batch, schema_evolution="strict", dest_cfg=_ICEBERG
             )
-        assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_7
         assert db.column_types(table) == before
         assert db.count(table) == 0
     finally:
