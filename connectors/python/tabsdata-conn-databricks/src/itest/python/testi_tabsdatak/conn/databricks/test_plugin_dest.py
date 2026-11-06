@@ -703,16 +703,23 @@ def test_dest_plugin_write_out_merge_does_not_narrow_a_widened_column_back(
         db.drop_table(table)
 
 
+@pytest.mark.parametrize(
+    "amount, taken",
+    [(42, True), (2**40, False)],
+    ids=["fits", "overflows"],
+)
 @databricks_domain("databricks")
-def test_dest_plugin_write_out_merge_refuses_a_wider_type_on_strict(
+def test_dest_plugin_write_out_merge_holds_a_wider_type_to_its_column_on_strict(
     domain_databricks: DatabricksDomain,
     tmp_path: Path,
+    amount: int,
+    taken: bool,
 ):
-    # The mirror of the widening case: under "strict" a batch whose column is
-    # wider than the target's is refused before the MERGE, and the column keeps
-    # its type -- even when the value would have fit.
+    # The mirror of the widening case: under "strict" the column keeps its
+    # type. A wider batch is merged cast to it when every value fits, and
+    # refused before the MERGE when one does not.
     db = store(domain_databricks)
-    table = "td_dest_merge_strict_type"
+    table = f"td_dest_merge_strict_type_{'fits' if taken else 'overflows'}"
     work = work_dir(tmp_path)
     conn = dest_conn(domain_databricks)
     merge_cfg = MergeCfg(on=["order_id"], op_column="op")
@@ -728,7 +735,7 @@ def test_dest_plugin_write_out_merge_refuses_a_wider_type_on_strict(
         tmp_path / "strict_wide.parquet",
         {
             "order_id": [1],
-            "amount": pl.Series([42], dtype=pl.Int64),
+            "amount": pl.Series([amount], dtype=pl.Int64),
             "op": ["u"],
         },
     )
@@ -736,12 +743,16 @@ def test_dest_plugin_write_out_merge_refuses_a_wider_type_on_strict(
         _merge_out(conn, work, table, narrow, merge_cfg, "strict")
         assert _types(db, table)["amount"] == "int"
 
-        with pytest.raises(SqlCommonRuntimeException) as raised:
+        if taken:
             _merge_out(conn, work, table, wide, merge_cfg, "strict")
-        assert "column 'amount' from int to bigint" in str(raised.value)
+        else:
+            with pytest.raises(SqlCommonRuntimeException) as raised:
+                _merge_out(conn, work, table, wide, merge_cfg, "strict")
+            assert "column 'amount' from int to bigint" in str(raised.value)
         assert _types(db, table)["amount"] == "int"
         assert_frames_match(
-            db.read_table(table), pl.DataFrame({"order_id": [1], "amount": [10]})
+            db.read_table(table),
+            pl.DataFrame({"order_id": [1], "amount": [amount if taken else 10]}),
         )
     finally:
         db.drop_table(table)
