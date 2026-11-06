@@ -699,6 +699,68 @@ def test_transformer_signature_rejects_mismatched_output_arity():
     assert excinfo.value.api_error is ApiErrorCode.API_19
 
 
+@pytest.mark.parametrize(
+    "reference",
+    ["a@NEW", "c/a@NEW", "a@HEAD~1..HEAD", "a@HEAD,HEAD^"],
+)
+def test_transformer_signature_refuses_a_single_slot_for_several_versions(reference):
+    """``@NEW``, a range or a list hands the function one TableFrame per
+    version, which a single slot cannot hold."""
+    with pytest.raises(ApiException) as excinfo:
+
+        @m.transformer(input_tables=[reference], output_tables=["x"])
+        def my_xf(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+            return t1
+
+    assert excinfo.value.api_error is ApiErrorCode.API_19
+    assert f"reads {reference!r}" in str(excinfo.value)
+    assert "TableFramesSpec" in str(excinfo.value)
+
+
+def test_transformer_signature_takes_a_list_slot_for_several_versions():
+    @m.transformer(input_tables=["a@NEW", "b@HEAD"], output_tables=["x"])
+    def my_xf(
+        t1: list[tableframe.TableFrame | None] | None,
+        t2: tableframe.TableFrame | None,
+    ) -> tableframe.TableFrame | None:
+        return t2
+
+    assert isinstance(my_xf, _info.TransformerInfo)
+
+
+@pytest.mark.parametrize("reference", ["a", "a@HEAD", "a@HEAD^", "a@INITIAL"])
+def test_transformer_signature_takes_either_slot_for_one_version(reference):
+    @m.transformer(input_tables=[reference], output_tables=["x", "y"])
+    def my_xf(
+        t1: list[tableframe.TableFrame | None] | None,
+    ) -> tuple[tableframe.TableFrame | None, tableframe.TableFrame | None]:
+        return (None, None)
+
+    @m.transformer(input_tables=[reference], output_tables=["x"])
+    def my_other_xf(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
+
+    assert isinstance(my_xf, _info.TransformerInfo)
+    assert isinstance(my_other_xf, _info.TransformerInfo)
+
+
+def test_subscriber_signature_refuses_a_single_slot_for_new_versions():
+    with pytest.raises(ApiException) as excinfo:
+
+        @m.subscriber(destination=_dest3(), input_tables=["a@NEW"])
+        def my_sub(
+            t1: tableframe.TableFrame | None,
+        ) -> tuple[
+            tableframe.TableFrame | None,
+            tableframe.TableFrame | None,
+            tableframe.TableFrame | None,
+        ]:
+            return (t1, t1, t1)
+
+    assert excinfo.value.api_error is ApiErrorCode.API_20
+    assert "reads 'a@NEW'" in str(excinfo.value)
+
+
 def test_subscriber_signature_uses_destination_table_count_for_output():
     dest = _dest3()  # table_count=3
 

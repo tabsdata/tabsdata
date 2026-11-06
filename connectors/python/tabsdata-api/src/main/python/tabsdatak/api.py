@@ -594,7 +594,9 @@ def transformer(
         input_tables: Non-empty list of `[collection/]table[@versions]`
             references to read (`collection/` may be omitted for a
             same-collection table; `@versions` selects a version, a
-            `v..v` range, a comma-separated list, or `NEW`).
+            `v..v` range, a comma-separated list, or `NEW`). A range, a
+            list or `NEW` hands over one `TableFrame` per version, so its
+            parameter must be a `TableFramesSpec`.
         output_tables: Non-empty list of local table names to emit, one
             per return slot (valid table names, see `publisher`).
         trigger_by: When the function runs on its own:

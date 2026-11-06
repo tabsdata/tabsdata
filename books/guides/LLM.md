@@ -282,9 +282,12 @@ Specifically:
   - For `@stream_publisher`, each is always `list[TableFrame]`: a
     stream source hands over the files of one batch per slot. The
     function must not declare a `ctx` parameter.
-  - For `@transformer` / `@subscriber`, each is either
-    `TableFrame` or `list[TableFrame]` (the framework does not yet
-    enforce a mode here).
+  - For `@transformer` / `@subscriber`, an input that can hand over
+    several versions of its table -- `@NEW` (every version since the
+    function's previous run), a `v..v` range or a `v,v` list -- must
+    be `list[TableFrame]` (`TableFramesSpec`), one element per
+    version; registration refuses a single slot for it. Any other
+    input may be either `TableFrame` or `list[TableFrame]`.
   - `TableFrame` is shorthand for `TableFrame | None`
     (auto-nullable). For `list[TableFrame]` the list is required
     but its elements may be `None`.

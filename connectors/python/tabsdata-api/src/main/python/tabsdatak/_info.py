@@ -226,14 +226,16 @@ class TransformerInfo(_api.JsonSerde):
 
     @model_validator(mode="after")
     def _check_func_signature(self):
-        # Transformer inputs accept either single or array slots --
-        # the framework does not yet enforce a mode here. Outputs are
-        # always single-mode TableFrame.
+        # An input that can yield several versions (``@NEW``, a range or a
+        # list) must be an array slot; any other input may be either.
+        # Outputs are always single-mode TableFrame.
+        modes, reasons = _api.input_slot_modes(self.input_tables)
         _api.check_callable_signature(
             _unwrap_info(self.func),
             input_count=len(self.input_tables),
-            input_mode="any",
+            input_mode=modes,
             output_count=len(self.output_tables),
+            input_reasons=reasons,
         )
         return self
 
@@ -268,17 +270,19 @@ class SubscriberInfo(_api.JsonSerde):
 
     @model_validator(mode="after")
     def _check_func_signature(self):
-        # Subscriber inputs accept either single or array slots --
-        # the framework does not yet enforce a mode here. Outputs are
-        # always single-mode TableFrame, one element per
+        # An input that can yield several versions (``@NEW``, a range or a
+        # list) must be an array slot; any other input may be either.
+        # Outputs are always single-mode TableFrame, one element per
         # `dest.cardinality`.
         from tabsdatak import _connectors
 
         definition = _connectors.get_dest(type(self.destination))
+        modes, reasons = _api.input_slot_modes(self.input_tables)
         _api.check_callable_signature(
             _unwrap_info(self.func),
             input_count=len(self.input_tables),
-            input_mode="any",
+            input_mode=modes,
             output_count=definition.cardinality(self.destination),
+            input_reasons=reasons,
         )
         return self

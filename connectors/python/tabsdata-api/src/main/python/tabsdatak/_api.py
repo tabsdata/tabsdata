@@ -50,6 +50,7 @@ import re
 import sys
 import typing
 import warnings
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any, Callable, ClassVar, TypeVar, Union, dataclass_transform
 
@@ -564,6 +565,40 @@ def _is_coll_table_versions_name(value: str) -> bool:
     return True
 
 
+def reads_several_versions(reference: str) -> bool:
+    """Whether a ``[collection/]table[@versions]`` input reference can hand
+    its function more than one version of the table: ``NEW`` (every version
+    since the function's previous run), a ``v..v`` range or a ``v,v`` list.
+    Such an input fills a list slot (``TableFramesSpec``); a single slot
+    cannot hold more than one."""
+    match = VERSIONED_TABLE_REGEX.match(reference)
+    versions = match.group("versions") if match else None
+    if versions is None:
+        return False
+    return versions == NEW_VERSION_PATTERN or ".." in versions or "," in versions
+
+
+def input_slot_modes(
+    references: Sequence[str],
+) -> tuple[list[str], list[str | None]]:
+    """The slot mode each input reference requires (``"array"`` for one that
+    can yield several versions, ``"any"`` otherwise), and why, for the error a
+    mismatch raises."""
+    modes: list[str] = []
+    reasons: list[str | None] = []
+    for reference in references:
+        if reads_several_versions(reference):
+            modes.append("array")
+            reasons.append(
+                f"it reads {reference!r}, which can hand it several versions "
+                f"of the table, one TableFrame each"
+            )
+        else:
+            modes.append("any")
+            reasons.append(None)
+    return modes, reasons
+
+
 def _cron_refusal(value: str) -> str | None:
     try:
         cron(value)
@@ -943,16 +978,15 @@ def _format_expected_signature(
     name: str,
     *,
     input_count: int,
-    input_mode: str,
+    input_mode: str | Sequence[str],
     output_count: int,
     allow_transaction_ctx: bool = True,
 ) -> str:
-    if input_mode == "array":
-        in_t = "TableFramesSpec"
-    else:
-        in_t = "TableFrameSpec"
-
-    params = ",\n        ".join(f"in_{i + 1}: {in_t}" for i in range(input_count))
+    modes = _slot_modes(input_mode, input_count)
+    params = ",\n        ".join(
+        f"in_{i + 1}: {'TableFramesSpec' if mode == 'array' else 'TableFrameSpec'}"
+        for i, mode in enumerate(modes)
+    )
     if not params:
         params = "# no input parameters"
     out_args = ", ".join(["TableFrameSpec"] * output_count) if output_count > 0 else ""
@@ -970,16 +1004,37 @@ def _format_expected_signature(
         if output_count == 1
         else ""
     )
+    distinct = set(modes)
+    slot_type = (
+        _slot_mode_hint(next(iter(distinct)))
+        if len(distinct) == 1
+        else "per slot, as each parameter shows"
+    )
 
     return (
         f"\n\nExpected signature ({input_count} input slot(s), "
         f"{output_count} output slot(s); slot type "
-        f"= {_slot_mode_hint(input_mode)}{ctx_note}):\n"
+        f"= {slot_type}{ctx_note}):\n"
         f"    def {name}(\n"
         f"        {params},\n"
         f"    ) -> tuple[{out_args}]:\n"
         f"        ...{single_out_note}"
     )
+
+
+def _article(mode: str) -> str:
+    return "an" if mode[0] in "aeiou" else "a"
+
+
+def _slot_modes(input_mode: str | Sequence[str], input_count: int) -> list[str]:
+    if isinstance(input_mode, str):
+        return [input_mode] * input_count
+    modes = list(input_mode)
+    if len(modes) != input_count:
+        raise ValueError(
+            f"{len(modes)} input mode(s) given for {input_count} input slot(s)"
+        )
+    return modes
 
 
 def _is_transaction_ctx_slot(t: Any) -> bool:
@@ -1010,9 +1065,10 @@ def check_callable_signature(
     func: Callable[..., Any],
     *,
     input_count: int,
-    input_mode: str,
+    input_mode: str | Sequence[str],
     output_count: int,
     allow_transaction_ctx: bool = True,
+    input_reasons: Sequence[str | None] | None = None,
 ) -> None:
     """Validate a decorated function's signature against the
     declared input / output shape.
@@ -1020,8 +1076,11 @@ def check_callable_signature(
     :param input_count: Number of input-slot parameters.
     :param input_mode: ``"single"`` (each slot is a
         ``TableFrameSpec``), ``"array"`` (each slot is a
-        ``TableFramesSpec``), or ``"any"`` (either).
+        ``TableFramesSpec``), or ``"any"`` (either); or one of them per
+        input slot.
     :param output_count: Number of return-tuple elements.
+    :param input_reasons: Per input slot, why it requires its mode, added
+        to the error a mismatch raises (``None`` for no reason to give).
     :param allow_transaction_ctx: When ``True`` (the default for
         ``@publisher`` / ``@transformer`` / ``@subscriber``), a
         single trailing ``ctx: TransactionCtx`` parameter is allowed after
@@ -1084,20 +1143,24 @@ def check_callable_signature(
             )
 
     # Each of the first input_count parameters must have a slot-type annotation.
+    modes = _slot_modes(input_mode, input_count)
+    reasons = list(input_reasons or [None] * input_count)
     for i in range(input_count):
         p = params[i]
+        mode = modes[i]
+        reason = f": {reasons[i]}" if reasons[i] else ""
         hint = hints.get(p.name)
         if hint is None:
             raise ValueError(
                 f"{name!r}: parameter {i + 1} ({p.name!r}) must be annotated "
-                f"as a {input_mode}-mode slot type "
-                f"({_slot_mode_hint(input_mode)}){expected}"
+                f"as {_article(mode)} {mode}-mode slot type "
+                f"({_slot_mode_hint(mode)}){reason}{expected}"
             )
-        if not _matches_slot_mode(hint, input_mode):
+        if not _matches_slot_mode(hint, mode):
             raise ValueError(
                 f"{name!r}: parameter {i + 1} ({p.name!r}) is annotated as "
-                f"{_render_type(hint)!r} but must be a {input_mode}-mode "
-                f"slot ({_slot_mode_hint(input_mode)}){expected}"
+                f"{_render_type(hint)!r} but must be {_article(mode)} {mode}-mode "
+                f"slot ({_slot_mode_hint(mode)}){reason}{expected}"
             )
 
     # Return shape:
