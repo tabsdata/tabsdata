@@ -12,6 +12,8 @@ from typing import Any
 
 import polars as pl
 
+from tabsdatak.conn.common.error import ConnException
+
 # noinspection PyProtectedMember
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.initial_values import resolve_initial_values
@@ -270,8 +272,8 @@ class _DatabricksDestPlugin(
         host = _convert(conn.host_url, str)
         try:
             _impl.write_all_tables(write_cfg, tables)
-        except DatabricksValidateException:
-            raise  # adapter-side validation is already typed (DATABRICKS_10)
+        except ConnException:
+            raise
         except Exception as e:  # noqa: BLE001 -- runtime wrapper
             if _is_connection_error(e):
                 raise DatabricksErrorCode.DATABRICKS_8.exception(

@@ -10,6 +10,7 @@ from typing import Any
 
 import polars as pl
 
+from tabsdatak.conn.common.error import ConnException
 from tabsdatak.conn.snowflake import (
     DestCfgKey,
     DestCfgSpec,
@@ -141,6 +142,8 @@ class SnowflakeDestPlugin(
         )
         try:
             _impl.write_all_tables(write_cfg, tables)
+        except ConnException:
+            raise
         except Exception as e:  # noqa: BLE001 -- runtime wrapper
             if _is_connection_error(e):
                 # noinspection PyProtectedMember

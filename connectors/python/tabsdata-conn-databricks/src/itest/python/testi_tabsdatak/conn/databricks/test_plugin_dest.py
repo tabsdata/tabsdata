@@ -22,8 +22,8 @@ from testi_tabsdatak.conn.common.sql.plugin_io import provisioned_parquet, work_
 from testi_tabsdatak.conn.databricks.backend import dest_conn, store
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common.sql.error import SqlCommonRuntimeException
 from tabsdatak.conn.databricks import DatabricksDest, MergeCfg, _plugin as plugin
-from tabsdatak.conn.databricks.error import DatabricksRuntimeException
 
 pytestmark = pytest.mark.databricks
 
@@ -507,7 +507,7 @@ def test_dest_plugin_write_out_merge_refuses_a_new_column_on_strict(
         _merge_out(conn, work, table, seed, merge_cfg, "strict")
         before = set(db.read_table(table).columns)
 
-        with pytest.raises(DatabricksRuntimeException) as raised:
+        with pytest.raises(SqlCommonRuntimeException) as raised:
             _merge_out(conn, work, table, widened, merge_cfg, "strict")
         assert "new column 'carrier'" in str(raised.value)
         got = db.read_table(table)
@@ -552,7 +552,7 @@ def test_dest_plugin_write_out_merge_stops_evolving_when_switched_back_to_strict
         _merge_out(conn, work, table, first, merge_cfg, "update")
         assert "carrier" in db.read_table(table).columns
 
-        with pytest.raises(DatabricksRuntimeException):
+        with pytest.raises(SqlCommonRuntimeException):
             _merge_out(conn, work, table, second, merge_cfg, "strict")
         got = db.read_table(table)
         assert "eta" not in got.columns
@@ -736,7 +736,7 @@ def test_dest_plugin_write_out_merge_refuses_a_wider_type_on_strict(
         _merge_out(conn, work, table, narrow, merge_cfg, "strict")
         assert _types(db, table)["amount"] == "int"
 
-        with pytest.raises(DatabricksRuntimeException) as raised:
+        with pytest.raises(SqlCommonRuntimeException) as raised:
             _merge_out(conn, work, table, wide, merge_cfg, "strict")
         assert "column 'amount' from int to bigint" in str(raised.value)
         assert _types(db, table)["amount"] == "int"

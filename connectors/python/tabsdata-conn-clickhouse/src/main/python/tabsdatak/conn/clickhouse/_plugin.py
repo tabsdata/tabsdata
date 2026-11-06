@@ -18,6 +18,7 @@ from tabsdatak.conn.clickhouse import (
 )
 from tabsdatak.conn.clickhouse._explorer import ClickHouseConnectionExplorer
 from tabsdatak.conn.clickhouse.error import ClickHouseErrorCode
+from tabsdatak.conn.common.error import ConnException
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
@@ -134,6 +135,8 @@ class _ClickHouseDestPlugin(
                 cause=e,
                 staging=type(conn.staging).__name__,
             )
+        except ConnException:
+            raise
         except Exception as e:  # noqa: BLE001 -- runtime wrapper
             host = _convert(conn.host, str)
             # Heuristic: connect-class failures from

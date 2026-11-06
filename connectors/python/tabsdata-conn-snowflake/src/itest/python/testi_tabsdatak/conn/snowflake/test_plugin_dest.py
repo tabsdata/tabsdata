@@ -21,8 +21,8 @@ from testi_tabsdatak.conn.common.sql.plugin_io import provisioned_parquet, work_
 from testi_tabsdatak.conn.snowflake.backend import dest_conn, store
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common.sql.error import SqlCommonRuntimeException
 from tabsdatak.conn.snowflake import MergeCfg, SnowflakeDest, _plugin as plugin
-from tabsdatak.conn.snowflake.error import SnowflakeRuntimeException
 
 pytestmark = pytest.mark.snowflake
 
@@ -828,7 +828,7 @@ def test_dest_plugin_write_out_iceberg_engine_refuses_an_impossible_retype(
         {"order_id": [1], "amount": ["not a number"]},
     )
     try:
-        with pytest.raises(SnowflakeRuntimeException):
+        with pytest.raises(SqlCommonRuntimeException):
             _load_out(conn, work, table, batch, dest_cfg=_ICEBERG)
         assert db.column_types(table) == before
         assert db.count(table) == 0
@@ -896,7 +896,7 @@ def test_dest_plugin_write_out_refuses_a_new_column_on_strict(
 
     try:
         write(narrow)
-        with pytest.raises(SnowflakeRuntimeException) as raised:
+        with pytest.raises(SqlCommonRuntimeException) as raised:
             write(widened)
         assert "new column 'PRIORITY'" in str(raised.value)
         assert_frames_match(
@@ -971,7 +971,7 @@ def test_dest_plugin_write_out_merge_refuses_a_new_column_on_strict(
     )
     try:
         _merge_out(conn, work, table, seed, merge_cfg, schema_evolution="strict")
-        with pytest.raises(SnowflakeRuntimeException) as raised:
+        with pytest.raises(SqlCommonRuntimeException) as raised:
             _merge_out(conn, work, table, widened, merge_cfg, schema_evolution="strict")
         assert "new column 'PRIORITY'" in str(raised.value)
         assert_frames_match(
@@ -1069,7 +1069,7 @@ def test_dest_plugin_write_out_stops_evolving_when_switched_back_to_strict(
         write(widened, "update")
         assert "priority" in db.read_table(table).columns
 
-        with pytest.raises(SnowflakeRuntimeException):
+        with pytest.raises(SqlCommonRuntimeException):
             write(wider, "strict")
         got = db.read_table(table)
         assert set(got.columns) == {"order_id", "status", "priority"}
@@ -1441,7 +1441,7 @@ def test_dest_plugin_write_out_merge_adds_only_the_watermark_on_strict(
             transaction_id="TRX_A",
             watermark_column=_WATERMARK,
         )
-        with pytest.raises(SnowflakeRuntimeException):
+        with pytest.raises(SqlCommonRuntimeException):
             _merge_out(
                 conn,
                 work,
@@ -1672,7 +1672,7 @@ def test_dest_plugin_write_out_merge_refuses_a_change_snowflake_cannot_make(
         {"order_id": [1], "amount": ["not a number"], "op": ["i"]},
     )
     try:
-        with pytest.raises(SnowflakeRuntimeException):
+        with pytest.raises(SqlCommonRuntimeException):
             _merge_out(conn, work, table, batch, merge_cfg, schema_evolution="update")
         assert db.column_types(table) == before
         assert db.count(table) == 0
