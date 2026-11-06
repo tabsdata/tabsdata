@@ -17,6 +17,7 @@ from testi_tabsdatak.conn.common.sql.schema.policy import (
     run,
     table_for,
 )
+from testi_tabsdatak.conn.common.sql.schema.widening import WIDENING_CASES
 from testi_tabsdatak.conn.db2.backend import dest_conn, store
 
 # noinspection PyProtectedMember
@@ -44,3 +45,13 @@ def _policy(domain: Db2Domain, work: Path) -> Policy:
 @db2_domain("db2")
 def test_schema_policy(domain_db2: Db2Domain, tmp_path: Path, case, request):
     run(case, _policy(domain_db2, work_dir(tmp_path)), table_for(request))
+
+
+@pytest.mark.parametrize("case", WIDENING_CASES)
+@db2_domain("db2")
+def test_schema_widening(domain_db2: Db2Domain, tmp_path: Path, case, request):
+    policy = _policy(domain_db2, work_dir(tmp_path))
+    try:
+        case(policy, table_for(request), store(domain_db2)._engine)
+    finally:
+        policy.drop(table_for(request))

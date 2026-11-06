@@ -17,6 +17,7 @@ from testi_tabsdatak.conn.common.sql.schema.policy import (
     run,
     table_for,
 )
+from testi_tabsdatak.conn.common.sql.schema.widening import WIDENING_CASES
 from testi_tabsdatak.conn.oracle.backend import dest_conn, store
 
 # noinspection PyProtectedMember
@@ -46,3 +47,13 @@ def _policy(domain: OracleDomain, work: Path) -> Policy:
 @oracle_domain("oracle")
 def test_schema_policy(domain_oracle: OracleDomain, tmp_path: Path, case, request):
     run(case, _policy(domain_oracle, work_dir(tmp_path)), table_for(request))
+
+
+@pytest.mark.parametrize("case", WIDENING_CASES)
+@oracle_domain("oracle")
+def test_schema_widening(domain_oracle: OracleDomain, tmp_path: Path, case, request):
+    policy = _policy(domain_oracle, work_dir(tmp_path))
+    try:
+        case(policy, table_for(request), store(domain_oracle)._engine)
+    finally:
+        policy.drop(table_for(request))

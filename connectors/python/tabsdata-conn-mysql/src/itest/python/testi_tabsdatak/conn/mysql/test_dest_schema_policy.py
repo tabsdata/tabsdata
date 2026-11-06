@@ -17,6 +17,7 @@ from testi_tabsdatak.conn.common.sql.schema.policy import (
     run,
     table_for,
 )
+from testi_tabsdatak.conn.common.sql.schema.widening import WIDENING_CASES
 from testi_tabsdatak.conn.mysql.backend import dest_conn, store
 
 # noinspection PyProtectedMember
@@ -44,3 +45,13 @@ def _policy(domain: MysqlDomain, work: Path) -> Policy:
 @mysql_domain("mysql")
 def test_schema_policy(domain_mysql: MysqlDomain, tmp_path: Path, case, request):
     run(case, _policy(domain_mysql, work_dir(tmp_path)), table_for(request))
+
+
+@pytest.mark.parametrize("case", WIDENING_CASES)
+@mysql_domain("mysql")
+def test_schema_widening(domain_mysql: MysqlDomain, tmp_path: Path, case, request):
+    policy = _policy(domain_mysql, work_dir(tmp_path))
+    try:
+        case(policy, table_for(request), store(domain_mysql)._engine)
+    finally:
+        policy.drop(table_for(request))

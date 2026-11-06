@@ -17,6 +17,7 @@ from testi_tabsdatak.conn.common.sql.schema.policy import (
     run,
     table_for,
 )
+from testi_tabsdatak.conn.common.sql.schema.widening import WIDENING_CASES
 from testi_tabsdatak.conn.postgres.backend import dest_conn, store
 
 # noinspection PyProtectedMember
@@ -46,3 +47,15 @@ def _policy(domain: PostgresDomain, work: Path) -> Policy:
 @postgres_domain("postgres")
 def test_schema_policy(domain_postgres: PostgresDomain, tmp_path: Path, case, request):
     run(case, _policy(domain_postgres, work_dir(tmp_path)), table_for(request))
+
+
+@pytest.mark.parametrize("case", WIDENING_CASES)
+@postgres_domain("postgres")
+def test_schema_widening(
+    domain_postgres: PostgresDomain, tmp_path: Path, case, request
+):
+    policy = _policy(domain_postgres, work_dir(tmp_path))
+    try:
+        case(policy, table_for(request), store(domain_postgres)._engine)
+    finally:
+        policy.drop(table_for(request))

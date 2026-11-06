@@ -430,9 +430,11 @@ class MySQLDest(Dest):
         schema_evolution: What a write does when the batch's columns differ from
             the table's. `"replace"` makes the table the batch's own, so it is
             not affected. `"strict"` (the default) refuses a batch with a column
-            the table lacks; `"update"` adds the column. Column types are never
-            changed: a value a column cannot hold fails the write. A column the
-            batch lacks is written NULL either way.
+            the table lacks; `"update"` adds the column and widens a number
+            column the batch has outgrown (a larger integer, double precision, a
+            decimal that keeps every digit); other type differences are left to
+            the database, where a value a column cannot hold fails the write. A
+            column the batch lacks is written NULL either way.
         dest_cfg: Optional config mapping over the allowed keys only
             (`mysql.logging_level`, `tabsdata.sql.write_engine`,
             `tabsdata.sql.chunk_size`).

@@ -328,22 +328,27 @@ def _qualify_for_write(connection: Connection, table: str) -> str:
 _CASE_INSENSITIVE_COLUMNS = frozenset({"mysql", "mssql"})
 
 
-def _add_new_columns(
+def _evolve_columns(
     connection: Connection,
     table: str,
     schema: pl.Schema,
     dtype: dict[str, Any],
     evolution: Literal["strict", "update"],
 ) -> None:
-    """Add to an existing `table` the columns the batch has and it lacks, as far
-    as `evolution` allows. A new column takes the type pandas would give it in a
-    table it creates, so both paths agree.
+    """Bring an existing `table` up to the batch as far as `evolution` allows:
+    add the columns the batch has and the table lacks, and widen a number
+    column the batch has outgrown. A column takes the type pandas would give it
+    in a table it creates, so both paths agree.
 
-    A column the batch lacks is left alone and written NULL by the insert. Type
-    changes are not compared: a value the column cannot hold fails the insert.
+    A column the batch lacks is left alone and written NULL by the insert. Other
+    type differences are left to the database: a value the column cannot hold
+    fails the insert.
     """
     from pandas.io.sql import SQLDatabase, SQLTable
-    from sqlalchemy import inspect, text
+    from sqlalchemy import Boolean, inspect, text
+
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._engine.widening import outgrows
 
     # noinspection PyProtectedMember
     from tabsdatak.conn.common.sql._schema.delta import (
@@ -360,26 +365,16 @@ def _add_new_columns(
     inspector = inspect(connection)
     if not inspector.has_table(name, schema=db_schema):
         return
-    insensitive = connection.dialect.name in _CASE_INSENSITIVE_COLUMNS
+    dialect = connection.dialect
+    insensitive = dialect.name in _CASE_INSENSITIVE_COLUMNS
 
     def fold(column: str) -> str:
         return column.lower() if insensitive else column
 
-    stored = {fold(c["name"]) for c in inspector.get_columns(name, schema=db_schema)}
-    new = [column for column in schema.names() if fold(column) not in stored]
-    if not new:
-        return
-    delta = governed(
-        SchemaDelta(
-            table_name=table,
-            is_create=False,
-            changes=[
-                SchemaChange(action=Action.ADD_COLUMN, column=column, safe=True)
-                for column in new
-            ],
-        ),
-        evolution,
-    )
+    stored = {
+        fold(column["name"]): column
+        for column in inspector.get_columns(name, schema=db_schema)
+    }
     frame = pl.DataFrame(schema=schema).to_pandas(use_pyarrow_extension_array=True)
     with SQLDatabase(connection, schema=db_schema) as database:
         columns = SQLTable(
@@ -390,20 +385,78 @@ def _add_new_columns(
             schema=db_schema,
             dtype=dtype or None,
         ).table.columns
-    preparer = connection.dialect.identifier_preparer
+    changes = []
+    for column in schema.names():
+        batch_type = columns[column].type
+        spelling = batch_type.compile(dialect=dialect)
+        existing = stored.get(fold(column))
+        if existing is None:
+            changes.append(
+                SchemaChange(
+                    action=Action.ADD_COLUMN,
+                    column=column,
+                    safe=True,
+                    detail={"type": spelling},
+                )
+            )
+        elif not isinstance(batch_type, Boolean):
+            current = existing["type"].compile(dialect=dialect)
+            if outgrows(current, spelling, dialect.name):
+                changes.append(
+                    SchemaChange(
+                        action=Action.ALTER_TYPE,
+                        column=existing["name"],
+                        safe=True,
+                        detail={
+                            "old_type": current,
+                            "new_type": spelling,
+                            "same_base": True,
+                            "nullable": existing.get("nullable", True),
+                        },
+                    )
+                )
+    if not changes:
+        return
+    delta = governed(
+        SchemaDelta(table_name=table, is_create=False, changes=changes), evolution
+    )
+    preparer = dialect.identifier_preparer
     target = ".".join(preparer.quote(part) for part in [*prefix, name])
-    add = _ADD_COLUMN.get(connection.dialect.name, "ADD COLUMN {column} {type}")
+    retyped = False
     for change in delta.changes:
         column = preparer.quote(change.column)
-        type_ = columns[change.column].type.compile(dialect=connection.dialect)
-        statement = f"ALTER TABLE {target} " + add.format(column=column, type=type_)
+        if change.action is Action.ADD_COLUMN:
+            clause = _ADD_COLUMN.get(dialect.name, "ADD COLUMN {column} {type}")
+            statement = clause.format(column=column, type=change.detail["type"])
+        else:
+            clause = _ALTER_TYPE.get(dialect.name, "ALTER COLUMN {column} TYPE {type}")
+            null = "NULL" if change.detail["nullable"] else "NOT NULL"
+            statement = clause.format(
+                column=column, type=change.detail["new_type"], null=null
+            )
+            retyped = True
+        statement = f"ALTER TABLE {target} {statement}"
         logger.info("sql-writer: evolving %s: %s", table, statement)
         connection.execute(text(statement))
+    if retyped and dialect.name == "ibm_db_sa":
+        # DB2 leaves a table whose column type changed in reorg-pending state,
+        # refusing inserts until it is reorganized.
+        connection.execute(
+            text("CALL SYSPROC.ADMIN_CMD(:command)"),
+            {"command": f"REORG TABLE {target}"},
+        )
 
 
 _ADD_COLUMN: dict[str, str] = {
     "mssql": "ADD {column} {type}",
     "oracle": "ADD ({column} {type})",
+}
+
+_ALTER_TYPE: dict[str, str] = {
+    "mysql": "MODIFY COLUMN {column} {type} {null}",
+    "mssql": "ALTER COLUMN {column} {type} {null}",
+    "oracle": "MODIFY ({column} {type})",
+    "ibm_db_sa": "ALTER COLUMN {column} SET DATA TYPE {type}",
 }
 
 
@@ -437,7 +490,7 @@ def _polars_write(
         _drop_table_if_exists(connection, table)
         if_table_exists = "append"
     else:
-        _add_new_columns(connection, table, schema, _dtype, schema_evolution)
+        _evolve_columns(connection, table, schema, _dtype, schema_evolution)
     wrote_any = False
     for df in frame.collect_batches(chunk_size=chunk_size):
         if _transforms:

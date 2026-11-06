@@ -20,6 +20,7 @@ from testi_tabsdatak.conn.common.sql.schema.policy import (
     run,
     table_for,
 )
+from testi_tabsdatak.conn.common.sql.schema.widening import WIDENING_CASES
 from testi_tabsdatak.conn.mssql.backend import dest_conn, store
 
 # noinspection PyProtectedMember
@@ -49,3 +50,15 @@ def test_schema_policy(
     domain_mssqlserver: MssqlserverDomain, tmp_path: Path, case, request
 ):
     run(case, _policy(domain_mssqlserver, work_dir(tmp_path)), table_for(request))
+
+
+@pytest.mark.parametrize("case", WIDENING_CASES)
+@mssqlserver_domain("mssqlserver")
+def test_schema_widening(
+    domain_mssqlserver: MssqlserverDomain, tmp_path: Path, case, request
+):
+    policy = _policy(domain_mssqlserver, work_dir(tmp_path))
+    try:
+        case(policy, table_for(request), store(domain_mssqlserver)._engine)
+    finally:
+        policy.drop(table_for(request))
