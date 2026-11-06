@@ -23,8 +23,10 @@ from tabsdatak.conn.bigquery import _iceberg
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery._evolution import (
     WATERMARK_TYPE,
+    cast_in_place,
     check_watermark_column as _check_watermark_column,
     ensure_watermark_column as _ensure_watermark_column,
+    narrowed_target,
     string_literal,
 )
 from tabsdatak.conn.bigquery.error import BigQueryErrorCode
@@ -45,7 +47,7 @@ from tabsdatak.conn.common.sql._merge.dialect import (
 from tabsdatak.conn.common.sql._schema.evolution import evolve_with_iceberg
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._schema.policy import SchemaEvolution
+from tabsdatak.conn.common.sql._schema.policy import STRICT, SchemaEvolution
 
 if TYPE_CHECKING:
     import polars as pl
@@ -261,12 +263,28 @@ class BigQueryMergeDialect(MergeDialect):
         vocabulary to reconcile first. That is what makes ``strict`` safe: the
         retypes the diff reports are real, and one BigQuery cannot make refuses
         the whole write rather than staging rows into a column that cannot hold
-        them.
+        them. Under ``strict``, a decimal the target column is narrower than
+        but holds every value of is cast to the column's type in the staging
+        table first, as a ``MERGE`` cannot assign it otherwise
+        (:func:`narrowed_target`).
         """
+        columns = staged.columns
+        if evolution == STRICT:
+            casts = narrowed_target(
+                self._bq_client, self._store, self._key, self._target_fqn
+            )
+            if casts:
+                cast_in_place(
+                    self._bq_client,
+                    staged.relation,
+                    [name for name, _ in staged.columns],
+                    casts,
+                )
+                columns = [(name, casts.get(name, t)) for name, t in columns]
         return evolve_with_iceberg(
             self,
             target,
-            staged.columns,
+            columns,
             marker=marker,
             renderer=_iceberg.BigQueryRenderer(),
             widening_map=_iceberg.BIGQUERY_TYPE_WIDENING_MAP,

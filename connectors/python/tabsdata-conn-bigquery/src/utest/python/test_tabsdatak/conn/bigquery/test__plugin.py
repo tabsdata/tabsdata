@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -258,6 +259,52 @@ def test_dest_plugin_strict_refuses_a_new_column_before_the_load(
         _write(work_dir, engine, schema_evolution="strict")
     assert _alters(bq_client) == []
     assert bq_client.load_table_from_uri.call_count == 0
+
+
+def _write_amounts(work_dir, amount: str, if_table_exists: str = "append"):
+    dest = BigQueryDest(
+        tables=["`my-project.analytics.users`"],
+        if_table_exists=if_table_exists,
+        schema_evolution="strict",
+    )
+    path = work_dir / "amounts.parquet"
+    pl.DataFrame(
+        {"amount": [Decimal(amount)]}, schema={"amount": pl.Decimal(38, 2)}
+    ).write_parquet(path)
+    plugin._BigQueryDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), dest, [pl.scan_parquet(path)]
+    )
+
+
+def _inserts(bq_client) -> list[str]:
+    return [s for s in _alters(bq_client) if s.startswith("INSERT INTO")]
+
+
+def test_dest_plugin_strict_appends_a_wider_decimal_its_column_holds(
+    monkeypatch, work_dir
+):
+    """A NUMERIC column cannot be loaded from a BIGNUMERIC batch, so the one
+    append whose values the footer shows fit is inserted cast instead."""
+    bq_client = _evolving_clients(
+        monkeypatch, [("amount", "NUMERIC")], [("amount", "BIGNUMERIC")]
+    )
+    _write_amounts(work_dir, "99999999.99")
+    assert bq_client.load_table_from_uri.call_count == 0
+    [insert] = _inserts(bq_client)
+    assert "CAST(`amount` AS NUMERIC) AS `amount`" in insert
+    assert insert.endswith("FROM _td_batch")
+
+
+def test_dest_plugin_strict_refuses_a_wider_decimal_its_column_cannot_hold(
+    monkeypatch, work_dir
+):
+    bq_client = _evolving_clients(
+        monkeypatch, [("amount", "NUMERIC")], [("amount", "BIGNUMERIC")]
+    )
+    with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
+        _write_amounts(work_dir, "1" + "0" * 29)
+    assert bq_client.load_table_from_uri.call_count == 0
+    assert _inserts(bq_client) == []
 
 
 def test_dest_plugin_strict_replace_takes_the_batch_schema(monkeypatch, work_dir):

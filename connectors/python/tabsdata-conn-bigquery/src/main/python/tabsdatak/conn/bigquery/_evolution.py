@@ -20,6 +20,8 @@ only when the write asks for it with
 from __future__ import annotations
 
 import logging
+import re
+from decimal import Decimal
 from typing import Any
 
 from tabsdatak.conn.bigquery import _iceberg
@@ -31,6 +33,138 @@ from tabsdatak.conn.common.sql._schema.evolution import evolve_with_iceberg
 from tabsdatak.conn.common.sql._schema.policy import SchemaEvolution
 
 logger = logging.getLogger(__name__)
+
+
+_DECIMAL = re.compile(
+    r"^\s*(BIG)?(?:NUMERIC|DECIMAL)\s*(?:\(\s*(\d+)\s*(?:,\s*(\d+)\s*)?\))?\s*$",
+    re.IGNORECASE,
+)
+
+
+def _decimal_digits(type_: str) -> tuple[int, int] | None:
+    """The integer digits and the scale a BigQuery decimal column holds."""
+    match = _DECIMAL.match(type_)
+    if not match:
+        return None
+    if match[2] is None:
+        return (76 - 38, 38) if match[1] else (38 - 9, 9)
+    precision, scale = int(match[2]), int(match[3] or 0)
+    return precision - scale, scale
+
+
+def narrowed(stored: list[tuple[str, str]], footer: Any) -> dict[str, str]:
+    """The stored type of each decimal column narrower than the batch's type
+    that still holds every value of the batch, keyed by column.
+
+    polars decimals reach BigQuery as ``BIGNUMERIC`` past 29 integer digits,
+    and a ``NUMERIC`` column cannot be loaded from one, nor assigned one,
+    whatever its values. The batch's types and values are read off the staged
+    file's Parquet footer, with no query: a column is taken when it keeps at
+    most the column's fractional digits (more would be rounded away) and
+    every value fits the column's integer digits.
+    """
+    import pyarrow as pa
+
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._schema.footer import column_range
+
+    held = {fold_identifier(name): type_ for name, type_ in stored}
+    taken = {}
+    for field in footer.schema.to_arrow_schema():
+        if not pa.types.is_decimal(field.type):
+            continue
+        type_ = held.get(fold_identifier(field.name))
+        digits = _decimal_digits(type_) if type_ else None
+        if digits is None:
+            continue
+        integer, scale = digits
+        batch = field.type
+        if batch.scale > scale or batch.precision - batch.scale <= integer:
+            continue
+        values = column_range([footer], field.name)
+        limit = Decimal(10) ** integer
+        if values is not None and (
+            values[0] is None or (-limit < values[0] and values[1] < limit)
+        ):
+            taken[field.name] = type_
+    return taken
+
+
+def _projection(columns: list[str], casts: dict[str, str]) -> str:
+    quote_column = _iceberg.quote_column
+    return ", ".join(
+        f"CAST({quote_column(name)} AS {casts[name]}) AS {quote_column(name)}"
+        if name in casts
+        else quote_column(name)
+        for name in columns
+    )
+
+
+def insert_cast(
+    bq_client: Any,
+    uri: str,
+    target_fqn: str,
+    columns: list[str],
+    casts: dict[str, str],
+) -> None:
+    """Append the batch at ``uri`` to ``target_fqn`` with ``casts`` applied.
+
+    The load job a bulk append otherwise runs cannot narrow a column, so this
+    one append reads the staged file through a query-scoped external table and
+    inserts it cast. That query is billed by the bytes it reads, where a load
+    job is not, so it runs only when a column needs it.
+    """
+    from google.cloud import bigquery
+
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.bigquery._impl import DECIMAL_TARGET_TYPES, quote_table
+
+    config = bigquery.ExternalConfig(bigquery.SourceFormat.PARQUET)
+    config.source_uris = [uri]
+    config.decimal_target_types = DECIMAL_TARGET_TYPES
+    names = ", ".join(_iceberg.quote_column(name) for name in columns)
+    logger.info("bigquery: appending onto %r with %s cast", target_fqn, casts)
+    bq_client.query_and_wait(
+        f"INSERT INTO {quote_table(target_fqn)} ({names}) "
+        f"SELECT {_projection(columns, casts)} FROM _td_batch",
+        job_config=bigquery.QueryJobConfig(table_definitions={"_td_batch": config}),
+    )
+
+
+def narrowed_target(
+    bq_client: Any, store: Any, key: str, target_fqn: str
+) -> dict[str, str]:
+    """:func:`narrowed` against ``target_fqn`` for the batch staged at ``key``,
+    reading only the staged file's footer; nothing when the target does not
+    exist yet, as the write then creates it from the batch."""
+    import pyarrow.parquet as pq
+    from google.cloud.exceptions import NotFound
+
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.bigquery._impl import table_column_types
+
+    try:
+        stored = table_column_types(bq_client, target_fqn)
+    except NotFound:
+        return {}
+    source = store.ranged(key)
+    try:
+        footer = pq.read_metadata(source)
+    finally:
+        source.close()
+    return narrowed(stored, footer)
+
+
+def cast_in_place(
+    bq_client: Any, relation: str, columns: list[str], casts: dict[str, str]
+) -> None:
+    """Rewrite the staging ``relation`` with ``casts`` applied, so a ``MERGE``
+    can assign it: BigQuery assigns no ``BIGNUMERIC`` to a ``NUMERIC``."""
+    logger.info("bigquery: casting %s in %s", casts, relation)
+    bq_client.query_and_wait(
+        f"CREATE OR REPLACE TABLE {relation} AS "
+        f"SELECT {_projection(columns, casts)} FROM {relation}"
+    )
 
 
 def fold_identifier(name: str) -> str:

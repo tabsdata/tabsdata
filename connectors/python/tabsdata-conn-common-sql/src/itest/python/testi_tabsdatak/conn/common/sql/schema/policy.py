@@ -7,6 +7,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from decimal import Decimal
 
 import polars as pl
 import pytest
@@ -24,6 +25,12 @@ MERGE = "merge"
 REPLACE = "replace"
 
 BEYOND_INT32 = 2**40
+
+AMOUNT = "amount"
+NARROW_PRECISION = 10
+WIDE_PRECISION = 38
+NARROW_AMOUNT = "10.25"
+FITTING_AMOUNT = "99999999.99"
 
 REFUSAL = "SQL_COMMON_10"
 
@@ -84,6 +91,13 @@ def _fitting() -> pl.LazyFrame:
     )
 
 
+def _amounts(amount: str, precision: int) -> pl.LazyFrame:
+    return pl.LazyFrame(
+        {ID: [1 if precision == NARROW_PRECISION else 2], AMOUNT: [Decimal(amount)]},
+        schema={ID: pl.Int64, AMOUNT: pl.Decimal(precision, 2)},
+    )
+
+
 def _seed(policy: Policy, table: str, frame: pl.LazyFrame) -> None:
     policy.drop(table)
     policy.write(table, frame, REPLACE, STRICT)
@@ -131,6 +145,19 @@ def strict_takes_a_wider_type_whose_values_fit(policy: Policy, table: str) -> No
     _expect(policy.rows(table, [ID, SCORE]), [(1, 10), (2, 20)])
 
 
+def _amount_rows(policy: Policy, table: str) -> list[tuple]:
+    return [(i, Decimal(str(a))) for i, a in policy.rows(table, [ID, AMOUNT])]
+
+
+def strict_takes_a_wider_decimal_whose_values_fit(policy: Policy, table: str) -> None:
+    _seed(policy, table, _amounts(NARROW_AMOUNT, NARROW_PRECISION))
+    policy.write(table, _amounts(FITTING_AMOUNT, WIDE_PRECISION), APPEND, STRICT)
+    _expect(
+        _amount_rows(policy, table),
+        [(1, Decimal(NARROW_AMOUNT)), (2, Decimal(FITTING_AMOUNT))],
+    )
+
+
 def update_widens_a_type(policy: Policy, table: str) -> None:
     _seed(policy, table, _narrow())
     policy.write(table, _wide(), APPEND, UPDATE)
@@ -173,6 +200,22 @@ def merge_strict_takes_a_wider_type_whose_values_fit(
     _expect(policy.rows(table, [ID, SCORE]), [(1, 10), (2, 20)])
 
 
+def merge_strict_takes_a_wider_decimal_whose_values_fit(
+    policy: Policy, table: str
+) -> None:
+    policy.drop(table)
+    policy.write(
+        table, _cdc(_amounts(NARROW_AMOUNT, NARROW_PRECISION), "i"), MERGE, STRICT
+    )
+    policy.write(
+        table, _cdc(_amounts(FITTING_AMOUNT, WIDE_PRECISION), "i"), MERGE, STRICT
+    )
+    _expect(
+        _amount_rows(policy, table),
+        [(1, Decimal(NARROW_AMOUNT)), (2, Decimal(FITTING_AMOUNT))],
+    )
+
+
 def merge_update_adds_a_new_column(policy: Policy, table: str) -> None:
     policy.drop(table)
     policy.write(table, _cdc(_base(), "i"), MERGE, UPDATE)
@@ -195,6 +238,9 @@ APPEND_CASES = [
     ),
     pytest.param(strict_refuses_a_wider_type, id="strict-wider-type"),
     pytest.param(strict_takes_a_wider_type_whose_values_fit, id="strict-fitting-type"),
+    pytest.param(
+        strict_takes_a_wider_decimal_whose_values_fit, id="strict-fitting-decimal"
+    ),
     pytest.param(update_widens_a_type, id="update-wider-type"),
 ]
 
@@ -219,6 +265,10 @@ MERGE_CASES = [
     pytest.param(merge_strict_refuses_a_new_column, id="merge-strict-new-column"),
     pytest.param(
         merge_strict_takes_a_wider_type_whose_values_fit, id="merge-strict-fitting-type"
+    ),
+    pytest.param(
+        merge_strict_takes_a_wider_decimal_whose_values_fit,
+        id="merge-strict-fitting-decimal",
     ),
     pytest.param(merge_update_adds_a_new_column, id="merge-update-new-column"),
 ]

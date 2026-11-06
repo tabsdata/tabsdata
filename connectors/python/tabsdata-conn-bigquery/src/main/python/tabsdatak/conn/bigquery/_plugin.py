@@ -97,6 +97,8 @@ class _BigQueryDestPlugin(
             batch_columns,
             check_watermark_column,
             ensure_watermark_column,
+            insert_cast,
+            narrowed_target,
         )
         from tabsdatak.conn.bigquery._impl import (
             BigQueryWriteCfg,
@@ -217,10 +219,11 @@ class _BigQueryDestPlugin(
             # replace's load job takes the batch's schema, so there is nothing
             # for strict to refuse. "update" only under iceberg: the native
             # engine's load job evolves itself.
-            diffing = (
+            strict_append = (
                 write_cfg.schema_evolution == "strict"
                 and write_cfg.if_table_exists == "append"
-            ) or (
+            )
+            diffing = strict_append or (
                 write_cfg.schema_evolution == "update"
                 and cfg.schema_evolution_engine == "iceberg"
             )
@@ -271,8 +274,8 @@ class _BigQueryDestPlugin(
 
             # Phase 2: kick off one ``load_table_from_uri`` per table
             # and wait for each load job to complete.
-            for i, (table_fqn, uri) in enumerate(
-                zip(write_cfg.target_tables, staging_uris), 1
+            for i, (table_fqn, key, uri) in enumerate(
+                zip(write_cfg.target_tables, staging_keys, staging_uris), 1
             ):
                 if uri in skipped:
                     continue
@@ -293,14 +296,19 @@ class _BigQueryDestPlugin(
                     # place that adds it rather than two engines each having a
                     # claim.
                     ensure_watermark_column(bq_client, table_fqn, watermark)
+                casts: dict[str, str] = {}
+                columns: list[tuple[str, str]] = []
                 if diffing:
                     # Before the load, so the rows land in a target already
                     # shaped to hold them -- and before a replace truncates the
                     # table it is about to refill.
                     try:
+                        columns = batch_columns(bq_client, uri, table_fqn)
+                        if strict_append:
+                            casts = narrowed_target(bq_client, store, key, table_fqn)
+                            columns = [(n, casts.get(n, t)) for n, t in columns]
                         BigQuerySchemaEvolver(bq_client, table_fqn).evolve(
-                            batch_columns(bq_client, uri, table_fqn),
-                            write_cfg.schema_evolution,
+                            columns, write_cfg.schema_evolution
                         )
                     except ConnException:
                         raise
@@ -308,6 +316,22 @@ class _BigQueryDestPlugin(
                         raise BigQueryErrorCode.BIGQUERY_23.exception(
                             cause=e, table=table_fqn
                         )
+                if casts:
+                    try:
+                        insert_cast(
+                            bq_client,
+                            uri,
+                            table_fqn,
+                            [name for name, _ in columns],
+                            casts,
+                        )
+                    except Exception as e:
+                        raise BigQueryErrorCode.BIGQUERY_7.exception(
+                            cause=e,
+                            table=table_fqn,
+                        )
+                    logger.debug("bigquery: finished table %r", table_fqn)
+                    continue
                 job_config = build_load_job_config(
                     write_cfg.if_table_exists,
                     write_cfg.schema_evolution,

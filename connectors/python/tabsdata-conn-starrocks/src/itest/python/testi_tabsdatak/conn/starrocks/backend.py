@@ -94,7 +94,12 @@ def explorer_conn(domain: StarrocksDomain) -> StarRocksDestConn:
 def column_spec(schema: pl.Schema) -> dict[str, str]:
     """`schema` as the ``{column: starrocks_type}`` spec of a table holding a frame
     of that shape."""
-    return {name: _COLUMN_TYPES[dtype.base_type()] for name, dtype in schema.items()}
+    return {
+        name: f"DECIMAL({dtype.precision},{dtype.scale})"
+        if isinstance(dtype, pl.Decimal)
+        else _COLUMN_TYPES[dtype.base_type()]
+        for name, dtype in schema.items()
+    }
 
 
 def store(domain: StarrocksDomain) -> StarRocksStore:
