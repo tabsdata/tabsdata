@@ -36,6 +36,7 @@ from tabsdatak.conn.common.sql._merge._statement import render_merge, render_rep
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge.dialect import Staged
 from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
+from tabsdatak.conn.common.sql.error import SqlCommonRuntimeException
 from tabsdatak.conn.databricks import MergeCfg
 
 # noinspection PyProtectedMember
@@ -186,6 +187,9 @@ def _only_starting_with(statements: list[str], prefix: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+_WRITTEN = ["order_id", "status"]
+
+
 def _merge_sql(
     on: list[str] | None = None,
     op_column: str = "op",
@@ -197,7 +201,7 @@ def _merge_sql(
         _TARGET,
         _staged([], relation=_SCRATCH),
         _cfg(on=on or ["order_id"], op_column=op_column),
-        [],
+        _WRITTEN,
     )
 
 
@@ -236,12 +240,16 @@ class TestMergeStatement:
         assert "WHEN NOT MATCHED BY TARGET" in _merge_sql()
         assert "BY SOURCE" not in _merge_sql()
 
-    def test_writes_the_bare_wildcard_on_strict(self):
-        """With evolution off, ``*`` covers the target's own columns and the
-        marker is not among them, so there is nothing to exclude."""
+    def test_spells_the_write_lists_out_on_strict(self):
+        """``*`` would name every target column, and a batch lacking one would
+        not resolve; the columns both sides share are written instead."""
         sql = _merge_sql(schema_evolution="strict")
-        assert "THEN UPDATE SET *" in sql
-        assert "THEN INSERT *" in sql
+        assert "THEN UPDATE SET target.`status` = source.`status`" in sql
+        assert (
+            "THEN INSERT (`order_id`, `status`)"
+            " VALUES (source.`order_id`, source.`status`)" in sql
+        )
+        assert "*" not in sql
         assert "EXCEPT" not in sql
 
     def test_excludes_the_marker_from_the_wildcard_on_update(self):
@@ -309,14 +317,17 @@ class TestMergeStatement:
 
 def _replace_sql(schema_evolution: str = "strict") -> str:
     dialect = _dialect(_RecordingCursor(), schema_evolution=schema_evolution)
-    return render_replace(dialect, _TARGET, _staged([], relation=_SCRATCH), _cfg(), [])
+    return render_replace(
+        dialect, _TARGET, _staged([], relation=_SCRATCH), _cfg(), _WRITTEN
+    )
 
 
 class TestReplaceStatement:
     def test_emits_the_whole_replace_on_strict(self):
         assert _replace_sql() == (
             f"MERGE INTO {_TARGET} AS target USING {_SCRATCH} AS source ON FALSE"
-            " WHEN NOT MATCHED BY TARGET THEN INSERT *"
+            " WHEN NOT MATCHED BY TARGET THEN INSERT (`order_id`, `status`)"
+            " VALUES (source.`order_id`, source.`status`)"
             " WHEN NOT MATCHED BY SOURCE THEN DELETE"
         )
 
@@ -508,6 +519,37 @@ class TestEvolve:
         )
         assert evolved == []
         assert cursor.statements == []
+
+    def test_strict_refuses_a_new_column_before_the_merge(self):
+        cursor = _RecordingCursor([("order_id", "bigint")])
+        staged = _staged([("order_id", "bigint"), ("note", "string"), ("op", "string")])
+        with pytest.raises(SqlCommonRuntimeException) as raised:
+            _dialect(cursor, schema_evolution="strict").evolve(
+                _TARGET, staged, "op", "strict"
+            )
+        assert "new column 'note'" in str(raised.value)
+        assert not any(s.startswith("ALTER") for s in cursor.statements)
+
+    def test_strict_refuses_a_wider_type(self):
+        cursor = _RecordingCursor([("order_id", "bigint"), ("n", "int")])
+        staged = _staged([("order_id", "bigint"), ("n", "bigint"), ("op", "string")])
+        with pytest.raises(SqlCommonRuntimeException):
+            _dialect(cursor, schema_evolution="strict").evolve(
+                _TARGET, staged, "op", "strict"
+            )
+
+    def test_strict_takes_a_lacking_or_narrower_column(self):
+        cursor = _RecordingCursor([
+            ("order_id", "bigint"),
+            ("n", "bigint"),
+            ("s", "string"),
+        ])
+        staged = _staged([("order_id", "bigint"), ("n", "int"), ("op", "string")])
+        evolved = _dialect(cursor, schema_evolution="strict").evolve(
+            _TARGET, staged, "op", "strict"
+        )
+        assert evolved == []
+        assert not any(s.startswith("ALTER") for s in cursor.statements)
 
 
 # ---------------------------------------------------------------------------

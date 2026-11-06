@@ -916,7 +916,7 @@ def test_append_watermark_is_added_under_update_too(monkeypatch, tmp_path):
     _bulk_clients(monkeypatch, cursor)
     _staged_batches(monkeypatch)
     _impl.write_all_tables(_wm_cfg(schema_evolution="update"), [_wm_parquet(tmp_path)])
-    assert len(_alters(cursor)) == 1
+    assert len([s for s in _alters(cursor) if "ADD COLUMNS" in s]) == 1
 
 
 def test_append_skips_entirely_when_the_trx_is_already_stamped(monkeypatch, tmp_path):

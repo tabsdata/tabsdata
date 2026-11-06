@@ -23,6 +23,7 @@ from testi_tabsdatak.conn.databricks.backend import dest_conn, store
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.databricks import DatabricksDest, MergeCfg, _plugin as plugin
+from tabsdatak.conn.databricks.error import DatabricksRuntimeException
 
 pytestmark = pytest.mark.databricks
 
@@ -482,13 +483,13 @@ def test_dest_plugin_write_out_merge_takes_a_new_column_on_update(
 
 
 @databricks_domain("databricks")
-def test_dest_plugin_write_out_merge_keeps_the_target_schema_on_strict(
+def test_dest_plugin_write_out_merge_refuses_a_new_column_on_strict(
     domain_databricks: DatabricksDomain,
     tmp_path: Path,
 ):
-    # The mirror of the evolving case: with no WITH SCHEMA EVOLUTION the wildcard
-    # covers the target's own columns, so a batch carrying a new one merges its
-    # shared columns and leaves the target's schema as the first write made it.
+    # The mirror of the evolving case: a batch carrying a new column is refused
+    # before the MERGE rather than merged without it, and the target is left as
+    # the first write made it.
     db = store(domain_databricks)
     table = "td_dest_merge_strict_column"
     work = work_dir(tmp_path)
@@ -506,12 +507,12 @@ def test_dest_plugin_write_out_merge_keeps_the_target_schema_on_strict(
         _merge_out(conn, work, table, seed, merge_cfg, "strict")
         before = set(db.read_table(table).columns)
 
-        _merge_out(conn, work, table, widened, merge_cfg, "strict")
+        with pytest.raises(DatabricksRuntimeException) as raised:
+            _merge_out(conn, work, table, widened, merge_cfg, "strict")
+        assert "new column 'carrier'" in str(raised.value)
         got = db.read_table(table)
-        assert "carrier" not in got.columns
         assert set(got.columns) == before
-        # The columns both sides share still merge.
-        assert_frames_match(got, pl.DataFrame({"order_id": [1], "status": ["shipped"]}))
+        assert_frames_match(got, pl.DataFrame({"order_id": [1], "status": ["new"]}))
     finally:
         db.drop_table(table)
 
@@ -521,9 +522,8 @@ def test_dest_plugin_write_out_merge_stops_evolving_when_switched_back_to_strict
     domain_databricks: DatabricksDomain,
     tmp_path: Path,
 ):
-    # The evolution mark is set on every merge, not only when evolving, so a
-    # target an earlier "update" run marked stops taking new columns as soon as a
-    # run asks for "strict".
+    # A target an earlier "update" run evolved refuses new columns as soon as a
+    # run asks for "strict", and keeps the column the earlier run added.
     db = store(domain_databricks)
     table = "td_dest_merge_evolution_off"
     work = work_dir(tmp_path)
@@ -552,10 +552,14 @@ def test_dest_plugin_write_out_merge_stops_evolving_when_switched_back_to_strict
         _merge_out(conn, work, table, first, merge_cfg, "update")
         assert "carrier" in db.read_table(table).columns
 
-        _merge_out(conn, work, table, second, merge_cfg, "strict")
+        with pytest.raises(DatabricksRuntimeException):
+            _merge_out(conn, work, table, second, merge_cfg, "strict")
         got = db.read_table(table)
         assert "eta" not in got.columns
-        assert_frames_match(got, pl.DataFrame({"order_id": [1], "status": ["shipped"]}))
+        assert_frames_match(
+            got,
+            pl.DataFrame({"order_id": [1], "status": ["packed"], "carrier": ["ups"]}),
+        )
     finally:
         db.drop_table(table)
 
@@ -700,15 +704,13 @@ def test_dest_plugin_write_out_merge_does_not_narrow_a_widened_column_back(
 
 
 @databricks_domain("databricks")
-def test_dest_plugin_write_out_merge_keeps_the_narrow_type_on_strict(
+def test_dest_plugin_write_out_merge_refuses_a_wider_type_on_strict(
     domain_databricks: DatabricksDomain,
     tmp_path: Path,
 ):
-    # The mirror of the widening case: "strict" sets
-    # ``delta.enableTypeWidening=false``, so a wider batch is written into the
-    # column as it stands instead of moving it. The value is small on purpose --
-    # it fits an int, so what is under test is the column's type and not what
-    # Databricks does with a value that overflows it.
+    # The mirror of the widening case: under "strict" a batch whose column is
+    # wider than the target's is refused before the MERGE, and the column keeps
+    # its type -- even when the value would have fit.
     db = store(domain_databricks)
     table = "td_dest_merge_strict_type"
     work = work_dir(tmp_path)
@@ -734,10 +736,12 @@ def test_dest_plugin_write_out_merge_keeps_the_narrow_type_on_strict(
         _merge_out(conn, work, table, narrow, merge_cfg, "strict")
         assert _types(db, table)["amount"] == "int"
 
-        _merge_out(conn, work, table, wide, merge_cfg, "strict")
+        with pytest.raises(DatabricksRuntimeException) as raised:
+            _merge_out(conn, work, table, wide, merge_cfg, "strict")
+        assert "column 'amount' from int to bigint" in str(raised.value)
         assert _types(db, table)["amount"] == "int"
         assert_frames_match(
-            db.read_table(table), pl.DataFrame({"order_id": [1], "amount": [42]})
+            db.read_table(table), pl.DataFrame({"order_id": [1], "amount": [10]})
         )
     finally:
         db.drop_table(table)

@@ -866,6 +866,25 @@ def ensure_watermark_column(cursor, fq_table: str, sql_fq: str, column: str) -> 
     return True
 
 
+TYPE_WIDENING = "delta.enableTypeWidening"
+
+
+def ensure_type_widening(cursor, sql_fq: str, enabled: bool) -> None:
+    """Set ``delta.enableTypeWidening`` on ``sql_fq`` to ``enabled``.
+
+    Read before writing: a property write is a Delta commit, several times the
+    cost of the read, and the value rarely changes between writes.
+    """
+    value = str(enabled).lower()
+    cursor.execute(f"SHOW TBLPROPERTIES {sql_fq} ('{TYPE_WIDENING}')")
+    current = {row[0]: row[1] for row in cursor.fetchall() or []}
+    if current.get(TYPE_WIDENING) != value:
+        logger.debug("Setting %s=%s for %s", TYPE_WIDENING, value, sql_fq)
+        cursor.execute(
+            f"ALTER TABLE {sql_fq} SET TBLPROPERTIES ('{TYPE_WIDENING}' = '{value}')"
+        )
+
+
 def copy_into_table(
     sql_conn,
     cfg: DatabricksWriteCfg,
@@ -911,6 +930,10 @@ def copy_into_table(
             f"COPY_OPTIONS ({merge}{cfg.support_append_copy_options})"
         )
         _execute_volume_statement(cursor, create_stmt, cfg.support_append_create_table)
+        if cfg.schema_evolution == "update":
+            # mergeSchema adds columns; widening a column's type needs the
+            # table feature as well.
+            ensure_type_widening(cursor, sql_fq, True)
         if cfg.watermark_column is not None:
             # After the CREATE, so a target this write is creating already has
             # the column from the staged file and the probe finds nothing to do.

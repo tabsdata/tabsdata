@@ -30,15 +30,17 @@ from tabsdatak.conn.common.sql._merge.dialect import (
 )
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._schema.policy import SchemaEvolution
+from tabsdatak.conn.common.sql._schema.evolution import evolve_with_iceberg
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.policy import UPDATE, SchemaEvolution
+from tabsdatak.conn.databricks import _types
 from tabsdatak.conn.databricks.error import DatabricksErrorCode
 
 if TYPE_CHECKING:
     import polars as pl
 
 logger = logging.getLogger(__name__)
-
-_TYPE_WIDENING = "delta.enableTypeWidening"
 
 _ERRORS = MergeErrors(
     marker_absent=DatabricksErrorCode.DATABRICKS_19.exception,
@@ -91,14 +93,11 @@ class DatabricksMergeDialect(MergeDialect):
         """The statement's shape, which here depends on the write's own setting.
 
         ``WITH SCHEMA EVOLUTION`` is what lets a batch carrying a new column
-        land it on the target; under ``"strict"`` it is left off and Databricks
-        rejects the write instead.
-
-        The marker is excluded from the wildcard only while the schema is
-        evolving, because that is the only case where it could reach the target:
+        land it on the target, and it writes through ``* EXCEPT (marker)``:
         evolution widens ``*`` to the columns the source has and the target does
-        not, which is exactly what the marker is. With evolution off, ``*``
-        covers the target's own columns, and the marker is not among them.
+        not, which is exactly what the marker is. Under ``"strict"`` the
+        modifier is left off and the write lists are spelled out: ``*`` would
+        name every target column, and a batch lacking one would not resolve.
 
         A batch that loads or truncates the table replaces the target's rows in
         one ``MERGE ... ON FALSE``, which evolves the target the same way.
@@ -108,7 +107,7 @@ class DatabricksMergeDialect(MergeDialect):
             source_alias="source",
             evolution_modifier=" WITH SCHEMA EVOLUTION" if self._evolving else "",
             not_matched="WHEN NOT MATCHED BY TARGET",
-            wildcard_writes="* EXCEPT ({marker})" if self._evolving else "*",
+            wildcard_writes="* EXCEPT ({marker})" if self._evolving else None,
             replace="merge",
         )
 
@@ -195,7 +194,11 @@ class DatabricksMergeDialect(MergeDialect):
         columns.
         """
         # noinspection PyProtectedMember
-        from tabsdatak.conn.databricks._impl import _volume_schema_projection
+        from tabsdatak.conn.databricks._impl import (
+            TYPE_WIDENING,
+            _volume_schema_projection,
+            ensure_type_widening,
+        )
 
         excluded = [
             name for name, _ in staged.columns if self.fold(name) == self.fold(marker)
@@ -204,20 +207,11 @@ class DatabricksMergeDialect(MergeDialect):
         logger.debug("Creating target table %s for merge", target)
         self._cursor.execute(
             f"CREATE TABLE IF NOT EXISTS {target} USING DELTA "
-            f"TBLPROPERTIES ('{_TYPE_WIDENING}' = '{widening}') AS SELECT "
+            f"TBLPROPERTIES ('{TYPE_WIDENING}' = '{widening}') AS SELECT "
             f"{_volume_schema_projection(excluded)} "
             f"FROM {staged.relation} LIMIT 0"
         )
-        # Read before writing: a property write is a Delta commit, several times
-        # the cost of the read, and the value rarely changes between merges.
-        self._cursor.execute(f"SHOW TBLPROPERTIES {target} ('{_TYPE_WIDENING}')")
-        current = {row[0]: row[1] for row in self._cursor.fetchall() or []}
-        if current.get(_TYPE_WIDENING) != widening:
-            logger.debug("Setting %s=%s for %s", _TYPE_WIDENING, widening, target)
-            self._cursor.execute(
-                f"ALTER TABLE {target} "
-                f"SET TBLPROPERTIES ('{_TYPE_WIDENING}' = '{widening}')"
-            )
+        ensure_type_widening(self._cursor, target, self._evolving)
 
     def target_columns(self, target: str) -> list[tuple[str, str]]:
         """``(name, type)`` per column ``target`` currently has.
@@ -236,17 +230,34 @@ class DatabricksMergeDialect(MergeDialect):
     def evolve(
         self, target: str, staged: Staged, marker: str, evolution: SchemaEvolution
     ) -> list[str]:
-        """Nothing to do: Databricks evolves the target from inside the
+        """Alter nothing: Databricks evolves the target from inside the
         ``MERGE``.
 
-        ``WITH SCHEMA EVOLUTION`` adds the columns the batch has and the target
-        does not, and ``delta.enableTypeWidening`` -- set by
+        Under ``"update"``, ``WITH SCHEMA EVOLUTION`` adds the columns the batch
+        has and the target does not, and ``delta.enableTypeWidening`` -- set by
         :meth:`ensure_target` -- widens a column whose type the batch has
         outgrown. Both happen as the statement runs, so there is nothing to
-        ALTER beforehand and nothing to report back: the driver's caller learns
-        what changed by reading the target, not from here.
+        report back: the driver's caller learns what changed by reading the
+        target, not from here.
+
+        Under ``"strict"`` the statement writes the columns both sides share, so
+        a batch the target cannot take as it is -- a new column, a wider type --
+        is refused here, before the statement runs, rather than merged without
+        it.
         """
-        return []
+        if evolution == UPDATE:
+            return []
+        return evolve_with_iceberg(
+            self,
+            target,
+            staged.columns,
+            marker=marker,
+            renderer=_types.CheckOnlyRenderer(),
+            widening_map=_types.TYPE_WIDENING_MAP,
+            can_safely_widen=_types.can_widen,
+            same_base=_types.same_base,
+            evolution=evolution,
+        )
 
     def check_watermark_column(self, target: str, watermark_cfg: WatermarkCfg) -> bool:
         """Whether ``target`` already holds a row stamped with this
