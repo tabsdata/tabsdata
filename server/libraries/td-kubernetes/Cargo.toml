@@ -17,10 +17,10 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
 
-[lib]
+[lints]
+workspace = true
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(td_k8s_development)'] }
+[lib]
 
 [features]
 api-docs = []

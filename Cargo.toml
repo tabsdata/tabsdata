@@ -10,6 +10,9 @@ version = "2.3.0"
 license = "Apache 2.0"
 build = "build.rs"
 
+[lints]
+workspace = true
+
 [workspace.package]
 authors = [
     "Aleix Lascorz Guiu    (tabsleix)      <aleix@tabsdata.com>",
@@ -145,6 +148,9 @@ strip = "debuginfo"
 
 [package.metadata.cargo-machete]
 ignored = ["td-apiserver", "toml", "te-tableframe", "te-system"]
+
+[workspace.lints.clippy]
+large_futures = "deny"
 
 # Internal dependencies
 
