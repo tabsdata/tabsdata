@@ -34,6 +34,11 @@ RUNNING = transaction_status_to_mapping(TransactionStatus.RUNNING.value)
 STALLED = transaction_status_to_mapping(TransactionStatus.STALLED.value)
 
 
+def _name(run) -> str:
+    # The server hands a Function; the fleet names functions by their name.
+    return getattr(run.function, "name", run.function)
+
+
 def held_transactions(
     transactions: Iterable,
     runs: Mapping[str, list],
@@ -45,14 +50,14 @@ def held_transactions(
     transactions = list(transactions)
     stalled = {tx.id for tx in transactions if tx.status == STALLED}
     blocked = {
-        run.function for tx in stalled for run in runs[tx] if run.status in BLOCKED
+        _name(run) for tx in stalled for run in runs[tx] if run.status in BLOCKED
     }
     queued = {
         tx.id
         for tx in transactions
         if tx.status == RUNNING
         and any(
-            run.status == SCHEDULED and run.function in blocked for run in runs[tx.id]
+            run.status == SCHEDULED and _name(run) in blocked for run in runs[tx.id]
         )
     }
     waiting = {
@@ -65,7 +70,7 @@ def held_transactions(
     held = set(queued)
     while True:
         sources = {
-            run.function
+            _name(run)
             for tx in stalled | held
             for run in runs[tx]
             if run.status == DONE
@@ -74,7 +79,7 @@ def held_transactions(
             tx
             for tx in waiting - held
             if any(
-                run.function in sources or upstream(run.function) in sources
+                _name(run) in sources or upstream(_name(run)) in sources
                 for run in runs[tx]
             )
         }

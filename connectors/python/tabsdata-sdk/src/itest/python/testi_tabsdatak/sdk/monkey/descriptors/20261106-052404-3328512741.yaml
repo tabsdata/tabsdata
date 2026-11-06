@@ -1,0 +1,3329 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+format: 1
+namespace: mkto2bkzaef15l5co3m
+failure:
+  duration: 823.2
+  problems:
+  - Execution ep20261106-32 of pub02 never finished (last status 'Running')
+  - 'Transaction tx20261106-41 of execution ep20261106-32 is Running although all its function runs finished:
+    Name: sub01, collection: Name: ''monkey_mkto2bkzaef15l5co3m_subscribers'' Done'
+  observed:
+    functions:
+      crn02:
+        enabled: true
+        version: fv20261106-158
+        function_id: 06gqu36m05ogn5jskcjqh4srv8
+      crn04:
+        enabled: true
+        version: fv20261106-130
+        function_id: 06gqu3b0apo8rebj2094j61gdc
+      crn05:
+        enabled: true
+        version: fv20261106-108
+        function_id: 06gqu36o9lrct6ftgjdumsuoe8
+      pub00:
+        enabled: true
+        version: fv20261106-1
+        function_id: 06gqu36crhpujfq6t8pel5o2rs
+      pub01:
+        enabled: false
+        version: fv20261106-160
+        function_id: 06gqu3bfc9q97cbvf84n2nf6uc
+      pub02:
+        enabled: true
+        version: fv20261106-35
+        function_id: 06gqu36erlpnpcb5ugbp2ssdtk
+      pub03:
+        enabled: true
+        version: fv20261106-4
+        function_id: 06gqu36fp1r1n9h0qu9o1rkhbk
+      pub04:
+        enabled: false
+        version: fv20261106-109
+        function_id: 06gqu36gh1p91f77u99dpj9qug
+      pub05:
+        enabled: true
+        version: fv20261106-76
+        function_id: 06gqu36h9tolr3toe0tqmd4a5c
+      pub06:
+        enabled: true
+        version: fv20261106-7
+        function_id: 06gqu36i09pn5fv6v31jrhc33o
+      pub07:
+        enabled: true
+        version: fv20261106-132
+        function_id: 06gqu36ig9ohjfrimcn20k1avo
+      pub08:
+        enabled: true
+        version: fv20261106-113
+        function_id: 06gqu36j2lpov67hod02atkajo
+      pub09:
+        enabled: false
+        version: fv20261106-161
+        function_id: 06gqu36jm1paf5p0tsl9kqka98
+      stm00:
+        enabled: false
+        version: fv20261106-149
+        function_id: 06gqu3981lrhl0ru5e008cksck
+      stm01:
+        enabled: true
+        version: fv20261106-162
+        function_id: 06gqu36ptlq1f06g8t2i340rp0
+      stm02:
+        enabled: true
+        version: fv20261106-150
+        function_id: 06gqu3au4pqqt06qgouf5obt9g
+      stm03:
+        enabled: false
+        version: fv20261106-106
+        function_id: 06gqu395vtorfeovvbvd9ge9es
+      stm05:
+        enabled: false
+        version: fv20261106-156
+        function_id: 06gqu36shdpd7bl957oe6h6e2k
+      sub00:
+        enabled: true
+        version: fv20261106-143
+        function_id: 06gqu374apq0l3uaum2rhrglq4
+      sub01:
+        enabled: true
+        version: fv20261106-121
+        function_id: 06gqu375bho3rfprumelqaetok
+      sub02:
+        enabled: false
+        version: fv20261106-127
+        function_id: 06gqu376atp4pdv4pfbhpilt8g
+      sub03:
+        enabled: false
+        version: fv20261106-131
+        function_id: 06gqu3774trtl98m1pnpt187o0
+      tfr00:
+        enabled: true
+        version: fv20261106-133
+        function_id: 06gqu399r1r1fe17p3a0gutnrs
+      tfr01:
+        enabled: true
+        version: fv20261106-126
+        function_id: 06gqu36ufhp9752t4p9hbj9rnc
+      tfr02:
+        enabled: true
+        version: fv20261106-145
+        function_id: 06gqu36vgprcn7qudrhfgtohtg
+      tfr03:
+        enabled: false
+        version: fv20261106-163
+        function_id: 06gqu370etr310nlt68cior9ck
+      tfr04:
+        enabled: false
+        version: fv20261106-148
+        function_id: 06gqu37225q25072051j67olbc
+      tfr05:
+        enabled: true
+        version: fv20261106-81
+        function_id: 06gqu3736pq2vd34a1lcjun8h4
+    workloads:
+    - name: crn-wkr20261106-119
+      decorator: cron_publisher
+      function: crn02
+      function_id: 06gqu36m05ogn5jskcjqh4srv8
+      version: fv20261106-158
+    - name: crn-wkr20261106-77
+      decorator: cron_publisher
+      function: crn05
+      function_id: 06gqu36o9lrct6ftgjdumsuoe8
+      version: fv20261106-108
+    - name: crn-wkr20261106-91
+      decorator: cron_publisher
+      function: crn04
+      function_id: 06gqu3b0apo8rebj2094j61gdc
+      version: fv20261106-130
+    - name: pub-wkr20261106-182
+      decorator: publisher
+      function: crn02
+      function_id: 06gqu36m05ogn5jskcjqh4srv8
+      version: null
+    - name: pub-wkr20261106-183
+      decorator: publisher
+      function: crn04
+      function_id: 06gqu3b0apo8rebj2094j61gdc
+      version: null
+    - name: pub-wkr20261106-184
+      decorator: publisher
+      function: crn05
+      function_id: 06gqu36o9lrct6ftgjdumsuoe8
+      version: null
+    - name: stm-wkr20261106-106
+      decorator: stream_publisher
+      function: stm02
+      function_id: 06gqu3au4pqqt06qgouf5obt9g
+      version: fv20261106-150
+    - name: stm-wkr20261106-123
+      decorator: stream_publisher
+      function: stm01
+      function_id: 06gqu36ptlq1f06g8t2i340rp0
+      version: fv20261106-162
+expected:
+  pub00:
+    exists: true
+    enabled: true
+  pub01:
+    exists: true
+    enabled: false
+  pub02:
+    exists: true
+    enabled: true
+  pub03:
+    exists: true
+    enabled: true
+  pub04:
+    exists: true
+    enabled: false
+  pub05:
+    exists: true
+    enabled: true
+  pub06:
+    exists: true
+    enabled: true
+  pub07:
+    exists: true
+    enabled: true
+  pub08:
+    exists: true
+    enabled: true
+  pub09:
+    exists: true
+    enabled: false
+  crn00:
+    exists: false
+  crn01:
+    exists: false
+  crn02:
+    exists: true
+    enabled: true
+  crn03:
+    exists: false
+  crn04:
+    exists: true
+    enabled: true
+  crn05:
+    exists: true
+    enabled: true
+  stm00:
+    exists: true
+    enabled: false
+  stm01:
+    exists: true
+    enabled: true
+  stm02:
+    exists: true
+    enabled: true
+  stm03:
+    exists: true
+    enabled: false
+  stm04:
+    exists: false
+  stm05:
+    exists: true
+    enabled: false
+  tfr00:
+    exists: true
+    enabled: true
+  tfr01:
+    exists: true
+    enabled: true
+  tfr02:
+    exists: true
+    enabled: true
+  tfr03:
+    exists: true
+    enabled: false
+  tfr04:
+    exists: true
+    enabled: false
+  tfr05:
+    exists: true
+    enabled: true
+  sub00:
+    exists: true
+    enabled: true
+  sub01:
+    exists: true
+    enabled: true
+  sub02:
+    exists: true
+    enabled: false
+  sub03:
+    exists: true
+    enabled: false
+plan:
+  generator: 5
+  seed: 3328512741
+  lanes: 8
+  faults: true
+  fleet:
+    collections:
+    - name: publishers_a
+      group: sources
+      connection: datagen
+    - name: publishers_b
+      group: sources
+      connection: datagen
+    - name: cron_publishers
+      group: sources
+      connection: datagen
+    - name: stream_publishers
+      group: sources
+      connection: kafka
+    - name: transformers
+      group: default
+      connection: null
+    - name: subscribers
+      group: destinations
+      connection: trash
+    functions:
+    - name: pub00
+      kind: publisher
+      collection: publishers_a
+    - name: pub01
+      kind: publisher
+      collection: publishers_b
+      seconds: 30
+    - name: pub02
+      kind: publisher
+      collection: publishers_a
+      seconds: 30
+    - name: pub03
+      kind: publisher
+      collection: publishers_b
+    - name: pub04
+      kind: publisher
+      collection: publishers_a
+    - name: pub05
+      kind: publisher
+      collection: publishers_b
+    - name: pub06
+      kind: publisher
+      collection: publishers_a
+      seconds: 30
+    - name: pub07
+      kind: publisher
+      collection: publishers_b
+      seconds: 10
+    - name: pub08
+      kind: publisher
+      collection: publishers_a
+    - name: pub09
+      kind: publisher
+      collection: publishers_b
+    - name: crn00
+      kind: cron_publisher
+      collection: cron_publishers
+    - name: crn01
+      kind: cron_publisher
+      collection: cron_publishers
+    - name: crn02
+      kind: cron_publisher
+      collection: cron_publishers
+    - name: crn03
+      kind: cron_publisher
+      collection: cron_publishers
+    - name: crn04
+      kind: cron_publisher
+      collection: cron_publishers
+    - name: crn05
+      kind: cron_publisher
+      collection: cron_publishers
+    - name: stm00
+      kind: stream_publisher
+      collection: stream_publishers
+    - name: stm01
+      kind: stream_publisher
+      collection: stream_publishers
+    - name: stm02
+      kind: stream_publisher
+      collection: stream_publishers
+    - name: stm03
+      kind: stream_publisher
+      collection: stream_publishers
+    - name: stm04
+      kind: stream_publisher
+      collection: stream_publishers
+    - name: stm05
+      kind: stream_publisher
+      collection: stream_publishers
+    - name: tfr00
+      kind: transformer
+      collection: transformers
+      upstream: pub04
+      fails: true
+    - name: tfr01
+      kind: transformer
+      collection: transformers
+      upstream: pub04
+    - name: tfr02
+      kind: transformer
+      collection: transformers
+      upstream: pub06
+    - name: tfr03
+      kind: transformer
+      collection: transformers
+      upstream: pub00
+    - name: tfr04
+      kind: transformer
+      collection: transformers
+      upstream: pub02
+      fails: true
+    - name: tfr05
+      kind: transformer
+      collection: transformers
+      upstream: pub02
+    - name: sub00
+      kind: subscriber
+      collection: subscribers
+      upstream: tfr02
+    - name: sub01
+      kind: subscriber
+      collection: subscribers
+      upstream: tfr05
+    - name: sub02
+      kind: subscriber
+      collection: subscribers
+      upstream: tfr00
+    - name: sub03
+      kind: subscriber
+      collection: subscribers
+      upstream: tfr02
+  ops:
+  - index: 0
+    lane: 7
+    delay: 1.3
+    action: trigger
+    function: pub07
+  - index: 1
+    lane: 3
+    delay: 1.6
+    action: update
+    function: crn01
+  - index: 2
+    lane: 6
+    delay: 1.4
+    action: enable
+    function: crn04
+  - index: 3
+    lane: 3
+    delay: 0.6
+    action: disable
+    function: crn01
+  - index: 4
+    lane: 5
+    delay: 0.0
+    action: trigger
+    function: pub05
+  - index: 5
+    lane: 5
+    delay: 0.0
+    action: trigger
+    function: pub05
+  - index: 6
+    lane: 5
+    delay: 0.0
+    action: trigger
+    function: sub01
+  - index: 7
+    lane: 3
+    delay: 0.9
+    action: enable
+    function: tfr05
+  - index: 8
+    lane: 2
+    delay: 0.8
+    action: enable
+    function: stm02
+  - index: 9
+    lane: 7
+    delay: 4.2
+    action: enable
+    function: pub07
+  - index: 10
+    lane: 1
+    delay: 0.2
+    action: update
+    function: stm01
+  - index: 11
+    lane: 6
+    delay: 0.3
+    action: enable
+    function: tfr00
+  - index: 12
+    lane: 7
+    delay: 0.0
+    action: trigger
+    function: sub03
+  - index: 13
+    lane: 6
+    delay: 0.6
+    action: recover_execution
+    function: pub06
+  - index: 14
+    lane: 5
+    delay: 4.1
+    action: trigger
+    function: sub01
+  - index: 15
+    lane: 1
+    delay: 0.7
+    action: lose_job
+    function: pub09
+  - index: 16
+    lane: 6
+    delay: 0.0
+    action: trigger
+    function: crn04
+  - index: 17
+    lane: 1
+    delay: 0.9
+    action: trigger
+    function: pub01
+  - index: 18
+    lane: 2
+    delay: 0.0
+    action: update
+    function: pub02
+  - index: 19
+    lane: 6
+    delay: 0.0
+    action: disable
+    function: tfr00
+  - index: 20
+    lane: 1
+    delay: 0.5
+    action: trigger
+    function: pub09
+  - index: 21
+    lane: 7
+    delay: 1.0
+    action: enable
+    function: sub03
+  - index: 22
+    lane: 5
+    delay: 0.0
+    action: disable
+    function: crn03
+  - index: 23
+    lane: 1
+    delay: 0.3
+    action: disable
+    function: tfr03
+  - index: 24
+    lane: 6
+    delay: 0.3
+    action: enable
+    function: tfr00
+  - index: 25
+    lane: 7
+    delay: 0.6
+    action: disable
+    function: sub03
+  - index: 26
+    lane: 5
+    delay: 0.1
+    action: enable
+    function: crn03
+  - index: 27
+    lane: 3
+    delay: 4.6
+    action: recover_execution
+    function: pub03
+  - index: 28
+    lane: 0
+    delay: 1.8
+    action: disable
+    function: stm00
+  - index: 29
+    lane: 6
+    delay: 0.0
+    action: disable
+    function: sub02
+  - index: 30
+    lane: 0
+    delay: 3.3
+    action: cancel_execution
+    function: tfr02
+  - index: 31
+    lane: 4
+    delay: 2.2
+    action: enable
+    function: stm04
+  - index: 32
+    lane: 3
+    delay: 0.4
+    action: lose_streamer
+    function: stm03
+  - index: 33
+    lane: 0
+    delay: 0.0
+    action: trigger
+    function: pub08
+  - index: 34
+    lane: 5
+    delay: 0.8
+    action: cancel_transaction
+    function: pub05
+  - index: 35
+    lane: 7
+    delay: 1.4
+    action: trigger
+    function: sub03
+  - index: 36
+    lane: 2
+    delay: 0.0
+    action: disable
+    function: tfr04
+  - index: 37
+    lane: 4
+    delay: 0.0
+    action: cancel_execution
+    function: pub04
+  - index: 38
+    lane: 1
+    delay: 0.0
+    action: update
+    function: tfr03
+  - index: 39
+    lane: 4
+    delay: 3.6
+    action: enable
+    function: stm04
+  - index: 40
+    lane: 0
+    delay: 0.9
+    action: disable
+    function: stm00
+  - index: 41
+    lane: 7
+    delay: 0.0
+    action: trigger
+    function: crn05
+  - index: 42
+    lane: 0
+    delay: 0.0
+    action: cancel_transaction
+    function: pub00
+  - index: 43
+    lane: 4
+    delay: 0.6
+    action: disable
+    function: pub04
+  - index: 44
+    lane: 3
+    delay: 0.0
+    action: enable
+    function: stm03
+  - index: 45
+    lane: 2
+    delay: 0.4
+    action: disable
+    function: crn00
+  - index: 46
+    lane: 2
+    delay: 0.3
+    action: trigger
+    function: pub02
+  - index: 47
+    lane: 0
+    delay: 0.0
+    action: cancel_execution
+    function: pub00
+  - index: 48
+    lane: 4
+    delay: 0.0
+    action: enable
+    function: stm04
+  - index: 49
+    lane: 1
+    delay: 0.4
+    action: trigger
+    function: pub09
+  - index: 50
+    lane: 2
+    delay: 4.7
+    action: lose_job
+    function: pub02
+  - index: 51
+    lane: 1
+    delay: 0.0
+    action: enable
+    function: tfr03
+  - index: 52
+    lane: 0
+    delay: 0.0
+    action: trigger
+    function: pub00
+  - index: 53
+    lane: 4
+    delay: 0.0
+    action: enable
+    function: sub00
+  - index: 54
+    lane: 5
+    delay: 0.0
+    action: update
+    function: pub05
+  - index: 55
+    lane: 1
+    delay: 0.9
+    action: enable
+    function: pub09
+  - index: 56
+    lane: 4
+    delay: 0.0
+    action: disable
+    function: crn02
+  - index: 57
+    lane: 5
+    delay: 0.8
+    action: update
+    function: stm05
+  - index: 58
+    lane: 6
+    delay: 0.2
+    action: disable
+    function: tfr00
+  - index: 59
+    lane: 7
+    delay: 1.6
+    action: trigger
+    function: crn05
+  - index: 60
+    lane: 2
+    delay: 0.0
+    action: enable
+    function: tfr04
+  - index: 61
+    lane: 5
+    delay: 0.0
+    action: disable
+    function: crn03
+  - index: 62
+    lane: 4
+    delay: 0.1
+    action: lose_streamer
+    function: stm04
+  - index: 63
+    lane: 7
+    delay: 0.0
+    action: disable
+    function: pub07
+  - index: 64
+    lane: 5
+    delay: 0.0
+    action: disable
+    function: stm05
+  - index: 65
+    lane: 2
+    delay: 0.0
+    action: trigger
+    function: pub02
+  - index: 66
+    lane: 0
+    delay: 0.7
+    action: delete
+    function: stm00
+  - index: 67
+    lane: 6
+    delay: 0.0
+    action: update
+    function: tfr00
+  - index: 68
+    lane: 7
+    delay: 0.1
+    action: cancel_execution
+    function: tfr01
+  - index: 69
+    lane: 5
+    delay: 0.0
+    action: update
+    function: pub05
+  - index: 70
+    lane: 4
+    delay: 0.0
+    action: lose_job
+    function: pub04
+  - index: 71
+    lane: 2
+    delay: 0.0
+    action: update
+    function: stm02
+  - index: 72
+    lane: 5
+    delay: 3.5
+    action: update
+    function: crn03
+  - index: 73
+    lane: 2
+    delay: 0.2
+    action: update
+    function: crn00
+  - index: 74
+    lane: 3
+    delay: 0.0
+    action: cancel_execution
+    function: pub03
+  - index: 75
+    lane: 6
+    delay: 0.0
+    action: update
+    function: tfr00
+  - index: 76
+    lane: 7
+    delay: 0.2
+    action: lose_job
+    function: pub07
+  - index: 77
+    lane: 5
+    delay: 1.0
+    action: disable
+    function: crn03
+  - index: 78
+    lane: 6
+    delay: 0.0
+    action: enable
+    function: tfr00
+  - index: 79
+    lane: 7
+    delay: 0.0
+    action: trigger
+    function: pub07
+  - index: 80
+    lane: 4
+    delay: 4.5
+    action: update
+    function: stm04
+  - index: 81
+    lane: 6
+    delay: 0.0
+    action: trigger
+    function: pub06
+  - index: 82
+    lane: 2
+    delay: 0.0
+    action: cancel_transaction
+    function: pub02
+  - index: 83
+    lane: 5
+    delay: 0.9
+    action: enable
+    function: crn03
+  - index: 84
+    lane: 5
+    delay: 0.0
+    action: trigger
+    function: sub01
+  - index: 85
+    lane: 6
+    delay: 0.7
+    action: cancel_execution
+    function: tfr00
+  - index: 86
+    lane: 7
+    delay: 0.0
+    action: trigger
+    function: sub03
+  - index: 87
+    lane: 1
+    delay: 1.0
+    action: disable
+    function: stm01
+  - index: 88
+    lane: 0
+    delay: 0.0
+    action: recover_execution
+    function: pub00
+  - index: 89
+    lane: 6
+    delay: 0.4
+    action: update
+    function: sub02
+  - index: 90
+    lane: 4
+    delay: 0.6
+    action: enable
+    function: stm04
+  - index: 91
+    lane: 1
+    delay: 0.0
+    action: lose_streamer
+    function: stm01
+  - index: 92
+    lane: 3
+    delay: 0.0
+    action: disable
+    function: crn01
+  - index: 93
+    lane: 5
+    delay: 1.8
+    action: disable
+    function: crn03
+  - index: 94
+    lane: 4
+    delay: 0.0
+    action: trigger
+    function: pub04
+  - index: 95
+    lane: 2
+    delay: 3.2
+    action: lose_streamer
+    function: stm02
+  - index: 96
+    lane: 7
+    delay: 0.5
+    action: disable
+    function: crn05
+  - index: 97
+    lane: 3
+    delay: 0.8
+    action: delete
+    function: stm03
+  - index: 98
+    lane: 2
+    delay: 1.6
+    action: update
+    function: stm02
+  - index: 99
+    lane: 7
+    delay: 0.4
+    action: cancel_execution
+    function: pub07
+  - index: 100
+    lane: 4
+    delay: 4.5
+    action: update
+    function: pub04
+  - index: 101
+    lane: 7
+    delay: 0.0
+    action: trigger
+    function: tfr01
+  - index: 102
+    lane: 1
+    delay: 0.0
+    action: trigger
+    function: pub01
+  - index: 103
+    lane: 7
+    delay: 1.0
+    action: enable
+    function: crn05
+  - index: 104
+    lane: 4
+    delay: 4.7
+    action: cancel_execution
+    function: sub00
+  - index: 105
+    lane: 6
+    delay: 0.5
+    action: delete
+    function: tfr00
+  - index: 106
+    lane: 0
+    delay: 2.8
+    action: trigger
+    function: stm00
+  - index: 107
+    lane: 1
+    delay: 8.2
+    action: pause
+  - index: 108
+    lane: 1
+    delay: 0.0
+    action: update
+    function: stm01
+  - index: 109
+    lane: 7
+    delay: 0.0
+    action: enable
+    function: crn05
+  - index: 110
+    lane: 7
+    delay: 0.0
+    action: trigger
+    function: pub07
+  - index: 111
+    lane: 0
+    delay: 4.1
+    action: recover_execution
+    function: pub00
+  - index: 112
+    lane: 7
+    delay: 0.6
+    action: cancel_transaction
+    function: pub07
+  - index: 113
+    lane: 6
+    delay: 0.0
+    action: update
+    function: crn04
+  - index: 114
+    lane: 4
+    delay: 0.0
+    action: cancel_transaction
+    function: pub04
+  - index: 115
+    lane: 1
+    delay: 0.0
+    action: disable
+    function: pub09
+  - index: 116
+    lane: 0
+    delay: 0.9
+    action: register
+    function: stm00
+  - index: 117
+    lane: 1
+    delay: 0.0
+    action: update
+    function: tfr03
+  - index: 118
+    lane: 1
+    delay: 2.6
+    action: enable
+    function: stm01
+  - index: 119
+    lane: 7
+    delay: 0.0
+    action: trigger
+    function: tfr01
+  - index: 120
+    lane: 2
+    delay: 0.0
+    action: update
+    function: tfr04
+  - index: 121
+    lane: 4
+    delay: 0.0
+    action: update
+    function: crn02
+  - index: 122
+    lane: 5
+    delay: 0.5
+    action: cancel_transaction
+    function: pub05
+  - index: 123
+    lane: 3
+    delay: 0.8
+    action: update
+    function: tfr05
+  - index: 124
+    lane: 5
+    delay: 0.5
+    action: trigger
+    function: pub05
+  - index: 125
+    lane: 7
+    delay: 0.0
+    action: trigger
+    function: tfr01
+  - index: 126
+    lane: 5
+    delay: 0.0
+    action: cancel_transaction
+    function: pub05
+  - index: 127
+    lane: 0
+    delay: 0.4
+    action: cancel_execution
+    function: pub00
+  - index: 128
+    lane: 4
+    delay: 0.6
+    action: cancel_execution
+    function: sub00
+  - index: 129
+    lane: 3
+    delay: 0.3
+    action: disable
+    function: crn01
+  - index: 130
+    lane: 0
+    delay: 0.2
+    action: update
+    function: stm00
+  - index: 131
+    lane: 4
+    delay: 0.7
+    action: lose_job
+    function: pub04
+  - index: 132
+    lane: 1
+    delay: 0.0
+    action: update
+    function: pub01
+  - index: 133
+    lane: 6
+    delay: 0.7
+    action: trigger
+    function: sub02
+  - index: 134
+    lane: 5
+    delay: 0.0
+    action: update
+    function: sub01
+  - index: 135
+    lane: 4
+    delay: 0.5
+    action: enable
+    function: sub00
+  - index: 136
+    lane: 1
+    delay: 0.0
+    action: cancel_execution
+    function: tfr03
+  - index: 137
+    lane: 1
+    delay: 0.1
+    action: delete
+    function: pub01
+  - index: 138
+    lane: 4
+    delay: 0.0
+    action: disable
+    function: stm04
+  - index: 139
+    lane: 2
+    delay: 0.0
+    action: cancel_execution
+    function: tfr04
+  - index: 140
+    lane: 6
+    delay: 0.3
+    action: trigger
+    function: crn04
+  - index: 141
+    lane: 0
+    delay: 0.0
+    action: lose_job
+    function: pub08
+  - index: 142
+    lane: 2
+    delay: 0.8
+    action: trigger
+    function: tfr04
+  - index: 143
+    lane: 1
+    delay: 4.8
+    action: disable
+    function: stm01
+  - index: 144
+    lane: 1
+    delay: 0.0
+    action: register
+    function: pub01
+  - index: 145
+    lane: 1
+    delay: 0.8
+    action: update
+    function: tfr03
+  - index: 146
+    lane: 6
+    delay: 0.0
+    action: update
+    function: crn04
+  - index: 147
+    lane: 3
+    delay: 2.9
+    action: lose_job
+    function: pub03
+  - index: 148
+    lane: 7
+    delay: 0.8
+    action: update
+    function: crn05
+  - index: 149
+    lane: 3
+    delay: 0.0
+    action: enable
+    function: crn01
+  - index: 150
+    lane: 1
+    delay: 0.6
+    action: disable
+    function: stm01
+  - index: 151
+    lane: 6
+    delay: 4.8
+    action: cancel_execution
+    function: pub06
+  - index: 152
+    lane: 0
+    delay: 0.0
+    action: trigger
+    function: pub08
+  - index: 153
+    lane: 7
+    delay: 4.9
+    action: update
+    function: tfr01
+  - index: 154
+    lane: 2
+    delay: 0.2
+    action: trigger
+    function: tfr04
+  - index: 155
+    lane: 7
+    delay: 4.5
+    action: cancel_execution
+    function: sub03
+  - index: 156
+    lane: 4
+    delay: 2.3
+    action: cancel_execution
+    function: pub04
+  - index: 157
+    lane: 0
+    delay: 3.4
+    action: recover_execution
+    function: pub00
+  - index: 158
+    lane: 0
+    delay: 0.0
+    action: disable
+    function: stm00
+  - index: 159
+    lane: 7
+    delay: 0.1
+    action: disable
+    function: tfr01
+  - index: 160
+    lane: 1
+    delay: 0.0
+    action: trigger
+    function: pub01
+  - index: 161
+    lane: 5
+    delay: 0.0
+    action: recover_transaction
+    function: pub05
+  - index: 162
+    lane: 4
+    delay: 0.0
+    action: enable
+    function: stm04
+  - index: 163
+    lane: 1
+    delay: 0.8
+    action: disable
+    function: tfr03
+  - index: 164
+    lane: 1
+    delay: 0.6
+    action: enable
+    function: stm01
+  - index: 165
+    lane: 0
+    delay: 0.0
+    action: update
+    function: pub08
+  - index: 166
+    lane: 4
+    delay: 0.3
+    action: disable
+    function: stm04
+  - index: 167
+    lane: 5
+    delay: 0.0
+    action: trigger
+    function: pub05
+  - index: 168
+    lane: 4
+    delay: 0.5
+    action: enable
+    function: crn02
+  - index: 169
+    lane: 2
+    delay: 0.0
+    action: disable
+    function: crn00
+  - index: 170
+    lane: 1
+    delay: 16.2
+    action: pause
+  - index: 171
+    lane: 0
+    delay: 11.6
+    action: pause
+  - index: 172
+    lane: 2
+    delay: 0.5
+    action: enable
+    function: crn00
+  - index: 173
+    lane: 6
+    delay: 0.0
+    action: register
+    function: tfr00
+  - index: 174
+    lane: 2
+    delay: 0.9
+    action: lose_apiserver
+  - index: 175
+    lane: 7
+    delay: 0.0
+    action: trigger
+    function: sub03
+  - index: 176
+    lane: 0
+    delay: 0.0
+    action: update
+    function: tfr02
+  - index: 177
+    lane: 6
+    delay: 0.0
+    action: enable
+    function: crn04
+  - index: 178
+    lane: 5
+    delay: 0.0
+    action: disable
+    function: crn03
+  - index: 179
+    lane: 5
+    delay: 0.0
+    action: update
+    function: sub01
+  - index: 180
+    lane: 6
+    delay: 1.6
+    action: delete
+    function: crn04
+  - index: 181
+    lane: 6
+    delay: 0.2
+    action: update
+    function: tfr00
+  - index: 182
+    lane: 4
+    delay: 0.8
+    action: enable
+    function: sub00
+  - index: 183
+    lane: 7
+    delay: 0.0
+    action: enable
+    function: tfr01
+  - index: 184
+    lane: 4
+    delay: 0.6
+    action: lose_streamer
+    function: stm04
+  - index: 185
+    lane: 3
+    delay: 0.0
+    action: disable
+    function: crn01
+  - index: 186
+    lane: 3
+    delay: 0.0
+    action: register
+    function: stm03
+  - index: 187
+    lane: 6
+    delay: 1.3
+    action: lose_job
+    function: pub06
+  - index: 188
+    lane: 4
+    delay: 2.3
+    action: disable
+    function: stm04
+  - index: 189
+    lane: 5
+    delay: 0.4
+    action: enable
+    function: stm05
+  - index: 190
+    lane: 3
+    delay: 0.0
+    action: delete
+    function: crn01
+  - index: 191
+    lane: 5
+    delay: 0.4
+    action: trigger
+    function: pub05
+  - index: 192
+    lane: 5
+    delay: 0.4
+    action: trigger
+    function: pub05
+  - index: 193
+    lane: 6
+    delay: 0.0
+    action: trigger
+    function: pub06
+  - index: 194
+    lane: 3
+    delay: 0.7
+    action: enable
+    function: crn01
+  - index: 195
+    lane: 1
+    delay: 2.1
+    action: update
+    function: stm01
+  - index: 196
+    lane: 7
+    delay: 0.0
+    action: trigger
+    function: crn05
+  - index: 197
+    lane: 3
+    delay: 0.4
+    action: disable
+    function: stm03
+  - index: 198
+    lane: 5
+    delay: 2.7
+    action: disable
+    function: crn03
+  - index: 199
+    lane: 2
+    delay: 0.2
+    action: delete
+    function: stm02
+  - index: 200
+    lane: 2
+    delay: 0.0
+    action: lose_apiserver
+  - index: 201
+    lane: 1
+    delay: 0.0
+    action: trigger
+    function: tfr03
+  - index: 202
+    lane: 2
+    delay: 0.0
+    action: trigger
+    function: tfr04
+  - index: 203
+    lane: 2
+    delay: 0.0
+    action: register
+    function: stm02
+  - index: 204
+    lane: 2
+    delay: 0.0
+    action: trigger
+    function: pub02
+  - index: 205
+    lane: 0
+    delay: 0.0
+    action: trigger
+    function: pub08
+  - index: 206
+    lane: 0
+    delay: 0.0
+    action: trigger
+    function: pub00
+  - index: 207
+    lane: 7
+    delay: 0.0
+    action: trigger
+    function: crn05
+  - index: 208
+    lane: 4
+    delay: 0.0
+    action: delete
+    function: stm04
+  - index: 209
+    lane: 1
+    delay: 0.5
+    action: recover_execution
+    function: pub09
+  - index: 210
+    lane: 3
+    delay: 0.0
+    action: trigger
+    function: pub03
+  - index: 211
+    lane: 7
+    delay: 0.9
+    action: update
+    function: tfr01
+  - index: 212
+    lane: 5
+    delay: 0.5
+    action: trigger
+    function: sub01
+  - index: 213
+    lane: 6
+    delay: 0.0
+    action: trigger
+    function: crn04
+  - index: 214
+    lane: 4
+    delay: 13.9
+    action: pause
+  - index: 215
+    lane: 2
+    delay: 0.0
+    action: update
+    function: tfr04
+  - index: 216
+    lane: 6
+    delay: 0.0
+    action: register
+    function: crn04
+  - index: 217
+    lane: 5
+    delay: 0.0
+    action: update
+    function: crn03
+  - index: 218
+    lane: 0
+    delay: 0.8
+    action: disable
+    function: stm00
+  - index: 219
+    lane: 1
+    delay: 3.9
+    action: disable
+    function: pub01
+  - index: 220
+    lane: 6
+    delay: 0.5
+    action: trigger
+    function: pub06
+  - index: 221
+    lane: 7
+    delay: 0.1
+    action: update
+    function: sub03
+  - index: 222
+    lane: 1
+    delay: 0.5
+    action: update
+    function: pub09
+  - index: 223
+    lane: 3
+    delay: 0.0
+    action: recover_execution
+    function: pub03
+  - index: 224
+    lane: 1
+    delay: 4.0
+    action: enable
+    function: stm01
+  - index: 225
+    lane: 2
+    delay: 3.7
+    action: enable
+    function: crn00
+  - index: 226
+    lane: 4
+    delay: 0.0
+    action: trigger
+    function: crn02
+  - index: 227
+    lane: 1
+    delay: 0.0
+    action: cancel_execution
+    function: pub09
+  - index: 228
+    lane: 2
+    delay: 1.7
+    action: enable
+    function: crn00
+  - index: 229
+    lane: 2
+    delay: 0.6
+    action: disable
+    function: tfr04
+  - index: 230
+    lane: 4
+    delay: 0.5
+    action: update
+    function: crn02
+  - index: 231
+    lane: 6
+    delay: 0.0
+    action: update
+    function: sub02
+  - index: 232
+    lane: 4
+    delay: 0.0
+    action: enable
+    function: crn02
+  - index: 233
+    lane: 2
+    delay: 0.0
+    action: update
+    function: stm02
+  - index: 234
+    lane: 7
+    delay: 0.0
+    action: cancel_execution
+    function: sub03
+  - index: 235
+    lane: 2
+    delay: 0.2
+    action: enable
+    function: crn00
+  - index: 236
+    lane: 6
+    delay: 0.0
+    action: update
+    function: crn04
+  - index: 237
+    lane: 5
+    delay: 0.3
+    action: update
+    function: crn03
+  - index: 238
+    lane: 5
+    delay: 1.8
+    action: enable
+    function: stm05
+  - index: 239
+    lane: 5
+    delay: 1.1
+    action: cancel_transaction
+    function: pub05
+  - index: 240
+    lane: 2
+    delay: 0.0
+    action: trigger
+    function: crn00
+  - index: 241
+    lane: 4
+    delay: 0.5
+    action: lose_job
+    function: pub04
+  - index: 242
+    lane: 1
+    delay: 0.7
+    action: disable
+    function: tfr03
+  - index: 243
+    lane: 2
+    delay: 0.9
+    action: delete
+    function: crn00
+  - index: 244
+    lane: 3
+    delay: 0.0
+    action: trigger
+    function: pub03
+  - index: 245
+    lane: 1
+    delay: 0.0
+    action: trigger
+    function: pub01
+  - index: 246
+    lane: 5
+    delay: 4.1
+    action: delete
+    function: crn03
+  - index: 247
+    lane: 5
+    delay: 0.1
+    action: cancel_execution
+    function: sub01
+  - index: 248
+    lane: 5
+    delay: 0.0
+    action: lose_streamer
+    function: stm05
+  - index: 249
+    lane: 0
+    delay: 0.5
+    action: trigger
+    function: pub08
+  - index: 250
+    lane: 7
+    delay: 0.0
+    action: enable
+    function: pub07
+  - index: 251
+    lane: 5
+    delay: 0.8
+    action: disable
+    function: stm05
+  - index: 252
+    lane: 2
+    delay: 0.2
+    action: delete
+    function: crn00
+  - index: 253
+    lane: 5
+    delay: 0.2
+    action: lose_job
+    function: pub05
+  - index: 254
+    lane: 1
+    delay: 0.0
+    action: trigger
+    function: pub09
+  - index: 255
+    lane: 6
+    delay: 0.6
+    action: update
+    function: tfr00
+outcomes:
+- index: 0
+  lane: 7
+  action: trigger
+  function: pub07
+  result: ok
+  detail: Execution ep20261106-4
+  elapsed: 0.11
+- index: 1
+  lane: 3
+  action: update
+  function: crn01
+  result: ok
+  elapsed: 0.72
+- index: 2
+  lane: 6
+  action: enable
+  function: crn04
+  result: ok
+  elapsed: 0.11
+- index: 3
+  lane: 3
+  action: disable
+  function: crn01
+  result: ok
+  elapsed: 0.17
+- index: 4
+  lane: 5
+  action: trigger
+  function: pub05
+  result: ok
+  detail: Execution ep20261106-1
+  elapsed: 0.09
+- index: 5
+  lane: 5
+  action: trigger
+  function: pub05
+  result: ok
+  detail: Execution ep20261106-2
+  elapsed: 0.04
+- index: 6
+  lane: 5
+  action: trigger
+  function: sub01
+  result: ok
+  detail: Execution ep20261106-3
+  elapsed: 0.04
+- index: 7
+  lane: 3
+  action: enable
+  function: tfr05
+  result: ok
+  elapsed: 0.23
+- index: 8
+  lane: 2
+  action: enable
+  function: stm02
+  result: ok
+  elapsed: 0.03
+- index: 9
+  lane: 7
+  action: enable
+  function: pub07
+  result: ok
+  elapsed: 0.29
+- index: 10
+  lane: 1
+  action: update
+  function: stm01
+  result: ok
+  elapsed: 0.16
+- index: 11
+  lane: 6
+  action: enable
+  function: tfr00
+  result: ok
+  elapsed: 0.18
+- index: 12
+  lane: 7
+  action: trigger
+  function: sub03
+  result: ok
+  detail: Execution ep20261106-13
+  elapsed: 0.26
+- index: 13
+  lane: 6
+  action: recover_execution
+  function: pub06
+  result: skipped
+  detail: No execution yet
+  elapsed: 0.0
+- index: 14
+  lane: 5
+  action: trigger
+  function: sub01
+  result: ok
+  detail: Execution ep20261106-9
+  elapsed: 0.13
+- index: 15
+  lane: 1
+  action: lose_job
+  function: pub09
+  result: skipped
+  detail: No execution yet
+  elapsed: 0.0
+- index: 16
+  lane: 6
+  action: trigger
+  function: crn04
+  result: ok
+  detail: Execution ep20261106-8
+  elapsed: 0.22
+- index: 17
+  lane: 1
+  action: trigger
+  function: pub01
+  result: ok
+  detail: Execution ep20261106-5
+  elapsed: 0.15
+- index: 18
+  lane: 2
+  action: update
+  function: pub02
+  result: ok
+  elapsed: 0.29
+- index: 19
+  lane: 6
+  action: disable
+  function: tfr00
+  result: ok
+  elapsed: 0.09
+- index: 20
+  lane: 1
+  action: trigger
+  function: pub09
+  result: ok
+  detail: Execution ep20261106-7
+  elapsed: 0.15
+- index: 21
+  lane: 7
+  action: enable
+  function: sub03
+  result: ok
+  elapsed: 0.11
+- index: 22
+  lane: 5
+  action: disable
+  function: crn03
+  result: ok
+  elapsed: 0.06
+- index: 23
+  lane: 1
+  action: disable
+  function: tfr03
+  result: ok
+  elapsed: 0.11
+- index: 24
+  lane: 6
+  action: enable
+  function: tfr00
+  result: ok
+  elapsed: 0.16
+- index: 25
+  lane: 7
+  action: disable
+  function: sub03
+  result: ok
+  elapsed: 0.21
+- index: 26
+  lane: 5
+  action: enable
+  function: crn03
+  result: ok
+  elapsed: 0.06
+- index: 27
+  lane: 3
+  action: recover_execution
+  function: pub03
+  result: skipped
+  detail: No execution yet
+  elapsed: 0.0
+- index: 28
+  lane: 0
+  action: disable
+  function: stm00
+  result: ok
+  elapsed: 0.19
+- index: 29
+  lane: 6
+  action: disable
+  function: sub02
+  result: ok
+  elapsed: 0.29
+- index: 30
+  lane: 0
+  action: cancel_execution
+  function: tfr02
+  result: skipped
+  detail: No execution yet
+  elapsed: 0.0
+- index: 31
+  lane: 4
+  action: enable
+  function: stm04
+  result: ok
+  elapsed: 0.13
+- index: 32
+  lane: 3
+  action: lose_streamer
+  function: stm03
+  result: ok
+  detail: Job stm-wkr20261106-10
+  elapsed: 0.06
+- index: 33
+  lane: 0
+  action: trigger
+  function: pub08
+  result: ok
+  detail: Execution ep20261106-12
+  elapsed: 0.11
+- index: 34
+  lane: 5
+  action: cancel_transaction
+  function: pub05
+  result: ok
+  detail: Transaction tx20261106-1 of execution ep20261106-1
+  elapsed: 0.42
+- index: 35
+  lane: 7
+  action: trigger
+  function: sub03
+  result: rejected
+  status: 400
+  detail: 'APIServerError: Function ''sub03'' must be enabled to be executed'
+  elapsed: 1.31
+- index: 36
+  lane: 2
+  action: disable
+  function: tfr04
+  result: ok
+  elapsed: 0.11
+- index: 37
+  lane: 4
+  action: cancel_execution
+  function: pub04
+  result: skipped
+  detail: No execution yet
+  elapsed: 0.0
+- index: 38
+  lane: 1
+  action: update
+  function: tfr03
+  result: ok
+  elapsed: 0.77
+- index: 39
+  lane: 4
+  action: enable
+  function: stm04
+  result: ok
+  elapsed: 0.17
+- index: 40
+  lane: 0
+  action: disable
+  function: stm00
+  result: ok
+  elapsed: 0.15
+- index: 41
+  lane: 7
+  action: trigger
+  function: crn05
+  result: ok
+  detail: Execution ep20261106-17
+  elapsed: 0.2
+- index: 42
+  lane: 0
+  action: cancel_transaction
+  function: pub00
+  result: skipped
+  detail: No transaction yet
+  elapsed: 0.0
+- index: 43
+  lane: 4
+  action: disable
+  function: pub04
+  result: ok
+  elapsed: 0.24
+- index: 44
+  lane: 3
+  action: enable
+  function: stm03
+  result: ok
+  elapsed: 0.07
+- index: 45
+  lane: 2
+  action: disable
+  function: crn00
+  result: ok
+  elapsed: 0.12
+- index: 46
+  lane: 2
+  action: trigger
+  function: pub02
+  result: ok
+  detail: Execution ep20261106-6
+  elapsed: 0.23
+- index: 47
+  lane: 0
+  action: cancel_execution
+  function: pub00
+  result: skipped
+  detail: No execution yet
+  elapsed: 0.0
+- index: 48
+  lane: 4
+  action: enable
+  function: stm04
+  result: ok
+  elapsed: 0.17
+- index: 49
+  lane: 1
+  action: trigger
+  function: pub09
+  result: ok
+  detail: Execution ep20261106-10
+  elapsed: 0.08
+- index: 50
+  lane: 2
+  action: lose_job
+  function: pub02
+  result: ok
+  detail: Job pub-wkr20261106-24 of execution ep20261106-6
+  elapsed: 0.11
+- index: 51
+  lane: 1
+  action: enable
+  function: tfr03
+  result: ok
+  elapsed: 0.07
+- index: 52
+  lane: 0
+  action: trigger
+  function: pub00
+  result: ok
+  detail: Execution ep20261106-14
+  elapsed: 0.15
+- index: 53
+  lane: 4
+  action: enable
+  function: sub00
+  result: ok
+  elapsed: 0.13
+- index: 54
+  lane: 5
+  action: update
+  function: pub05
+  result: ok
+  elapsed: 0.73
+- index: 55
+  lane: 1
+  action: enable
+  function: pub09
+  result: ok
+  elapsed: 0.15
+- index: 56
+  lane: 4
+  action: disable
+  function: crn02
+  result: ok
+  elapsed: 0.16
+- index: 57
+  lane: 5
+  action: update
+  function: stm05
+  result: ok
+  elapsed: 0.95
+- index: 58
+  lane: 6
+  action: disable
+  function: tfr00
+  result: ok
+  elapsed: 0.04
+- index: 59
+  lane: 7
+  action: trigger
+  function: crn05
+  result: ok
+  detail: Execution ep20261106-19
+  elapsed: 0.07
+- index: 60
+  lane: 2
+  action: enable
+  function: tfr04
+  result: ok
+  elapsed: 0.26
+- index: 61
+  lane: 5
+  action: disable
+  function: crn03
+  result: ok
+  elapsed: 0.26
+- index: 62
+  lane: 4
+  action: lose_streamer
+  function: stm04
+  result: skipped
+  detail: No streamer
+  elapsed: 0.12
+- index: 63
+  lane: 7
+  action: disable
+  function: pub07
+  result: ok
+  elapsed: 0.07
+- index: 64
+  lane: 5
+  action: disable
+  function: stm05
+  result: ok
+  elapsed: 0.1
+- index: 65
+  lane: 2
+  action: trigger
+  function: pub02
+  result: ok
+  detail: Execution ep20261106-16
+  elapsed: 0.34
+- index: 66
+  lane: 0
+  action: delete
+  function: stm00
+  result: ok
+  elapsed: 0.07
+- index: 67
+  lane: 6
+  action: update
+  function: tfr00
+  result: ok
+  elapsed: 0.54
+- index: 68
+  lane: 7
+  action: cancel_execution
+  function: tfr01
+  result: skipped
+  detail: No execution yet
+  elapsed: 0.0
+- index: 69
+  lane: 5
+  action: update
+  function: pub05
+  result: ok
+  elapsed: 0.4
+- index: 70
+  lane: 4
+  action: lose_job
+  function: pub04
+  result: skipped
+  detail: No execution yet
+  elapsed: 0.0
+- index: 71
+  lane: 2
+  action: update
+  function: stm02
+  result: ok
+  elapsed: 0.91
+- index: 72
+  lane: 5
+  action: update
+  function: crn03
+  result: ok
+  elapsed: 0.31
+- index: 73
+  lane: 2
+  action: update
+  function: crn00
+  result: ok
+  elapsed: 0.26
+- index: 74
+  lane: 3
+  action: cancel_execution
+  function: pub03
+  result: skipped
+  detail: No execution yet
+  elapsed: 0.0
+- index: 75
+  lane: 6
+  action: update
+  function: tfr00
+  result: ok
+  elapsed: 0.61
+- index: 76
+  lane: 7
+  action: lose_job
+  function: pub07
+  result: ok
+  detail: Job pub-wkr20261106-17 of execution ep20261106-4
+  elapsed: 0.05
+- index: 77
+  lane: 5
+  action: disable
+  function: crn03
+  result: ok
+  elapsed: 0.05
+- index: 78
+  lane: 6
+  action: enable
+  function: tfr00
+  result: ok
+  elapsed: 0.06
+- index: 79
+  lane: 7
+  action: trigger
+  function: pub07
+  result: rejected
+  status: 400
+  detail: 'APIServerError: Function ''pub07'' must be enabled to be executed'
+  elapsed: 0.05
+- index: 80
+  lane: 4
+  action: update
+  function: stm04
+  result: ok
+  elapsed: 0.22
+- index: 81
+  lane: 6
+  action: trigger
+  function: pub06
+  result: ok
+  detail: Execution ep20261106-11
+  elapsed: 0.22
+- index: 82
+  lane: 2
+  action: cancel_transaction
+  function: pub02
+  result: ok
+  detail: Transaction tx20261106-22 of execution ep20261106-16
+  elapsed: 0.12
+- index: 83
+  lane: 5
+  action: enable
+  function: crn03
+  result: ok
+  elapsed: 0.04
+- index: 84
+  lane: 5
+  action: trigger
+  function: sub01
+  result: ok
+  detail: Execution ep20261106-21
+  elapsed: 0.06
+- index: 85
+  lane: 6
+  action: cancel_execution
+  function: tfr00
+  result: skipped
+  detail: No execution yet
+  elapsed: 0.0
+- index: 86
+  lane: 7
+  action: trigger
+  function: sub03
+  result: rejected
+  status: 400
+  detail: 'APIServerError: Function ''sub03'' must be enabled to be executed'
+  elapsed: 0.09
+- index: 87
+  lane: 1
+  action: disable
+  function: stm01
+  result: ok
+  elapsed: 0.18
+- index: 88
+  lane: 0
+  action: recover_execution
+  function: pub00
+  result: ok
+  detail: Execution ep20261106-14
+  elapsed: 0.07
+- index: 89
+  lane: 6
+  action: update
+  function: sub02
+  result: ok
+  elapsed: 0.66
+- index: 90
+  lane: 4
+  action: enable
+  function: stm04
+  result: ok
+  elapsed: 0.08
+- index: 91
+  lane: 1
+  action: lose_streamer
+  function: stm01
+  result: ok
+  detail: Job stm-wkr20261106-15
+  elapsed: 0.05
+- index: 92
+  lane: 3
+  action: disable
+  function: crn01
+  result: ok
+  elapsed: 0.08
+- index: 93
+  lane: 5
+  action: disable
+  function: crn03
+  result: ok
+  elapsed: 0.06
+- index: 94
+  lane: 4
+  action: trigger
+  function: pub04
+  result: rejected
+  status: 400
+  detail: 'APIServerError: Function ''pub04'' must be enabled to be executed'
+  elapsed: 0.07
+- index: 95
+  lane: 2
+  action: lose_streamer
+  function: stm02
+  result: ok
+  detail: Job stm-wkr20261106-42
+  elapsed: 0.06
+- index: 96
+  lane: 7
+  action: disable
+  function: crn05
+  result: ok
+  elapsed: 0.03
+- index: 97
+  lane: 3
+  action: delete
+  function: stm03
+  result: ok
+  elapsed: 0.65
+- index: 98
+  lane: 2
+  action: update
+  function: stm02
+  result: ok
+  elapsed: 0.4
+- index: 99
+  lane: 7
+  action: cancel_execution
+  function: pub07
+  result: ok
+  detail: Execution ep20261106-4
+  elapsed: 0.07
+- index: 100
+  lane: 4
+  action: update
+  function: pub04
+  result: ok
+  elapsed: 5.38
+- index: 101
+  lane: 7
+  action: trigger
+  function: tfr01
+  result: ok
+  detail: Execution ep20261106-20
+  elapsed: 0.1
+- index: 102
+  lane: 1
+  action: trigger
+  function: pub01
+  result: ok
+  detail: Execution ep20261106-15
+  elapsed: 0.31
+- index: 103
+  lane: 7
+  action: enable
+  function: crn05
+  result: ok
+  elapsed: 0.07
+- index: 104
+  lane: 4
+  action: cancel_execution
+  function: sub00
+  result: skipped
+  detail: No execution yet
+  elapsed: 0.0
+- index: 105
+  lane: 6
+  action: delete
+  function: tfr00
+  result: ok
+  elapsed: 0.35
+- index: 106
+  lane: 0
+  action: trigger
+  function: stm00
+  result: rejected
+  status: 404
+  detail: 'APIServerError: [Function] The requested entity was not found'
+  elapsed: 0.54
+- index: 107
+  lane: 1
+  action: pause
+  result: ok
+  elapsed: 0.0
+- index: 108
+  lane: 1
+  action: update
+  function: stm01
+  result: ok
+  elapsed: 0.28
+- index: 109
+  lane: 7
+  action: enable
+  function: crn05
+  result: ok
+  elapsed: 0.06
+- index: 110
+  lane: 7
+  action: trigger
+  function: pub07
+  result: rejected
+  status: 400
+  detail: 'APIServerError: Function ''pub07'' must be enabled to be executed'
+  elapsed: 0.07
+- index: 111
+  lane: 0
+  action: recover_execution
+  function: pub00
+  result: ok
+  detail: Execution ep20261106-14
+  elapsed: 0.03
+- index: 112
+  lane: 7
+  action: cancel_transaction
+  function: pub07
+  result: ok
+  detail: Transaction tx20261106-4 of execution ep20261106-4
+  elapsed: 0.03
+- index: 113
+  lane: 6
+  action: update
+  function: crn04
+  result: ok
+  elapsed: 0.85
+- index: 114
+  lane: 4
+  action: cancel_transaction
+  function: pub04
+  result: skipped
+  detail: No transaction yet
+  elapsed: 0.0
+- index: 115
+  lane: 1
+  action: disable
+  function: pub09
+  result: ok
+  elapsed: 0.05
+- index: 116
+  lane: 0
+  action: register
+  function: stm00
+  result: ok
+  elapsed: 0.26
+- index: 117
+  lane: 1
+  action: update
+  function: tfr03
+  result: ok
+  elapsed: 0.32
+- index: 118
+  lane: 1
+  action: enable
+  function: stm01
+  result: ok
+  elapsed: 0.06
+- index: 119
+  lane: 7
+  action: trigger
+  function: tfr01
+  result: ok
+  detail: Execution ep20261106-24
+  elapsed: 0.1
+- index: 120
+  lane: 2
+  action: update
+  function: tfr04
+  result: ok
+  elapsed: 0.23
+- index: 121
+  lane: 4
+  action: update
+  function: crn02
+  result: ok
+  elapsed: 0.17
+- index: 122
+  lane: 5
+  action: cancel_transaction
+  function: pub05
+  result: ok
+  detail: Transaction tx20261106-1 of execution ep20261106-1
+  elapsed: 0.3
+- index: 123
+  lane: 3
+  action: update
+  function: tfr05
+  result: ok
+  elapsed: 0.25
+- index: 124
+  lane: 5
+  action: trigger
+  function: pub05
+  result: ok
+  detail: Execution ep20261106-29
+  elapsed: 0.08
+- index: 125
+  lane: 7
+  action: trigger
+  function: tfr01
+  result: ok
+  detail: Execution ep20261106-25
+  elapsed: 0.08
+- index: 126
+  lane: 5
+  action: cancel_transaction
+  function: pub05
+  result: ok
+  detail: Transaction tx20261106-36 of execution ep20261106-29
+  elapsed: 0.04
+- index: 127
+  lane: 0
+  action: cancel_execution
+  function: pub00
+  result: ok
+  detail: Execution ep20261106-14
+  elapsed: 0.04
+- index: 128
+  lane: 4
+  action: cancel_execution
+  function: sub00
+  result: skipped
+  detail: No execution yet
+  elapsed: 0.0
+- index: 129
+  lane: 3
+  action: disable
+  function: crn01
+  result: ok
+  elapsed: 0.04
+- index: 130
+  lane: 0
+  action: update
+  function: stm00
+  result: ok
+  elapsed: 0.4
+- index: 131
+  lane: 4
+  action: lose_job
+  function: pub04
+  result: skipped
+  detail: No execution yet
+  elapsed: 0.0
+- index: 132
+  lane: 1
+  action: update
+  function: pub01
+  result: ok
+  elapsed: 0.56
+- index: 133
+  lane: 6
+  action: trigger
+  function: sub02
+  result: rejected
+  status: 400
+  detail: 'APIServerError: Function ''sub02'' must be enabled to be executed'
+  elapsed: 1.24
+- index: 134
+  lane: 5
+  action: update
+  function: sub01
+  result: ok
+  elapsed: 0.53
+- index: 135
+  lane: 4
+  action: enable
+  function: sub00
+  result: ok
+  elapsed: 0.02
+- index: 136
+  lane: 1
+  action: cancel_execution
+  function: tfr03
+  result: skipped
+  detail: No execution yet
+  elapsed: 0.0
+- index: 137
+  lane: 1
+  action: delete
+  function: pub01
+  result: ok
+  elapsed: 0.02
+- index: 138
+  lane: 4
+  action: disable
+  function: stm04
+  result: ok
+  elapsed: 0.02
+- index: 139
+  lane: 2
+  action: cancel_execution
+  function: tfr04
+  result: skipped
+  detail: No execution yet
+  elapsed: 0.0
+- index: 140
+  lane: 6
+  action: trigger
+  function: crn04
+  result: ok
+  detail: Execution ep20261106-18
+  elapsed: 0.08
+- index: 141
+  lane: 0
+  action: lose_job
+  function: pub08
+  result: skipped
+  detail: No unfinished job
+  elapsed: 0.08
+- index: 142
+  lane: 2
+  action: trigger
+  function: tfr04
+  result: ok
+  detail: Execution ep20261106-22
+  elapsed: 0.07
+- index: 143
+  lane: 1
+  action: disable
+  function: stm01
+  result: ok
+  elapsed: 0.06
+- index: 144
+  lane: 1
+  action: register
+  function: pub01
+  result: ok
+  elapsed: 0.17
+- index: 145
+  lane: 1
+  action: update
+  function: tfr03
+  result: ok
+  elapsed: 0.29
+- index: 146
+  lane: 6
+  action: update
+  function: crn04
+  result: ok
+  elapsed: 0.27
+- index: 147
+  lane: 3
+  action: lose_job
+  function: pub03
+  result: skipped
+  detail: No execution yet
+  elapsed: 0.0
+- index: 148
+  lane: 7
+  action: update
+  function: crn05
+  result: ok
+  elapsed: 0.67
+- index: 149
+  lane: 3
+  action: enable
+  function: crn01
+  result: ok
+  elapsed: 0.04
+- index: 150
+  lane: 1
+  action: disable
+  function: stm01
+  result: ok
+  elapsed: 0.02
+- index: 151
+  lane: 6
+  action: cancel_execution
+  function: pub06
+  result: ok
+  detail: Execution ep20261106-11
+  elapsed: 0.08
+- index: 152
+  lane: 0
+  action: trigger
+  function: pub08
+  result: ok
+  detail: Execution ep20261106-28
+  elapsed: 0.39
+- index: 153
+  lane: 7
+  action: update
+  function: tfr01
+  result: ok
+  elapsed: 0.51
+- index: 154
+  lane: 2
+  action: trigger
+  function: tfr04
+  result: ok
+  detail: Execution ep20261106-23
+  elapsed: 0.06
+- index: 155
+  lane: 7
+  action: cancel_execution
+  function: sub03
+  result: ok
+  detail: Execution ep20261106-13
+  elapsed: 0.02
+- index: 156
+  lane: 4
+  action: cancel_execution
+  function: pub04
+  result: skipped
+  detail: No execution yet
+  elapsed: 0.0
+- index: 157
+  lane: 0
+  action: recover_execution
+  function: pub00
+  result: ok
+  detail: Execution ep20261106-14
+  elapsed: 0.01
+- index: 158
+  lane: 0
+  action: disable
+  function: stm00
+  result: ok
+  elapsed: 0.03
+- index: 159
+  lane: 7
+  action: disable
+  function: tfr01
+  result: ok
+  elapsed: 0.03
+- index: 160
+  lane: 1
+  action: trigger
+  function: pub01
+  result: ok
+  detail: Execution ep20261106-42
+  elapsed: 0.03
+- index: 161
+  lane: 5
+  action: recover_transaction
+  function: pub05
+  result: ok
+  detail: Transaction tx20261106-1 of execution ep20261106-1
+  elapsed: 0.02
+- index: 162
+  lane: 4
+  action: enable
+  function: stm04
+  result: ok
+  elapsed: 0.02
+- index: 163
+  lane: 1
+  action: disable
+  function: tfr03
+  result: ok
+  elapsed: 0.03
+- index: 164
+  lane: 1
+  action: enable
+  function: stm01
+  result: ok
+  elapsed: 0.01
+- index: 165
+  lane: 0
+  action: update
+  function: pub08
+  result: ok
+  elapsed: 0.45
+- index: 166
+  lane: 4
+  action: disable
+  function: stm04
+  result: ok
+  elapsed: 0.02
+- index: 167
+  lane: 5
+  action: trigger
+  function: pub05
+  result: ok
+  detail: Execution ep20261106-31
+  elapsed: 0.05
+- index: 168
+  lane: 4
+  action: enable
+  function: crn02
+  result: ok
+  elapsed: 0.02
+- index: 169
+  lane: 2
+  action: disable
+  function: crn00
+  result: ok
+  elapsed: 0.04
+- index: 170
+  lane: 1
+  action: pause
+  result: ok
+  elapsed: 0.0
+- index: 171
+  lane: 0
+  action: pause
+  result: ok
+  elapsed: 0.0
+- index: 172
+  lane: 2
+  action: enable
+  function: crn00
+  result: ok
+  elapsed: 0.05
+- index: 173
+  lane: 6
+  action: register
+  function: tfr00
+  result: ok
+  elapsed: 0.21
+- index: 174
+  lane: 2
+  action: lose_apiserver
+  result: ok
+  detail: Pod srv-apiserver-ff89f786c-nrswp; A new one answered after 5 s
+  elapsed: 5.53
+- index: 175
+  lane: 7
+  action: trigger
+  function: sub03
+  result: rejected
+  status: 400
+  detail: 'APIServerError: Function ''sub03'' must be enabled to be executed'
+  elapsed: 0.6
+- index: 176
+  lane: 0
+  action: update
+  function: tfr02
+  result: ok
+  elapsed: 0.14
+- index: 177
+  lane: 6
+  action: enable
+  function: crn04
+  result: ok
+  elapsed: 0.06
+- index: 178
+  lane: 5
+  action: disable
+  function: crn03
+  result: ok
+  elapsed: 0.04
+- index: 179
+  lane: 5
+  action: update
+  function: sub01
+  result: ok
+  elapsed: 0.71
+- index: 180
+  lane: 6
+  action: delete
+  function: crn04
+  result: ok
+  elapsed: 0.05
+- index: 181
+  lane: 6
+  action: update
+  function: tfr00
+  result: ok
+  elapsed: 5.62
+- index: 182
+  lane: 4
+  action: enable
+  function: sub00
+  result: ok
+  elapsed: 0.03
+- index: 183
+  lane: 7
+  action: enable
+  function: tfr01
+  result: ok
+  elapsed: 0.07
+- index: 184
+  lane: 4
+  action: lose_streamer
+  function: stm04
+  result: skipped
+  detail: No streamer
+  elapsed: 0.01
+- index: 185
+  lane: 3
+  action: disable
+  function: crn01
+  result: ok
+  elapsed: 0.04
+- index: 186
+  lane: 3
+  action: register
+  function: stm03
+  result: ok
+  elapsed: 0.3
+- index: 187
+  lane: 6
+  action: lose_job
+  function: pub06
+  result: skipped
+  detail: No unfinished job
+  elapsed: 0.01
+- index: 188
+  lane: 4
+  action: disable
+  function: stm04
+  result: ok
+  elapsed: 0.01
+- index: 189
+  lane: 5
+  action: enable
+  function: stm05
+  result: ok
+  elapsed: 0.02
+- index: 190
+  lane: 3
+  action: delete
+  function: crn01
+  result: ok
+  elapsed: 0.06
+- index: 191
+  lane: 5
+  action: trigger
+  function: pub05
+  result: ok
+  detail: Execution ep20261106-36
+  elapsed: 0.03
+- index: 192
+  lane: 5
+  action: trigger
+  function: pub05
+  result: ok
+  detail: Execution ep20261106-38
+  elapsed: 0.03
+- index: 193
+  lane: 6
+  action: trigger
+  function: pub06
+  result: ok
+  detail: Execution ep20261106-35
+  elapsed: 0.03
+- index: 194
+  lane: 3
+  action: enable
+  function: crn01
+  result: rejected
+  status: 404
+  detail: 'APIServerError: [Function] The requested entity was not found'
+  elapsed: 0.01
+- index: 195
+  lane: 1
+  action: update
+  function: stm01
+  result: ok
+  elapsed: 0.12
+- index: 196
+  lane: 7
+  action: trigger
+  function: crn05
+  result: ok
+  detail: Execution ep20261106-33
+  elapsed: 0.05
+- index: 197
+  lane: 3
+  action: disable
+  function: stm03
+  result: ok
+  elapsed: 0.05
+- index: 198
+  lane: 5
+  action: disable
+  function: crn03
+  result: ok
+  elapsed: 0.03
+- index: 199
+  lane: 2
+  action: delete
+  function: stm02
+  result: ok
+  elapsed: 0.28
+- index: 200
+  lane: 2
+  action: lose_apiserver
+  result: ok
+  detail: Pod srv-apiserver-ff89f786c-xvtjm; A new one answered after 6 s
+  elapsed: 5.56
+- index: 201
+  lane: 1
+  action: trigger
+  function: tfr03
+  result: rejected
+  status: 400
+  detail: 'APIServerError: Function ''tfr03'' must be enabled to be executed'
+  elapsed: 0.01
+- index: 202
+  lane: 2
+  action: trigger
+  function: tfr04
+  result: ok
+  detail: Execution ep20261106-30
+  elapsed: 0.05
+- index: 203
+  lane: 2
+  action: register
+  function: stm02
+  result: ok
+  elapsed: 0.72
+- index: 204
+  lane: 2
+  action: trigger
+  function: pub02
+  result: ok
+  detail: Execution ep20261106-32
+  elapsed: 0.08
+- index: 205
+  lane: 0
+  action: trigger
+  function: pub08
+  result: ok
+  detail: Execution ep20261106-40
+  elapsed: 0.02
+- index: 206
+  lane: 0
+  action: trigger
+  function: pub00
+  result: ok
+  detail: Execution ep20261106-41
+  elapsed: 0.02
+- index: 207
+  lane: 7
+  action: trigger
+  function: crn05
+  result: ok
+  detail: Execution ep20261106-34
+  elapsed: 0.02
+- index: 208
+  lane: 4
+  action: delete
+  function: stm04
+  result: ok
+  elapsed: 0.01
+- index: 209
+  lane: 1
+  action: recover_execution
+  function: pub09
+  result: ok
+  detail: Execution ep20261106-10
+  elapsed: 0.01
+- index: 210
+  lane: 3
+  action: trigger
+  function: pub03
+  result: ok
+  detail: Execution ep20261106-26
+  elapsed: 0.06
+- index: 211
+  lane: 7
+  action: update
+  function: tfr01
+  result: ok
+  elapsed: 0.15
+- index: 212
+  lane: 5
+  action: trigger
+  function: sub01
+  result: ok
+  detail: Execution ep20261106-39
+  elapsed: 0.02
+- index: 213
+  lane: 6
+  action: trigger
+  function: crn04
+  result: rejected
+  status: 404
+  detail: 'APIServerError: [Function] The requested entity was not found'
+  elapsed: 0.04
+- index: 214
+  lane: 4
+  action: pause
+  result: ok
+  elapsed: 0.0
+- index: 215
+  lane: 2
+  action: update
+  function: tfr04
+  result: ok
+  elapsed: 0.12
+- index: 216
+  lane: 6
+  action: register
+  function: crn04
+  result: ok
+  elapsed: 0.11
+- index: 217
+  lane: 5
+  action: update
+  function: crn03
+  result: ok
+  elapsed: 0.12
+- index: 218
+  lane: 0
+  action: disable
+  function: stm00
+  result: ok
+  elapsed: 0.02
+- index: 219
+  lane: 1
+  action: disable
+  function: pub01
+  result: ok
+  elapsed: 0.02
+- index: 220
+  lane: 6
+  action: trigger
+  function: pub06
+  result: ok
+  detail: Execution ep20261106-37
+  elapsed: 0.03
+- index: 221
+  lane: 7
+  action: update
+  function: sub03
+  result: ok
+  elapsed: 0.14
+- index: 222
+  lane: 1
+  action: update
+  function: pub09
+  result: ok
+  elapsed: 0.11
+- index: 223
+  lane: 3
+  action: recover_execution
+  function: pub03
+  result: ok
+  detail: Execution ep20261106-26
+  elapsed: 0.04
+- index: 224
+  lane: 1
+  action: enable
+  function: stm01
+  result: ok
+  elapsed: 0.02
+- index: 225
+  lane: 2
+  action: enable
+  function: crn00
+  result: ok
+  elapsed: 0.02
+- index: 226
+  lane: 4
+  action: trigger
+  function: crn02
+  result: ok
+  detail: Execution ep20261106-48
+  elapsed: 0.02
+- index: 227
+  lane: 1
+  action: cancel_execution
+  function: pub09
+  result: ok
+  detail: Execution ep20261106-10
+  elapsed: 0.01
+- index: 228
+  lane: 2
+  action: enable
+  function: crn00
+  result: ok
+  elapsed: 0.02
+- index: 229
+  lane: 2
+  action: disable
+  function: tfr04
+  result: ok
+  elapsed: 0.06
+- index: 230
+  lane: 4
+  action: update
+  function: crn02
+  result: ok
+  elapsed: 0.11
+- index: 231
+  lane: 6
+  action: update
+  function: sub02
+  result: ok
+  elapsed: 0.14
+- index: 232
+  lane: 4
+  action: enable
+  function: crn02
+  result: ok
+  elapsed: 0.01
+- index: 233
+  lane: 2
+  action: update
+  function: stm02
+  result: ok
+  elapsed: 0.14
+- index: 234
+  lane: 7
+  action: cancel_execution
+  function: sub03
+  result: ok
+  detail: Execution ep20261106-13
+  elapsed: 0.01
+- index: 235
+  lane: 2
+  action: enable
+  function: crn00
+  result: ok
+  elapsed: 0.02
+- index: 236
+  lane: 6
+  action: update
+  function: crn04
+  result: ok
+  elapsed: 0.16
+- index: 237
+  lane: 5
+  action: update
+  function: crn03
+  result: ok
+  elapsed: 0.2
+- index: 238
+  lane: 5
+  action: enable
+  function: stm05
+  result: ok
+  elapsed: 0.03
+- index: 239
+  lane: 5
+  action: cancel_transaction
+  function: pub05
+  result: ok
+  detail: Transaction tx20261106-36 of execution ep20261106-29
+  elapsed: 0.01
+- index: 240
+  lane: 2
+  action: trigger
+  function: crn00
+  result: ok
+  detail: Execution ep20261106-43
+  elapsed: 0.04
+- index: 241
+  lane: 4
+  action: lose_job
+  function: pub04
+  result: skipped
+  detail: No execution yet
+  elapsed: 0.0
+- index: 242
+  lane: 1
+  action: disable
+  function: tfr03
+  result: ok
+  elapsed: 0.02
+- index: 243
+  lane: 2
+  action: delete
+  function: crn00
+  result: ok
+  elapsed: 0.02
+- index: 244
+  lane: 3
+  action: trigger
+  function: pub03
+  result: ok
+  detail: Execution ep20261106-27
+  elapsed: 0.11
+- index: 245
+  lane: 1
+  action: trigger
+  function: pub01
+  result: rejected
+  status: 400
+  detail: 'APIServerError: Function ''pub01'' must be enabled to be executed'
+  elapsed: 0.01
+- index: 246
+  lane: 5
+  action: delete
+  function: crn03
+  result: ok
+  elapsed: 0.02
+- index: 247
+  lane: 5
+  action: cancel_execution
+  function: sub01
+  result: ok
+  detail: Execution ep20261106-39
+  elapsed: 0.01
+- index: 248
+  lane: 5
+  action: lose_streamer
+  function: stm05
+  result: ok
+  detail: Job stm-wkr20261106-109
+  elapsed: 0.17
+- index: 249
+  lane: 0
+  action: trigger
+  function: pub08
+  result: ok
+  detail: Execution ep20261106-44
+  elapsed: 0.03
+- index: 250
+  lane: 7
+  action: enable
+  function: pub07
+  result: ok
+  elapsed: 0.02
+- index: 251
+  lane: 5
+  action: disable
+  function: stm05
+  result: ok
+  elapsed: 0.02
+- index: 252
+  lane: 2
+  action: delete
+  function: crn00
+  result: rejected
+  status: 404
+  detail: 'APIServerError: [Function] The requested entity was not found'
+  elapsed: 0.01
+- index: 253
+  lane: 5
+  action: lose_job
+  function: pub05
+  result: ok
+  detail: Job pub-wkr20261106-111 of execution ep20261106-38
+  elapsed: 0.02
+- index: 254
+  lane: 1
+  action: trigger
+  function: pub09
+  result: rejected
+  status: 400
+  detail: 'APIServerError: Function ''pub09'' must be enabled to be executed'
+  elapsed: 0.01
+- index: 255
+  lane: 6
+  action: update
+  function: tfr00
+  result: ok
+  elapsed: 0.16
