@@ -335,11 +335,12 @@ class PostgresDest(Dest):
             truncates the table before inserting.
         transactional: When `True` (default), wrap every table write
             in one transactional session.
-        schema_evolution: `"strict"` (the default) rejects a batch with a
-            column the table lacks; `"update"` adds the column to the table
-            first. A column the batch lacks is written NULL either way. Column
-            types are not changed: a value a column cannot hold fails the
-            write.
+        schema_evolution: What a write does when the batch's columns differ from
+            the table's. `"replace"` makes the table the batch's own, so it is
+            not affected. `"strict"` (the default) refuses a batch with a column
+            the table lacks; `"update"` adds the column. Column types are never
+            changed: a value a column cannot hold fails the write. A column the
+            batch lacks is written NULL either way.
         dest_cfg: Optional config mapping over the allowed keys only
             (`postgres.logging_level`,
             `tabsdata.sql.write_engine`, `tabsdata.sql.chunk_size`).

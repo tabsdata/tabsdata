@@ -349,9 +349,12 @@ class ClickHouseDest(Dest):
             characters.
         if_table_exists: `"append"` (the default) adds rows;
             `"replace"` overwrites the table.
-        schema_evolution: `"strict"` (the default) rejects schema changes;
-            `"update"` adds new columns and widens column types of the target
-            to match the schema of the incoming data.
+        schema_evolution: What a write does when the batch's columns differ from
+            the table's. `"replace"` makes the table the batch's own, so it is
+            not affected. `"strict"` (the default) refuses a batch with a column
+            the table lacks or a wider type; `"update"` adds the column and
+            widens the type, and refuses a change ClickHouse cannot make. A
+            column the batch lacks is written NULL either way.
         dest_cfg: Optional connector config. Supported keys:
             `clickhouse.logging_level`, and
             `clickhouse.schema_evolution_engine` -- `"iceberg"`, the default

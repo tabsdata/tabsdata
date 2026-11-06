@@ -334,8 +334,13 @@ class BigQueryDest(Dest):
         if_table_exists: `"append"` (the default) adds rows;
             `"replace"` drops and recreates the table;
             `"merge"` merges rows.
-        schema_evolution: `"strict"` (the default) rejects schema changes;
-            `"update"` allows new columns.
+        schema_evolution: What a write does when the batch's columns differ from
+            the table's. `"replace"` makes the table the batch's own, so it is
+            not affected. `"strict"` (the default) refuses a batch with a column
+            the table lacks or a wider type; `"update"` adds the column and
+            widens the type, and refuses a change BigQuery cannot make. A column
+            the batch lacks is written NULL either way, and a merge keeps its
+            stored value in the rows it updates.
         merge_cfg: Required by -- and only valid with --
             `if_table_exists="merge"`: how incoming rows are matched
             onto existing ones. A list, one entry per table in `tables` and

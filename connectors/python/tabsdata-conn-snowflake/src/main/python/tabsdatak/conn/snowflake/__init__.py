@@ -314,9 +314,12 @@ class SnowflakeDest(Dest):
             `"merge"` stages the rows and `MERGE`s them onto the
             target by the keys in `merge_cfg`, updating, deleting or
             inserting each one.
-        schema_evolution: `"strict"` (the default) rejects schema changes;
-            `"update"` adds new columns to the target to match the schema of
-            the incoming data.
+        schema_evolution: What a write does when the batch's columns differ from
+            the table's. `"strict"` (the default) refuses a batch with a column
+            the table lacks or a wider type; `"update"` adds the column and
+            widens the type, and refuses a change Snowflake cannot make. A
+            column the batch lacks is written NULL either way, and a merge keeps
+            its stored value in the rows it updates.
         merge_cfg: Required by -- and only valid with --
             `if_table_exists="merge"`: how incoming rows are matched
             onto existing ones. A list, one entry per table in `tables` and
