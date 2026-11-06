@@ -112,6 +112,35 @@ def test_a_transformer_binds_no_connector():
     )
 
 
+def test_an_input_of_several_versions_takes_a_list_slot(tmp_path):
+    """@NEW, a range or a list hands one TableFrame per version, which only a
+    list slot can hold; registration refuses a single one."""
+    made = build_scaffold(
+        "transformer",
+        inputs=["sales/orders@NEW", "sales/prices@HEAD~1..HEAD", "items"],
+        outputs=["joined"],
+    )
+    assert made.source == _source(
+        """
+        from tabsdatak.api import TableFrameSpec, TableFramesSpec, transformer
+        from tabsdatak.tableframe.functions import concat
+
+
+        @transformer(
+            input_tables=["sales/orders@NEW", "sales/prices@HEAD~1..HEAD", "items"],
+            output_tables=["joined"],
+        )
+        def transform(
+            orders: TableFramesSpec, prices: TableFramesSpec, items: TableFrameSpec
+        ) -> TableFrameSpec:
+            return concat(orders or [])
+        """
+    )
+    path = tmp_path / "transform.py"
+    path.write_text(made.source)
+    assert check_function(f"{path}::transform")["valid"]
+
+
 def test_a_subscriber_takes_one_slot_per_input():
     made = build_scaffold(
         "subscriber", "postgres-sql-out", inputs=["crm/customers", "crm/orders"]

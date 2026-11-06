@@ -16,6 +16,8 @@ import re
 import typing
 from dataclasses import dataclass
 
+# noinspection PyProtectedMember
+from tabsdatak import _api
 from tabsdatak.cli._examples import FUNCTION_KINDS
 
 # noinspection PyProtectedMember
@@ -329,7 +331,15 @@ def build_scaffold(
     frames = kind == "stream_publisher" or (
         kind == "publisher" and bound is not None and bound.many_files
     )
-    if frames:
+    # A slot holds one TableFrame per version: a list for a source that hands
+    # several, or an input that can yield several versions (@NEW, a range,
+    # a list), which registration refuses to a single slot.
+    lists = (
+        [_api.reads_several_versions(table) for table in inputs]
+        if inputs
+        else [frames] * len(outputs)
+    )
+    if any(lists):
         imports.api.add("TableFramesSpec")
         imports.modules.setdefault("tabsdatak.tableframe.functions", set()).add(
             "concat"
@@ -339,16 +349,21 @@ def build_scaffold(
             f"'{name}' would shadow the imported '{name}'; pick another name."
         )
     params = _params(inputs or outputs, {name, *imports.names()})
-    if frames:
-        values = [f"concat({param} or [])" for param in params]
-        param_type = "TableFramesSpec"
-    else:
-        values = list(params)
-        param_type = "TableFrameSpec"
+    values = [
+        f"concat({param} or [])" if many else param
+        for param, many in zip(params, lists)
+    ]
     if kind == "transformer":
-        values = [params[0]] * len(outputs)
+        values = [values[0]] * len(outputs)
     returns, body = _returns(values)
-    signature = _signature(name, [f"{p}: {param_type}" for p in params], returns)
+    signature = _signature(
+        name,
+        [
+            f"{param}: {'TableFramesSpec' if many else 'TableFrameSpec'}"
+            for param, many in zip(params, lists)
+        ],
+        returns,
+    )
     decorator = "".join(f"    {argument},\n" for argument in arguments)
     source = (
         f"{imports.render()}\n\n\n"
