@@ -11,19 +11,19 @@ from tabsdatak.tableframe._engine.frame.frame import EngineFrame
 class TableFrame(EngineFrame):
     @property
     def columns(self):
-        return wrap(self._lf.columns)
+        return wrap(self._lf.collect_schema().names())
 
     @property
     def dtypes(self):
-        return wrap(self._lf.dtypes)
+        return wrap(self._lf.collect_schema().dtypes())
 
     @property
     def schema(self):
-        return wrap(self._lf.schema)
+        return wrap(self._lf.collect_schema())
 
     @property
     def width(self):
-        return wrap(self._lf.width)
+        return wrap(self._lf.collect_schema().len())
 
     def __getitem__(self, item):
         u_item = unwrap(item)

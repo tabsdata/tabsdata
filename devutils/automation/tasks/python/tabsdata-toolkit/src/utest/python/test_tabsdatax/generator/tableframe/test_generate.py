@@ -211,7 +211,7 @@ def test_tableframe_has_hooks_and_augmenting_ops(main_root):
     assert '"filter", (self,), {}, ' in text
     assert "call=lambda lf: lf.filter(*u_args, **u_kwargs)" in text
     # property reads (wrapped) underlying frame
-    assert "return wrap(self._lf.schema)" in text
+    assert "return wrap(self._lf.collect_schema())" in text
 
 
 def test_drop_and_rename_dispatch_hooks(main_root):

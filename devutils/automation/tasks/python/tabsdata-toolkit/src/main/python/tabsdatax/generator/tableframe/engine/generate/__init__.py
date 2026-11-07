@@ -1347,13 +1347,24 @@ _CUSTOM_BODIES = {
 }
 
 
+# LazyFrame properties that polars resolves through the schema, each with a
+# PerformanceWarning; read once through collect_schema() instead.
+_SCHEMA_PROPERTIES = {
+    "columns": "collect_schema().names()",
+    "dtypes": "collect_schema().dtypes()",
+    "schema": "collect_schema()",
+    "width": "collect_schema().len()",
+}
+
+
 def _tableframe_member(symbol: Symbol, root: str) -> list[str]:
     name = _member(symbol)
     if symbol.is_property:
+        access = _SCHEMA_PROPERTIES.get(name, name)
         return [
             "    @property",
             f"    def {name}(self):",
-            f"        return wrap(self._lf.{name})",
+            f"        return wrap(self._lf.{access})",
             "",
         ]
     hooked = _HOOKED_BODIES.get(symbol.hook_name)
