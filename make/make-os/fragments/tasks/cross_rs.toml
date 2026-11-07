@@ -1,0 +1,68 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+[tasks.__os__cross_rs]
+plugin = "td-task-tracker"
+category = "14 - Cross"
+private = true
+run_task = [
+    { name = [
+        "__os__cross_clippy_rs"
+    ] }
+]
+
+[tasks.__os__cross_clippy_rs]
+plugin = "td-task-tracker"
+category = "14 - Cross"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/cross.ds
+
+    previous_cargo = get_env td-cargo
+    previous_target = get_env td-target
+    previous_path = get_env PATH
+    os_family = os_family
+    if eq ${os_family} "windows"
+        path_separator = set ";"
+    else
+        path_separator = set ":"
+    end
+
+    host = cross_host
+    targets = cross_targets
+    for target in ${targets}
+        cargo = cross_cargo ${target}
+        info "🎯 Linting for ${target} with ${cargo}..."
+        set_env td-cargo ${cargo}
+        if eq ${target} ${host}
+            unset_env td-target
+            unset_env td-target-token
+        else
+            set_env td-target ${target}
+            set_env td-target-token "--target"
+        end
+        if eq ${cargo} "cargo-xwin"
+            llvm_bin = cross_llvm_bin
+            llvm_bin_missing = is_empty ${llvm_bin}
+            if not ${llvm_bin_missing}
+                set_env PATH "${llvm_bin}${path_separator}${previous_path}"
+            end
+        end
+        cm_run_task clippy_rs
+        set_env PATH ${previous_path}
+    end
+
+    set_env td-cargo ${previous_cargo}
+    previous_target_missing = is_empty ${previous_target}
+    if ${previous_target_missing}
+        unset_env td-target
+        unset_env td-target-token
+    else
+        set_env td-target ${previous_target}
+        set_env td-target-token "--target"
+    end
+    ''']

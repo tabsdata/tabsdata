@@ -151,6 +151,7 @@ BACKENDS_PY_DOMAINS_MANIFEST = { value = "${BACKENDS_MANIFEST_FOLDER}/domains_py
 BACKENDS_RS_DOMAINS_MANIFEST = { value = "${BACKENDS_MANIFEST_FOLDER}/domains_rs.yaml", normalize = true }
 BACKENDS_DOMAINS_ATTEMPTS = "4"
 BACKENDS_DOMAINS_RETRY_DELAY_MS = "5000"
+CROSS_TARGETS = "aarch64-apple-darwin;x86_64-unknown-linux-gnu;x86_64-pc-windows-msvc"
 ITEST_REGISTRY_FILE = { value = "${HOME}/.tabsdatax/instances/tdkpytest.yaml", normalize = true }
 ITEST_PORTS_LOCK = { value = "${HOME}/.tabsdatax/instances/tdkpytest.ports.lock", normalize = true }
 ITEST_MONKEY_UPGRADE_LAUNCH_CONFIG = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/variant/config/pytest/monkey/upgrade.yaml", normalize = true }

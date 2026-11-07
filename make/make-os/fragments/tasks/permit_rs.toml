@@ -10,6 +10,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/cross.ds
 
     tabsdata_rust_version = set 1.99.1
     set_env TABSDATA_RUST_VERSION ${tabsdata_rust_version}
@@ -44,7 +45,7 @@ script = [
         debug "♻️️ Checking if zig is installed..."
         zig = which zig
         if equals ${zig} ""
-            error "🚫🚫🚫🚫🚫 Zig is not available, and portable Linux builds link through it. Install it from https://ziglang.org/download or with your package manager. Make aborted."
+            error "🚫🚫🚫🚫🚫 Zig is not available, and clippy lints for other platforms with it. Install it from https://ziglang.org/download or with your package manager (brew install zig on macOS). Make aborted."
             assert_fail
         end
         result = exec zig version
@@ -108,6 +109,7 @@ script = [
         array_push ${crates_array} "cargo-update"
         array_push ${crates_array} "cargo-upgrades"
         array_push ${crates_array} "cargo-workspaces"
+        array_push ${crates_array} "cargo-xwin"
         array_push ${crates_array} "cargo-zigbuild"
         array_push ${crates_array} "mdbook"
         array_push ${crates_array} "mdbook-d2"
@@ -122,6 +124,34 @@ script = [
         end
 
         exec --fail-on-error rustup component add %{components}
+
+        cross_targets = get_env CROSS_TARGETS
+        cross_targets = replace ${cross_targets} ";" " "
+        debug "♻️️ Installing the Rust targets clippy lints for: ${cross_targets}"
+        exec --fail-on-error rustup target add %{cross_targets}
+
+        debug "♻️️ Checking if zig is installed, the C compiler for linting other platforms..."
+        zig = which zig
+        if equals ${zig} ""
+            error "🚫🚫🚫🚫🚫 Zig is not available, and clippy lints for other platforms with it. Install it from https://ziglang.org/download or with your package manager (brew install zig on macOS). Make aborted."
+            assert_fail
+        end
+
+        os_family = os_family
+        if not eq ${os_family} "windows"
+            debug "♻️️ Checking if clang-cl is installed, the C compiler for linting Windows..."
+            llvm_bin = cross_llvm_bin
+            llvm_bin_missing = is_empty ${llvm_bin}
+            clang_cl = which clang-cl
+            clang_cl_missing = is_empty ${clang_cl}
+            if ${llvm_bin_missing}
+                if ${clang_cl_missing}
+                    error "🚫🚫🚫🚫🚫 clang-cl is not available, and clippy lints for Windows with it. Install LLVM ('brew install llvm' on macOS, your distribution's llvm and clang packages on Linux). Make aborted."
+                    assert_fail
+                end
+            end
+        end
+
         exec --fail-on-error cargo install --quiet --locked %{force_token} --jobs ${td_cargo_install_jobs} %{crates}
 
         os_family = os_family

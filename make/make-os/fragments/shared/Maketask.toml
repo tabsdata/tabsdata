@@ -69,6 +69,9 @@ extend = [
     { path = "./make/make-os/fragments/tasks/pants_rs.toml", relative = "git" },
     { path = "./make/make-os/fragments/tasks/pants_py.toml", relative = "git" },
 
+    { path = "./make/make-os/fragments/tasks/cross_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/cross_py.toml", relative = "git" },
+
     { path = "./make/make-os/fragments/tasks/check_rs.toml", relative = "git" },
     { path = "./make/make-os/fragments/tasks/check_py.toml", relative = "git" },
 

@@ -148,7 +148,8 @@ run_task = [
         "machete_rs",
         "audit_rs",
         "deny_rs",
-        "pants_rs"
+        "pants_rs",
+        "cross_rs"
     ] }
 ]
 
@@ -181,7 +182,8 @@ run_task = [
         "machete_py",
         "audit_py",
         "deny_py",
-        "pants_py"
+        "pants_py",
+        "cross_py"
     ] }
 ]
 
@@ -2086,6 +2088,37 @@ description = "Task 'pants' for Python projects"
 run_task = [
     { name = [
         "__os__pants_py"
+    ] }
+]
+
+[tasks.cross]
+plugin = "td-task-tracker"
+category = "14 - Cross"
+description = "Run the checks that must hold on every platform in CROSS_TARGETS, for each of them"
+run_task = [
+    { name = [
+        "cross_rs",
+        "cross_py"
+    ] }
+]
+
+[tasks.cross_rs]
+plugin = "td-task-tracker"
+category = "14 - Cross"
+description = "Task 'cross' for Rust projects"
+run_task = [
+    { name = [
+        "__os__cross_rs"
+    ] }
+]
+
+[tasks.cross_py]
+plugin = "td-task-tracker"
+category = "14 - Cross"
+description = "Task 'cross' for Python projects"
+run_task = [
+    { name = [
+        "__os__cross_py"
     ] }
 ]
 

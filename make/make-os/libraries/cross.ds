@@ -1,0 +1,54 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+fn cross_targets
+    targets = get_env CROSS_TARGETS
+    targets = split ${targets} ;
+    return ${targets}
+end
+
+fn cross_host
+    rustc = exec --fail-on-error rustc -vV
+    lines = split ${rustc.stdout} \n
+    for line in ${lines}
+        line = trim ${line}
+        is_host = starts_with ${line} "host: "
+        if ${is_host}
+            host = substring ${line} 6
+            return ${host}
+        end
+    end
+    return ""
+end
+
+fn cross_cargo
+    target = set ${1}
+    host = cross_host
+    if eq ${target} ${host}
+        return cargo
+    end
+    msvc = ends_with ${target} "-windows-msvc"
+    if ${msvc}
+        return cargo-xwin
+    end
+    return cargo-zigbuild
+end
+
+fn cross_llvm_bin
+    clang_cl = which clang-cl
+    missing = is_empty ${clang_cl}
+    if not ${missing}
+        return ""
+    end
+    folders = split "/opt/homebrew/opt/llvm/bin;/usr/local/opt/llvm/bin" ;
+    for folder in ${folders}
+        exists = is_file ${folder}/clang-cl
+        if ${exists}
+            return ${folder}
+        end
+    end
+    return ""
+end
+
+trace "📌 Duckscript 'cross' library loaded"

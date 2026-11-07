@@ -1,0 +1,14 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+[tasks.__os__cross_py]
+plugin = "td-task-tracker"
+category = "14 - Cross"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+    warn "⏳ Nothing to do."
+    ''']
