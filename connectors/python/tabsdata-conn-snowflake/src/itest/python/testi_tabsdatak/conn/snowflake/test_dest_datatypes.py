@@ -20,52 +20,65 @@ from testi_tabsdatak.conn.snowflake.backend import dest_conn, store
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.snowflake import SnowflakeDest, _plugin as plugin
+from tabsdatak.conn.snowflake.error import SnowflakeErrorCode, SnowflakeRuntimeException
 
 pytestmark = pytest.mark.snowflake
 
-# Types the Snowflake write path can't create/load today (surfaced by the matrix).
-_XFAIL: dict[str, str] = {
-    "binary": (
-        "SNOWFLAKE_8: the bulk load matches columns by name, which routes every "
-        "value through a variant, and a variant cannot be cast to BINARY. The "
-        "destination now refuses a binary column up front rather than letting "
-        "COPY INTO fail once the stage and table exist -- encode it (base64 into "
-        "a string) before writing"
-    ),
+# Types the destination refuses up front, before the stage and table exist:
+# the bulk load cannot cast its variant to them (SNOWFLAKE_8: binary).
+_REFUSED: dict[str, SnowflakeErrorCode] = {
+    "binary": SnowflakeErrorCode.SNOWFLAKE_8,
 }
 
 
-def _params():
-    for case in DATATYPE_CASES:
-        marks = (
-            [pytest.mark.xfail(reason=_XFAIL[case.id], strict=True)]
-            if case.id in _XFAIL
-            else []
-        )
-        # One fixed table per case, so a run leaves nothing unpredictable behind.
-        # Upper case because the connector quotes the name it is given, and
-        # Snowflake stores unquoted identifiers upper-folded.
-        table = f"TD_DT_{case.id.upper()}"
-        yield pytest.param(case, table, id=case.id, marks=marks)
+# Upper case because the connector quotes the name it is given, and
+# Snowflake stores unquoted identifiers upper-folded.
+def _table(case: DataTypeCase) -> str:
+    return f"TD_DT_{case.id.upper()}"
 
 
-@pytest.mark.parametrize("case, table", list(_params()))
-@snowflake_domain("snowflake")
-def test_datatype_create_and_load(
-    domain_snowflake: SnowflakeDomain,
-    case: DataTypeCase,
-    table: str,
-    tmp_path: Path,
-):
-    frame = write_named_datatype_table(
+def _write(domain: SnowflakeDomain, case: DataTypeCase, tmp_path: Path):
+    return write_named_datatype_table(
         case,
-        table=table,
+        table=_table(case),
         dest_plugin=plugin.SnowflakeDestPlugin(),
         make_dest=lambda tables: SnowflakeDest(
             tables=tables, if_table_exists="replace"
         ),
-        dest_conn=dest_conn(domain_snowflake),
-        sql=store(domain_snowflake),
+        dest_conn=dest_conn(domain),
+        sql=store(domain),
         work_dir=work_dir(tmp_path),
     )
+
+
+def _cases(refused: bool) -> list:
+    return [
+        pytest.param(case, id=case.id)
+        for case in DATATYPE_CASES
+        if (case.id in _REFUSED) is refused
+    ]
+
+
+@pytest.mark.parametrize("case", _cases(refused=False))
+@snowflake_domain("snowflake")
+def test_datatype_create_and_load(
+    domain_snowflake: SnowflakeDomain,
+    case: DataTypeCase,
+    tmp_path: Path,
+):
+    frame = _write(domain_snowflake, case, tmp_path)
     assert frame.height == len(case.values)
+
+
+@pytest.mark.parametrize("case", _cases(refused=True))
+@snowflake_domain("snowflake")
+def test_datatype_refused(
+    domain_snowflake: SnowflakeDomain,
+    case: DataTypeCase,
+    tmp_path: Path,
+):
+    with pytest.raises(SnowflakeRuntimeException) as refusal:
+        _write(domain_snowflake, case, tmp_path)
+    assert refusal.value.api_error is _REFUSED[case.id]
+    assert "'c'" in str(refusal.value)
+    assert _table(case) in str(refusal.value)
