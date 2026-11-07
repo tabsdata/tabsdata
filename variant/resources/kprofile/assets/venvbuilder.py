@@ -710,6 +710,27 @@ def compile_one_virtual_environment(virtual_environment: str) -> None:
     trace(f"Compiled {virtual_environment} in {time.monotonic() - started:.2f}s")
 
 
+def report_one_virtual_environment(
+    workspace: dict[str, str], virtual_environment: str
+) -> None:
+    command = [
+        uv_binary(workspace),
+        "pip",
+        "list",
+        "--python",
+        venv_python(virtual_environment),
+    ]
+    trace(f"RUN {' '.join(command)}")
+    try:
+        listing = subprocess.run(
+            command, check=True, capture_output=True, text=True, encoding="utf-8"
+        ).stdout
+    except Exception as error:
+        trace(f"Listing the packages of {virtual_environment} failed ({error})")
+        return
+    trace(f"Packages installed in {virtual_environment}:\n{listing.rstrip()}")
+
+
 COMPRESS_SCRIPT = """
 import sys
 import zstandard
@@ -811,6 +832,7 @@ def build_one_image(
     )
     prune_one_virtual_environment(virtual_environment, pruned_bin_files)
     compile_one_virtual_environment(virtual_environment)
+    report_one_virtual_environment(workspace, virtual_environment)
     if not os.path.isdir(virtual_environment):
         raise FileNotFoundError(f"Expected folder is missing: {virtual_environment}")
     write_one_image(workspace, script, venv, target)

@@ -431,6 +431,7 @@ class PythonEnvironment:
                 binary.link(source_root, self.root)
         self.link_libexec_launchers(recipe.packages)
         self.compile(verbose=verbose)
+        self.report()
 
     def link_libexec_launchers(self, packages: tuple[PackageRecipe, ...]) -> None:
         target = self.root / LIBEXEC_INSTALL_RELATIVE_PATH
@@ -667,6 +668,14 @@ class PythonEnvironment:
             subprocess.run(command, capture_output=not verbose)
         except Exception as error:
             logger.warning(f"Precompiling {self.root} failed ({error}); skipping")
+
+    def report(self) -> None:
+        try:
+            listing = self.uv(["pip", "list", "--python", str(self.python())])
+        except VenvCreationError as error:
+            logger.warning(f"Listing the packages of {self.root} failed ({error})")
+            return
+        print(f"Packages installed in {self.root}:\n{listing.rstrip()}", flush=True)
 
     def binary(self, name: str) -> Path:
         scripts = self.scripts()

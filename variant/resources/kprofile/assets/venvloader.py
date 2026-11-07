@@ -11,6 +11,7 @@ import os
 import shutil
 import subprocess
 import sys
+import sysconfig
 import tarfile
 import time
 from pathlib import Path
@@ -40,6 +41,7 @@ UV_MODE_LOCAL = "local"
 UV_MODES_HOST = (UV_MODE_LINKED, UV_MODE_LOCAL)
 
 TAR_EXECUTABLE = "tar"
+UV_EXECUTABLE = "uv"
 COPY_BLOCK_SIZE = 1 << 22
 
 PATH_SEPARATOR = "/"
@@ -228,6 +230,32 @@ def extract_image(location: StorageLocation, uv_home: Path) -> None:
                 extract_with_tarfile(stream, uv_home)
 
 
+def venv_python(virtual_environment: Path) -> Path:
+    scripts = sysconfig.get_paths(
+        scheme="venv",
+        vars={"base": str(virtual_environment), "platbase": str(virtual_environment)},
+    )["scripts"]
+    return Path(scripts) / ("python" + Path(sys.executable).suffix)
+
+
+def report_venv(uv_home: Path, venv: str) -> None:
+    virtual_environment = uv_home / KENVS_FOLDER / venv
+    python = str(venv_python(virtual_environment))
+    uv = shutil.which(UV_EXECUTABLE)
+    if uv:
+        command = [uv, "pip", "list", "--python", python]
+    else:
+        command = [python, "-m", "pip", "list", "--disable-pip-version-check"]
+    try:
+        listing = subprocess.run(
+            command, check=True, capture_output=True, text=True, encoding="utf-8"
+        ).stdout
+    except (OSError, subprocess.CalledProcessError) as error:
+        trace(f"Listing the packages of {virtual_environment} failed ({error})")
+        return
+    trace(f"Packages installed in {virtual_environment}:\n{listing.rstrip()}")
+
+
 def main() -> int:
     arguments = parse_arguments()
     mode = os.environ.get(ENV_UV_MODE, "").strip().lower()
@@ -248,6 +276,7 @@ def main() -> int:
             clear_venv(uv_home, venv)
             name = image_for_venv(arguments.image, venv)
             extract_image(image_location(mount, arguments.subfolder, name), uv_home)
+            report_venv(uv_home, venv)
     except (
         OSError,
         MountError,

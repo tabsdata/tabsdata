@@ -372,6 +372,17 @@ prune_virtual_environment() {
    prune_one_virtual_environment "$virtual_environment_fn" "${PRUNED_BIN_FILES_FN[@]}"
 }
 
+report_one_virtual_environment() {
+   local virtual_environment="$1"
+   run uv pip list --python "$virtual_environment/bin/python" \
+      || trace "Listing the packages of $virtual_environment failed"
+}
+
+report_packages() {
+   report_one_virtual_environment "$virtual_environment_td"
+   report_one_virtual_environment "$virtual_environment_fn"
+}
+
 verify_image() {
    test -d "$UV_PYTHON_HOME"
    test -d "$virtual_environment_td"
@@ -456,6 +467,7 @@ main() {
    step "Creating the virtual environments"   create_virtual_environment
    step "Installing packages"                 install_packages
    step "Pruning the virtual environments"    prune_virtual_environment
+   step "Reporting the installed packages"    report_packages
    step "Verifying the image"                 verify_image
    step "Writing the image"                   write_image
    step "Sending the image"                   send_image
