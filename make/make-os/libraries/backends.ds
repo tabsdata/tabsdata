@@ -170,4 +170,29 @@ fn resolve_domains_manifest
     return ${manifest}
 end
 
+fn create_domains
+    tdd = set ${1}
+    manifest = set ${2}
+    attempts = get_env BACKENDS_DOMAINS_ATTEMPTS
+    delay = get_env BACKENDS_DOMAINS_RETRY_DELAY_MS
+    attempt = set 1
+    created = set false
+    while not ${created}
+        debug "🚀 ${tdd} domain create --manifest ${manifest} --force --brief"
+        exit_code = exec --get-exit-code ${tdd} domain create --manifest ${manifest} --force --brief
+        if eq ${exit_code} "0"
+            created = set true
+        elseif less_than ${attempt} ${attempts}
+            warn "⚠️ Creating backend domains failed on attempt ${attempt} of ${attempts} (exit code ${exit_code}). Retrying in ${delay} ms."
+            sleep ${delay}
+            attempt = calc ${attempt} + 1
+        else
+            error ""
+            error "🧨 Creating backend domains failed after ${attempts} attempts (exit code ${exit_code})."
+            error ""
+            assert false
+        end
+    end
+end
+
 trace "📌 Duckscript 'backends' library loaded"
