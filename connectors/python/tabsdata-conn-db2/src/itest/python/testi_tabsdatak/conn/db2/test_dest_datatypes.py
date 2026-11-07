@@ -23,20 +23,12 @@ from tabsdatak.conn.db2 import Db2Dest, _plugin as plugin
 
 pytestmark = pytest.mark.db2
 
-# Types the DB2 write path can't create/load today (surfaced by the matrix).
-_XFAIL: dict[str, str] = {}
-
 
 def _params():
     for case in DATATYPE_CASES:
-        marks = (
-            [pytest.mark.xfail(reason=_XFAIL[case.id], strict=True)]
-            if case.id in _XFAIL
-            else []
-        )
         # One fixed table per case, so a run leaves nothing unpredictable behind.
         table = f"td_dt_{case.id}"
-        yield pytest.param(case, table, id=case.id, marks=marks)
+        yield pytest.param(case, table, id=case.id)
 
 
 @pytest.mark.parametrize("case, table", list(_params()))

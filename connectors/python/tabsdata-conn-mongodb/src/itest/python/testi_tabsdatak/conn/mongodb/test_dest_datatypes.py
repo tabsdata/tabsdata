@@ -24,10 +24,6 @@ from tabsdatak.conn.mongodb import MongoDBDest, _plugin as plugin
 
 pytestmark = pytest.mark.mongodb
 
-# Types the MongoDB write path can't encode today (surfaced by the matrix): BSON has
-# no codec for them and the writer registers none, so the insert itself fails.
-_XFAIL: dict[str, str] = {}
-
 
 # The matrix reads back through a table-shaped store; MongoStore speaks collections.
 class _CollectionStore:
@@ -43,14 +39,9 @@ class _CollectionStore:
 
 def _params():
     for case in DATATYPE_CASES:
-        marks = (
-            [pytest.mark.xfail(reason=_XFAIL[case.id], strict=True)]
-            if case.id in _XFAIL
-            else []
-        )
         # One fixed collection per case, so a run leaves nothing unpredictable behind.
         collection = f"td_dt_{case.id}"
-        yield pytest.param(case, collection, id=case.id, marks=marks)
+        yield pytest.param(case, collection, id=case.id)
 
 
 @pytest.mark.parametrize("case, collection", list(_params()))
