@@ -123,7 +123,7 @@ class DataQualityProcessor:
             collection = (
                 input_table.collection if input_table.collection else self.collection
             )
-            table = input_table
+            table = input_table.table
             version = input_table.version
 
             qualified_table = (collection, input_table.table)

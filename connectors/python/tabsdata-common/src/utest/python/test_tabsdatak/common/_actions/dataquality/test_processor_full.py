@@ -727,6 +727,50 @@ class TestDataQualityProcessorTableNames:
         assert "customers" in str(exception.value)
 
     @pytest.mark.dq
+    def test_name_collision_resolved_same_version_under_two_aliases(self):
+        input_tables = {
+            "alias1": ExtendedTableURI(
+                TableURI(
+                    None,
+                    "customers",
+                    "HEAD",
+                ),
+                0,
+            ),
+            "alias2": ExtendedTableURI(
+                TableURI(
+                    "collection",
+                    "customers",
+                    "HEAD",
+                ),
+                1,
+            ),
+        }
+
+        dq_action = DataQuality(
+            "customers",
+            classifiers=[IsNull(["value"])],
+            operators=[Select(AllOk(), to_table="resolved_select")],
+        )
+
+        processor = DataQualityProcessor(
+            collection="collection",
+            input_tables=input_tables,
+            output_tables=[],
+            input_actions=[dq_action],
+            output_actions=[],
+        )
+
+        input_tables_names, output_tables_names = processor.table_names()
+
+        assert len(input_tables_names) == 1
+        assert input_tables_names[0].table == "resolved_select"
+        assert input_tables_names[0].from_table == "customers"
+        assert input_tables_names[0].from_collection == "collection"
+        assert input_tables_names[0].position == 0
+        assert output_tables_names == []
+
+    @pytest.mark.dq
     def test_name_collision_unresolved_table_not_found(self):
         input_tables = {
             "alias": ExtendedTableURI(
