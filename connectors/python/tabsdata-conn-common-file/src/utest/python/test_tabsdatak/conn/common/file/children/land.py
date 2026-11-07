@@ -46,7 +46,8 @@ def main(root: str, options: str, name: str, file_format: str, target: str) -> N
     (table,) = list(slot)
     table.frame.sink_parquet(target)
     rows = pl.scan_parquet(target).select(pl.len()).collect().item()
-    print(json.dumps({"rows": rows, "peak": peak_bytes()}))
+    report = {"rows": rows, "peak": peak_bytes(), "threads": pl.thread_pool_size()}
+    print(json.dumps(report))
 
 
 if __name__ == "__main__":

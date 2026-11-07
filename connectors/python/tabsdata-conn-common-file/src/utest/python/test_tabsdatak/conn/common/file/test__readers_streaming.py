@@ -26,7 +26,10 @@ pytestmark = [pytest.mark.unit, pytest.mark.slow]
 
 MEBIBYTE = 1 << 20
 GIBIBYTE = 1 << 30
-PEAK_LIMIT = 1536 * MEBIBYTE
+# A reader holds a share of each polars thread's work in flight, so its peak
+# follows the size of the thread pool (the runner's cores), never the file's.
+PEAK_BASE = 1280 * MEBIBYTE
+PEAK_PER_THREAD = 48 * MEBIBYTE
 GROWTH_LIMIT = 256 * MEBIBYTE
 CHILD_SECONDS = 900
 LAND = Path(__file__).parent / "children" / "land.py"
@@ -149,7 +152,7 @@ def landed(domain, tmp_path: Path, file_format: str, size: int):
         target.unlink(missing_ok=True)
     report = json.loads(child.stdout.strip().splitlines()[-1])
     assert report["rows"] == rows
-    return report["peak"]
+    return report["peak"], report["threads"]
 
 
 @emulated
@@ -164,8 +167,12 @@ def test_a_large_file_lands_in_bounded_memory_that_does_not_grow_with_it(
     file_format,
 ):
     domain = locals()[f"domain_{emulator}"]
-    smaller = landed(domain, tmp_path, file_format, GIBIBYTE)
-    larger = landed(domain, tmp_path, file_format, 2 * GIBIBYTE)
-    report = f"peaks {smaller / MEBIBYTE:.0f} and {larger / MEBIBYTE:.0f} MiB"
-    assert max(smaller, larger) < PEAK_LIMIT, report
+    smaller, threads = landed(domain, tmp_path, file_format, GIBIBYTE)
+    larger, _ = landed(domain, tmp_path, file_format, 2 * GIBIBYTE)
+    limit = PEAK_BASE + PEAK_PER_THREAD * threads
+    report = (
+        f"peaks {smaller / MEBIBYTE:.0f} and {larger / MEBIBYTE:.0f} MiB"
+        f" with {threads} threads, limit {limit / MEBIBYTE:.0f} MiB"
+    )
+    assert max(smaller, larger) < limit, report
     assert larger - smaller < GROWTH_LIMIT, report
