@@ -386,21 +386,12 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
         sr_client = build_schema_registry_client(
             schema_registry=self._conn.schema_registry,
         )
-        sr_client_alt = None
-        if sr_client is not None and self._stream_src.data_format not in (
-            "json",
-            "avro",
-        ):
-            sr_client_alt = build_schema_registry_client(
-                schema_registry=self._conn.schema_registry,
-            )
         self._serde = build_serde(
             data_format=self._stream_src.data_format,
             schema=self._stream_src.schema,
             schema_registry=self._conn.schema_registry,
             working_dir=str(work_dir),
             sr_client=sr_client,
-            sr_client_alt=sr_client_alt,
         )
         self._batch_decode = self._serde.batch_decoder()
         return consumer

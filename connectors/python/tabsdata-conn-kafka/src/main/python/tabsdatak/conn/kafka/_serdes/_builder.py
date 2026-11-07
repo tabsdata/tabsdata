@@ -55,7 +55,6 @@ def build_serde(
     schema_registry: SchemaRegistrySpec | None,
     working_dir: str,
     sr_client: Any | None = None,
-    sr_client_alt: Any | None = None,
 ) -> KafkaSerde:
     """Pick the concrete :class:`KafkaSerde` for the given
     ``(data_format, schema_registry)`` combo.
@@ -70,10 +69,6 @@ def build_serde(
     :param working_dir: Working directory for protobuf compilation.
     :param sr_client: Pre-built schema-registry client. Used by
         Confluent / Glue paths.
-    :param sr_client_alt: Second Confluent SR client (Protobuf SR
-        only -- the serializer + deserializer caches diverge and
-        need separate clients; see
-        :class:`ProtobufSrKafkaSerde`).
     """
     # noinspection PyProtectedMember
     from tabsdatak.conn.kafka._serdes._confluent import (
@@ -125,8 +120,7 @@ def build_serde(
             )
         if is_protobuf:
             return ProtobufSrKafkaSerde(
-                serializer_registry_client=sr_client,
-                deserializer_registry_client=sr_client_alt or sr_client,
+                schema_registry_client=sr_client,
                 protobuf_schema=schema,
                 message_name=data_format.message_name,
                 working_dir=working_dir,

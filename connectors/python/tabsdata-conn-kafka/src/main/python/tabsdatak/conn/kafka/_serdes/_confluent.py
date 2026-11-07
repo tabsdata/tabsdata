@@ -143,19 +143,18 @@ class JsonSrKafkaSerde(SrKafkaSerde):
 class ProtobufSrKafkaSerde(SrKafkaSerde):
     """Confluent SR + Protobuf.
 
-    Needs *separate* SR clients for serialiser and deserialiser:
-    the Confluent SR client caches schemas by id; the serializer's
-    ``register`` call caches the schema in proto-text format
-    (Redpanda v26+ returns that on read), but the deserializer
-    needs the binary-format schema (``format=serialized``). A
-    shared client causes a cache hit with the wrong format and
-    breaks protobuf deserialisation."""
+    Only the serializer talks to the registry. The deserializer decodes
+    with the message class compiled from ``protobuf_schema``, reading the
+    schema id and message index from the Confluent framing: given a
+    registry, it would also fetch the writer schema as a serialized
+    descriptor (``format=serialized``) to run data-contract rules, which
+    this connector does not expose, and a registry that answers with
+    ``.proto`` text instead fails every message on that fetch."""
 
     def __init__(
         self,
         *,
-        serializer_registry_client: "SchemaRegistryClient",
-        deserializer_registry_client: "SchemaRegistryClient",
+        schema_registry_client: "SchemaRegistryClient",
         protobuf_schema: str,
         message_name: str,
         working_dir: str,
@@ -166,14 +165,8 @@ class ProtobufSrKafkaSerde(SrKafkaSerde):
             protobuf_schema=protobuf_schema,
             message_name=message_name,
         )
-        self._serializer = self._make_serializer(
-            serializer_registry_client,
-            msg_class,
-        )
-        self._deserializer = self._make_deserializer(
-            deserializer_registry_client,
-            msg_class,
-        )
+        self._serializer = self._make_serializer(schema_registry_client, msg_class)
+        self._deserializer = self._make_deserializer(msg_class)
         self._schema = protobuf_schema
         self._message_name = message_name
         self._working_dir = working_dir
@@ -198,7 +191,7 @@ class ProtobufSrKafkaSerde(SrKafkaSerde):
         return serializer
 
     @staticmethod
-    def _make_deserializer(schema_registry_client: Any, msg_class: type):
+    def _make_deserializer(msg_class: type):
         from confluent_kafka.schema_registry.protobuf import (
             ProtobufDeserializer,
         )
@@ -206,7 +199,7 @@ class ProtobufSrKafkaSerde(SrKafkaSerde):
 
         class_deserializer = ProtobufDeserializer(  # type: ignore[call-arg]
             message_type=msg_class,
-            schema_registry_client=schema_registry_client,
+            schema_registry_client=None,
         )
 
         def deserializer(data: bytes, ctx: "SerializationContext") -> dict:

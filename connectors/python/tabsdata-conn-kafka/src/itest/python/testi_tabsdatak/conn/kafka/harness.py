@@ -263,8 +263,7 @@ def confluent_json(sr: Broker, _work: Path):
 
 def confluent_protobuf(sr: Broker, work: Path):
     return ProtobufSrKafkaSerde(
-        serializer_registry_client=sr.schema_registry_client(),
-        deserializer_registry_client=sr.schema_registry_client(),
+        schema_registry_client=sr.schema_registry_client(),
         protobuf_schema=proto_schema(),
         message_name=PROTOBUF_MESSAGE,
         working_dir=str(work),
@@ -346,27 +345,8 @@ JSON_VARIANT = next(v for v in VARIANTS if v.id == "no_sr_json")
 
 
 def variant_params():
-    """One parametrize entry per serde variant. The Protobuf-over-Confluent-SR
-    variant is xfailed: its deserializer fails against this Redpanda registry with
-    "Error parsing message with type 'google.protobuf.FileDescriptorProto'" (a
-    protobuf-SR round-trip quirk). Protobuf works no-SR, and SR works for JSON/Avro,
-    so the failure is confined to that one intersection; also unit-covered."""
-    params = []
-    for variant in VARIANTS:
-        marks = []
-        if variant.id == "confluent_sr_protobuf":
-            marks = [
-                pytest.mark.xfail(
-                    reason=(
-                        "Protobuf over Confluent SR fails to deserialise against the "
-                        "tdx Redpanda registry (FileDescriptorProto parse error); "
-                        "tracked in TD-2809"
-                    ),
-                    strict=False,
-                )
-            ]
-        params.append(pytest.param(variant, id=variant.id, marks=marks))
-    return params
+    """One parametrize entry per serde variant."""
+    return [pytest.param(variant, id=variant.id) for variant in VARIANTS]
 
 
 def stream_src(

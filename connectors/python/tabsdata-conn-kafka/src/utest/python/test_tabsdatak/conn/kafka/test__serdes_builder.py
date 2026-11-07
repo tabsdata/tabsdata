@@ -131,7 +131,6 @@ def test_build_serde_confluent_protobuf(tmp_path):
         schema=_PROTO_SCHEMA,
         schema_registry=sr, working_dir=str(tmp_path),
         sr_client=MagicMock(),
-        sr_client_alt=MagicMock(),
     )
     assert isinstance(serde, ProtobufSrKafkaSerde)
 
