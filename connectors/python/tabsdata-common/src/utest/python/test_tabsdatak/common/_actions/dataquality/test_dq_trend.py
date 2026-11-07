@@ -765,8 +765,9 @@ def test_dropping_the_handle_deletes_the_directory():
     assert directory.is_dir()
 
     name = module_name(func)
-    del root, func
-    gc.collect()
+    with pytest.warns(ResourceWarning, match="Implicitly cleaning up"):
+        del root, func
+        gc.collect()
 
     assert not directory.exists()
     sys.modules.pop(name, None)
