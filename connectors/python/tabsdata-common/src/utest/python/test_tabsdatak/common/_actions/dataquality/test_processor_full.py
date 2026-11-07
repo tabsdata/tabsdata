@@ -17,12 +17,10 @@ from tabsdatak.dataquality._tableuri import ExtendedTableURI, TableURI
 
 pytestmark = pytest.mark.dq
 
-_URI_TABLE_NAME_REJECTED = (
-    "DataQuality(table=...) now uses TableNameSpec (strict identifier "
-    "regex); URI-grammar action names (collection/table, table@version) "
-    "are rejected at construction. Legacy tabsdata used bare str with no "
-    "validation."
-)
+
+def _with_uri_table(action: DataQuality, table: str) -> DataQuality:
+    object.__setattr__(action, "table", table)
+    return action
 
 
 class TestDataQualityProcessorTableNames:
@@ -285,11 +283,6 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     @pytest.mark.dq
-    @pytest.mark.xfail(
-        reason=_URI_TABLE_NAME_REJECTED,
-        raises=ParameterValidationError,
-        strict=True,
-    )
     def test_table_names_collection_slash_table_format(self):
         input_tables = {
             "alias": ExtendedTableURI(
@@ -302,10 +295,13 @@ class TestDataQualityProcessorTableNames:
             ),
         }
 
-        dq_action = DataQuality(
+        dq_action = _with_uri_table(
+            DataQuality(
+                "uri_action",
+                classifiers=[IsNull(["value"])],
+                operators=[Select(AllOk(), to_table="qualified_select")],
+            ),
             "collection/table",
-            classifiers=[IsNull(["value"])],
-            operators=[Select(AllOk(), to_table="qualified_select")],
         )
 
         processor = DataQualityProcessor(
@@ -325,11 +321,6 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     @pytest.mark.dq
-    @pytest.mark.xfail(
-        reason=_URI_TABLE_NAME_REJECTED,
-        raises=ParameterValidationError,
-        strict=True,
-    )
     def test_table_names_table_at_version_format(self):
         input_tables = {
             "alias": ExtendedTableURI(
@@ -342,10 +333,13 @@ class TestDataQualityProcessorTableNames:
             )
         }
 
-        dq_action = DataQuality(
+        dq_action = _with_uri_table(
+            DataQuality(
+                "uri_action",
+                classifiers=[IsNull(["value"])],
+                operators=[Select(AllOk(), to_table="versioned_select")],
+            ),
             "table@HEAD",
-            classifiers=[IsNull(["value"])],
-            operators=[Select(AllOk(), to_table="versioned_select")],
         )
 
         processor = DataQualityProcessor(
@@ -365,11 +359,6 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     @pytest.mark.dq
-    @pytest.mark.xfail(
-        reason=_URI_TABLE_NAME_REJECTED,
-        raises=ParameterValidationError,
-        strict=True,
-    )
     def test_table_names_full_uri_format(self):
         input_tables = {
             "alias": ExtendedTableURI(
@@ -382,10 +371,13 @@ class TestDataQualityProcessorTableNames:
             ),
         }
 
-        dq_action = DataQuality(
+        dq_action = _with_uri_table(
+            DataQuality(
+                "uri_action",
+                classifiers=[IsNull(["value"])],
+                operators=[Select(AllOk(), to_table="full_uri_select")],
+            ),
             "collection/table@HEAD~1",
-            classifiers=[IsNull(["value"])],
-            operators=[Select(AllOk(), to_table="full_uri_select")],
         )
 
         processor = DataQualityProcessor(
@@ -405,11 +397,6 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     @pytest.mark.dq
-    @pytest.mark.xfail(
-        reason=_URI_TABLE_NAME_REJECTED,
-        raises=ParameterValidationError,
-        strict=True,
-    )
     def test_table_names_version_with_carets_format(self):
         input_tables = {
             "alias": ExtendedTableURI(
@@ -422,10 +409,13 @@ class TestDataQualityProcessorTableNames:
             )
         }
 
-        dq_action = DataQuality(
+        dq_action = _with_uri_table(
+            DataQuality(
+                "uri_action",
+                classifiers=[IsNull(["value"])],
+                operators=[Select(AllOk(), to_table="caret_version_select")],
+            ),
             "table@HEAD^^",
-            classifiers=[IsNull(["value"])],
-            operators=[Select(AllOk(), to_table="caret_version_select")],
         )
 
         processor = DataQualityProcessor(
@@ -445,11 +435,6 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     @pytest.mark.dq
-    @pytest.mark.xfail(
-        reason=_URI_TABLE_NAME_REJECTED,
-        raises=ParameterValidationError,
-        strict=True,
-    )
     def test_table_names_version_with_hash_format(self):
         input_tables = {
             "alias1": ExtendedTableURI(
@@ -462,10 +447,13 @@ class TestDataQualityProcessorTableNames:
             )
         }
 
-        dq_action = DataQuality(
+        dq_action = _with_uri_table(
+            DataQuality(
+                "uri_action",
+                classifiers=[IsNull(["value"])],
+                operators=[Select(AllOk(), to_table="hash_version_select")],
+            ),
             "table@ABCDEFGHIJKLMNOPQRSTUVWXY0",
-            classifiers=[IsNull(["value"])],
-            operators=[Select(AllOk(), to_table="hash_version_select")],
         )
 
         processor = DataQualityProcessor(
@@ -528,11 +516,6 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     @pytest.mark.dq
-    @pytest.mark.xfail(
-        reason=_URI_TABLE_NAME_REJECTED,
-        raises=ParameterValidationError,
-        strict=True,
-    )
     def test_name_collision_resolved_via_qualified_name_single_match(self):
         input_tables = {
             "alias": ExtendedTableURI(
@@ -545,10 +528,13 @@ class TestDataQualityProcessorTableNames:
             ),
         }
 
-        dq_action = DataQuality(
+        dq_action = _with_uri_table(
+            DataQuality(
+                "uri_action",
+                classifiers=[IsNull(["value"])],
+                operators=[Select(AllOk(), to_table="qualified_resolved_select")],
+            ),
             "collection_a/customers",
-            classifiers=[IsNull(["value"])],
-            operators=[Select(AllOk(), to_table="qualified_resolved_select")],
         )
 
         processor = DataQualityProcessor(
@@ -568,11 +554,6 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names == []
 
     @pytest.mark.dq
-    @pytest.mark.xfail(
-        reason=_URI_TABLE_NAME_REJECTED,
-        raises=ParameterValidationError,
-        strict=True,
-    )
     def test_name_collision_resolved_different_collections(self):
         input_tables = {
             "table_a": ExtendedTableURI(
@@ -593,10 +574,13 @@ class TestDataQualityProcessorTableNames:
             ),
         }
 
-        dq_action = DataQuality(
+        dq_action = _with_uri_table(
+            DataQuality(
+                "uri_action",
+                classifiers=[IsNull(["value"])],
+                operators=[Select(AllOk(), to_table="different_collection_select")],
+            ),
             "collection_a/customers",
-            classifiers=[IsNull(["value"])],
-            operators=[Select(AllOk(), to_table="different_collection_select")],
         )
 
         processor = DataQualityProcessor(
@@ -776,11 +760,6 @@ class TestDataQualityProcessorTableNames:
         assert "products" in str(exception.value)
 
     @pytest.mark.dq
-    @pytest.mark.xfail(
-        reason=_URI_TABLE_NAME_REJECTED,
-        raises=ParameterValidationError,
-        strict=True,
-    )
     def test_name_collision_unresolved_wrong_collection(self):
         input_tables = {
             "alias": ExtendedTableURI(
@@ -793,10 +772,13 @@ class TestDataQualityProcessorTableNames:
             ),
         }
 
-        dq_action = DataQuality(
+        dq_action = _with_uri_table(
+            DataQuality(
+                "uri_action",
+                classifiers=[IsNull(["value"])],
+                operators=[Select(AllOk(), to_table="wrong_collection_select")],
+            ),
             "collection_b/customers",
-            classifiers=[IsNull(["value"])],
-            operators=[Select(AllOk(), to_table="wrong_collection_select")],
         )
 
         processor = DataQualityProcessor(
@@ -814,11 +796,6 @@ class TestDataQualityProcessorTableNames:
         assert "collection_b/customers" in str(exception.value)
 
     @pytest.mark.dq
-    @pytest.mark.xfail(
-        reason=_URI_TABLE_NAME_REJECTED,
-        raises=ParameterValidationError,
-        strict=True,
-    )
     def test_name_collision_unresolved_ambiguous_qualified_name(self):
         input_tables = {
             "alias1": ExtendedTableURI(
@@ -839,10 +816,13 @@ class TestDataQualityProcessorTableNames:
             ),
         }
 
-        dq_action = DataQuality(
+        dq_action = _with_uri_table(
+            DataQuality(
+                "uri_action",
+                classifiers=[IsNull(["value"])],
+                operators=[Select(AllOk(), to_table="ambiguous_select")],
+            ),
             "collection/customers",
-            classifiers=[IsNull(["value"])],
-            operators=[Select(AllOk(), to_table="ambiguous_select")],
         )
 
         processor = DataQualityProcessor(
@@ -2444,11 +2424,6 @@ class TestDataQualityProcessorTableNames:
         assert output_tables_names[2].kind == TableKind.DQ_FILTER
 
     @pytest.mark.dq
-    @pytest.mark.xfail(
-        reason=_URI_TABLE_NAME_REJECTED,
-        raises=ParameterValidationError,
-        strict=True,
-    )
     def test_from_table_and_from_collection_with_qualified_table_reference(self):
         input_tables = {
             "alias1": ExtendedTableURI(
@@ -2469,20 +2444,26 @@ class TestDataQualityProcessorTableNames:
             ),
         }
 
-        dq_action1 = DataQuality(
+        dq_action1 = _with_uri_table(
+            DataQuality(
+                "uri_action",
+                classifiers=[IsNull(["value"])],
+                operators=[
+                    Select(AllOk(), to_table="clean_transactions"),
+                ],
+            ),
             "sales/transactions@HEAD",
-            classifiers=[IsNull(["value"])],
-            operators=[
-                Select(AllOk(), to_table="clean_transactions"),
-            ],
         )
 
-        dq_action2 = DataQuality(
+        dq_action2 = _with_uri_table(
+            DataQuality(
+                "uri_action",
+                classifiers=[IsNull(["value"])],
+                operators=[
+                    Filter(AnyFailed(), to_table="valid_stock"),
+                ],
+            ),
             "inventory/stock_levels",
-            classifiers=[IsNull(["value"])],
-            operators=[
-                Filter(AnyFailed(), to_table="valid_stock"),
-            ],
         )
 
         processor = DataQualityProcessor(
