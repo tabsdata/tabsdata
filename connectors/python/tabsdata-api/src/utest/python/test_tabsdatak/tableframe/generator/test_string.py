@@ -5,11 +5,24 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import polars as pl
 import pytest
 
+from tabsdatak.tableframe import TableFrame
+from tabsdatak.tableframe._core.translate import _is_passthrough
 from tabsdatak.tableframe.string import ExprStringNameSpace
 
 pytestmark = pytest.mark.tfgen
+
+
+def _evaluate(result, data):
+    leaked = type(result).__module__.split(".", 1)[0] == "polars"
+    assert not leaked or _is_passthrough(result)
+    inner = getattr(result, "_inner", None)
+    if isinstance(result, TableFrame):
+        result._to_polars_df()
+    elif data is not None and isinstance(inner, pl.Expr):
+        data.select(inner).collect()
 
 
 def test_to_date_delegates():
@@ -18,10 +31,20 @@ def test_to_date_delegates():
     getattr(inner, "to_date").assert_called()
 
 
+def test_to_date_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).to_date(strict=False)
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
+
+
 def test_to_datetime_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "to_datetime")()
     getattr(inner, "to_datetime").assert_called()
+
+
+def test_to_datetime_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).to_datetime(strict=False)
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
 
 
 def test_to_time_delegates():
@@ -30,10 +53,20 @@ def test_to_time_delegates():
     getattr(inner, "to_time").assert_called()
 
 
+def test_to_time_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).to_time(strict=False)
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
+
+
 def test_len_bytes_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "len_bytes")()
     getattr(inner, "len_bytes").assert_called()
+
+
+def test_len_bytes_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).len_bytes()
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
 
 
 def test_len_chars_delegates():
@@ -42,10 +75,20 @@ def test_len_chars_delegates():
     getattr(inner, "len_chars").assert_called()
 
 
+def test_len_chars_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).len_chars()
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
+
+
 def test_to_uppercase_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "to_uppercase")()
     getattr(inner, "to_uppercase").assert_called()
+
+
+def test_to_uppercase_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).to_uppercase()
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
 
 
 def test_to_lowercase_delegates():
@@ -54,10 +97,20 @@ def test_to_lowercase_delegates():
     getattr(inner, "to_lowercase").assert_called()
 
 
+def test_to_lowercase_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).to_lowercase()
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
+
+
 def test_to_titlecase_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "to_titlecase")()
     getattr(inner, "to_titlecase").assert_called()
+
+
+def test_to_titlecase_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).to_titlecase()
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
 
 
 def test_strip_chars_delegates():
@@ -66,10 +119,20 @@ def test_strip_chars_delegates():
     getattr(inner, "strip_chars").assert_called()
 
 
+def test_strip_chars_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).strip_chars()
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
+
+
 def test_strip_chars_start_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "strip_chars_start")()
     getattr(inner, "strip_chars_start").assert_called()
+
+
+def test_strip_chars_start_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).strip_chars_start()
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
 
 
 def test_strip_chars_end_delegates():
@@ -78,10 +141,20 @@ def test_strip_chars_end_delegates():
     getattr(inner, "strip_chars_end").assert_called()
 
 
+def test_strip_chars_end_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).strip_chars_end()
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
+
+
 def test_strip_prefix_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "strip_prefix")()
     getattr(inner, "strip_prefix").assert_called()
+
+
+def test_strip_prefix_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).strip_prefix("x")
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
 
 
 def test_strip_suffix_delegates():
@@ -90,10 +163,20 @@ def test_strip_suffix_delegates():
     getattr(inner, "strip_suffix").assert_called()
 
 
+def test_strip_suffix_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).strip_suffix("1")
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
+
+
 def test_pad_start_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "pad_start")()
     getattr(inner, "pad_start").assert_called()
+
+
+def test_pad_start_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).pad_start(4)
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
 
 
 def test_pad_end_delegates():
@@ -102,10 +185,20 @@ def test_pad_end_delegates():
     getattr(inner, "pad_end").assert_called()
 
 
+def test_pad_end_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).pad_end(4)
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
+
+
 def test_zfill_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "zfill")()
     getattr(inner, "zfill").assert_called()
+
+
+def test_zfill_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).zfill(4)
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
 
 
 def test_contains_delegates():
@@ -114,10 +207,20 @@ def test_contains_delegates():
     getattr(inner, "contains").assert_called()
 
 
+def test_contains_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).contains("x")
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
+
+
 def test_find_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "find")()
     getattr(inner, "find").assert_called()
+
+
+def test_find_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).find("1")
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
 
 
 def test_ends_with_delegates():
@@ -126,10 +229,20 @@ def test_ends_with_delegates():
     getattr(inner, "ends_with").assert_called()
 
 
+def test_ends_with_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).ends_with("1")
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
+
+
 def test_starts_with_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "starts_with")()
     getattr(inner, "starts_with").assert_called()
+
+
+def test_starts_with_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).starts_with("x")
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
 
 
 def test_extract_delegates():
@@ -138,10 +251,20 @@ def test_extract_delegates():
     getattr(inner, "extract").assert_called()
 
 
+def test_extract_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).extract(r"(\d)")
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
+
+
 def test_count_matches_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "count_matches")()
     getattr(inner, "count_matches").assert_called()
+
+
+def test_count_matches_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).count_matches(r"\d")
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
 
 
 def test_replace_delegates():
@@ -150,10 +273,20 @@ def test_replace_delegates():
     getattr(inner, "replace").assert_called()
 
 
+def test_replace_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).replace("x", "z")
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
+
+
 def test_replace_all_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "replace_all")()
     getattr(inner, "replace_all").assert_called()
+
+
+def test_replace_all_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).replace_all("x", "z")
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
 
 
 def test_reverse_delegates():
@@ -162,10 +295,20 @@ def test_reverse_delegates():
     getattr(inner, "reverse").assert_called()
 
 
+def test_reverse_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).reverse()
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
+
+
 def test_slice_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "slice")()
     getattr(inner, "slice").assert_called()
+
+
+def test_slice_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).slice(0, 1)
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
 
 
 def test_head_delegates():
@@ -174,10 +317,20 @@ def test_head_delegates():
     getattr(inner, "head").assert_called()
 
 
+def test_head_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).head(1)
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
+
+
 def test_tail_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "tail")()
     getattr(inner, "tail").assert_called()
+
+
+def test_tail_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).tail(1)
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
 
 
 def test_to_integer_delegates():
@@ -186,13 +339,28 @@ def test_to_integer_delegates():
     getattr(inner, "to_integer").assert_called()
 
 
+def test_to_integer_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).to_integer(strict=False)
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
+
+
 def test_contains_any_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "contains_any")()
     getattr(inner, "contains_any").assert_called()
 
 
+def test_contains_any_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).contains_any(["x", "y"])
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))
+
+
 def test_replace_many_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "replace_many")()
     getattr(inner, "replace_many").assert_called()
+
+
+def test_replace_many_runs():
+    result = ExprStringNameSpace._wrap(pl.col("a").str).replace_many(["x"], ["z"])
+    _evaluate(result, pl.LazyFrame({"a": ["x1", "y2"]}))

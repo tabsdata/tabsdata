@@ -6,610 +6,171 @@ from __future__ import annotations
 import polars as pl
 import pytest
 
-from tabsdatak.tableframe._core.hooks import tableframe_of
+from tabsdatak.tableframe import TableFrame
+from tabsdatak.tableframe._core.translate import _is_passthrough
 
 pytestmark = pytest.mark.tfgen
 
 
+def _evaluate(result, data):
+    leaked = type(result).__module__.split(".", 1)[0] == "polars"
+    assert not leaked or _is_passthrough(result)
+    inner = getattr(result, "_inner", None)
+    if isinstance(result, TableFrame):
+        result._to_polars_df()
+    elif data is not None and isinstance(inner, pl.Expr):
+        data.select(inner).collect()
+
+
 def _live_frame():
-    return tableframe_of(pl.LazyFrame({"a": [1.0], "b": [2.0]}))
-
-
-def test_columns_delegates():
-    try:
-        result = _live_frame().columns
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    return TableFrame.from_dict({"a": [1.0], "b": [2.0]})
 
 
 def test_columns_runs():
-    try:
-        result = _live_frame().columns
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_dtypes_delegates():
-    try:
-        result = _live_frame().dtypes
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().columns
+    _evaluate(result, None)
 
 
 def test_dtypes_runs():
-    try:
-        result = _live_frame().dtypes
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_schema_delegates():
-    try:
-        result = _live_frame().schema
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().dtypes
+    _evaluate(result, None)
 
 
 def test_schema_runs():
-    try:
-        result = _live_frame().schema
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_width_delegates():
-    try:
-        result = _live_frame().width
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().schema
+    _evaluate(result, None)
 
 
 def test_width_runs():
-    try:
-        result = _live_frame().width
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_op_getitem_delegates():
-    try:
-        result = _live_frame().__getitem__()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().width
+    _evaluate(result, None)
 
 
 def test_op_getitem_runs():
-    try:
-        result = _live_frame().__getitem__()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_explain_delegates():
-    try:
-        result = _live_frame().explain()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().__getitem__("a")
+    _evaluate(result, None)
 
 
 def test_explain_runs():
-    try:
-        result = _live_frame().explain()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_show_graph_delegates():
-    try:
-        result = _live_frame().show_graph(show=False)
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().explain()
+    _evaluate(result, None)
 
 
 def test_show_graph_runs():
-    try:
-        result = _live_frame().show_graph(show=False)
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_inspect_delegates():
-    try:
-        result = _live_frame().inspect()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().show_graph(show=False)
+    _evaluate(result, None)
 
 
 def test_inspect_runs():
-    try:
-        result = _live_frame().inspect()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_sort_delegates():
-    try:
-        result = _live_frame().sort()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().inspect()
+    _evaluate(result, None)
 
 
 def test_sort_runs():
-    try:
-        result = _live_frame().sort()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_cast_delegates():
-    try:
-        result = _live_frame().cast()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().sort("a")
+    _evaluate(result, None)
 
 
 def test_cast_runs():
-    try:
-        result = _live_frame().cast()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_clear_delegates():
-    try:
-        result = _live_frame().clear()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().cast({"a": pl.Float32})
+    _evaluate(result, None)
 
 
 def test_clear_runs():
-    try:
-        result = _live_frame().clear()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_filter_delegates():
-    try:
-        result = _live_frame().filter()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().clear()
+    _evaluate(result, None)
 
 
 def test_filter_runs():
-    try:
-        result = _live_frame().filter()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_select_delegates():
-    try:
-        result = _live_frame().select()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().filter()
+    _evaluate(result, None)
 
 
 def test_select_runs():
-    try:
-        result = _live_frame().select()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_group_by_delegates():
-    try:
-        result = _live_frame().group_by()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().select()
+    _evaluate(result, None)
 
 
 def test_group_by_runs():
-    try:
-        result = _live_frame().group_by()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_join_delegates():
-    try:
-        result = _live_frame().join(_live_frame(), on="a")
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().group_by()
+    _evaluate(result, None)
 
 
 def test_join_runs():
-    try:
-        result = _live_frame().join(_live_frame(), on="a")
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_with_columns_delegates():
-    try:
-        result = _live_frame().with_columns()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().join(_live_frame(), on="a")
+    _evaluate(result, None)
 
 
 def test_with_columns_runs():
-    try:
-        result = _live_frame().with_columns()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_drop_delegates():
-    try:
-        result = _live_frame().drop()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().with_columns()
+    _evaluate(result, None)
 
 
 def test_drop_runs():
-    try:
-        result = _live_frame().drop()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_rename_delegates():
-    try:
-        result = _live_frame().rename()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().drop()
+    _evaluate(result, None)
 
 
 def test_rename_runs():
-    try:
-        result = _live_frame().rename()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_slice_delegates():
-    try:
-        result = _live_frame().slice()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().rename({"a": "z"})
+    _evaluate(result, None)
 
 
 def test_slice_runs():
-    try:
-        result = _live_frame().slice()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_limit_delegates():
-    try:
-        result = _live_frame().limit()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().slice(0, 1)
+    _evaluate(result, None)
 
 
 def test_limit_runs():
-    try:
-        result = _live_frame().limit()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_head_delegates():
-    try:
-        result = _live_frame().head()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().limit()
+    _evaluate(result, None)
 
 
 def test_head_runs():
-    try:
-        result = _live_frame().head()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_tail_delegates():
-    try:
-        result = _live_frame().tail()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().head()
+    _evaluate(result, None)
 
 
 def test_tail_runs():
-    try:
-        result = _live_frame().tail()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_last_delegates():
-    try:
-        result = _live_frame().last()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().tail()
+    _evaluate(result, None)
 
 
 def test_last_runs():
-    try:
-        result = _live_frame().last()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_first_delegates():
-    try:
-        result = _live_frame().first()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().last()
+    _evaluate(result, None)
 
 
 def test_first_runs():
-    try:
-        result = _live_frame().first()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_fill_null_delegates():
-    try:
-        result = _live_frame().fill_null()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().first()
+    _evaluate(result, None)
 
 
 def test_fill_null_runs():
-    try:
-        result = _live_frame().fill_null()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_fill_nan_delegates():
-    try:
-        result = _live_frame().fill_nan()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().fill_null(0)
+    _evaluate(result, None)
 
 
 def test_fill_nan_runs():
-    try:
-        result = _live_frame().fill_nan()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_unique_delegates():
-    try:
-        result = _live_frame().unique()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().fill_nan(0)
+    _evaluate(result, None)
 
 
 def test_unique_runs():
-    try:
-        result = _live_frame().unique()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_drop_nans_delegates():
-    try:
-        result = _live_frame().drop_nans()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().unique()
+    _evaluate(result, None)
 
 
 def test_drop_nans_runs():
-    try:
-        result = _live_frame().drop_nans()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_drop_nulls_delegates():
-    try:
-        result = _live_frame().drop_nulls()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().drop_nans()
+    _evaluate(result, None)
 
 
 def test_drop_nulls_runs():
-    try:
-        result = _live_frame().drop_nulls()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_unnest_delegates():
-    try:
-        result = _live_frame().unnest()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().drop_nulls()
+    _evaluate(result, None)
 
 
 def test_unnest_runs():
-    try:
-        result = _live_frame().unnest()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
+    result = _live_frame().unnest()
+    _evaluate(result, None)

@@ -363,15 +363,34 @@ def test_generate_tests_into_test_root(tmp_path):
     tests = tmp_path / "tests" / "src" / "utest" / "python"
     result = perform(_report(), ROOT, str(code), test_root=str(tests))
     names = {p.name for p in tests.glob("*.py")}
-    assert {"expr.py", "functions.py", "group_by.py"} <= names
+    assert {"test_expr.py", "test_functions.py", "test_group_by.py"} <= names
     assert "test_pkg.py" in names  # root module -> test_<first segment of root module>
-    assert set(result.tests) >= {"expr", "functions", "test_pkg"}
-    expr_test = (tests / "expr.py").read_text()
+    assert set(result.tests) >= {"test_expr", "test_functions", "test_pkg"}
+    expr_test = (tests / "test_expr.py").read_text(encoding="utf-8")
     assert expr_test.splitlines()[0].startswith("# Copyright ")
     assert "def test_alias_delegates():" in expr_test
     assert (
         'getattr(inner, "alias").assert_called()' in expr_test
     )  # spies the polars call
+    assert 'Expr._wrap(pl.col("a")).alias("z")' in expr_test
+    assert "_evaluate(result, pl.LazyFrame(" in expr_test
+    assert "pytest.skip" not in expr_test
+
+
+def test_generate_tests_replaces_stale_generated_files_only(tmp_path):
+    code = tmp_path / "code" / "src" / "main" / "python"
+    tests = tmp_path / "tests" / "src" / "utest" / "python"
+    perform(_report(), ROOT, str(code), test_root=str(tests))
+    stale = tests / "expr.py"
+    stale.write_text(
+        (tests / "test_expr.py").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    custom = tests / "test_custom.py"
+    custom.write_text("def test_mine():\n    pass\n", encoding="utf-8")
+    perform(_report(), ROOT, str(code), test_root=str(tests))
+    assert not stale.exists()
+    assert custom.exists()
+    assert (tests / "test_expr.py").exists()
 
 
 def _regenerate_with_handwritten_stub(main_root, engine_frame: str) -> str:
@@ -425,6 +444,8 @@ def test_regeneration_carries_engine_frame_members_with_imports(main_root):
 def test_multiline_docstring_summary_stays_on_the_opening_line(main_root):
     perform(_report(), ROOT, str(main_root))
     stub = main_root / "pkg" / "wrap" / "expr.pyi"
-    stub.write_text(stub.read_text().replace('""" """', '"""Summary.\n\n    Body.\n    """', 1))
+    stub.write_text(
+        stub.read_text().replace('""" """', '"""Summary.\n\n    Body.\n    """', 1)
+    )
     perform(_report(), ROOT, str(main_root))
     assert '"""Summary.\n' in stub.read_text()
