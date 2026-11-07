@@ -254,40 +254,10 @@ def _set_copy_into_schema_evolution(
     )
 
 
-def reject_unsupported_columns(
-    target_tables: list[str],
-    tables: list[pl.LazyFrame],
-) -> None:
-    """Fail before loading anything if a column has a type the bulk load cannot
-    carry.
-
-    COPY INTO matches columns by name, which routes every parquet value through
-    a variant, and a variant cannot be cast to BINARY ("Failed to cast variant
-    value ... to BINARY"). Snowflake reports that per file once the stage and the
-    table already exist, so reading the schema up front turns it into one error
-    naming the table and the offending columns.
-    """
-    import polars as pl
-
-    from tabsdatak.conn.snowflake.error import SnowflakeErrorCode
-
-    for table, frame in zip(target_tables, tables):
-        offenders = [
-            name for name, dtype in frame.collect_schema().items() if dtype == pl.Binary
-        ]
-        if offenders:
-            raise SnowflakeErrorCode.SNOWFLAKE_8.exception(
-                table=table,
-                columns=", ".join(repr(name) for name in offenders),
-            )
-
-
 def write_all_tables(cfg: SnowflakeWriteCfg, tables: list[pl.LazyFrame]) -> None:
     """Bulk-load each frame in ``tables`` into its corresponding table in
     ``cfg.target_tables``. Opens a single Snowflake connection per call and
     re-uses it across every (frame, table) pair."""
-    reject_unsupported_columns(list(cfg.target_tables), tables)
-
     logger.debug(
         "snowflake: establishing connection to account %r",
         cfg.conn._account(),

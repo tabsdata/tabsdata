@@ -381,7 +381,7 @@ def test_write_all_tables_reads_the_parquet_logical_types(
     impl.write_all_tables(_write_cfg(), [parquet])
     assert (
         "CREATE TEMPORARY FILE FORMAT tabsdata_parquet"
-        " TYPE = PARQUET USE_LOGICAL_TYPE = TRUE"
+        " TYPE = PARQUET USE_LOGICAL_TYPE = TRUE BINARY_AS_TEXT = FALSE"
     ) in fake_sf_connection.log
 
 
@@ -491,60 +491,23 @@ def test_write_all_tables_closes_connection_on_failure(
     assert fake.closed is True
 
 
-def test_write_all_tables_rejects_a_binary_column_before_connecting(tmp_path):
-    """A binary column has to be refused up front, not by COPY INTO after the
-    stage and the table already exist."""
+def test_write_all_tables_loads_binary_columns(fake_sf_connection, tmp_path):
+    """Binary columns of every width go through the load like any other: the
+    file format reads them as binary, so nothing refuses them up front."""
     import pyarrow as pa
-
-    from tabsdatak.conn.snowflake.error import (
-        SnowflakeErrorCode,
-        SnowflakeRuntimeException,
-    )
 
     parquet = _parquet(
         tmp_path / "bin.parquet",
         ok=pa.array([1], pa.int64()),
         payload=pa.array([b"\x00\x01"], pa.binary()),
+        large=pa.array([b"x"], pa.large_binary()),
+        fixed=pa.array([b"xy"], pa.binary(2)),
     )
-    cfg = _write_cfg()
-    # No fake_sf_connection fixture: the check must fire before any connect.
-    with pytest.raises(SnowflakeRuntimeException) as ei:
-        impl.write_all_tables(cfg, [parquet])
-    assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_8
-    assert "'payload'" in str(ei.value)
-    assert "'ok'" not in str(ei.value)
-    assert "ANALYTICS.PUBLIC.T" in str(ei.value)
-
-
-def test_write_all_tables_rejects_large_and_fixed_binary(tmp_path):
-    import pyarrow as pa
-
-    from tabsdatak.conn.snowflake.error import SnowflakeRuntimeException
-
-    for name, array in (
-        ("large", pa.array([b"x"], pa.large_binary())),
-        ("fixed", pa.array([b"xy"], pa.binary(2))),
-    ):
-        parquet = _parquet(tmp_path / f"{name}.parquet", **{name: array})
-        cfg = _write_cfg()
-        with pytest.raises(SnowflakeRuntimeException):
-            impl.write_all_tables(cfg, [parquet])
-
-
-def test_write_all_tables_names_the_table_the_offending_file_targets(tmp_path):
-    """With several slots the error has to point at the right table."""
-    import pyarrow as pa
-
-    from tabsdatak.conn.snowflake.error import SnowflakeRuntimeException
-
-    clean = _parquet(tmp_path / "clean.parquet")
-    dirty = _parquet(
-        tmp_path / "dirty.parquet", payload=pa.array([b"x"], pa.binary())
+    impl.write_all_tables(_write_cfg(), [parquet])
+    assert any(
+        s.startswith('COPY INTO "ANALYTICS"."PUBLIC"."T"')
+        for s in fake_sf_connection.log
     )
-    cfg = _write_cfg(target_tables=["ANALYTICS.PUBLIC.FIRST", "ANALYTICS.PUBLIC.SECOND"])
-    with pytest.raises(SnowflakeRuntimeException) as ei:
-        impl.write_all_tables(cfg, [clean, dirty])
-    assert "ANALYTICS.PUBLIC.SECOND" in str(ei.value)
 
 
 # ---------------------------------------------------------------------------

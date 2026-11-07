@@ -72,10 +72,16 @@ def create_file_format(cursor) -> None:
     under a running statement nor be refused for not owning it. It also shadows
     a permanent ``tabsdata_parquet`` an earlier connector version left in the
     schema, so a stale definition there is never the one read.
+
+    ``BINARY_AS_TEXT = FALSE`` reads a byte column with no logical type as
+    ``BINARY``. Snowflake's default reads it as UTF-8 text, and a ``COPY``
+    matching by column name then fails to cast that text to a ``BINARY``
+    column. A string column carries the ``STRING`` logical type, so it is
+    still read as text.
     """
     cursor.execute(
         f"CREATE TEMPORARY FILE FORMAT {PARQUET_FILE_FORMAT}"
-        f" TYPE = PARQUET USE_LOGICAL_TYPE = TRUE"
+        f" TYPE = PARQUET USE_LOGICAL_TYPE = TRUE BINARY_AS_TEXT = FALSE"
     )
 
 
