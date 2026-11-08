@@ -30,7 +30,13 @@ GIBIBYTE = 1 << 30
 # follows the size of the thread pool (the runner's cores), never the file's.
 PEAK_BASE = 1280 * MEBIBYTE
 PEAK_PER_THREAD = 48 * MEBIBYTE
-GROWTH_LIMIT = 256 * MEBIBYTE
+# A leak grows with the file, three times over between these sizes; the work in
+# flight at the peak varies between landings, more so the more threads hold it.
+SMALLER = GIBIBYTE
+LARGER = 4 * GIBIBYTE
+GROWTH_BASE = 128 * MEBIBYTE
+GROWTH_PER_THREAD = 12 * MEBIBYTE
+ROUNDS = 2
 CHILD_SECONDS = 900
 LAND = Path(__file__).parent / "children" / "land.py"
 
@@ -167,12 +173,24 @@ def test_a_large_file_lands_in_bounded_memory_that_does_not_grow_with_it(
     file_format,
 ):
     domain = locals()[f"domain_{emulator}"]
-    smaller, threads = landed(domain, tmp_path, file_format, GIBIBYTE)
-    larger, _ = landed(domain, tmp_path, file_format, 2 * GIBIBYTE)
-    limit = PEAK_BASE + PEAK_PER_THREAD * threads
+    peaks: dict[int, list[int]] = {SMALLER: [], LARGER: []}
+    # A burst of work in flight only ever raises a landing's peak, while a leak
+    # raises every landing of the larger file: a failing comparison lands both
+    # sizes again and judges the lower peak of each.
+    for _ in range(ROUNDS):
+        for size, landings in peaks.items():
+            peak, threads = landed(domain, tmp_path, file_format, size)
+            landings.append(peak)
+        smaller, larger = min(peaks[SMALLER]), min(peaks[LARGER])
+        peak_limit = PEAK_BASE + PEAK_PER_THREAD * threads
+        growth_limit = GROWTH_BASE + GROWTH_PER_THREAD * threads
+        if max(smaller, larger) < peak_limit and larger - smaller < growth_limit:
+            break
     report = (
         f"peaks {smaller / MEBIBYTE:.0f} and {larger / MEBIBYTE:.0f} MiB"
-        f" with {threads} threads, limit {limit / MEBIBYTE:.0f} MiB"
+        f" ({len(peaks[SMALLER])} landing(s) each) with {threads} threads,"
+        f" limits {peak_limit / MEBIBYTE:.0f} MiB peak,"
+        f" {growth_limit / MEBIBYTE:.0f} MiB growth"
     )
-    assert max(smaller, larger) < limit, report
-    assert larger - smaller < GROWTH_LIMIT, report
+    assert max(smaller, larger) < peak_limit, report
+    assert larger - smaller < growth_limit, report
