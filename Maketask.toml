@@ -293,6 +293,7 @@ run_task = [
         "__os__clean_rs_macros",
         "__os__clean_rs_modules",
         "__os__clean_rs_expansions",
+        "__km__clean_rs",
         "__os__clean_rs_all"
     ] }
 ]
@@ -347,7 +348,8 @@ run_task = [
     { name = [
         "__os__lock_rs_macros",
         "__os__lock_rs_modules",
-        "__os__lock_rs_expansions"
+        "__os__lock_rs_expansions",
+        "__km__lock_rs"
     ] }
 ]
 
@@ -1861,7 +1863,8 @@ run_task = [
     { name = [
         "__os__outdated_rs_macros",
         "__os__outdated_rs_modules",
-        "__os__outdated_rs_expansions"
+        "__os__outdated_rs_expansions",
+        "__km__outdated_rs"
     ] }
 ]
 
@@ -1903,6 +1906,7 @@ description = "Task 'machete' for Rust projects"
 run_task = [
     { name = [
         "__os__machete_rs",
+        "__km__machete_rs"
     ] }
 ]
 
@@ -2011,7 +2015,8 @@ run_task = [
     { name = [
         "__os__audit_rs_macros",
         "__os__audit_rs_modules",
-        "__os__audit_rs_expansions"
+        "__os__audit_rs_expansions",
+        "__km__audit_rs"
     ] }
 ]
 
@@ -2044,7 +2049,8 @@ run_task = [
     { name = [
         "__os__deny_rs_macros",
         "__os__deny_rs_modules",
-        "__os__deny_rs_expansions"
+        "__os__deny_rs_expansions",
+        "__km__deny_rs"
     ] }
 ]
 
@@ -2077,7 +2083,8 @@ run_task = [
     { name = [
         "__os__pants_rs_macros",
         "__os__pants_rs_modules",
-        "__os__pants_rs_expansions"
+        "__os__pants_rs_expansions",
+        "__km__pants_rs"
     ] }
 ]
 
@@ -2141,7 +2148,8 @@ run_task = [
     { name = [
         "__os__check_rs_macros",
         "__os__check_rs_modules",
-        "__os__check_rs_expansions"
+        "__os__check_rs_expansions",
+        "__km__check_rs"
     ] }
 ]
 
@@ -2174,7 +2182,8 @@ run_task = [
     { name = [
         "__os__clippy_rs_macros",
         "__os__clippy_rs_modules",
-        "__os__clippy_rs_expansions"
+        "__os__clippy_rs_expansions",
+        "__km__clippy_rs"
     ] }
 ]
 
@@ -2207,7 +2216,8 @@ run_task = [
     { name = [
         "__os__fmt_rs_macros",
         "__os__fmt_rs_modules",
-        "__os__fmt_rs_expansions"
+        "__os__fmt_rs_expansions",
+        "__km__fmt_rs"
     ] }
 ]
 

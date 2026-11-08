@@ -25,6 +25,8 @@ script = [
     previous_cargo = get_env td-cargo
     previous_target = get_env td-target
     previous_path = get_env PATH
+    previous_profile = get_env td-profile
+    set_env td-profile "assembly"
     os_family = os_family
     if eq ${os_family} "windows"
         path_separator = set ";"
@@ -57,6 +59,7 @@ script = [
     end
 
     set_env td-cargo ${previous_cargo}
+    set_env td-profile ${previous_profile}
     previous_target_missing = is_empty ${previous_target}
     if ${previous_target_missing}
         unset_env td-target
