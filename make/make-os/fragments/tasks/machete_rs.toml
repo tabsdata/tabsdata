@@ -12,6 +12,28 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 machete --with-metadata"
-    exec --fail-on-error cargo machete --with-metadata
+    fn run_machete_rs
+        debug "🚀 machete --with-metadata"
+        exec --fail-on-error cargo machete --with-metadata
+    end
+
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    if ${on_ga_true}
+        run_machete_rs
+    else
+        project_root_folder = get_env PROJECT_ROOT_FOLDER
+        project_root_folder_basename = basename ${project_root_folder}
+        is_tabsdata_ee = eq ${project_root_folder_basename} "tabsdata-ee"
+        if ${is_tabsdata_ee}
+            run_machete_rs
+
+            info "🐡 Switching to tabsdata-os"
+            cd "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-os"
+
+            run_machete_rs
+        else
+            run_machete_rs
+        end
+    end
     ''']
