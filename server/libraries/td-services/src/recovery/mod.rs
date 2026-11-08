@@ -16,4 +16,7 @@ pub use reconcile::{
     recover_lfrs_from_actions, recreate_trigger_workloads, stage_trigger_functions,
     stop_recovered_workloads, stop_unowned_workloads,
 };
-pub use sweep::{fail_stale_abandoned_attempts, fetch_stale_dispatched_runs, sweep_stale_runs};
+pub use sweep::{
+    fail_stale_abandoned_attempts, fail_stray_function_workers, fetch_stale_dispatched_runs,
+    stray_function_workers, sweep_stale_runs,
+};

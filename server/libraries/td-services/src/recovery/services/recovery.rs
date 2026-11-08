@@ -10,9 +10,11 @@ use crate::recovery::{
     current_trigger_versions, fn_candidates, stage_trigger_functions,
 };
 use crate::recovery::{
-    RecoveryActions, apply_recovery_actions, classify_divergence, recreate_trigger_workloads,
-    stop_recovered_workloads, stop_unowned_workloads, sweep_stale_runs,
+    RecoveryActions, apply_recovery_actions, classify_divergence, fail_stray_function_workers,
+    recreate_trigger_workloads, stop_recovered_workloads, stop_unowned_workloads,
+    stray_function_workers, sweep_stale_runs,
 };
+use itertools::Itertools;
 use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -118,7 +120,45 @@ async fn recovery(
         }
     }
 
+    let stray_projects: Vec<ProjectId> = {
+        let mut conn = db.read().await?;
+        stray_function_workers(conn.get(grant), &at, &config)
+            .await?
+            .into_iter()
+            .map(|worker| worker.base.project_id)
+            .unique()
+            .collect()
+    };
+    for project in stray_projects {
+        match fail_project_stray_workers(&db, grant, &project, &config).await {
+            Ok(stops) => stop_function_workers(&bridge, stops).await,
+            Err(e) => error!(
+                project_id = %project,
+                "recovery.stray_workers: project failed, continuing with the rest: {e:?}"
+            ),
+        }
+    }
+
     Ok(())
+}
+
+/// Fails a project's stray function workers in its own write transaction,
+/// judged again under its lock, as the read that found them held none.
+#[instrument(name = "recovery.project", skip_all, fields(project_id = %project))]
+async fn fail_project_stray_workers<P: ServingPool>(
+    db: &DbPool<AcrossProjects, P>,
+    grant: Grant,
+    project: &ProjectId,
+    config: &RecoveryConfig,
+) -> Result<Vec<FunctionStopRequest>, TdError> {
+    retrying(|attempt| async {
+        let mut trx = db.in_project(project).lock_project().begin(attempt).await?;
+        let at = trx.locked_at();
+        let stops = fail_stray_function_workers(trx.get(grant), at, config).await?;
+        trx.commit().await?;
+        Ok(stops)
+    })
+    .await
 }
 
 /// Applies a project's verdicts in its own write transaction and returns
@@ -757,6 +797,137 @@ mod tests {
         let lfr_after: LogicalFunctionRunDB = db.fetch_one::<LogicalFunctionRunDB>(&lfr.id).await?;
         assert_eq!(lfr_after.status, LogicalFunctionRunStatus::Requested);
 
+        Ok(())
+    }
+
+    /// Dispatches one run of a fresh publisher, then ends its attempt as
+    /// `Failed` at `ended_on` without touching its worker, as a release that
+    /// abandoned attempts without failing their workers did. Returns the
+    /// worker left live.
+    async fn worker_left_by_an_ended_attempt(
+        db: &TdPool,
+        name: &str,
+        ended_on: AtTime,
+    ) -> Result<WorkerDB, TdError> {
+        let p = db.seed().test_project().await?;
+        let collection = db
+            .scoped(p.project_id)
+            .seed()
+            .collection(&CollectionName::try_from(name)?, &UserId::admin())
+            .await?;
+        let create = FunctionRegister {
+            child_functions: None,
+            name: name.try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("t0")?].into(),
+            table_types: None,
+            parent_tables: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
+        let _ = db
+            .scoped(p.project_id)
+            .seed()
+            .function(&collection, &create)
+            .await?;
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str(name)?,
+                    },
+                ),
+                ExecutionRequest {
+                    name: None,
+                    function_only: FunctionOnly::default(),
+                    override_disabled_trigger: OverrideDisabledTrigger::default(),
+                    skip_if_running: SkipIfRunning::default(),
+                    external_uid: None,
+                },
+            )
+            .in_project(p.project_id);
+        let execution = dispatch_services(db).execute_function(request).await?.data;
+        dispatch_services(db).tick().await?;
+
+        let mut pfrs: Vec<PhysicalFunctionRunDB> = db
+            .timeline()
+            .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
+            .await?;
+        assert_eq!(pfrs.len(), 1);
+        let pfr = pfrs.remove(0);
+        let ended = PhysicalFunctionRunUpdateDB {
+            dispatched_on: pfr.dispatched_on,
+            started_on: None,
+            ended_on: Some(ended_on.into()),
+            status: PhysicalFunctionRunStatus::Failed,
+        };
+        db.scd2().update(&ended, &pfr.id).await?;
+        let mut workers: Vec<WorkerDB> = db.fetch_all(&pfr.id).await?;
+        assert_eq!(workers.len(), 1);
+        let worker = workers.remove(0);
+        assert_eq!(worker.status, WorkerStatus::Requested);
+        Ok(worker)
+    }
+
+    fn stopped_workers(sent: &InMemoryOrchestratorMessageQueue) -> Vec<String> {
+        sent.messages()
+            .into_iter()
+            .filter(|m| {
+                matches!(
+                    m.payload,
+                    OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
+                        FunctionRequest::Stop(_)
+                    )
+                )
+            })
+            .map(|m| m.id)
+            .collect()
+    }
+
+    /// Past the dispatch grace the worker will never report: it is failed, and
+    /// any workload it left is stopped.
+    #[td_test::test(db)]
+    async fn test_a_worker_its_ended_attempt_left_live_is_failed(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let an_hour_ago = AtTime::from(chrono::Utc::now() - chrono::Duration::hours(1));
+        let worker = worker_left_by_an_ended_attempt(&db, "f_left_live", an_hour_ago).await?;
+
+        let (services, sent) = kubernetes_recovery_services(&db, RecoveryConfig::default());
+        services.recovery(()).await?;
+
+        let settled: WorkerDB = db.fetch_one(&worker.id).await?;
+        assert_eq!(settled.status, WorkerStatus::Failed);
+        assert_eq!(stopped_workers(&sent), vec![worker.id.to_string()]);
+        Ok(())
+    }
+
+    /// Within the dispatch grace the worker's own report may still land.
+    #[td_test::test(db)]
+    async fn test_a_worker_whose_attempt_just_ended_is_left_to_report(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let worker = worker_left_by_an_ended_attempt(&db, "f_just_ended", AtTime::now()).await?;
+
+        let (services, sent) = kubernetes_recovery_services(&db, RecoveryConfig::default());
+        services.recovery(()).await?;
+
+        let unsettled: WorkerDB = db.fetch_one(&worker.id).await?;
+        assert_eq!(unsettled.status, WorkerStatus::Requested);
+        assert!(stopped_workers(&sent).is_empty());
         Ok(())
     }
 

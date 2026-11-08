@@ -17,11 +17,13 @@ use td_database::access::{
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::RecoveryConfig;
+use td_objects::and;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
+use td_objects::dxo::worker::{WorkerDBWithNames, WorkerUpdateDB};
 use td_objects::types::basic::{
     AtTime, ExecutionId, FunctionId, LogicalFunctionRunId, LogicalFunctionRunStatus,
-    PhysicalFunctionRunId,
+    PhysicalFunctionRunId, PhysicalFunctionRunStatus,
 };
 use td_queries::Queries;
 use tracing::{debug, instrument, warn};
@@ -133,6 +135,91 @@ pub async fn fail_stale_abandoned_attempts(
         "scheduler.fail_stale_abandoned_attempts: terminalized stale attempt(s)"
     );
     function_stops(conn, workers).await
+}
+
+/// The function workers still live although their attempt has ended for
+/// longer than the dispatch grace: none of them will report, as their report
+/// was lost, or a release that abandoned attempts without failing their
+/// workers left them behind.
+#[instrument(
+    name = "recovery.stray_function_workers",
+    skip_all,
+    level = "debug",
+    err(Debug, level = "debug")
+)]
+pub async fn stray_function_workers<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
+    at: &AtTime,
+    config: &RecoveryConfig,
+) -> Result<Vec<WorkerDBWithNames>, TdError> {
+    let live: Vec<WorkerDBWithNames> = conn
+        .fetch_all(WorkerDBWithNames::function_runners_in_flight())
+        .await?;
+    let pfr_ids: Vec<PhysicalFunctionRunId> = live
+        .iter()
+        .filter_map(|worker| worker.base.physical_function_run_id.clone())
+        .unique()
+        .collect();
+    if pfr_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let cutoff = ***at - chrono::Duration::from_std(config.dispatch_grace.0).unwrap_or_default();
+    let ended_long_ago: HashSet<PhysicalFunctionRunId> = conn
+        .scd2()
+        .chunked()
+        .fetch_all::<PhysicalFunctionRunDB>(&pfr_ids, ())
+        .await?
+        .into_iter()
+        .filter(|pfr| !PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.status))
+        .filter(|pfr| {
+            let ended = pfr
+                .ended_on
+                .map(|ended| *ended)
+                .or(pfr.dispatched_on.map(|dispatched| *dispatched));
+            ended.is_none_or(|ended| **ended < cutoff)
+        })
+        .map(|pfr| pfr.id.clone())
+        .collect();
+    Ok(live
+        .into_iter()
+        .filter(|worker| {
+            worker
+                .base
+                .physical_function_run_id
+                .as_ref()
+                .is_some_and(|pfr_id| ended_long_ago.contains(pfr_id))
+        })
+        .collect())
+}
+
+/// Fails the project's [stray function workers](stray_function_workers), and
+/// returns the stops for any workload they left.
+#[instrument(
+    name = "recovery.fail_stray_function_workers",
+    skip_all,
+    level = "debug",
+    err(Debug, level = "debug")
+)]
+pub async fn fail_stray_function_workers(
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
+    at: LockInstant,
+    config: &RecoveryConfig,
+) -> Result<Vec<FunctionStopRequest>, TdError> {
+    let stray = stray_function_workers(conn, &AtTime::from(at), config).await?;
+    if stray.is_empty() {
+        return Ok(Vec::new());
+    }
+    let failed = WorkerUpdateDB::failed_at(at);
+    let keys: Vec<_> = stray
+        .iter()
+        .map(|worker| and!(worker.base.id.clone(), worker.base.status))
+        .collect();
+    conn.chunked().update(&failed, &keys).await?;
+    warn!(
+        workers = stray.len(),
+        "recovery: failing function workers whose attempt ended without them"
+    );
+    function_stops(conn, stray).await
 }
 
 /// The time-based sweep, in one write transaction: stale `Dispatched` PFRs →

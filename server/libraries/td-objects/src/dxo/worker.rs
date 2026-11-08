@@ -113,6 +113,14 @@ impl WorkerDBWithNames {
         )
     }
 
+    /// A function worker reports its own end, so until then it is live.
+    pub fn function_runners_in_flight() -> impl SqlCondition<Self> {
+        and!(
+            WorkerType::FunctionRunner,
+            or!(WorkerStatus::Requested, WorkerStatus::Running)
+        )
+    }
+
     /// A failed stage worker is restarted once its retry is due, so it is
     /// left out here and listed by [`stage_triggers_due`](Self::stage_triggers_due).
     pub fn stage_triggers_in_flight() -> impl SqlCondition<Self> {
