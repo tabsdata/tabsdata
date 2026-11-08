@@ -63,7 +63,6 @@ mod tests {
 
     use td_error::TdError;
     use tokio::fs;
-    use tokio::io::AsyncWriteExt;
 
     #[tokio::test]
     async fn test_cert_download_ok() -> Result<(), TdError> {
@@ -71,12 +70,7 @@ mod tests {
         fs::create_dir_all(&tls_path).await.unwrap();
 
         let key_path = tls_path.join(SSL_CERT_PEM_FILE);
-        fs::File::create(&key_path)
-            .await
-            .unwrap()
-            .write_all("TEST CERTIFICATE".as_ref())
-            .await
-            .unwrap();
+        fs::write(&key_path, "TEST CERTIFICATE").await.unwrap();
 
         let service = Services {
             ssl_folder: Ctx::new(tls_path),

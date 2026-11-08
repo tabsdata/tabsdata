@@ -5,7 +5,6 @@
 use std::path::PathBuf;
 use td_common::crypto::{SSL_CERT_PEM_FILE, SSL_KEY_PEM_FILE};
 use tokio::fs;
-use tokio::io::AsyncWriteExt;
 
 /// A folder holding a self-signed `localhost` key and certificate.
 pub(super) async fn tls_folder() -> PathBuf {
@@ -41,12 +40,7 @@ O09LIoG1amWrXq+Cb/zjCFTBIjlY1l4FCM61zbxjHNc8AxNprls1PEDj460+H1Wo
 336M0v1+uiHDK1XEB3ULHtxtYImBgfbv/vXu5V0wxfeKQfMuEhlgJ1k+9lm7/vjJ
 j5JcrAQs7+AoPMM8ql2UHbA=
 -----END PRIVATE KEY-----"#;
-    fs::File::create(&key_path)
-        .await
-        .unwrap()
-        .write_all(test_key.as_ref())
-        .await
-        .unwrap();
+    fs::write(&key_path, test_key).await.unwrap();
     eprintln!("Key pem created in {key_path:?}");
 
     let cert_path = tls_path.join(SSL_CERT_PEM_FILE);
@@ -69,12 +63,7 @@ rqJRg/HEdiANfvvg1Qz7XdUP/HLiCpy4nzv2/kYkH/6u3A/KQBWDfAL12iF78RY2
 jEHcboQd57qqDZUulA2XGxSoFBUjG7zXgx3u1757Z3HMcR1v+P/meXKIJ33ySe8U
 vRcg70teydPmY1fiAURFk3gl/g==
 -----END CERTIFICATE-----"#;
-    fs::File::create(&cert_path)
-        .await
-        .unwrap()
-        .write_all(test_crt.as_ref())
-        .await
-        .unwrap();
+    fs::write(&cert_path, test_crt).await.unwrap();
     eprintln!("Certificate pem created in {cert_path:?}");
     tls_path
 }
