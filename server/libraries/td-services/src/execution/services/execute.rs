@@ -1276,36 +1276,36 @@ pub(crate) mod tests {
     #[td_test::test(db)]
     async fn test_execute_initial_status_upstream_scheduled(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        test_execute_upstream_initial_status(
+        Box::pin(test_execute_upstream_initial_status(
             db,
             p.project_id,
             LogicalFunctionRunStatus::Scheduled,
             LogicalFunctionRunStatus::Scheduled,
-        )
+        ))
         .await
     }
 
     #[td_test::test(db)]
     async fn test_execute_initial_status_upstream_on_hold(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        test_execute_upstream_initial_status(
+        Box::pin(test_execute_upstream_initial_status(
             db,
             p.project_id,
             LogicalFunctionRunStatus::OnHold,
             LogicalFunctionRunStatus::OnHold,
-        )
+        ))
         .await
     }
 
     #[td_test::test(db)]
     async fn test_execute_initial_status_upstream_failed(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        test_execute_upstream_initial_status(
+        Box::pin(test_execute_upstream_initial_status(
             db,
             p.project_id,
             LogicalFunctionRunStatus::Failed,
             LogicalFunctionRunStatus::OnHold,
-        )
+        ))
         .await
     }
 

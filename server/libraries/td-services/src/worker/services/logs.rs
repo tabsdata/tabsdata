@@ -297,8 +297,9 @@ mod tests {
         ];
 
         let test_dir = td_common::tdtestdir!();
-        let response =
-            temp_env::async_with_vars([(WORKSPACE_URI_ENV, Some(test_dir.to_str().unwrap()))], {
+        let response = Box::pin(temp_env::async_with_vars(
+            [(WORKSPACE_URI_ENV, Some(test_dir.to_str().unwrap()))],
+            {
                 async move {
                     // Create sample log files for the first worker, which will have the file names
                     // as the content.
@@ -326,8 +327,9 @@ mod tests {
                     let response = service.worker_log(request).await?.data;
                     Ok::<_, TdError>(response)
                 }
-            })
-            .await?;
+            },
+        ))
+        .await?;
 
         let content = response.into_inner().try_collect::<Vec<Bytes>>().await?;
         let content = content

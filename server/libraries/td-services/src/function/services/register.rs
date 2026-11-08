@@ -911,14 +911,16 @@ mod tests {
     async fn test_register_tables_dependencies_different_collections(
         db: TdPool,
     ) -> Result<(), TdError> {
-        test_register_tables_dependencies_triggers_different_collections(db, true, false).await
+        Box::pin(test_register_tables_dependencies_triggers_different_collections(db, true, false))
+            .await
     }
 
     #[td_test::test(db)]
     async fn test_register_tables_triggers_different_collections(
         db: TdPool,
     ) -> Result<(), TdError> {
-        test_register_tables_dependencies_triggers_different_collections(db, false, true).await
+        Box::pin(test_register_tables_dependencies_triggers_different_collections(db, false, true))
+            .await
     }
 
     // Within a project there is no cross-collection permission: any function

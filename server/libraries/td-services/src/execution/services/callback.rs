@@ -905,7 +905,7 @@ pub(crate) mod tests {
                 }],
             }],
         }];
-        test_status_update(
+        Box::pin(test_status_update(
             db.clone(),
             p.project_id,
             &test_executions,
@@ -944,7 +944,7 @@ pub(crate) mod tests {
                     Ok(())
                 }
             },
-        )
+        ))
         .await
     }
 
@@ -978,7 +978,7 @@ pub(crate) mod tests {
                 ],
             }],
         }];
-        test_status_update(
+        Box::pin(test_status_update(
             db.clone(),
             p.project_id,
             &test_executions,
@@ -1017,7 +1017,7 @@ pub(crate) mod tests {
                     Ok(())
                 }
             },
-        )
+        ))
         .await
     }
 }

@@ -219,7 +219,7 @@ mod tests {
             )
             .await?;
         let (execution, transaction, physical_function_run, table) =
-            _update_table_version(db.clone(), &collection, &p).await?;
+            Box::pin(_update_table_version(db.clone(), &collection, &p)).await?;
         let current_without_data = db
             .scoped(p.project_id)
             .seed()
@@ -304,7 +304,7 @@ mod tests {
             )
             .await?;
         let (execution, transaction, physical_function_run, table) =
-            _update_table_version(db.clone(), &collection, &p).await?;
+            Box::pin(_update_table_version(db.clone(), &collection, &p)).await?;
         let current_without_data = db
             .scoped(p.project_id)
             .seed()
