@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from collections.abc import Iterator
@@ -24,6 +25,8 @@ from tabsdatak.conn.db2 import Db2CdcStreamSrcConn, Db2DestConn, Db2SrcConn
 # and lets that folding line the names up. Quoting a lower-case name would force
 # a case-sensitive match that never resolves.
 DELIMITERS = ("", "")
+
+logger = logging.getLogger(__name__)
 
 
 def src_conn(domain: Db2Domain) -> Db2SrcConn:
@@ -84,7 +87,24 @@ def cdc_source_table(
     try:
         yield table, cd_table
     finally:
+        _release_after_use(domain, table)
+
+
+# tdd leaves the registration, the CD table and the source table in place when
+# asncap runs but has not taken the stop yet; its error carries no code.
+_CAPTURE_BUSY = "has not taken the CAPSTOP"
+
+
+def _release_after_use(domain: Db2CdcDomain, table: str) -> None:
+    """Release a table a test is done with. A table asncap is still behind on
+    stays: no other test uses its name, and the domain's next destroy or model
+    install removes it. Every other failure fails the test."""
+    try:
         domain.release_table(table=table, drop=True)
+    except Exception as error:
+        if _CAPTURE_BUSY not in str(error):
+            raise
+        logger.warning("Left %s registered for capture: %s", table, error)
 
 
 def cdc_insert(domain: Db2CdcDomain, table: str, rows: list[dict]) -> None:
