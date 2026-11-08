@@ -104,7 +104,14 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
-        let execution = test_execute(db.clone(), alpha.project_id, false, false, false).await?;
+        let execution = Box::pin(test_execute(
+            db.clone(),
+            alpha.project_id,
+            false,
+            false,
+            false,
+        ))
+        .await?;
         let ctx = RequestContext::with(AccessTokenId::default(), UserId::admin());
         let request = |ctx: &RequestContext| {
             ctx.read(ExecutionParam {
@@ -124,7 +131,8 @@ mod tests {
     #[td_test::test(db)]
     async fn test_read_execution(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let execution = test_execute(db.clone(), p.project_id, false, false, false).await?;
+        let execution =
+            Box::pin(test_execute(db.clone(), p.project_id, false, false, false)).await?;
 
         let service = Services::with_defaults(db.clone());
         let request =

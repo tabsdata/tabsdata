@@ -140,21 +140,21 @@ pub(crate) mod tests {
     #[td_test::test(db)]
     async fn test_execute_dependencies_different_collections(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let _ = test_execute(db, p.project_id, true, false, false).await?;
+        let _ = Box::pin(test_execute(db, p.project_id, true, false, false)).await?;
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_execute_trigger_different_collections(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let _ = test_execute(db, p.project_id, false, true, false).await?;
+        let _ = Box::pin(test_execute(db, p.project_id, false, true, false)).await?;
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_execute_single_function(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let _ = test_execute(db, p.project_id, true, false, true).await?;
+        let _ = Box::pin(test_execute(db, p.project_id, true, false, true)).await?;
         Ok(())
     }
 

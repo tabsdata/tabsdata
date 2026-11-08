@@ -73,7 +73,8 @@ mod tests {
     #[td_test::test(db)]
     async fn test_execution_details(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let execution = test_execute(db.clone(), p.project_id, false, false, false).await?;
+        let execution =
+            Box::pin(test_execute(db.clone(), p.project_id, false, false, false)).await?;
 
         let service = Services::with_defaults(db.clone());
         let request =
