@@ -93,9 +93,9 @@ _INTEGER_BITS = {
 def holds(stored: str, batch: str, dialect: str) -> Callable[[object], bool] | None:
     """Whether a column spelled ``stored``, which a ``batch`` column outgrows,
     holds a given value of it: an integer within the column's range, or a
-    decimal within its integer digits; ``None`` for a float, which loses
-    precision rather than overflows, and for a batch decimal with more
-    fractional digits than the column keeps, which would be rounded away."""
+    decimal within its integer digits; ``None`` for a float (see
+    :func:`single_holds_double`), and for a batch decimal with more fractional
+    digits than the column keeps, which would be rounded away."""
     old, new = kind(stored, dialect), kind(batch, dialect)
     if old is None or new is None or old[0] != "exact" or new[0] != "exact":
         return None
@@ -113,3 +113,12 @@ def holds(stored: str, batch: str, dialect: str) -> Callable[[object], bool] | N
         return lambda value: low <= value <= high
     limit = Decimal(10) ** (old[1] - old[2])
     return lambda value: -limit < Decimal(value) < limit
+
+
+def single_holds_double(stored: str, batch: str, dialect: str) -> bool:
+    """Whether ``stored`` is a single precision column a double ``batch``
+    column outgrows. Such a column holds a value only when it survives the
+    round trip through single precision unchanged: a float loses precision
+    rather than overflows, so a range says nothing."""
+    old, new = kind(stored, dialect), kind(batch, dialect)
+    return old == ("float", 4, 0) and new == ("float", 8, 0)

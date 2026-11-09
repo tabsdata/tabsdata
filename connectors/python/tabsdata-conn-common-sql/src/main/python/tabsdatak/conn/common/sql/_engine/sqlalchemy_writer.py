@@ -492,41 +492,68 @@ def _fitting(
     frame: pl.LazyFrame, changes: list["SchemaChange"], dialect: str
 ) -> list["SchemaChange"]:
     """``changes`` with each widening marked as fitting when every value of the
-    batch fits the column as it is (:func:`holds`); the batch is read for the
-    smallest and largest value of those columns only."""
+    batch fits the column as it is: an integer or decimal within the column's
+    range (:func:`holds`, read off the smallest and largest value), a double
+    that single precision holds exactly (:func:`single_holds_double`). The
+    batch is read for those columns only, in one pass."""
     # noinspection PyProtectedMember
-    from tabsdatak.conn.common.sql._engine.widening import holds
+    from tabsdatak.conn.common.sql._engine.widening import holds, single_holds_double
 
     # noinspection PyProtectedMember
     from tabsdatak.conn.common.sql._schema.delta import Action, SchemaChange
 
+    retyped = [change for change in changes if change.action is Action.ALTER_TYPE]
     checks = {
         change.column: check
-        for change in changes
-        if change.action is Action.ALTER_TYPE
-        and (
+        for change in retyped
+        if (
             check := holds(
                 change.detail["old_type"], change.detail["new_type"], dialect
             )
         )
     }
-    if not checks:
+    singles = {
+        change.column
+        for change in retyped
+        if single_holds_double(
+            change.detail["old_type"], change.detail["new_type"], dialect
+        )
+    }
+    if not checks and not singles:
         return changes
-    bounds = (
+    facts = (
         frame
         .select(
             *(pl.col(column).min().alias(f"{column}\0min") for column in checks),
             *(pl.col(column).max().alias(f"{column}\0max") for column in checks),
+            *(
+                (
+                    pl.col(column).is_null()
+                    | pl.col(column).is_nan()
+                    | (
+                        pl.col(column).cast(pl.Float32).cast(pl.Float64)
+                        == pl.col(column)
+                    )
+                )
+                .all()
+                .alias(f"{column}\0exact")
+                for column in singles
+            ),
         )
         .collect()
         .row(0, named=True)
     )
+
+    def fits(column: str) -> bool:
+        if column in singles:
+            return bool(facts[f"{column}\0exact"])
+        check = checks.get(column)
+        low, high = facts.get(f"{column}\0min"), facts.get(f"{column}\0max")
+        return bool(check) and (low is None or (check(low) and check(high)))
+
     fitting = []
     for change in changes:
-        check = checks.get(change.column)
-        low = bounds.get(f"{change.column}\0min")
-        high = bounds.get(f"{change.column}\0max")
-        if check and (low is None or (check(low) and check(high))):
+        if change.action is Action.ALTER_TYPE and fits(change.column):
             change = SchemaChange(
                 action=change.action,
                 column=change.column,

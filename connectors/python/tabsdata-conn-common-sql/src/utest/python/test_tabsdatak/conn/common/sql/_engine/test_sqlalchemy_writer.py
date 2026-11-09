@@ -777,3 +777,32 @@ def test_a_replace_of_a_missing_table_empties_nothing(monkeypatch):
     )
     saw._empty_table_if_exists(connection, "s.t")
     assert connection.statements == []
+
+
+def _float_change():
+    from tabsdatak.conn.common.sql._schema.delta import Action, SchemaChange
+
+    return SchemaChange(
+        action=Action.ALTER_TYPE,
+        column="f",
+        safe=True,
+        detail={"old_type": "REAL", "new_type": "FLOAT(53)", "nullable": True},
+    )
+
+
+@pytest.mark.parametrize(
+    "values,fits",
+    [
+        ([1.5, -2.25, None], True),
+        ([float("nan"), float("inf")], True),
+        ([None], True),
+        ([0.1], False),
+        ([1e300], False),
+    ],
+)
+def test_strict_takes_a_double_only_when_single_precision_holds_it_exactly(
+    values, fits
+):
+    frame = pl.LazyFrame({"f": values}, schema={"f": pl.Float64})
+    [change] = saw._fitting(frame, [_float_change()], "postgresql")
+    assert bool(change.detail.get("fits")) is fits

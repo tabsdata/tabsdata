@@ -7,7 +7,11 @@ from __future__ import annotations
 import pytest
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._engine.widening import holds, outgrows
+from tabsdatak.conn.common.sql._engine.widening import (
+    holds,
+    outgrows,
+    single_holds_double,
+)
 
 pytestmark = pytest.mark.sql_common
 
@@ -74,3 +78,23 @@ def test_no_value_is_known_to_fit_a_float_or_a_column_keeping_fewer_digits(
     stored, batch, dialect
 ):
     assert holds(stored, batch, dialect) is None
+
+
+@pytest.mark.parametrize(
+    "stored,batch,dialect,single",
+    [
+        ("REAL", "FLOAT(53)", "postgresql", True),
+        ("REAL", "DOUBLE PRECISION", "postgresql", True),
+        ("REAL", "FLOAT(53)", "mssql", True),
+        ("REAL", "FLOAT(53)", "ibm_db_sa", True),
+        ("FLOAT", "FLOAT(53)", "mysql", True),
+        ("BINARY_FLOAT", "BINARY_DOUBLE", "oracle", True),
+        ("REAL", "FLOAT", "sqlite", False),
+        ("DOUBLE", "DOUBLE", "mysql", False),
+        ("INTEGER", "BIGINT", "postgresql", False),
+    ],
+)
+def test_a_single_precision_column_outgrown_by_a_double_is_recognized(
+    stored, batch, dialect, single
+):
+    assert single_holds_double(stored, batch, dialect) is single
