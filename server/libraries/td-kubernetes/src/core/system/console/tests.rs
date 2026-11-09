@@ -117,3 +117,20 @@ fn an_empty_environment_is_still_a_valid_block() {
         [0, 0]
     );
 }
+
+#[cfg(windows)]
+#[test]
+fn a_child_in_its_own_console_runs_and_reports_its_exit_code() {
+    let mut command = std::process::Command::new("cmd");
+    command.args(["/d", "/c", "exit 7"]);
+    let mut child = super::OwnConsoleChild::spawn(&command, None).expect("spawn cmd");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let status = loop {
+        if let Some(status) = child.try_wait().expect("poll cmd") {
+            break status;
+        }
+        assert!(std::time::Instant::now() < deadline, "cmd never exited");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    };
+    assert_eq!(status.code(), Some(7));
+}

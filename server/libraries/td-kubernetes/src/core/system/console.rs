@@ -95,16 +95,27 @@ mod windows {
     use std::{io, mem, ptr};
 
     use windows_sys::Win32::Foundation::{
-        CloseHandle, DUPLICATE_SAME_ACCESS, DuplicateHandle, HANDLE, WAIT_OBJECT_0,
+        CloseHandle, DUPLICATE_SAME_ACCESS, DuplicateHandle, ERROR_ACCESS_DENIED, HANDLE,
+        WAIT_OBJECT_0,
     };
     use windows_sys::Win32::System::Threading::{
-        CREATE_NEW_CONSOLE, CREATE_NEW_PROCESS_GROUP, CREATE_UNICODE_ENVIRONMENT, CreateProcessW,
-        DeleteProcThreadAttributeList, EXTENDED_STARTUPINFO_PRESENT, GetCurrentProcess,
-        GetExitCodeProcess, InitializeProcThreadAttributeList, LPPROC_THREAD_ATTRIBUTE_LIST,
-        PROC_THREAD_ATTRIBUTE_HANDLE_LIST, PROCESS_INFORMATION, STARTF_USESHOWWINDOW,
-        STARTF_USESTDHANDLES, STARTUPINFOEXW, TerminateProcess, UpdateProcThreadAttribute,
-        WaitForSingleObject,
+        CREATE_BREAKAWAY_FROM_JOB, CREATE_NEW_CONSOLE, CREATE_NEW_PROCESS_GROUP,
+        CREATE_UNICODE_ENVIRONMENT, CreateProcessW, DeleteProcThreadAttributeList,
+        EXTENDED_STARTUPINFO_PRESENT, GetCurrentProcess, GetExitCodeProcess,
+        InitializeProcThreadAttributeList, LPPROC_THREAD_ATTRIBUTE_LIST,
+        PROC_THREAD_ATTRIBUTE_HANDLE_LIST, PROCESS_CREATION_FLAGS, PROCESS_INFORMATION,
+        STARTF_USESHOWWINDOW, STARTF_USESTDHANDLES, STARTUPINFOEXW, TerminateProcess,
+        UpdateProcThreadAttribute, WaitForSingleObject,
     };
+
+    const CREATION_FLAGS: PROCESS_CREATION_FLAGS = CREATE_NEW_CONSOLE
+        | CREATE_NEW_PROCESS_GROUP
+        | CREATE_UNICODE_ENVIRONMENT
+        | EXTENDED_STARTUPINFO_PRESENT;
+
+    fn job_refused_breakaway(error: &io::Error) -> bool {
+        error.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32)
+    }
     use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
 
     use super::{env_block, push_arg};
@@ -242,30 +253,34 @@ mod windows {
             startup.StartupInfo.hStdOutput = stdout.0;
             startup.StartupInfo.hStdError = stderr.0;
             startup.lpAttributeList = attributes.raw();
-            let mut info: PROCESS_INFORMATION = unsafe { mem::zeroed() };
-
-            let created = unsafe {
-                CreateProcessW(
-                    application
-                        .as_ref()
-                        .map_or(ptr::null(), |name| name.as_ptr()),
-                    line.as_mut_ptr(),
-                    ptr::null(),
-                    ptr::null(),
-                    1,
-                    CREATE_NEW_CONSOLE
-                        | CREATE_NEW_PROCESS_GROUP
-                        | CREATE_UNICODE_ENVIRONMENT
-                        | EXTENDED_STARTUPINFO_PRESENT,
-                    environment.as_ptr().cast(),
-                    directory.as_ref().map_or(ptr::null(), |dir| dir.as_ptr()),
-                    &startup.StartupInfo,
-                    &mut info,
-                )
+            let create = |flags: PROCESS_CREATION_FLAGS| -> io::Result<PROCESS_INFORMATION> {
+                let mut line = line.clone();
+                let mut info: PROCESS_INFORMATION = unsafe { mem::zeroed() };
+                let created = unsafe {
+                    CreateProcessW(
+                        application
+                            .as_ref()
+                            .map_or(ptr::null(), |name| name.as_ptr()),
+                        line.as_mut_ptr(),
+                        ptr::null(),
+                        ptr::null(),
+                        1,
+                        flags,
+                        environment.as_ptr().cast(),
+                        directory.as_ref().map_or(ptr::null(), |dir| dir.as_ptr()),
+                        &startup.StartupInfo,
+                        &mut info,
+                    )
+                };
+                if created == 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                Ok(info)
             };
-            if created == 0 {
-                return Err(io::Error::last_os_error());
-            }
+            let info = match create(CREATION_FLAGS | CREATE_BREAKAWAY_FROM_JOB) {
+                Err(error) if job_refused_breakaway(&error) => create(CREATION_FLAGS)?,
+                created => created?,
+            };
             drop(Owned(info.hThread));
             Ok(Self {
                 process: Owned(info.hProcess),
