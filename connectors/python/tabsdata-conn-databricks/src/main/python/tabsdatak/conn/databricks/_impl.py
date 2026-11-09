@@ -1013,78 +1013,79 @@ def copy_into_table(
     fq_table: str,
     footer: Any = None,
 ) -> None:
-    """Execute the CREATE-OR-REPLACE / CREATE-IF-NOT-EXISTS + COPY INTO
-    sequence against ``fq_table`` from ``file_in_volume``.
+    """Execute the CREATE-IF-NOT-EXISTS + COPY INTO sequence against
+    ``fq_table`` from ``file_in_volume``.
 
     Append and replace only -- a merge goes through the shared driver and
-    :class:`~tabsdatak.conn.databricks._merge.DatabricksMergeDialect`.
+    :class:`~tabsdatak.conn.databricks._merge.DatabricksMergeDialect`. A
+    replace keeps the table and empties it once the batch has passed the
+    schema policy, so a refused batch leaves the rows in place.
     """
+    if cfg.if_table_exists == "append":
+        create_kwargs, copy_options, copy_kwargs = (
+            cfg.support_append_create_table,
+            cfg.support_append_copy_options,
+            cfg.support_append_copy_into,
+        )
+    elif cfg.if_table_exists == "replace":
+        create_kwargs, copy_options, copy_kwargs = (
+            cfg.support_replace_create_table,
+            cfg.support_replace_copy_options,
+            cfg.support_replace_copy_into,
+        )
+    else:
+        raise ValueError(
+            f"Invalid if_table_exists {cfg.if_table_exists!r}: "
+            f"expected 'append' or 'replace'"
+        )
     cursor = sql_conn.cursor()
     sql_fq = _fq_for_sql(fq_table)
-    if cfg.if_table_exists == "replace":
-        create_stmt = (
-            f"CREATE OR REPLACE TABLE {sql_fq} "
-            f"USING DELTA AS SELECT * FROM read_files("
-            f"'{file_in_volume}', {_READ_FILES_OPTIONS}) LIMIT 0"
-        )
-        copy_stmt = (
-            f"COPY INTO {sql_fq} FROM '{file_in_volume}' "
-            f"FILEFORMAT = PARQUET"
-            f"{cfg.support_replace_copy_options}"
-        )
-        _execute_volume_statement(cursor, create_stmt, cfg.support_replace_create_table)
-        _execute_volume_statement(cursor, copy_stmt, cfg.support_replace_copy_into)
-        return
-    if cfg.if_table_exists == "append":
-        merge = (
-            "'mergeSchema' = 'false'"
-            if cfg.schema_evolution == "strict"
-            else "'mergeSchema' = 'true'"
-        )
-        create_stmt = (
-            f"CREATE TABLE IF NOT EXISTS {sql_fq} "
-            f"USING DELTA AS SELECT * FROM read_files("
-            f"'{file_in_volume}', {_READ_FILES_OPTIONS}) LIMIT 0"
-        )
-        copy_stmt = (
-            f"COPY INTO {sql_fq} FROM '{file_in_volume}' "
-            f"FILEFORMAT = PARQUET "
-            f"COPY_OPTIONS ({merge}{cfg.support_append_copy_options})"
-        )
-        _execute_volume_statement(cursor, create_stmt, cfg.support_append_create_table)
-        if cfg.schema_evolution == "update":
-            # mergeSchema adds columns; widening a column's type needs the
-            # table feature as well.
-            ensure_type_widening(cursor, sql_fq, True)
-        if cfg.watermark_column is not None:
-            # After the CREATE, so a target this write is creating already has
-            # the column from the staged file and the probe finds nothing to do.
-            # Before the COPY, because under strict ``mergeSchema`` is off and a
-            # batch carrying a column the target lacks fails the load outright
-            # -- and because a column added afterwards would be NULL in the rows
-            # just written, leaving the guard to read the next rerun as the
-            # first.
-            ensure_watermark_column(cursor, fq_table, sql_fq, cfg.watermark_column)
-        if cfg.schema_evolution == "strict":
-            casts = _hold_to_strict(cursor, sql_fq, file_in_volume, footer)
-            if casts:
-                projection = ", ".join(
-                    f"CAST({_quote_column(name)} AS {type_}) AS {_quote_column(name)}"
-                    if type_
-                    else _quote_column(name)
-                    for name, type_ in casts.items()
-                )
-                copy_stmt = copy_stmt.replace(
-                    f"FROM '{file_in_volume}'",
-                    f"FROM (SELECT {projection} FROM '{file_in_volume}')",
-                    1,
-                )
-        _execute_volume_statement(cursor, copy_stmt, cfg.support_append_copy_into)
-        return
-    raise ValueError(
-        f"Invalid if_table_exists {cfg.if_table_exists!r}: "
-        f"expected 'append' or 'replace'"
+    merge = (
+        "'mergeSchema' = 'false'"
+        if cfg.schema_evolution == "strict"
+        else "'mergeSchema' = 'true'"
     )
+    create_stmt = (
+        f"CREATE TABLE IF NOT EXISTS {sql_fq} "
+        f"USING DELTA AS SELECT * FROM read_files("
+        f"'{file_in_volume}', {_READ_FILES_OPTIONS}) LIMIT 0"
+    )
+    copy_stmt = (
+        f"COPY INTO {sql_fq} FROM '{file_in_volume}' "
+        f"FILEFORMAT = PARQUET "
+        f"COPY_OPTIONS ({merge}{copy_options})"
+    )
+    _execute_volume_statement(cursor, create_stmt, create_kwargs)
+    if cfg.schema_evolution == "update":
+        # mergeSchema adds columns; widening a column's type needs the
+        # table feature as well.
+        ensure_type_widening(cursor, sql_fq, True)
+    if cfg.if_table_exists == "append" and cfg.watermark_column is not None:
+        # After the CREATE, so a target this write is creating already has
+        # the column from the staged file and the probe finds nothing to do.
+        # Before the COPY, because under strict ``mergeSchema`` is off and a
+        # batch carrying a column the target lacks fails the load outright
+        # -- and because a column added afterwards would be NULL in the rows
+        # just written, leaving the guard to read the next rerun as the
+        # first.
+        ensure_watermark_column(cursor, fq_table, sql_fq, cfg.watermark_column)
+    if cfg.schema_evolution == "strict":
+        casts = _hold_to_strict(cursor, sql_fq, file_in_volume, footer)
+        if casts:
+            projection = ", ".join(
+                f"CAST({_quote_column(name)} AS {type_}) AS {_quote_column(name)}"
+                if type_
+                else _quote_column(name)
+                for name, type_ in casts.items()
+            )
+            copy_stmt = copy_stmt.replace(
+                f"FROM '{file_in_volume}'",
+                f"FROM (SELECT {projection} FROM '{file_in_volume}')",
+                1,
+            )
+    if cfg.if_table_exists == "replace":
+        cursor.execute(f"TRUNCATE TABLE {sql_fq}")
+    _execute_volume_statement(cursor, copy_stmt, copy_kwargs)
 
 
 def delete_from_volume(ws_client, file_in_volume: str) -> None:

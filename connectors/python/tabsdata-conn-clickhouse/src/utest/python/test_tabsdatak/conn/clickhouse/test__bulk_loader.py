@@ -3,9 +3,9 @@
 #
 
 """Tests for ``_bulk_loader.py`` phase orchestration -- focused on the
-``if_table_exists='replace'`` contract: the target is dropped *before* the
-create/verify loop, so a re-run recreates it fresh (and a same-name re-run can
-no longer collide). ``append`` must never drop.
+``if_table_exists='replace'`` contract: the target is kept, evolved like an
+append, and emptied only once every table took the batch's schema. ``append``
+never empties it.
 """
 
 from __future__ import annotations
@@ -45,9 +45,12 @@ class _RecordingDialect:
         self.calls: list[str] = []
         self.schemas: list = []
 
-    def drop_tables(self, load_mode, table_names):
-        self.calls.append("drop_tables")
-        self._exists = False
+    def truncate_tables(self, load_mode, table_names):
+        self.calls.append("truncate_tables")
+
+    def compute_evolution_delta(self, load_mode, table_name, arrow_schema, nulls):
+        self.calls.append("compute_evolution_delta")
+        return SchemaDelta(table_name=table_name, is_create=False, changes=[])
 
     def table_exists(self, load_mode, table_name):
         self.calls.append("table_exists")
@@ -138,7 +141,9 @@ class _Evolving(_RecordingDialect):
         self.applied: list[SchemaChange] = []
 
     def compute_evolution_delta(self, load_mode, table_name, arrow_schema, nulls):
-        return SchemaDelta(table_name=table_name, is_create=False, changes=self._changes)
+        return SchemaDelta(
+            table_name=table_name, is_create=False, changes=self._changes
+        )
 
     def apply_schema_delta(self, load_mode, table_name, delta):
         self.applied.extend(delta.changes)
@@ -268,28 +273,45 @@ def test_update_adds_a_new_column(tmp_path):
     assert dialect.applied == [_ADDED]
 
 
-def test_replace_drops_before_create(tmp_path):
+def test_replace_creates_a_missing_table_then_truncates(tmp_path):
     dialect = _RecordingDialect(exists=False)
     loader = _loader(tmp_path, dialect, WriteMode.REPLACE)
     loader.phase_validate_and_prepare(_staged(loader))
-    assert dialect.calls[0] == "drop_tables"
-    assert dialect.calls.index("drop_tables") < dialect.calls.index("create_table")
+    assert dialect.calls == ["table_exists", "create_table", "truncate_tables"]
 
 
-def test_replace_drops_even_when_table_exists(tmp_path):
-    # A re-run against a pre-existing table: the drop must still fire (so the
-    # table is recreated fresh) rather than being skipped.
+def test_replace_evolves_an_existing_table_then_truncates_it(tmp_path):
     dialect = _RecordingDialect(exists=True)
     loader = _loader(tmp_path, dialect, WriteMode.REPLACE)
     loader.phase_validate_and_prepare(_staged(loader))
-    assert dialect.calls[0] == "drop_tables"
+    assert dialect.calls == [
+        "table_exists",
+        "compute_evolution_delta",
+        "truncate_tables",
+    ]
 
 
-def test_append_does_not_drop(tmp_path):
+def test_replace_under_strict_refuses_a_new_column_before_truncating(tmp_path):
+    dialect = _Evolving([_ADDED])
+    loader = _loader(tmp_path, dialect, WriteMode.REPLACE, STRICT)
+    with pytest.raises(SqlCommonRuntimeException):
+        loader.phase_validate_and_prepare(_staged(loader))
+    assert "truncate_tables" not in dialect.calls
+
+
+def test_replace_under_update_adds_a_new_column_then_truncates(tmp_path):
+    dialect = _Evolving([_ADDED])
+    loader = _loader(tmp_path, dialect, WriteMode.REPLACE, UPDATE)
+    loader.phase_validate_and_prepare(_staged(loader))
+    assert dialect.applied == [_ADDED]
+    assert dialect.calls[-1] == "truncate_tables"
+
+
+def test_append_does_not_truncate(tmp_path):
     dialect = _RecordingDialect(exists=False)
     loader = _loader(tmp_path, dialect, WriteMode.APPEND)
     loader.phase_validate_and_prepare(_staged(loader))
-    assert "drop_tables" not in dialect.calls
+    assert "truncate_tables" not in dialect.calls
 
 
 def test_a_failed_load_still_cleans_up_and_a_failed_cleanup_is_ignored(tmp_path):

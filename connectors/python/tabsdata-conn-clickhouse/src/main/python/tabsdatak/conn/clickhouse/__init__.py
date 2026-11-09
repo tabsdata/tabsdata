@@ -348,13 +348,12 @@ class ClickHouseDest(Dest):
             `database.table`); backtick-quote a part for special
             characters.
         if_table_exists: `"append"` (the default) adds rows;
-            `"replace"` overwrites the table.
+            `"replace"` empties the table and loads the batch.
         schema_evolution: What a write does when the batch's columns differ from
-            the table's. `"replace"` makes the table the batch's own, so it is
-            not affected. `"strict"` (the default) refuses a batch with a column
-            the table lacks or a wider type; `"update"` adds the column and
-            widens the type, and refuses a change ClickHouse cannot make. A
-            column the batch lacks is written NULL either way.
+            the table's, a replace included. `"strict"` (the default) refuses a
+            batch with a column the table lacks or a wider type; `"update"` adds
+            the column and widens the type, and refuses a change ClickHouse
+            cannot make. A column the batch lacks is written NULL either way.
         dest_cfg: Optional connector config. Supported keys:
             `clickhouse.logging_level`, and
             `clickhouse.schema_evolution_engine` -- `"iceberg"`, the default

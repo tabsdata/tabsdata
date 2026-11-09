@@ -108,7 +108,7 @@ def test_polars_single_table_append(db_path, work_dir, transactional):
         engine.dispose()
 
 
-def test_polars_replace_drops_existing_rows(db_path, work_dir):
+def test_polars_replace_replaces_the_rows(db_path, work_dir):
     src = _frame([{"id": 1, "name": "only"}],
     )
     saw.PolarsWriteEngine().write(
@@ -126,10 +126,72 @@ def test_polars_replace_drops_existing_rows(db_path, work_dir):
         engine.dispose()
 
 
+def test_polars_replace_keeps_the_table(db_path, work_dir):
+    src = _frame([{"id": 1, "name": "only"}])
+    saw.PolarsWriteEngine().write(_cfg(db_path, if_table_exists="replace"), [src])
+    engine = create_engine(sqlite_uri(db_path))
+    try:
+        with engine.connect() as conn:
+            columns = {
+                row[1]: row[5]
+                for row in conn.execute(text("PRAGMA table_info(users)")).fetchall()
+            }
+            rows = conn.execute(text("SELECT id, name, age FROM users")).fetchall()
+    finally:
+        engine.dispose()
+    assert columns == {"id": 1, "name": 0, "age": 0}
+    assert rows == [(1, "only", None)]
+
+
+def test_polars_replace_under_strict_refuses_a_new_column_and_keeps_the_rows(
+    db_path, work_dir
+):
+    src = _frame([{"id": 1, "name": "only", "extra": 7}])
+    with pytest.raises(SqlCommonRuntimeException) as raised:
+        saw.PolarsWriteEngine().write(
+            _cfg(db_path, if_table_exists="replace", schema_evolution="strict"),
+            [src],
+        )
+    assert raised.value.api_error is SqlCommonErrorCode.SQL_COMMON_10
+    engine = create_engine(sqlite_uri(db_path))
+    try:
+        with engine.connect() as conn:
+            count = conn.execute(text("SELECT COUNT(*) FROM users")).scalar_one()
+    finally:
+        engine.dispose()
+    assert count == 3
+
+
+def test_polars_replace_under_update_adds_a_new_column(db_path, work_dir):
+    # The table is created by the writer itself, so the only change the batch
+    # brings is the new column: SQLite cannot retype one.
+    def replace(frame: pl.LazyFrame) -> None:
+        saw.PolarsWriteEngine().write(
+            _cfg(
+                db_path,
+                target_tables=["evolving"],
+                if_table_exists="replace",
+                schema_evolution="update",
+            ),
+            [frame],
+        )
+
+    replace(_frame([{"id": 1, "name": "first"}]))
+    replace(_frame([{"id": 2, "name": "second", "extra": 7}]))
+    engine = create_engine(sqlite_uri(db_path))
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(text("SELECT id, name, extra FROM evolving")).fetchall()
+    finally:
+        engine.dispose()
+    assert rows == [(2, "second", 7)]
+
+
 def test_polars_replace_does_not_reflect_the_table(db_path, work_dir, monkeypatch):
     # Regression for the Oracle "Could not reflect: requested table(s) not
-    # available" flake: 'replace' must drop + append (create-on-write) and never
-    # reflect the existing table (pandas' native 'replace' path does).
+    # available" flake: 'replace' empties the table and appends (create-on-write
+    # when it does not exist), and never reflects it through MetaData (pandas'
+    # native 'replace' path does).
     import sqlalchemy
 
     reflected: list = []

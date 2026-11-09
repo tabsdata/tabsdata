@@ -417,12 +417,13 @@ class DatabricksDest(Dest):
             characters. Partial names are completed from the
             connection's `catalog` / `schema` defaults.
         if_table_exists: `"append"` (the default) adds rows;
-            `"replace"` overwrites the table.
+            `"replace"` empties the table and writes the batch, keeping the
+            table and its columns.
             `"merge"` merges rows.
         schema_evolution: What a write does when the batch's columns differ from
-            the table's. `"replace"` makes the table the batch's own, so it is
-            not affected. `"strict"` (the default) refuses a batch with a column
-            the table lacks or a wider type; `"update"` adds the column and
+            the table's, a replace included. `"strict"` (the default) refuses a
+            batch with a column the table lacks or a wider type, before a replace
+            empties the table; `"update"` adds the column and
             widens the type, and refuses a change Databricks cannot make. A
             column the batch lacks is written NULL either way, and a merge keeps
             its stored value in the rows it updates.
@@ -442,8 +443,8 @@ class DatabricksDest(Dest):
             A merge stamps through the `MERGE` itself; an append writes the
             column into the batch it stages, so `COPY INTO` stamps the rows it
             loads. A replace is refused it, having nothing to make idempotent --
-            it rewrites the table wholesale, so a rerun already leaves the same
-            rows behind.
+            it rewrites every row, so a rerun already leaves the same rows
+            behind.
         dest_cfg: Optional connector config; the only supported key is
             `databricks.logging_level`.
 

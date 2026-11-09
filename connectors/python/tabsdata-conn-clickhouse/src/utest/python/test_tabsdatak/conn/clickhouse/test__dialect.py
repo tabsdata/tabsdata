@@ -257,19 +257,19 @@ class TestDialectAlterTable:
         assert ts.table_name == "`weird db`.`weird tbl`"
 
 
-class TestDialectDropTable:
-    def test_drop_uses_fqn(self, captured_client):
+class TestDialectTruncateTable:
+    def test_truncate_uses_fqn(self, captured_client):
         d = ClickHouseDialect(_config("analytics"), MagicMock())
-        d.drop_table(MagicMock(), "users")
+        d.truncate_table(MagicMock(), "users")
         assert captured_client.commands == [
-            "DROP TABLE IF EXISTS `analytics`.`users`"
+            "TRUNCATE TABLE IF EXISTS `analytics`.`users`"
         ]
 
-    def test_drop_qualified_name(self, captured_client):
+    def test_truncate_qualified_name(self, captured_client):
         d = ClickHouseDialect(_config("analytics"), MagicMock())
-        d.drop_table(MagicMock(), "warehouse.events")
+        d.truncate_table(MagicMock(), "warehouse.events")
         assert captured_client.commands == [
-            "DROP TABLE IF EXISTS `warehouse`.`events`"
+            "TRUNCATE TABLE IF EXISTS `warehouse`.`events`"
         ]
 
 

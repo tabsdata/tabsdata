@@ -102,8 +102,8 @@ class Dialect(ABC):
     # --- Data operations (single-table, abstract) --------------------
 
     @abstractmethod
-    def drop_table(self, load_mode: LoadMode, table_name: str) -> None:
-        """Drop a table if it exists."""
+    def truncate_table(self, load_mode: LoadMode, table_name: str) -> None:
+        """Remove every row of a table, keeping it, if it exists."""
 
     @abstractmethod
     def bulk_load(
@@ -121,9 +121,9 @@ class Dialect(ABC):
 
     # --- Data operations (batch) -------------------------------------
 
-    def drop_tables(self, load_mode: LoadMode, table_names: list[str]) -> None:
+    def truncate_tables(self, load_mode: LoadMode, table_names: list[str]) -> None:
         for name in table_names:
-            self.drop_table(load_mode, name)
+            self.truncate_table(load_mode, name)
 
     def bulk_load_tables(
         self,

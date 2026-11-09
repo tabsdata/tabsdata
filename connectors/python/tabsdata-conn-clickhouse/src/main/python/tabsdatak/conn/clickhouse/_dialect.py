@@ -456,10 +456,10 @@ class ClickHouseDialect(Dialect):
 
     # --- Data operations ---------------------------------------------
 
-    def drop_table(self, load_mode: LoadMode, table_name: str) -> None:
+    def truncate_table(self, load_mode: LoadMode, table_name: str) -> None:
         fq = self._fqn(table_name)
-        self._client.command(f"DROP TABLE IF EXISTS {fq}")
-        logger.debug("Dropped table: %s", fq)
+        self._client.command(f"TRUNCATE TABLE IF EXISTS {fq}")
+        logger.debug("Truncated table: %s", fq)
 
     def bulk_load(
         self,

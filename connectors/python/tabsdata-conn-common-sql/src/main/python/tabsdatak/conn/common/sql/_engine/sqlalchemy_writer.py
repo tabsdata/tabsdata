@@ -321,16 +321,29 @@ def _dialect_type_fixes(
     return dtype, transforms
 
 
-def _drop_table_if_exists(connection: Connection, table: str) -> None:
-    from sqlalchemy import MetaData, Table
+# Db2 takes TRUNCATE ... IMMEDIATE only as the first statement of a unit of
+# work, and SQLite has no TRUNCATE.
+_EMPTY_TABLE: dict[str, str] = {
+    "ibm_db_sa": "DELETE FROM {table}",
+    "sqlite": "DELETE FROM {table}",
+}
 
-    # Mirror polars.write_database's [schema.]table unpacking so the DROP targets
-    # the same identifier polars/pandas would CREATE. `checkfirst` uses the
-    # dialect's has_table (identifier-aware) rather than MetaData.reflect, so it
-    # never raises Oracle's "requested table(s) not available".
+
+def _empty_table_if_exists(connection: Connection, table: str) -> None:
+    from sqlalchemy import inspect, text
+
+    # Mirror polars.write_database's [schema.]table unpacking so the statement
+    # targets the same identifier polars/pandas would CREATE. has_table is
+    # identifier-aware rather than MetaData.reflect, so it never raises Oracle's
+    # "requested table(s) not available".
     *prefix, name = table.split(".")
     schema = prefix[-1] if prefix else None
-    Table(name, MetaData(), schema=schema).drop(bind=connection, checkfirst=True)
+    if not inspect(connection).has_table(name, schema=schema):
+        return
+    preparer = connection.dialect.identifier_preparer
+    target = ".".join(preparer.quote(part) for part in [*prefix, name])
+    statement = _EMPTY_TABLE.get(connection.dialect.name, "TRUNCATE TABLE {table}")
+    connection.execute(text(statement.format(table=target)))
 
 
 # Dialects whose `default_schema_name` is not the schema an unqualified CREATE
@@ -516,17 +529,15 @@ def _polars_write(
     _dtype.update(_fixes)
     if _dtype:
         options.setdefault("engine_options", {})["dtype"] = _dtype
-    # Create-on-write for 'replace': drop the target up front, then always
-    # append. pandas' own 'replace' reflects the existing table before dropping
-    # it, which fails on Oracle -- its identifier normalize/denormalize asymmetry
-    # makes the reflect's name-membership check miss the table ("requested
-    # table(s) not available"). Dropping via has_table (checkfirst) avoids the
-    # reflect, and appending create-on-writes exactly like the other dialects.
+    # A replace keeps the table: it evolves it like an append, empties it, and
+    # appends. pandas' own 'replace' would drop and recreate the table, and
+    # reflects it first, which fails on Oracle -- its identifier
+    # normalize/denormalize asymmetry makes the reflect's name-membership check
+    # miss the table ("requested table(s) not available").
+    _evolve_columns(connection, table, schema, _dtype, schema_evolution)
     if if_table_exists == "replace":
-        _drop_table_if_exists(connection, table)
+        _empty_table_if_exists(connection, table)
         if_table_exists = "append"
-    else:
-        _evolve_columns(connection, table, schema, _dtype, schema_evolution)
     wrote_any = False
     for df in frame.collect_batches(chunk_size=chunk_size):
         if _transforms:

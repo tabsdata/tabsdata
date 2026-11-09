@@ -332,15 +332,14 @@ class BigQueryDest(Dest):
             `project` / `dataset` defaults. BigQuery wraps the whole
             name in one backtick pair, e.g. `my-project.ds.t`.
         if_table_exists: `"append"` (the default) adds rows;
-            `"replace"` drops and recreates the table;
+            `"replace"` empties the table and loads the batch;
             `"merge"` merges rows.
         schema_evolution: What a write does when the batch's columns differ from
-            the table's. `"replace"` makes the table the batch's own, so it is
-            not affected. `"strict"` (the default) refuses a batch with a column
-            the table lacks or a wider type; `"update"` adds the column and
-            widens the type, and refuses a change BigQuery cannot make. A column
-            the batch lacks is written NULL either way, and a merge keeps its
-            stored value in the rows it updates.
+            the table's, a replace included. `"strict"` (the default) refuses a
+            batch with a column the table lacks or a wider type; `"update"` adds
+            the column and widens the type, and refuses a change BigQuery cannot
+            make. A column the batch lacks is written NULL either way, and a
+            merge keeps its stored value in the rows it updates.
         merge_cfg: Required by -- and only valid with --
             `if_table_exists="merge"`: how incoming rows are matched
             onto existing ones. A list, one entry per table in `tables` and

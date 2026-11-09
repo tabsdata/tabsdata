@@ -239,23 +239,20 @@ DECIMAL_TARGET_TYPES = ["NUMERIC", "BIGNUMERIC"]
 
 
 def build_load_job_config(
-    if_table_exists: IfTableExistsSpec,
     schema_evolution: SchemaEvolutionSpec,
     schema_evolution_engine: str = "native",
 ) -> Any:
     """Translate the dest's strategy fields into a BigQuery
     ``LoadJobConfig`` for a parquet -> table load.
 
-    Mirrors legacy ``BigQueryDest._upload_single_uri_to_table``:
+    The load always appends: a replace has already emptied the table it keeps
+    (:func:`truncate_table`), so it loads exactly like an append.
 
-    - ``if_table_exists='replace'`` -> ``WRITE_TRUNCATE``; schema is
-      replaced wholesale, so no ``schema_update_options`` are passed.
-    - ``if_table_exists='append'`` + ``schema_evolution='strict'`` ->
-      ``WRITE_APPEND`` with no schema-update options (incoming parquet
-      must match the table's current schema).
-    - ``if_table_exists='append'`` + ``schema_evolution='update'`` ->
-      ``WRITE_APPEND`` with ``ALLOW_FIELD_ADDITION`` and
-      ``ALLOW_FIELD_RELAXATION``.
+    - ``schema_evolution='strict'`` -> ``WRITE_APPEND`` with no
+      schema-update options (incoming parquet must match the table's current
+      schema).
+    - ``schema_evolution='update'`` -> ``WRITE_APPEND`` with
+      ``ALLOW_FIELD_ADDITION`` and ``ALLOW_FIELD_RELAXATION``.
 
     ``schema_evolution_engine='iceberg'`` takes the options off whatever
     the other two say: the connector has already ALTERed the target into
@@ -277,25 +274,33 @@ def build_load_job_config(
     from google.cloud import bigquery
 
     natively = schema_evolution_engine == "native"
-    if if_table_exists == "replace":
-        write_disposition = bigquery.WriteDisposition.WRITE_TRUNCATE
+    if schema_evolution == "strict" or not natively:
         schema_update_options: list[Any] = []
     else:
-        write_disposition = bigquery.WriteDisposition.WRITE_APPEND
-        if schema_evolution == "strict" or not natively:
-            schema_update_options = []
-        else:
-            schema_update_options = [
-                bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION,
-                bigquery.SchemaUpdateOption.ALLOW_FIELD_RELAXATION,
-            ]
+        schema_update_options = [
+            bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION,
+            bigquery.SchemaUpdateOption.ALLOW_FIELD_RELAXATION,
+        ]
     return bigquery.LoadJobConfig(
         source_format=bigquery.SourceFormat.PARQUET,
-        write_disposition=write_disposition,
+        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
         schema_update_options=schema_update_options,
         create_disposition=bigquery.CreateDisposition.CREATE_IF_NEEDED,
         decimal_target_types=DECIMAL_TARGET_TYPES,
     )
+
+
+def truncate_table(bq_client: Any, table_fqn: str) -> None:
+    """Remove every row of ``table_fqn``, keeping the table, when it exists;
+    a missing table is created by the load that follows."""
+    from google.cloud.exceptions import NotFound
+
+    try:
+        bq_client.get_table(table_fqn)
+    except NotFound:
+        return
+    logger.info("bigquery: truncating %r for replace", table_fqn)
+    bq_client.query_and_wait(f"TRUNCATE TABLE {quote_table(table_fqn)}")
 
 
 def build_merge_staging_load_job_config() -> Any:

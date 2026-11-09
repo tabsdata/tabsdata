@@ -1042,6 +1042,84 @@ def test_a_replace_never_stamps_even_when_handed_a_watermark(monkeypatch, tmp_pa
     assert _alters(cursor) == []
 
 
+def _replace_cfg(**overrides) -> _impl.DatabricksWriteCfg:
+    return _wm_cfg(if_table_exists="replace", watermark_column=None, **overrides)
+
+
+def _position(cursor, prefix: str) -> int:
+    return next(i for i, s in enumerate(cursor.log) if s.startswith(prefix))
+
+
+def test_replace_keeps_the_table_and_truncates_it_before_the_copy(
+    monkeypatch, tmp_path
+):
+    cursor = _BulkCursor(("id",))
+    _bulk_clients(monkeypatch, cursor)
+    _impl.write_all_tables(_replace_cfg(), [_wm_parquet(tmp_path)])
+    assert not any("CREATE OR REPLACE" in s for s in cursor.log)
+    assert (
+        _position(cursor, "CREATE TABLE IF NOT EXISTS")
+        < _position(cursor, f"TRUNCATE TABLE {_WM_SQL_FQ}")
+        < _position(cursor, "COPY INTO")
+    )
+
+
+def test_replace_under_strict_copies_without_merging_the_schema(
+    monkeypatch, tmp_path
+):
+    cursor = _BulkCursor(("id",))
+    _bulk_clients(monkeypatch, cursor)
+    _impl.write_all_tables(_replace_cfg(), [_wm_parquet(tmp_path)])
+    [copy] = [s for s in cursor.log if s.startswith("COPY INTO")]
+    assert "'mergeSchema' = 'false'" in copy
+
+
+def test_replace_under_update_merges_the_schema_and_widens(monkeypatch, tmp_path):
+    cursor = _BulkCursor(("id",))
+    _bulk_clients(monkeypatch, cursor)
+    _impl.write_all_tables(
+        _replace_cfg(schema_evolution="update"), [_wm_parquet(tmp_path)]
+    )
+    [copy] = [s for s in cursor.log if s.startswith("COPY INTO")]
+    assert "'mergeSchema' = 'true'" in copy
+    assert _position(cursor, "SHOW TBLPROPERTIES") < _position(
+        cursor, "TRUNCATE TABLE"
+    )
+
+
+class _WiderBatchCursor(_BulkCursor):
+    """A target with only ``id``, receiving a batch that adds ``note``."""
+
+    def __init__(self) -> None:
+        super().__init__(("id",))
+
+    def execute(self, statement: str, **parameters) -> None:
+        if statement.startswith("DESCRIBE"):
+            self.log.append(statement)
+            self.description = [("col_name",), ("data_type",)]
+            self._rows = [("id", "bigint")]
+            if statement.startswith("DESCRIBE QUERY"):
+                self._rows.append(("note", "string"))
+            return
+        super().execute(statement, **parameters)
+
+
+def test_replace_under_strict_refuses_a_new_column_before_truncating(
+    monkeypatch, tmp_path
+):
+    import polars as pl
+
+    from tabsdatak.conn.common.sql.error import SqlCommonRuntimeException
+
+    path = tmp_path / "in.parquet"
+    pl.DataFrame({"id": [1], "note": ["x"]}).write_parquet(path)
+    cursor = _WiderBatchCursor()
+    _bulk_clients(monkeypatch, cursor)
+    with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
+        _impl.write_all_tables(_replace_cfg(), [pl.scan_parquet(path)])
+    assert not any(s.startswith(("TRUNCATE", "COPY INTO")) for s in cursor.log)
+
+
 def _staged_schemas(monkeypatch):
     """The schema of every frame streamed to the volume."""
     schemas: list[dict] = []

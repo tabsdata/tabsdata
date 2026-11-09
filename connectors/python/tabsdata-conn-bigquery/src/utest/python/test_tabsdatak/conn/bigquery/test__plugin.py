@@ -307,21 +307,53 @@ def test_dest_plugin_strict_refuses_a_wider_decimal_its_column_cannot_hold(
     assert _inserts(bq_client) == []
 
 
-def test_dest_plugin_strict_replace_takes_the_batch_schema(monkeypatch, work_dir):
-    """A replace's load job replaces the table's schema, so strict has
-    nothing to refuse."""
-    bq_client = _evolving_clients(
-        monkeypatch, [("id", "INTEGER")], [("id", "INTEGER"), ("note", "STRING")]
-    )
+def _replace(work_dir, schema_evolution: str, rows: list[dict]) -> None:
     dest = BigQueryDest(
         tables=["`my-project.analytics.users`"],
         if_table_exists="replace",
-        schema_evolution="strict",
+        schema_evolution=schema_evolution,
     )
-    src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "note": "x"}])
+    src = _make_parquet(work_dir / "in.parquet", rows)
     plugin._BigQueryDestPlugin().write_out(
         _dest_ctx(work_dir), _bare_conn(), dest, [pl.scan_parquet(src)]
     )
+
+
+def test_dest_plugin_strict_replace_refuses_a_new_column_and_keeps_the_rows(
+    monkeypatch, work_dir
+):
+    """A replace keeps the table, so strict refuses what it would refuse on an
+    append, before the table is emptied."""
+    bq_client = _evolving_clients(
+        monkeypatch, [("id", "INTEGER")], [("id", "INTEGER"), ("note", "STRING")]
+    )
+    with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
+        _replace(work_dir, "strict", [{"id": 1, "note": "x"}])
+    assert not [s for s in _alters(bq_client) if s.startswith("TRUNCATE")]
+    assert bq_client.load_table_from_uri.call_count == 0
+
+
+def test_dest_plugin_replace_truncates_the_table_then_appends(monkeypatch, work_dir):
+    bq_client = _evolving_clients(monkeypatch, [("id", "INTEGER")], [("id", "INTEGER")])
+    _replace(work_dir, "strict", [{"id": 1}])
+    assert "TRUNCATE TABLE `my-project.analytics.users`" in _alters(bq_client)
+    [call] = bq_client.load_table_from_uri.call_args_list
+    from google.cloud import bigquery
+
+    assert (
+        call.kwargs["job_config"].write_disposition
+        == bigquery.WriteDisposition.WRITE_APPEND
+    )
+
+
+def test_dest_plugin_replace_of_a_missing_table_loads_without_truncating(
+    monkeypatch, work_dir
+):
+    bq_client = _evolving_clients(
+        monkeypatch, [], [("id", "INTEGER")], target_exists=False
+    )
+    _replace(work_dir, "strict", [{"id": 1}])
+    assert not [s for s in _alters(bq_client) if s.startswith("TRUNCATE")]
     assert bq_client.load_table_from_uri.call_count == 1
 
 
@@ -410,19 +442,18 @@ def test_unquote_table_fqn_unescapes_inner_backtick():
 # ---------------------------------------------------------------------------
 
 
-def test_load_job_config_replace_uses_write_truncate():
+def test_load_job_config_always_appends():
     from google.cloud import bigquery
 
-    cfg = impl.build_load_job_config("replace", "update")
-    assert cfg.write_disposition == bigquery.WriteDisposition.WRITE_TRUNCATE
-    # replace wipes the schema, so no update options carry forward.
-    assert list(cfg.schema_update_options or []) == []
+    for evolution in ("strict", "update"):
+        cfg = impl.build_load_job_config(evolution)
+        assert cfg.write_disposition == bigquery.WriteDisposition.WRITE_APPEND
 
 
 def test_load_job_config_append_strict_no_schema_update():
     from google.cloud import bigquery
 
-    cfg = impl.build_load_job_config("append", "strict")
+    cfg = impl.build_load_job_config("strict")
     assert cfg.write_disposition == bigquery.WriteDisposition.WRITE_APPEND
     assert list(cfg.schema_update_options or []) == []
 
@@ -430,7 +461,7 @@ def test_load_job_config_append_strict_no_schema_update():
 def test_load_job_config_append_update_emits_field_options():
     from google.cloud import bigquery
 
-    cfg = impl.build_load_job_config("append", "update")
+    cfg = impl.build_load_job_config("update")
     assert cfg.write_disposition == bigquery.WriteDisposition.WRITE_APPEND
     assert set(cfg.schema_update_options or []) == {
         bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION,
@@ -442,14 +473,14 @@ def test_load_job_config_iceberg_engine_takes_the_field_options_off():
     """The connector has already ALTERed the target into shape; leaving
     BigQuery's own evolution on would be a second engine on one write, and one
     that would quietly re-add a column the Iceberg pass had refused."""
-    cfg = impl.build_load_job_config("append", "update", "iceberg")
+    cfg = impl.build_load_job_config("update", "iceberg")
     assert list(cfg.schema_update_options or []) == []
 
 
 def test_load_job_config_defaults_to_the_native_engine():
     from google.cloud import bigquery
 
-    cfg = impl.build_load_job_config("append", "update")
+    cfg = impl.build_load_job_config("update")
     assert set(cfg.schema_update_options or []) == {
         bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION,
         bigquery.SchemaUpdateOption.ALLOW_FIELD_RELAXATION,
@@ -459,7 +490,7 @@ def test_load_job_config_defaults_to_the_native_engine():
 def test_load_job_config_parquet_source_and_create_if_needed():
     from google.cloud import bigquery
 
-    cfg = impl.build_load_job_config("append", "update")
+    cfg = impl.build_load_job_config("update")
     assert cfg.source_format == bigquery.SourceFormat.PARQUET
     assert cfg.create_disposition == bigquery.CreateDisposition.CREATE_IF_NEEDED
 
@@ -478,7 +509,7 @@ def test_merge_staging_load_job_config_truncates_and_creates():
 
 def test_merge_staging_load_job_config_widens_decimals_like_a_direct_load():
     staging = impl.build_merge_staging_load_job_config()
-    direct = impl.build_load_job_config("append", "update")
+    direct = impl.build_load_job_config("update")
     assert staging.decimal_target_types == direct.decimal_target_types
 
 

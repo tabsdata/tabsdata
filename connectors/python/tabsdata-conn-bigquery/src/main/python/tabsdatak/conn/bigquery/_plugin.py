@@ -108,6 +108,7 @@ class _BigQueryDestPlugin(
             quote_table,
             stage,
             staging_store,
+            truncate_table,
         )
 
         # noinspection PyProtectedMember
@@ -214,16 +215,12 @@ class _BigQueryDestPlugin(
                     logger.debug("bigquery: finished table %r", table_fqn)
                 return
 
-            # A strict append whatever the engine: the load job would refuse the
-            # same batch, but with its own error rather than SQL_COMMON_10. A
-            # replace's load job takes the batch's schema, so there is nothing
-            # for strict to refuse. "update" only under iceberg: the native
-            # engine's load job evolves itself.
-            strict_append = (
-                write_cfg.schema_evolution == "strict"
-                and write_cfg.if_table_exists == "append"
-            )
-            diffing = strict_append or (
+            # Strict whatever the engine, on an append and on a replace alike: a
+            # replace keeps the table, and the load job would refuse the same
+            # batch, but with its own error rather than SQL_COMMON_10. "update"
+            # only under iceberg: the native engine's load job evolves itself.
+            strict = write_cfg.schema_evolution == "strict"
+            diffing = strict or (
                 write_cfg.schema_evolution == "update"
                 and cfg.schema_evolution_engine == "iceberg"
             )
@@ -304,7 +301,7 @@ class _BigQueryDestPlugin(
                     # table it is about to refill.
                     try:
                         columns = batch_columns(bq_client, uri, table_fqn)
-                        if strict_append:
+                        if strict:
                             casts = narrowed_target(bq_client, store, key, table_fqn)
                             columns = [(n, casts.get(n, t)) for n, t in columns]
                         BigQuerySchemaEvolver(bq_client, table_fqn).evolve(
@@ -315,6 +312,14 @@ class _BigQueryDestPlugin(
                     except Exception as e:
                         raise BigQueryErrorCode.BIGQUERY_23.exception(
                             cause=e, table=table_fqn
+                        )
+                if write_cfg.if_table_exists == "replace":
+                    try:
+                        truncate_table(bq_client, table_fqn)
+                    except Exception as e:
+                        raise BigQueryErrorCode.BIGQUERY_7.exception(
+                            cause=e,
+                            table=table_fqn,
                         )
                 if casts:
                     try:
@@ -333,7 +338,6 @@ class _BigQueryDestPlugin(
                     logger.debug("bigquery: finished table %r", table_fqn)
                     continue
                 job_config = build_load_job_config(
-                    write_cfg.if_table_exists,
                     write_cfg.schema_evolution,
                     cfg.schema_evolution_engine,
                 )

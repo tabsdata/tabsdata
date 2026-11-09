@@ -178,18 +178,17 @@ class CloudStagedBulkLoader:
         footers and prepare them (create/evolve), before any load. Returns
         each table's staged column names."""
         logger.info("Phase 2: Validate & Prepare")
-        # 'replace' drops the target up front so it is recreated fresh from the
-        # incoming schema (honouring a changed schema too); the create path below
-        # then sees no table and rebuilds it.
-        if self.write_mode == WriteMode.REPLACE:
-            table_names = list(staged_files.keys())
-            logger.debug(f"Dropping tables for replace: {table_names}")
-            self.dialect.drop_tables(self.load_mode, table_names)
-
         columns: dict[str, list[str]] = {}
         for table_name, files in staged_files.items():
             footers = [self.cloud_storage.footer(staged.key) for staged in files]
             columns[table_name] = self.validate_and_prepare_table(table_name, footers)
+
+        # 'replace' keeps every table and empties it only once all of them took
+        # the batch's schema, so a refusal leaves their rows in place.
+        if self.write_mode == WriteMode.REPLACE:
+            table_names = list(staged_files.keys())
+            logger.debug("Truncating tables for replace: %s", table_names)
+            self.dialect.truncate_tables(self.load_mode, table_names)
 
         logger.info("Phase 2 complete: all tables validated and prepared.")
         return columns
