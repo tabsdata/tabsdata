@@ -125,4 +125,16 @@ pub fn processes_carrying_owner(owners: &[String]) -> Vec<u32> {
 }
 
 #[cfg(test)]
+pub(crate) fn km_identity_contract() -> Vec<Vec<String>> {
+    let path = std::path::PathBuf::from(tm_workspace::workspace_root!())
+        .join("../tabsdata-km/mods/kcommon/contract/identity.tsv");
+    std::fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("km's identity contract at {}: {error}", path.display()))
+        .lines()
+        .filter(|line| !line.is_empty())
+        .map(|line| line.split('\t').map(str::to_owned).collect())
+        .collect()
+}
+
+#[cfg(test)]
 mod tests;

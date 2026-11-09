@@ -91,3 +91,21 @@ fn the_current_process_runs_since_its_own_stamp() {
     assert!(running_since(pid, &owner_stamp(started)).expect("a verdict"));
     assert!(!running_since(pid, "20000101T000000Z").expect("a verdict"));
 }
+
+#[test]
+fn the_formats_match_kms_identity_contract() {
+    for row in km_identity_contract() {
+        match row[0].as_str() {
+            "var" => assert_eq!(KM_KILL_TOKEN_VAR, row[2]),
+            "stamp" => assert_eq!(owner_stamp(row[1].parse().unwrap()), row[2]),
+            "unknown_stamp" => assert_eq!(UNKNOWN_STAMP, row[1]),
+            "owner" => {
+                let expected = row.get(2).map(|pid| format!("{pid}{OWNER_SEP}{}", row[3]));
+                assert_eq!(owner_key(&row[1]), expected, "{row:?}");
+            }
+            "token" => assert_eq!(token_owner_key(&row[1]).as_deref(), Some(row[2].as_str())),
+            "path" | "pid_file" => {}
+            kind => panic!("unknown contract row {kind:?}"),
+        }
+    }
+}

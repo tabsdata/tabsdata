@@ -193,3 +193,28 @@ fn a_missing_folder_keeps_its_given_name_for_the_stop_event() {
     let absent = root.path().join("absent");
     assert_eq!(stop_event_folder(&absent), absent.to_string_lossy());
 }
+
+#[test]
+fn the_layout_matches_kms_identity_contract() {
+    let root = tempfile::tempdir().expect("a temporary folder");
+    let cluster = KminusCluster::new(root.path(), root.path().join("images"), false, None, None);
+    for row in crate::core::system::identity::km_identity_contract() {
+        match (row[0].as_str(), row.get(1).map(String::as_str)) {
+            ("path", Some("km_pids")) => assert_eq!(cluster.pids_path(), root.path().join(&row[2])),
+            ("path", Some("km_run_token")) => {
+                assert_eq!(cluster.run_token_path(), root.path().join(&row[2]))
+            }
+            ("path", kind) => panic!("unknown contract path {kind:?}"),
+            ("pid_file", Some(sample)) => {
+                fs::create_dir_all(cluster.pids_path()).expect("a pids folder");
+                fs::write(cluster.pids_path().join(&row[2]), "").expect("a pid file");
+                let pids: Vec<u32> = km_pid_files(&cluster.pids_path())
+                    .into_iter()
+                    .map(|(pid, _)| pid)
+                    .collect();
+                assert_eq!(pids, [sample.parse::<u32>().unwrap()]);
+            }
+            _ => {}
+        }
+    }
+}
