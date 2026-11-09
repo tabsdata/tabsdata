@@ -31,7 +31,7 @@ use crate::core::system::subprocess::{
     wait_for_exit,
 };
 #[cfg(unix)]
-use crate::core::system::subprocess::{apply_subprocess_flags, terminate_single_process};
+use crate::core::system::subprocess::{start_new_session, terminate_single_process};
 use crate::cwarn;
 use crate::runtime::provider::{Cluster, Transaction};
 
@@ -681,7 +681,7 @@ fn spawn_in_background(
             command.stdout(Stdio::null()).stderr(Stdio::null());
         }
     }
-    apply_subprocess_flags(&mut command);
+    start_new_session(&mut command);
     command.spawn()
 }
 

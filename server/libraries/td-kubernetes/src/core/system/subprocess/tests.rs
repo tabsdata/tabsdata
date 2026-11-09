@@ -190,6 +190,36 @@ fn terminate_single_process_leaves_descendant_in_own_group_alone() {
 }
 
 #[cfg(unix)]
+#[test]
+fn a_new_session_leaves_the_terminal_session_and_leads_its_own_group() {
+    use std::process::{Command as SystemCommand, Stdio};
+
+    let mut command = SystemCommand::new("sleep");
+    command
+        .arg("30")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    start_new_session(&mut command);
+    let mut child = command.spawn().expect("spawn sleep");
+    let pid = child.id() as i32;
+
+    let session = unsafe { libc::getsid(pid) };
+    let own_session = unsafe { libc::getsid(0) };
+    let group = process_group_of(child.id());
+
+    let _ = child.kill();
+    let _ = child.wait();
+
+    assert_eq!(session, pid, "the child must lead a session of its own");
+    assert_ne!(
+        session, own_session,
+        "the child must leave its parent's session"
+    );
+    assert_eq!(group, pid, "the child must lead its own process group");
+}
+
+#[cfg(unix)]
 fn python_available() -> bool {
     use std::process::{Command as SystemCommand, Stdio};
 
