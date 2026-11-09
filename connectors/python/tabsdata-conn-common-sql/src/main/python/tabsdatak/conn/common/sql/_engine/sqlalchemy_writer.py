@@ -54,21 +54,6 @@ def _retry() -> Retrying:
 
 WriteLoader = Callable[..., None]
 
-_ENGINE_KEY_SUFFIX = ".schema_evolution_engine"
-_ENGINES = ("iceberg",)
-
-
-def _check_schema_evolution_engine(cfg) -> None:
-    from tabsdatak.conn.common.sql.error import SqlCommonErrorCode
-
-    for key, value in (cfg or {}).items():
-        if key.endswith(_ENGINE_KEY_SUFFIX) and value not in _ENGINES:
-            raise SqlCommonErrorCode.SQL_COMMON_11.exception(
-                key=key,
-                value=value,
-                allowed=" or ".join(repr(engine) for engine in _ENGINES),
-            )
-
 
 class SqlAlchemyWriteEngine(SqlWriteEngine, ABC):
     @abstractmethod
@@ -79,7 +64,6 @@ class SqlAlchemyWriteEngine(SqlWriteEngine, ABC):
         dest: SqlWriteCfg,
         tables: list[pl.LazyFrame],
     ) -> None:
-        _check_schema_evolution_engine(dest.cfg)
         write_loader = self.loader()
         frames = list(tables)
         if len(frames) != len(dest.target_tables):

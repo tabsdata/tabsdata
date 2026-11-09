@@ -91,6 +91,5 @@ class SqlCommonErrorCode(ErrorCode):
     )  # _schema.policy.governed()
     SQL_COMMON_11 = ErrorDef(
         SqlCommonValidateException,
-        "dest_cfg[{key!r}]={value!r} is not a schema evolution engine; it is"
-        " {allowed} or unset",
-    )  # _engine.sqlalchemy_writer._check_schema_evolution_engine()
+        "{destination} does not support {written}: {reason}",
+    )  # _schema.matrix.resolve()

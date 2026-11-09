@@ -21,7 +21,6 @@ from tabsdatak.conn.common.sql._engine import (
 from tabsdatak.conn.common.sql.error import (
     SqlCommonErrorCode,
     SqlCommonRuntimeException,
-    SqlCommonValidateException,
 )
 from test_tabsdatak.conn.common.sql import _sqlite_helpers
 from test_tabsdatak.conn.common.sql._sqlite_helpers import (
@@ -679,10 +678,3 @@ def test_strict_refuses_a_wider_integer_whose_values_do_not_fit(tmp_path, value)
     assert raised.value.api_error is SqlCommonErrorCode.SQL_COMMON_10
     assert "'id' from SMALLINT to BIGINT" in str(raised.value)
     assert _rows(engine) == [(1,)]
-
-
-def test_the_schema_evolution_engine_takes_only_iceberg():
-    saw._check_schema_evolution_engine({"x.schema_evolution_engine": "iceberg"})
-    with pytest.raises(SqlCommonValidateException) as raised:
-        saw._check_schema_evolution_engine({"x.schema_evolution_engine": "native"})
-    assert raised.value.api_error is SqlCommonErrorCode.SQL_COMMON_11
