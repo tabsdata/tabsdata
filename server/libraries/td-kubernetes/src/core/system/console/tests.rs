@@ -134,3 +134,147 @@ fn a_child_in_its_own_console_runs_and_reports_its_exit_code() {
     };
     assert_eq!(status.code(), Some(7));
 }
+
+#[cfg(windows)]
+mod jobs {
+    use std::ffi::OsStr;
+    use std::io::{BufRead, BufReader, Write};
+    use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::io::AsRawHandle;
+    use std::process::{Command, Stdio};
+    use std::{mem, ptr};
+
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows_sys::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, IsProcessInJob, JOB_OBJECT_LIMIT_BREAKAWAY_OK,
+        JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JobObjectExtendedLimitInformation, OpenJobObjectW, QueryInformationJobObject,
+        SetInformationJobObject,
+    };
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+
+    use super::super::OwnConsoleChild;
+
+    const HELPER_JOB_VAR: &str = "TD_CONSOLE_JOB_HELPER";
+    const HELPER_TEST: &str = "core::system::console::tests::jobs::job_helper";
+    const IN_JOB: &str = "child-in-job=";
+    const JOB_OBJECT_QUERY: u32 = 4;
+
+    struct Handle(HANDLE);
+
+    impl Drop for Handle {
+        fn drop(&mut self) {
+            unsafe {
+                CloseHandle(self.0);
+            }
+        }
+    }
+
+    fn wide_z(text: &str) -> Vec<u16> {
+        OsStr::new(text)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
+    }
+
+    fn create_job(name: &str, allow_breakaway: bool) -> Handle {
+        let job = unsafe { CreateJobObjectW(ptr::null(), wide_z(name).as_ptr()) };
+        assert!(!job.is_null(), "create job {name}");
+        let job = Handle(job);
+        if allow_breakaway {
+            let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { mem::zeroed() };
+            limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_BREAKAWAY_OK;
+            let set = unsafe {
+                SetInformationJobObject(
+                    job.0,
+                    JobObjectExtendedLimitInformation,
+                    (&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+                    mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+                )
+            };
+            assert_ne!(set, 0, "allow breakaway from job {name}");
+        }
+        job
+    }
+
+    fn own_job_forbids_breakaway() -> bool {
+        let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { mem::zeroed() };
+        let queried = unsafe {
+            QueryInformationJobObject(
+                ptr::null_mut(),
+                JobObjectExtendedLimitInformation,
+                (&mut limits as *mut JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+                mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+                ptr::null_mut(),
+            )
+        };
+        let allowed = JOB_OBJECT_LIMIT_BREAKAWAY_OK | JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK;
+        queried != 0 && limits.BasicLimitInformation.LimitFlags & allowed == 0
+    }
+
+    fn child_in_job_when_spawned_inside(allow_breakaway: bool) -> bool {
+        let name = format!(
+            "td-console-job-{}-{}",
+            std::process::id(),
+            if allow_breakaway { "allow" } else { "forbid" }
+        );
+        let job = create_job(&name, allow_breakaway);
+        let mut helper = Command::new(std::env::current_exe().expect("test binary"))
+            .args(["--exact", HELPER_TEST, "--nocapture", "--test-threads=1"])
+            .env(HELPER_JOB_VAR, &name)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .expect("spawn helper");
+        let assigned = unsafe { AssignProcessToJobObject(job.0, helper.as_raw_handle() as HANDLE) };
+        assert_ne!(assigned, 0, "assign helper to job {name}");
+        writeln!(helper.stdin.take().expect("helper stdin")).expect("release helper");
+        let reported = BufReader::new(helper.stdout.take().expect("helper stdout"))
+            .lines()
+            .map_while(Result::ok)
+            .find_map(|line| line.strip_prefix(IN_JOB).map(|value| value == "true"));
+        let status = helper.wait().expect("wait helper");
+        assert!(status.success(), "helper failed in job {name}: {status}");
+        reported.expect("helper reported where its child ran")
+    }
+
+    #[test]
+    fn a_job_that_forbids_breakaway_still_lets_the_child_start_inside_it() {
+        assert!(child_in_job_when_spawned_inside(false));
+    }
+
+    #[test]
+    fn a_job_that_allows_breakaway_does_not_keep_the_child() {
+        if own_job_forbids_breakaway() {
+            eprintln!("Skipping test; this test runs in a job that forbids breakaway");
+            return;
+        }
+        assert!(!child_in_job_when_spawned_inside(true));
+    }
+
+    #[test]
+    fn job_helper() {
+        let Ok(name) = std::env::var(HELPER_JOB_VAR) else {
+            return;
+        };
+        let mut release = String::new();
+        std::io::stdin()
+            .read_line(&mut release)
+            .expect("wait for release");
+        let mut command = Command::new("ping");
+        command.args(["-n", "30", "127.0.0.1"]);
+        let mut child = OwnConsoleChild::spawn(&command, None).expect("spawn child");
+        let job = unsafe { OpenJobObjectW(JOB_OBJECT_QUERY, 0, wide_z(&name).as_ptr()) };
+        assert!(!job.is_null(), "open job {name}");
+        let job = Handle(job);
+        let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, child.id()) };
+        assert!(!process.is_null(), "open child {}", child.id());
+        let process = Handle(process);
+        let mut inside = 0;
+        let checked = unsafe { IsProcessInJob(process.0, job.0, &mut inside) };
+        let _ = child.kill();
+        assert_ne!(checked, 0, "check the child's job");
+        println!("{IN_JOB}{}", inside != 0);
+    }
+}
