@@ -212,16 +212,21 @@ pub fn process_paths(pid: u32) -> Result<Option<ProcessPaths>, OsProcessError> {
 
 pub fn terminate_process(pid: u32, grace: Duration) {
     let descendants = collect_descendants(pid);
-    request_graceful_shutdown(pid, &descendants);
-    if wait_for_tree_exit(pid, &descendants, grace) {
-        warn!(pid, "Process tree terminated gracefully");
-        return;
+    #[cfg(unix)]
+    {
+        request_graceful_shutdown(pid, &descendants);
+        if wait_for_tree_exit(pid, &descendants, grace) {
+            warn!(pid, "Process tree terminated gracefully");
+            return;
+        }
+        warn!(
+            pid,
+            grace_secs = grace.as_secs(),
+            "Process tree did not exit within grace period; force-killing"
+        );
     }
-    warn!(
-        pid,
-        grace_secs = grace.as_secs(),
-        "Process tree did not exit within grace period; force-killing"
-    );
+    #[cfg(not(unix))]
+    let _ = grace;
     force_kill_tree(pid, &descendants);
     match is_alive(pid) {
         Ok(true) => warn!(pid, "Process still alive after force-kill"),
@@ -230,6 +235,7 @@ pub fn terminate_process(pid: u32, grace: Duration) {
     }
 }
 
+#[cfg(unix)]
 pub fn terminate_single_process(pid: u32, grace: Duration) -> bool {
     request_single_graceful_shutdown(pid);
     if wait_for_exit(pid, grace) {
@@ -274,38 +280,19 @@ fn collect_descendants(root: u32) -> Vec<u32> {
     descendants
 }
 
+#[cfg(unix)]
 fn request_graceful_shutdown(root: u32, descendants: &[u32]) {
-    #[cfg(unix)]
-    {
-        for group in process_groups(root, descendants) {
-            unsafe {
-                libc::kill(-group, libc::SIGTERM);
-            }
-        }
-    }
-    #[cfg(target_os = "windows")]
-    {
-        use windows_sys::Win32::System::Console::{CTRL_BREAK_EVENT, GenerateConsoleCtrlEvent};
-        let _ = descendants;
+    for group in process_groups(root, descendants) {
         unsafe {
-            GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, root);
+            libc::kill(-group, libc::SIGTERM);
         }
     }
 }
 
+#[cfg(unix)]
 fn request_single_graceful_shutdown(pid: u32) {
-    #[cfg(unix)]
-    {
-        unsafe {
-            libc::kill(pid as i32, libc::SIGTERM);
-        }
-    }
-    #[cfg(target_os = "windows")]
-    {
-        use windows_sys::Win32::System::Console::{CTRL_BREAK_EVENT, GenerateConsoleCtrlEvent};
-        unsafe {
-            GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pid);
-        }
+    unsafe {
+        libc::kill(pid as i32, libc::SIGTERM);
     }
 }
 
@@ -321,6 +308,7 @@ fn process_groups(root: u32, descendants: &[u32]) -> Vec<i32> {
     groups
 }
 
+#[cfg(unix)]
 fn wait_for_tree_exit(root: u32, descendants: &[u32], timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
     loop {
@@ -348,8 +336,7 @@ pub fn wait_for_exit(pid: u32, timeout: Duration) -> bool {
     }
 }
 
-#[allow(dead_code)]
-fn force_kill_process(pid: u32) {
+pub fn force_kill_process(pid: u32) {
     #[cfg(unix)]
     {
         unsafe {

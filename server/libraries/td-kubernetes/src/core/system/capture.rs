@@ -5,7 +5,6 @@
 use std::fs::{File, OpenOptions, create_dir_all};
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::process::Child;
 use std::time::Instant;
 
 use tracing::{debug, info};
@@ -36,7 +35,7 @@ pub fn writer_for(path: &Path) -> Option<File> {
     OpenOptions::new().create(true).append(true).open(path).ok()
 }
 
-pub fn relay(path: &Path, label: &str, child: &mut Child, verbose: bool) {
+pub fn relay(path: &Path, label: &str, mut exited: impl FnMut() -> bool, verbose: bool) {
     let Ok(file) = File::open(path) else {
         debug!(
             "Could not tail '{}' for {label}; its output stays in that file.",
@@ -60,7 +59,7 @@ pub fn relay(path: &Path, label: &str, child: &mut Child, verbose: bool) {
             );
             return;
         }
-        if matches!(child.try_wait(), Ok(Some(_))) {
+        if exited() {
             relay_available(&mut reader, &mut offset, label, verbose);
             return;
         }

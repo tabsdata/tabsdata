@@ -575,6 +575,7 @@ impl Provider for KminusProvider {
 
     async fn stop_cluster(&self, reporter: &dyn Reporter) -> CommandResult<ClusterStopOutcome> {
         let step = reporter.step("Stopping kminus cluster");
+        let owners = self.cluster.run_owners();
         let stopped = self.cluster.stop().await?;
         if !stopped {
             step.fail();
@@ -583,7 +584,7 @@ impl Provider for KminusProvider {
         if let Ok(settings) = InstanceSettings::load(&self.name)
             && wait_for_ports_released(&settings.ports).is_some()
         {
-            kill_port_holders(&settings.ports);
+            kill_port_holders(&settings.ports, &owners);
             if let Some(entry) =
                 wait_for_ports_released_within(&settings.ports, PORT_RELEASE_AFTER_KILL_TIMEOUT)
             {

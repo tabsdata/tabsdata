@@ -211,3 +211,26 @@ fn every_assigned_role_reads_back() {
         assert!(PortRole::from_str(&entry.role).is_some(), "{}", entry.role);
     }
 }
+
+fn table_field(port: u16) -> u32 {
+    u32::from(port.to_be()) | 0xabcd_0000
+}
+
+#[test]
+fn a_table_port_is_read_in_network_byte_order() {
+    assert_eq!(table_port(table_field(2457)), 2457);
+    assert_eq!(table_port(table_field(65535)), 65535);
+}
+
+#[test]
+fn only_the_holders_of_the_port_are_returned_once_each() {
+    let rows = [
+        (table_field(2457), 100),
+        (table_field(2458), 200),
+        (table_field(2457), 100),
+        (table_field(2457), 0),
+        (table_field(2457), 300),
+    ];
+    assert_eq!(holders_of(rows, 2457), [100, 300]);
+    assert!(holders_of(rows, 9999).is_empty());
+}

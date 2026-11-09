@@ -102,6 +102,11 @@ fn relaying_a_missing_file_is_harmless() {
         .arg("--version")
         .spawn()
         .expect("a short lived child");
-    relay(&absent, "km", &mut child, false);
+    relay(
+        &absent,
+        "km",
+        || matches!(child.try_wait(), Ok(Some(_))),
+        false,
+    );
     let _ = child.wait();
 }

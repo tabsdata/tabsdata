@@ -84,6 +84,7 @@ colored = { workspace = true }
 const_format = { workspace = true }
 cron-descriptor = { workspace = true }
 dirs = { workspace = true }
+dunce = { workspace = true }
 fslock = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
@@ -131,4 +132,10 @@ tower = { workspace = true }
 
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { workspace = true }
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_Networking_WinSock",
+    "Win32_Security",
+    "Win32_UI_WindowsAndMessaging",
+] }

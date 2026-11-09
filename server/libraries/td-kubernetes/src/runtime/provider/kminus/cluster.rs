@@ -23,13 +23,15 @@ use crate::base::error::provider::ProviderError;
 use crate::client::tdkserver::widgets::show_caution;
 use crate::core::system::capture;
 use crate::core::system::exit::CommandResult;
+use crate::core::system::identity;
 use crate::core::system::stopevent;
 use crate::core::system::stream::Silencer;
 use crate::core::system::subprocess::{
-    self, apply_detached_flags, apply_subprocess_flags, force_terminate_process_tree,
-    is_alive as process_is_alive, may_be_alive, seal_own_stdio, terminate_single_process,
+    self, apply_detached_flags, force_terminate_process_tree, may_be_alive, seal_own_stdio,
     wait_for_exit,
 };
+#[cfg(unix)]
+use crate::core::system::subprocess::{apply_subprocess_flags, terminate_single_process};
 use crate::cwarn;
 use crate::runtime::provider::{Cluster, Transaction};
 
@@ -77,6 +79,7 @@ impl ClusterState {
 const KM_CONFIG_FOLDER: &str = "config";
 const KM_DATA_FOLDER: &str = "data";
 const KM_PIDS_FOLDER: &str = "pids";
+const KM_RUN_TOKEN_FILE: &str = "run-token";
 const KM_SYSCONFIG_FILE: &str = "kmsysconfig.yaml";
 const KM_KUBECONFIG_FILE: &str = "kubeconfig.yaml";
 const KM_PRCONFIG_FILE: &str = "vk-prconfig.yaml";
@@ -287,22 +290,9 @@ impl KminusCluster {
             command.arg(KM_LOGLEVEL_ARGUMENT).arg(loglevel.as_str());
         }
         let stdio = self.stdio_log_path();
-        match stdio.as_deref().and_then(capture::writer_for) {
-            Some(file) => {
-                let duplicate = file.try_clone().ok();
-                command.stdout(Stdio::from(file));
-                match duplicate {
-                    Some(errors) => command.stderr(Stdio::from(errors)),
-                    None => command.stderr(Stdio::null()),
-                };
-            }
-            None => {
-                command.stdout(Stdio::null()).stderr(Stdio::null());
-            }
-        }
-        apply_subprocess_flags(&mut command);
+        let output = stdio.as_deref().and_then(capture::writer_for);
         seal_own_stdio();
-        let mut child = command.spawn().map_err(|error| {
+        let mut child = spawn_in_background(command, output).map_err(|error| {
             ProviderError::KminusStartFailed(format!(
                 "spawn '{} {KM_START_SUBCOMMAND}': {error}",
                 km.display()
@@ -310,7 +300,12 @@ impl KminusCluster {
         })?;
         if let Some(path) = stdio {
             debug!("Kminus stdio is captured in '{}'.", path.display());
-            capture::relay(&path, KM_BINARY, &mut child, self.verbose);
+            capture::relay(
+                &path,
+                KM_BINARY,
+                || matches!(child.try_wait(), Ok(Some(_))),
+                self.verbose,
+            );
         }
         self.warn_on_log_count();
         Ok(())
@@ -388,11 +383,28 @@ impl KminusCluster {
         .is_ok()
     }
 
-    fn stop_through_event(&self, pid: u32) -> bool {
-        if !stopevent::signal_stop(&self.path().to_string_lossy()) {
-            return false;
+    fn signal_stop_event(&self) -> bool {
+        stopevent::signal_stop(&stop_event_folder(self.path()))
+    }
+
+    fn run_token_path(&self) -> PathBuf {
+        self.data_path().join(KM_BINARY).join(KM_RUN_TOKEN_FILE)
+    }
+
+    pub fn run_owners(&self) -> Vec<String> {
+        let mut owners: Vec<String> = Vec::new();
+        let recorded = km_pid_files(&self.pids_path())
+            .into_iter()
+            .filter_map(|(_, content)| content.and_then(|text| identity::owner_key(&text)));
+        let persisted = fs::read_to_string(self.run_token_path())
+            .ok()
+            .and_then(|text| identity::token_owner_key(&text));
+        for owner in recorded.chain(persisted) {
+            if !owners.contains(&owner) {
+                owners.push(owner);
+            }
         }
-        wait_for_exit(pid, KM_GRACEFUL_TIMEOUT)
+        owners
     }
 
     fn stop_through_km(&self) -> bool {
@@ -406,6 +418,7 @@ impl KminusCluster {
             .arg(KM_WORKDIR_ARGUMENT)
             .arg(self.path())
             .stdin(Stdio::null());
+        apply_detached_flags(&mut command);
         match subprocess::run_with_timeout(&mut command, KM_BINARY, self.verbose, KM_STOP_TIMEOUT) {
             Ok(Some(output)) if output.status.success() => true,
             Ok(Some(output)) => {
@@ -492,22 +505,29 @@ impl Cluster for KminusCluster {
     }
 
     async fn stop(&self) -> CommandResult<bool> {
-        let Some(pid) = read_km_pid(&self.pids_path()) else {
-            return Ok(false);
+        let pid = match read_km_pid(&self.pids_path()) {
+            KmRecord::Live(pid) | KmRecord::Unknown(pid) => pid,
+            KmRecord::Absent | KmRecord::Stale(_) => return Ok(false),
         };
-        if let Ok(false) = process_is_alive(pid) {
-            return Ok(false);
-        }
+        let event_set = self.signal_stop_event();
         if self.stop_through_km() {
             return Ok(true);
         }
-        if self.stop_through_event(pid) {
+        if event_set && wait_for_exit(pid, KM_GRACEFUL_TIMEOUT) {
             return Ok(true);
         }
-        if terminate_single_process(pid, KM_GRACEFUL_TIMEOUT) {
+        if km_gone(read_km_pid(&self.pids_path()), pid) {
             return Ok(true);
         }
-        if force_terminate_process_tree(pid, KM_FORCE_TIMEOUT) {
+        #[cfg(unix)]
+        if km_live(read_km_pid(&self.pids_path()), pid)
+            && terminate_single_process(pid, KM_GRACEFUL_TIMEOUT)
+        {
+            return Ok(true);
+        }
+        if km_live(read_km_pid(&self.pids_path()), pid)
+            && force_terminate_process_tree(pid, KM_FORCE_TIMEOUT)
+        {
             return Ok(true);
         }
         if !self.poll_process_dead(pid).await {
@@ -521,12 +541,9 @@ impl Cluster for KminusCluster {
     }
 
     async fn is_alive(&self) -> bool {
-        let Some(pid) = read_km_pid(&self.pids_path()) else {
-            return false;
-        };
-        match process_is_alive(pid) {
-            Ok(false) => false,
-            Ok(true) | Err(_) => try_connect(&self.kubefile()).await,
+        match read_km_pid(&self.pids_path()) {
+            KmRecord::Absent | KmRecord::Stale(_) => false,
+            KmRecord::Live(_) | KmRecord::Unknown(_) => try_connect(&self.kubefile()).await,
         }
     }
 
@@ -572,19 +589,100 @@ pub fn prconfig_path(cluster_folder: &Path) -> PathBuf {
     cluster_folder.join(KM_CONFIG_FOLDER).join(KM_PRCONFIG_FILE)
 }
 
-fn read_km_pid(pids_folder: &Path) -> Option<u32> {
-    let entries = fs::read_dir(pids_folder).ok()?;
-    for entry in entries.flatten() {
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if let Some((pid_part, suffix)) = name.split_once('.')
-            && suffix == KM_BINARY
-            && let Ok(pid) = pid_part.parse::<u32>()
-        {
-            return Some(pid);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum KmRecord {
+    Absent,
+    Live(u32),
+    Stale(u32),
+    Unknown(u32),
+}
+
+fn km_pid_files(pids_folder: &Path) -> Vec<(u32, Option<String>)> {
+    let Ok(entries) = fs::read_dir(pids_folder) else {
+        return Vec::new();
+    };
+    let mut found: Vec<(u32, Option<String>)> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            let (pid_part, suffix) = name.split_once('.')?;
+            if suffix != KM_BINARY {
+                return None;
+            }
+            let pid = pid_part.parse::<u32>().ok()?;
+            Some((pid, fs::read_to_string(entry.path()).ok()))
+        })
+        .collect();
+    found.sort_unstable_by_key(|(pid, _)| *pid);
+    found
+}
+
+fn km_live(record: KmRecord, pid: u32) -> bool {
+    record == KmRecord::Live(pid)
+}
+
+fn km_gone(record: KmRecord, pid: u32) -> bool {
+    match record {
+        KmRecord::Absent | KmRecord::Stale(_) => true,
+        KmRecord::Live(live) | KmRecord::Unknown(live) => live != pid,
+    }
+}
+
+fn recorded_identity(pid: u32, content: Option<&str>) -> Option<(u32, String)> {
+    let (recorded, stamp) = identity::parse_owner(content?)?;
+    (recorded == pid).then(|| (pid, stamp.to_owned()))
+}
+
+fn read_km_pid(pids_folder: &Path) -> KmRecord {
+    let Some((pid, content)) = km_pid_files(pids_folder).into_iter().next() else {
+        return KmRecord::Absent;
+    };
+    let Some((pid, stamp)) = recorded_identity(pid, content.as_deref()) else {
+        return KmRecord::Stale(pid);
+    };
+    match identity::running_since(pid, &stamp) {
+        Ok(true) => KmRecord::Live(pid),
+        Ok(false) => KmRecord::Stale(pid),
+        Err(_) => KmRecord::Unknown(pid),
+    }
+}
+
+fn stop_event_folder(path: &Path) -> String {
+    dunce::canonicalize(path)
+        .unwrap_or_else(|_| path.to_path_buf())
+        .to_string_lossy()
+        .into_owned()
+}
+
+#[cfg(windows)]
+fn spawn_in_background(
+    command: SystemCommand,
+    output: Option<fs::File>,
+) -> std::io::Result<crate::core::system::console::OwnConsoleChild> {
+    crate::core::system::console::OwnConsoleChild::spawn(&command, output.as_ref())
+}
+
+#[cfg(not(windows))]
+fn spawn_in_background(
+    mut command: SystemCommand,
+    output: Option<fs::File>,
+) -> std::io::Result<std::process::Child> {
+    match output {
+        Some(file) => {
+            let duplicate = file.try_clone().ok();
+            command.stdout(Stdio::from(file));
+            match duplicate {
+                Some(errors) => command.stderr(Stdio::from(errors)),
+                None => command.stderr(Stdio::null()),
+            };
+        }
+        None => {
+            command.stdout(Stdio::null()).stderr(Stdio::null());
         }
     }
-    None
+    apply_subprocess_flags(&mut command);
+    command.spawn()
 }
 
 async fn try_connect(kubefile: &Path) -> bool {

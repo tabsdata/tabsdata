@@ -24,8 +24,6 @@ const PORT_RELEASE_POLL_INTERVAL: Duration = Duration::from_millis(250);
 const PORT_RELEASE_LOG_INTERVAL: Duration = Duration::from_secs(5);
 pub const PORT_RELEASE_TIMEOUT: Duration = Duration::from_secs(30);
 pub const PORT_RELEASE_AFTER_KILL_TIMEOUT: Duration = Duration::from_secs(15);
-#[cfg(windows)]
-const PORT_HOLDER_KILL_GRACE: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PortRole {
@@ -282,14 +280,16 @@ pub fn wait_for_ports_released_within(
 }
 
 #[cfg(windows)]
-pub fn kill_port_holders(assigned: &[AssignedPort]) {
-    use crate::core::system::subprocess::terminate_process;
+pub fn kill_port_holders(assigned: &[AssignedPort], owners: &[String]) {
+    use crate::core::system::identity::{process_carries_owner, processes_carrying_owner};
+    use crate::core::system::subprocess::force_kill_process;
 
-    let mut roots: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+    let mut held = false;
     for entry in assigned {
         if port_available(entry.port) {
             continue;
         }
+        held = true;
         let pids = listener_pids(entry.port);
         if pids.is_empty() {
             warn!(
@@ -300,50 +300,45 @@ pub fn kill_port_holders(assigned: &[AssignedPort]) {
             continue;
         }
         for pid in pids {
-            let root = parent_pid(pid).unwrap_or(pid);
-            warn!(
-                port = entry.port,
-                holder_pid = pid,
-                root_pid = root,
-                "Killing process tree holding port"
-            );
-            roots.insert(root);
+            if process_carries_owner(pid, owners) {
+                warn!(
+                    port = entry.port,
+                    holder_pid = pid,
+                    "Port is held by a process left over from this instance"
+                );
+            } else {
+                warn!(
+                    port = entry.port,
+                    holder_pid = pid,
+                    "Port is held by a process not proven to belong to this instance; leaving it"
+                );
+            }
         }
     }
-    for root in roots {
-        terminate_process(root, PORT_HOLDER_KILL_GRACE);
+    if !held || owners.is_empty() {
+        return;
+    }
+    for pid in processes_carrying_owner(owners) {
+        if process_carries_owner(pid, owners) {
+            warn!(pid, "Killing a process left over from this instance");
+            force_kill_process(pid);
+        }
     }
 }
 
 #[cfg(not(windows))]
-pub fn kill_port_holders(_assigned: &[AssignedPort]) {}
+pub fn kill_port_holders(_assigned: &[AssignedPort], _owners: &[String]) {}
 
-#[cfg(windows)]
-fn listener_pids(port: u16) -> Vec<u32> {
-    let output = std::process::Command::new("netstat")
-        .args(["-ano"])
-        .output();
-    let Ok(output) = output else {
-        return Vec::new();
-    };
-    let text = String::from_utf8_lossy(&output.stdout);
-    let needle = format!(":{port}");
+#[cfg(any(windows, test))]
+fn table_port(local_port: u32) -> u16 {
+    u16::from_be((local_port & 0xffff) as u16)
+}
+
+#[cfg(any(windows, test))]
+fn holders_of(rows: impl IntoIterator<Item = (u32, u32)>, port: u16) -> Vec<u32> {
     let mut pids: Vec<u32> = Vec::new();
-    for line in text.lines() {
-        let fields: Vec<&str> = line.split_whitespace().collect();
-        if fields.len() < 5 || !fields[0].eq_ignore_ascii_case("TCP") {
-            continue;
-        }
-        if !fields[1].ends_with(&needle) {
-            continue;
-        }
-        if !fields[3].eq_ignore_ascii_case("LISTENING") {
-            continue;
-        }
-        if let Ok(pid) = fields[4].parse::<u32>()
-            && pid != 0
-            && !pids.contains(&pid)
-        {
+    for (local_port, pid) in rows {
+        if pid != 0 && table_port(local_port) == port && !pids.contains(&pid) {
             pids.push(pid);
         }
     }
@@ -351,14 +346,103 @@ fn listener_pids(port: u16) -> Vec<u32> {
 }
 
 #[cfg(windows)]
-fn parent_pid(pid: u32) -> Option<u32> {
-    use sysinfo::{Pid, ProcessesToUpdate, RefreshKind};
-    let mut system = td_common::os::system_with(RefreshKind::nothing()).ok()?;
-    system.refresh_processes(ProcessesToUpdate::Some(&[Pid::from_u32(pid)]), true);
-    system
-        .process(Pid::from_u32(pid))
-        .and_then(|process| process.parent())
-        .map(|parent| parent.as_u32())
+fn listener_pids(port: u16) -> Vec<u32> {
+    use windows_sys::Win32::NetworkManagement::IpHelper::{
+        MIB_TCP6ROW_OWNER_PID, MIB_TCP6TABLE_OWNER_PID, MIB_TCPROW_OWNER_PID,
+        MIB_TCPTABLE_OWNER_PID,
+    };
+    use windows_sys::Win32::Networking::WinSock::{AF_INET, AF_INET6};
+
+    let v4 = listener_table(AF_INET)
+        .map(|(buffer, size)| {
+            table_rows::<MIB_TCPROW_OWNER_PID>(
+                &buffer,
+                size,
+                std::mem::offset_of!(MIB_TCPTABLE_OWNER_PID, table),
+            )
+            .into_iter()
+            .map(|row| (row.dwLocalPort, row.dwOwningPid))
+            .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let v6 = listener_table(AF_INET6)
+        .map(|(buffer, size)| {
+            table_rows::<MIB_TCP6ROW_OWNER_PID>(
+                &buffer,
+                size,
+                std::mem::offset_of!(MIB_TCP6TABLE_OWNER_PID, table),
+            )
+            .into_iter()
+            .map(|row| (row.dwLocalPort, row.dwOwningPid))
+            .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    holders_of(v4.into_iter().chain(v6), port)
+}
+
+#[cfg(windows)]
+fn listener_table(family: u16) -> Option<(Vec<u64>, usize)> {
+    use windows_sys::Win32::Foundation::{ERROR_INSUFFICIENT_BUFFER, NO_ERROR};
+    use windows_sys::Win32::NetworkManagement::IpHelper::{
+        GetExtendedTcpTable, TCP_TABLE_OWNER_PID_LISTENER,
+    };
+
+    let mut buffer: Vec<u64> = Vec::new();
+    let mut size = 0u32;
+    for _ in 0..8 {
+        let table = if buffer.is_empty() {
+            std::ptr::null_mut()
+        } else {
+            buffer.as_mut_ptr().cast()
+        };
+        let status = unsafe {
+            GetExtendedTcpTable(
+                table,
+                &mut size,
+                0,
+                u32::from(family),
+                TCP_TABLE_OWNER_PID_LISTENER,
+                0,
+            )
+        };
+        match status {
+            NO_ERROR if !buffer.is_empty() => return Some((buffer, size as usize)),
+            NO_ERROR | ERROR_INSUFFICIENT_BUFFER => {
+                buffer = vec![0u64; (size as usize).div_ceil(8).max(1)];
+                size = (buffer.len() * 8) as u32;
+            }
+            _ => {
+                warn!(family, status, "Cannot read the TCP listener table");
+                return None;
+            }
+        }
+    }
+    None
+}
+
+#[cfg(windows)]
+fn table_rows<T: Copy>(buffer: &[u64], size: usize, offset: usize) -> Vec<T> {
+    let bytes = size.min(buffer.len() * 8);
+    if bytes < std::mem::size_of::<u32>() {
+        return Vec::new();
+    }
+    let base = buffer.as_ptr().cast::<u8>();
+    let count = unsafe { base.cast::<u32>().read_unaligned() } as usize;
+    let stride = std::mem::size_of::<T>();
+    let fits = count
+        .checked_mul(stride)
+        .and_then(|length| length.checked_add(offset))
+        .is_some_and(|end| end <= bytes);
+    if !fits {
+        return Vec::new();
+    }
+    (0..count)
+        .map(|index| unsafe {
+            base.add(offset + index * stride)
+                .cast::<T>()
+                .read_unaligned()
+        })
+        .collect()
 }
 
 pub fn kminus_api_port(assigned: &[AssignedPort]) -> Option<u16> {
