@@ -58,14 +58,14 @@ def test_dest_plugin_write_out_appends_rows(
 
 @fs_domain("fs_employees_xs")
 @postgres_domain("postgres")
-def test_dest_plugin_write_out_replace_clears_existing(
+def test_dest_plugin_write_out_replace_keeps_the_table(
     domain_fs_employees_xs: FsDomain,
     domain_postgres: PostgresDomain,
     tmp_path: Path,
 ):
-    # Replacing with a different entity: the second write must leave only its own
-    # rows and columns behind, so neither the first load's rows nor its schema
-    # survive.
+    # A replace keeps the table and only ever grows its schema: a different
+    # entity is refused under strict, leaving the first load in place, and
+    # under update it adds its columns and leaves only its own rows.
     db = store(domain_postgres)
     table = "td_dest_replace"
     work = work_dir(tmp_path)
@@ -82,14 +82,28 @@ def test_dest_plugin_write_out_replace_clears_existing(
         )
         assert db.read_table(table).height == pl.read_parquet(first).height
 
+        with pytest.raises(Exception, match="SQL_COMMON_10"):
+            plugin.PostgresDestPlugin().write_out(
+                PluginDestCtx(work),
+                conn,
+                PostgresDest(tables=[table], if_table_exists="replace"),
+                [pl.scan_parquet(second)],
+            )
+        kept = db.read_table(table)
+        assert kept.height == pl.read_parquet(first).height
+        assert set(kept.columns) == set(pl.read_parquet(first).columns)
         plugin.PostgresDestPlugin().write_out(
             PluginDestCtx(work),
             conn,
-            PostgresDest(tables=[table], if_table_exists="replace"),
+            PostgresDest(
+                tables=[table], if_table_exists="replace", schema_evolution="update"
+            ),
             [pl.scan_parquet(second)],
         )
         got = db.read_table(table)
         assert got.height == expected.height
-        assert set(got.columns) == set(expected.columns)
+        assert set(got.columns) == set(expected.columns) | set(
+            pl.read_parquet(first).columns
+        )
     finally:
         db.drop_table(table)

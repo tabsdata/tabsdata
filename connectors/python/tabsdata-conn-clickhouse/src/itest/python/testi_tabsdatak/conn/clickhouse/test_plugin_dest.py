@@ -98,7 +98,7 @@ def test_dest_plugin_write_out_appends_rows(
 @s3_domain("s3")
 @azureblob_domain("azureblob")
 @gcs_domain("gcs")
-def test_dest_plugin_write_out_replace_clears_existing(
+def test_dest_plugin_write_out_replace_keeps_the_table(
     provider: str,
     domain_fs_employees_xs: FsDomain,
     domain_clickhouse: ClickhouseDomain,
@@ -107,10 +107,9 @@ def test_dest_plugin_write_out_replace_clears_existing(
     domain_gcs: GCSDomain,
     tmp_path: Path,
 ):
-    # Replacing with a different entity: the second write must leave only its own
-    # rows and columns behind, so neither the first load's rows nor its schema
-    # survive. `employees` is the second entity because the date-bearing entities
-    # carry the model's 9999-01-01 sentinel, which overflows ClickHouse's Date32.
+    # A replace keeps the table and only ever grows its schema: a different
+    # entity is refused under strict, leaving the first load in place, and
+    # under update it adds its columns and leaves only its own rows.
     db = store(domain_clickhouse)
     table = f"td_dest_replace_{provider}"
     work = work_dir(tmp_path)
@@ -128,15 +127,29 @@ def test_dest_plugin_write_out_replace_clears_existing(
         )
         assert db.count(table) == pl.read_parquet(first).height
 
+        with pytest.raises(Exception, match="SQL_COMMON_10"):
+            plugin._ClickHouseDestPlugin().write_out(
+                PluginDestCtx(work),
+                conn,
+                ClickHouseDest(tables=[table], if_table_exists="replace"),
+                [pl.scan_parquet(second)],
+            )
+        kept = db.read_table(table)
+        assert kept.height == pl.read_parquet(first).height
+        assert set(kept.columns) == set(pl.read_parquet(first).columns)
         plugin._ClickHouseDestPlugin().write_out(
             PluginDestCtx(work),
             conn,
-            ClickHouseDest(tables=[table], if_table_exists="replace"),
+            ClickHouseDest(
+                tables=[table], if_table_exists="replace", schema_evolution="update"
+            ),
             [pl.scan_parquet(second)],
         )
         got = db.read_table(table)
         assert got.height == expected.height
-        assert set(got.columns) == set(expected.columns)
+        assert set(got.columns) == set(expected.columns) | set(
+            pl.read_parquet(first).columns
+        )
     finally:
         db.drop_table(table)
 
