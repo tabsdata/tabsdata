@@ -15,8 +15,8 @@ from testi_tabsdatak.conn.common.sql.plugin_io import work_dir
 from testi_tabsdatak.conn.common.sql.schema.policy import (
     APPEND,
     APPEND_CASES,
-    REPLACE_CASES,
     REPLACE,
+    REPLACE_CASES,
     STRICT,
     Policy,
     run,

@@ -13,11 +13,11 @@ from tabsdatax.itest.fixture.functions.files import PluginDestCtx
 from testi_tabsdatak.conn.common.sql.plugin_io import work_dir
 from testi_tabsdatak.conn.common.sql.schema.policy import (
     APPEND_CASES,
-    REPLACE_CASES,
     ID,
     MERGE,
     MERGE_CASES,
     OP,
+    REPLACE_CASES,
     Policy,
     run,
     table_for,
