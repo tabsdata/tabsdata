@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -308,8 +307,7 @@ def test_discard_never_fails(caplog):
         def delete(self, keys):
             raise OSError("denied")
 
-    with caplog.at_level(logging.WARNING, logger=impl.logger.name):
-        impl.discard(Broken(), ["a"])
+    impl.discard(Broken(), ["a"])
     assert "staged files remain" in caplog.text
 
 

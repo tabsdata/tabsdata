@@ -9,7 +9,6 @@ import time
 from collections.abc import Callable, Iterable, Iterator
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 
 class SourcePoll[R]:

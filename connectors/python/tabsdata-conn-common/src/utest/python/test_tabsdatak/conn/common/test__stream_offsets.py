@@ -104,8 +104,7 @@ def test_a_failed_source_acknowledgement_is_only_a_warning(caplog):
     def refuse(_offset):
         raise RuntimeError("slot gone")
 
-    with caplog.at_level("WARNING"):
-        _kept(refuse).acknowledge_offset(Counter(3))
+    _kept(refuse).acknowledge_offset(Counter(3))
 
     assert "slot gone" in caplog.text
 

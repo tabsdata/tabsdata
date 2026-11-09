@@ -68,7 +68,6 @@ except ImportError:
 #
 # # noinspection PyProtectedMember
 # from tabsdata._utils.tableframe._generators import _id
-# from tabsdata._utils.tdlogging import setup_tests_logging
 from tabsdata._utils.temps import tabsdata_temp_folder
 
 # from tabsdata.api.apiserver import APIServer, obtain_connection
@@ -109,7 +108,6 @@ def clean_python_virtual_environments(): ...
 
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 # from test_tabsdata.bootest import (
 #     TESTING_RESOURCES_PATH,
@@ -136,7 +134,6 @@ logger.setLevel(logging.INFO)
 #
 #
 # def pytest_configure(config: pytest.Config):
-#     setup_tests_logging()
 #     if not hasattr(config, "workerinput"):
 #         setup_temp_folder(config)
 #         clean_everything()

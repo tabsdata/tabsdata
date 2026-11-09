@@ -24,7 +24,6 @@ from tabsdatak.conn.common.sql.cdc.dialect import LargeColumnKind
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 INITIAL_SCHEMA_VERSION = 0
 

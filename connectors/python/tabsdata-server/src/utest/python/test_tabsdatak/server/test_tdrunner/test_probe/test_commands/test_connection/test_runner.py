@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 
 import pytest
@@ -72,7 +71,6 @@ def test_the_done_report_never_logs_the_output(
     monkeypatch.setattr(Responder, "notify", lambda responder, body, what: None)
     probe_arguments = arguments(tmp_path, tmp_path / "request.json", connection_file)
     Journal(start=1, end=2).save(probe_arguments.journal_file)
-    caplog.set_level(logging.DEBUG)
     Responder(probe_arguments).done(output={"rows": [["SENTINEL-ROW-VALUE"]]})
     assert "SENTINEL-ROW-VALUE" not in caplog.text
 

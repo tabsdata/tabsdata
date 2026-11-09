@@ -20,7 +20,6 @@ def trace(msg, *args, **kwargs):
 
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 HOME_FOLDER_SYMBOL = "~"
 TABSDATA_FOLDER_NAME = ".tabsdata"

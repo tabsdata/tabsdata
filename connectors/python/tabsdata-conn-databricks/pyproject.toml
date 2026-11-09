@@ -51,6 +51,7 @@ src_databricks = "tabsdatak.conn.databricks._plugin:DATABRICKS_SRC"
 dest_databricks = "tabsdatak.conn.databricks._plugin:DATABRICKS_DEST"
 
 [tool.pytest.ini_options]
+log_level = "DEBUG"
 addopts = "--import-mode=importlib"
 consider_namespace_packages = true
 filterwarnings = [

@@ -18,9 +18,6 @@ from xdist.workermanage import WorkerController
 from testi_tabsdatak.bootest import check_assets, enrich_sys_path
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
-logging.getLogger("snowflake.connector.network").setLevel(logging.CRITICAL)
 
 enrich_sys_path()
 check_assets()

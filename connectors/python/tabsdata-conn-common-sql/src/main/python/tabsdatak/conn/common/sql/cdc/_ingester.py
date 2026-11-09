@@ -34,7 +34,6 @@ from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat, QualifiedTablesSpec
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 # Key under which the CDC offset dict lives inside the per-flow stream
 # state, for Tabsdata-owned-offset ingesters (read back via

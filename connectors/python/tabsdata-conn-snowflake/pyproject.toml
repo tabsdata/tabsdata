@@ -50,6 +50,7 @@ Source = "https://github.com/tabsdata/tabsdata"
 dest_snowflake = "tabsdatak.conn.snowflake._plugin:SNOWFLAKE_DEST"
 
 [tool.pytest.ini_options]
+log_level = "DEBUG"
 addopts = "--import-mode=importlib"
 consider_namespace_packages = true
 filterwarnings = [

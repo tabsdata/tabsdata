@@ -49,6 +49,7 @@ Source = "https://github.com/tabsdata/tabsdata"
 dest_mongodb = "tabsdatak.conn.mongodb._plugin:MONGODB_DEST"
 
 [tool.pytest.ini_options]
+log_level = "DEBUG"
 addopts = "--import-mode=importlib"
 consider_namespace_packages = true
 filterwarnings = [

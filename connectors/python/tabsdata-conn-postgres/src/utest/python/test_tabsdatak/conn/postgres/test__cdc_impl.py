@@ -409,8 +409,7 @@ def _partial_text_capture_check(
         "replica_identity",
         lambda self, connection, schema, table: identity,
     )
-    with caplog.at_level(logging.WARNING, logger=_cdc_impl.__name__):
-        bi._check_partial_text_capture(MagicMock(), bi._tracked_tables)
+    bi._check_partial_text_capture(MagicMock(), bi._tracked_tables)
     return [record for record in caplog.records if record.levelno == logging.WARNING]
 
 

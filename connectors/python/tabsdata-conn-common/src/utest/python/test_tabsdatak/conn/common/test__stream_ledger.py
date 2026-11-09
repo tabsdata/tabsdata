@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import logging
 import re
 from pathlib import Path
 
@@ -128,8 +127,7 @@ def test_the_staged_line_keeps_the_wording_the_performance_suite_reads(stage, ca
     # cdc_throughput.py) reads this line off the stream worker's log to count
     # the rows and bytes staged. Rewording it breaks that check.
     ledger = StageLedger(ctx=stage, slots=["s.a"])
-    with caplog.at_level(logging.DEBUG, logger=LEDGER_LOGGER):
-        ledger.write("s.a", table(1, 2, 3))
+    ledger.write("s.a", table(1, 2, 3))
 
     [record] = [r for r in caplog.records if r.name == LEDGER_LOGGER]
     [stats] = ledger.manifest()[0]

@@ -3,6 +3,7 @@
 #
 
 [tool.pytest.ini_options]
+log_level = "DEBUG"
 pythonpath = ["."]
 python_files = ["lifecycle.py"]
 cache_dir = "/tmp/tdlifecycle.cache"

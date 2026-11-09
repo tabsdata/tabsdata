@@ -86,8 +86,7 @@ def test_a_failed_removal_is_only_logged(caplog):
         def execute(self, sql, params=None, file_stream=None):
             raise RuntimeError("denied")
 
-    with caplog.at_level("WARNING", logger=staging.logger.name):
-        staging.remove_from_stage(_Refusing([]), "stg", "f")
+    staging.remove_from_stage(_Refusing([]), "stg", "f")
     assert any("@stg/f" in r.getMessage() for r in caplog.records)
 
 

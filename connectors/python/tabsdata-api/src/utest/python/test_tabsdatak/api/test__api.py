@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import dataclasses as _stdlib_dc
 import inspect
-import logging
 import sys
 import textwrap
 from dataclasses import FrozenInstanceError
@@ -1206,15 +1205,13 @@ def test_a_marked_value_is_its_offset_from_the_base(seconds):
 
 
 def test_a_marked_value_is_warned_of(caplog):
-    with caplog.at_level(logging.WARNING):
-        _api.decode_seconds(KEY, _api.unsafe_seconds(5))
+    _api.decode_seconds(KEY, _api.unsafe_seconds(5))
     assert KEY in caplog.text
     assert "5 second(s)" in caplog.text
 
 
 def test_a_plain_value_is_not_warned_of(caplog):
-    with caplog.at_level(logging.WARNING):
-        _api.decode_seconds(KEY, 120)
+    _api.decode_seconds(KEY, 120)
     assert caplog.text == ""
 
 

@@ -2,7 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-import logging
 import os
 import shlex
 from urllib.parse import urlparse
@@ -39,9 +38,6 @@ def _fast_esc_app_init(self, *args, **kwargs):
 
 
 Application.__init__ = _fast_esc_app_init
-
-# Suppress noisy asyncio debug logging (e.g. "Using selector: KqueueSelector")
-logging.getLogger("asyncio").setLevel(logging.WARNING)
 
 # ---------------------------------------------------------------------------
 # Click 8.2+ compatibility patch for click-repl 0.3.0.

@@ -7,7 +7,6 @@ from __future__ import annotations
 import logging
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 # noinspection unresolved-references
 from test_tabsdatak.bootest import enrich_sys_path
@@ -29,12 +28,10 @@ import pytest
 from xdist.workermanage import WorkerController
 
 # noinspection PyProtectedMember,unresolved-references
-from test_tabsdatak._testing import setup_tests_logging
 from test_tabsdata.conftest import setup_temp_folder, setup_temp_folder_node
 
 
 def pytest_configure(config: pytest.Config):
-    setup_tests_logging()
     if not hasattr(config, "workerinput"):
         setup_temp_folder(config)
 

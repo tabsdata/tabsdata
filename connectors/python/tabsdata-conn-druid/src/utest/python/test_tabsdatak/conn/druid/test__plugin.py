@@ -9,7 +9,6 @@ The real-Druid happy paths live in ``test__plugin_integration.py``.
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -458,8 +457,7 @@ def test_discard_never_fails(tmp_path, caplog):
         def delete(self, keys):
             raise OSError("denied")
 
-    with caplog.at_level(logging.WARNING, logger=impl.logger.name):
-        impl.discard(Broken(), ["a"])
+    impl.discard(Broken(), ["a"])
     assert "staged files remain" in caplog.text
 
 
@@ -622,6 +620,5 @@ def test_resolve_dest_cfg_applies_overrides():
 
 
 def test_resolve_dest_cfg_warns_on_unknown_key_via_raw_dict(caplog):
-    with caplog.at_level("WARNING", logger=plugin.logger.name):
-        plugin._resolve_dest_cfg({"bogus.key": "value"})
+    plugin._resolve_dest_cfg({"bogus.key": "value"})
     assert any("Unknown dest_cfg key" in r.getMessage() for r in caplog.records)

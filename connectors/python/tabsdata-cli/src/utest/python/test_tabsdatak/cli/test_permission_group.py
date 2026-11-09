@@ -43,7 +43,6 @@ pytestmark = [
 ]
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 _PASSWORD = "authz_password"
 

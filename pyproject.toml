@@ -49,6 +49,7 @@ Source = "https://github.com/tabsdata/tabsdata"
 # collect_ignore_glob = ["**/itest/**"]
 norecursedirs = ["templates"]
 addopts = "--import-mode=importlib"
+log_level = "DEBUG"
 consider_namespace_packages = true
 filterwarnings = [
     "ignore::DeprecationWarning",

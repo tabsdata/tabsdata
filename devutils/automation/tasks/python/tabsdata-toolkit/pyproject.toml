@@ -94,6 +94,7 @@ Documentation = "https://docs.tabsdata.com"
 Source = "https://github.com/tabsdata/tabsdata"
 
 [tool.pytest.ini_options]
+log_level = "DEBUG"
 addopts = "--import-mode=importlib -p pytester"
 consider_namespace_packages = true
 testpaths = ["src/utest/python"]

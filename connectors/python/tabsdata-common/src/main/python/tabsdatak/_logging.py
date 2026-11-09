@@ -63,11 +63,3 @@ def setup_logging(config_path: str | Path | None = None) -> None:
     with path.open("r", encoding="utf-8") as handle:
         config = yaml.safe_load(handle)
     logging.config.dictConfig(config)
-
-
-# NOTE: pytest-side helpers ``setup_tests_logging`` and
-# ``NewlineOnFirstLog`` live in
-# :mod:`test_tabsdatak._testing` (under the package's ``utest``
-# tree) so this production module doesn't import ``rich`` or carry
-# test-only configuration. Connector conftests import them from
-# there.

@@ -460,9 +460,8 @@ def test_without_a_known_server_zone_a_timestamp_stays_utc_and_is_warned_once(
     stamps = bi._timestamp_columns(event)
     values = {"at": datetime(2026, 1, 1, 10, 0)}
 
-    with caplog.at_level("WARNING"):
-        bi._to_server_clock(values, stamps)
-        bi._to_server_clock(values, stamps)
+    bi._to_server_clock(values, stamps)
+    bi._to_server_clock(values, stamps)
 
     assert values == {"at": datetime(2026, 1, 1, 10, 0)}
     assert caplog.text.count("server zone is unknown") == 1
@@ -1187,8 +1186,7 @@ def test_without_a_commit_instant_rows_keep_their_statement_time(caplog):
     bi = _polling_ingester()
     bi._stream = iter(events)
 
-    with caplog.at_level("WARNING"):
-        changes = list(bi.poll_changes(session=None))
+    changes = list(bi.poll_changes(session=None))
 
     assert [change.timestamp for change in changes] == [
         datetime.fromtimestamp(1767268800, tz=timezone.utc),

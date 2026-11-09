@@ -52,6 +52,7 @@ src_mssql = "tabsdatak.conn.mssql._plugin:MSSQL_SRC"
 dest_mssql = "tabsdatak.conn.mssql._plugin:MSSQL_DEST"
 
 [tool.pytest.ini_options]
+log_level = "DEBUG"
 addopts = "--import-mode=importlib"
 consider_namespace_packages = true
 filterwarnings = [

@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import re
 import urllib.error
 from pathlib import Path
@@ -339,8 +338,7 @@ def test_the_start_line_keeps_the_wording_the_performance_suite_reads(tmp_path, 
     # cdc_throughput.py) starts its clock at this line of the stream worker's
     # log. Rewording it breaks that check.
     command = streaming(tmp_path, SendingPlugin())
-    with caplog.at_level(logging.INFO):
-        command.stream()
+    command.stream()
 
     [record] = [r for r in caplog.records if r.getMessage().startswith("Running ")]
     assert record.name.endswith("stream_source_plugin.runner")

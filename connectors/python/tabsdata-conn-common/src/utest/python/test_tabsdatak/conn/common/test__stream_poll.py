@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import logging
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._poll import SourcePoll
@@ -67,8 +66,7 @@ def test_a_poll_can_count_the_rows_inside_each_record():
 def test_an_empty_poll_logs_nothing(caplog):
     poll = SourcePoll([], clock=Clock())
     list(poll)
-    with caplog.at_level("DEBUG", logger="tabsdatak.conn.common._stream._poll"):
-        poll.log()
+    poll.log()
     assert caplog.records == []
 
 
@@ -81,8 +79,7 @@ def test_a_poll_with_records_logs_them_with_its_seconds(caplog):
 
     poll = SourcePoll(source(), clock=clock)
     list(poll)
-    with caplog.at_level("DEBUG", logger="tabsdatak.conn.common._stream._poll"):
-        poll.log()
+    poll.log()
     assert [(r.levelname, r.args) for r in caplog.records] == [("DEBUG", (1, 1.25))]
 
 
@@ -98,8 +95,7 @@ def test_the_poll_line_keeps_the_wording_the_performance_suite_reads(caplog):
 
     poll = SourcePoll(source(), clock=clock)
     list(poll)
-    with caplog.at_level(logging.DEBUG, logger=POLL_LOGGER):
-        poll.log()
+    poll.log()
 
     [record] = caplog.records
     assert record.name == POLL_LOGGER

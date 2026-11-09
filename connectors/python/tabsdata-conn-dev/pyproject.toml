@@ -51,6 +51,7 @@ src_dev_frame = "tabsdatak.conn.dev._plugin:DEV_FRAME_SRC"
 dest_dev_frame = "tabsdatak.conn.dev._plugin:DEV_FRAME_DEST"
 
 [tool.pytest.ini_options]
+log_level = "DEBUG"
 addopts = "--import-mode=importlib"
 consider_namespace_packages = true
 filterwarnings = [

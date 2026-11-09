@@ -51,6 +51,7 @@ src_oracle = "tabsdatak.conn.oracle._plugin:ORACLE_SRC"
 dest_oracle = "tabsdatak.conn.oracle._plugin:ORACLE_DEST"
 
 [tool.pytest.ini_options]
+log_level = "DEBUG"
 addopts = "--import-mode=importlib"
 consider_namespace_packages = true
 filterwarnings = [

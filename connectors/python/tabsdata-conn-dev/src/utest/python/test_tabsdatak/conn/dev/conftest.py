@@ -7,7 +7,6 @@ from __future__ import annotations
 import logging
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 from test_tabsdatak.bootest import enrich_sys_path
 from test_tabsdatak.conn.dev.bootest import TESTING_RESOURCES_PATH
@@ -24,7 +23,6 @@ _enrich_sys_path()
 import pytest
 from xdist.workermanage import WorkerController
 
-from test_tabsdatak._testing import setup_tests_logging
 
 # noinspection PyUnusedImports
 from test_tabsdata.conftest import (
@@ -38,7 +36,6 @@ from test_tabsdata.conftest import (
 
 
 def pytest_configure(config: pytest.Config):
-    setup_tests_logging()
     if not hasattr(config, "workerinput"):
         setup_temp_folder(config)
         clean_everything()

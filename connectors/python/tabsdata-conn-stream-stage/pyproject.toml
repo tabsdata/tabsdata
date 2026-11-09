@@ -48,6 +48,7 @@ Source = "https://github.com/tabsdata/tabsdata"
 src_stream_stage = "tabsdatak.conn.stream.stage:STREAM_STAGE_SRC"
 
 [tool.pytest.ini_options]
+log_level = "DEBUG"
 addopts = "--import-mode=importlib"
 consider_namespace_packages = true
 filterwarnings = [

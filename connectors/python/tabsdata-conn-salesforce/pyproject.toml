@@ -50,6 +50,7 @@ src_salesforce = "tabsdatak.conn.salesforce._plugin:SALESFORCE_SRC"
 src_salesforce_report = "tabsdatak.conn.salesforce._plugin:SALESFORCE_REPORT_SRC"
 
 [tool.pytest.ini_options]
+log_level = "DEBUG"
 addopts = "--import-mode=importlib"
 consider_namespace_packages = true
 filterwarnings = [

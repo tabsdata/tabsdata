@@ -51,6 +51,7 @@ src_localfile = "tabsdatak.conn.localfile._plugin:LOCALFILE_SRC"
 dest_localfile = "tabsdatak.conn.localfile._plugin:LOCALFILE_DEST"
 
 [tool.pytest.ini_options]
+log_level = "DEBUG"
 addopts = "--import-mode=importlib"
 consider_namespace_packages = true
 filterwarnings = [

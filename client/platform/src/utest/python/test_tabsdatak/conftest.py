@@ -13,7 +13,6 @@ import pytest
 from test_tabsdatak.bootest import check_assets, enrich_sys_path
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 enrich_sys_path()
 check_assets()

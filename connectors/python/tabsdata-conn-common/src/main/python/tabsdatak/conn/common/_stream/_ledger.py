@@ -18,7 +18,6 @@ from tabsdatak.spi import (
 )
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 
 class StageLedger:

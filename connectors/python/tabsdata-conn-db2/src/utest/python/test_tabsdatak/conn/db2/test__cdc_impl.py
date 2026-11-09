@@ -12,7 +12,6 @@ Catalog / engine calls (``server_timezone``,
 from __future__ import annotations
 
 import json
-import logging
 from datetime import datetime, timedelta, timezone, tzinfo
 from decimal import Decimal
 from unittest.mock import MagicMock
@@ -687,8 +686,7 @@ def test_a_cur_commit_setting_other_than_on_is_warned_about(setting, caplog):
         "IBMSNAP_RESTART": (_commitseq(1, 0x100), None),
         "as idx": [],
     })
-    with caplog.at_level(logging.WARNING, logger=_cdc_impl.__name__):
-        list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
+    list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
     assert "cur_commit" in caplog.text
     assert setting in caplog.text
 
@@ -699,8 +697,7 @@ def test_cur_commit_on_is_not_warned_about(caplog):
         "IBMSNAP_RESTART": (_commitseq(1, 0x100), None),
         "as idx": [],
     })
-    with caplog.at_level(logging.WARNING, logger=_cdc_impl.__name__):
-        list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
+    list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
     assert "cur_commit" not in caplog.text
 
 

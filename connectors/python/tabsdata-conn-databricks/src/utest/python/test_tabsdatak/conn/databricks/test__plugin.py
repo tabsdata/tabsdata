@@ -178,9 +178,7 @@ def test_is_connection_error_rejects_other_names():
 
 
 def test_resolve_src_cfg_logs_unknown_keys(caplog):
-    import logging as _logging
 
-    caplog.set_level(_logging.WARNING, logger=plugin.logger.name)
     cfg = plugin._resolve_src_cfg({"databricks.logging_level": 20, "bogus": 1})
     assert cfg.logging_level == 20
     assert any("Unknown src_cfg key" in rec.getMessage() for rec in caplog.records)

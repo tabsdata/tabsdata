@@ -133,8 +133,7 @@ def test_a_failed_delete_is_logged_and_skipped(tmp_path, caplog, monkeypatch):
 
     monkeypatch.setattr(queue.stage, "discard", failing)
     queue.queue.append("files/x/leftover.parquet")
-    with caplog.at_level("WARNING"):
-        queue.sweep_until(time.monotonic() + 1, lambda: True)
+    queue.sweep_until(time.monotonic() + 1, lambda: True)
     assert len(queue) == 0
     assert any("Cannot delete" in record.message for record in caplog.records)
 

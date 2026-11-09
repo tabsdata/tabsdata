@@ -9,7 +9,6 @@ import threading
 from typing import Callable
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 
 class TaskRunner:

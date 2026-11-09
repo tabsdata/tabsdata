@@ -11,7 +11,6 @@ import pytest
 from tabsdatak.cli._unattended import UNATTENDED_MARKERS
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 
 @pytest.fixture(autouse=True)

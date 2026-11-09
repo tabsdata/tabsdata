@@ -52,6 +52,7 @@ src_s3 = "tabsdatak.conn.s3._plugin:S3_SRC"
 dest_s3 = "tabsdatak.conn.s3._plugin:S3_DEST"
 
 [tool.pytest.ini_options]
+log_level = "DEBUG"
 addopts = "--import-mode=importlib"
 consider_namespace_packages = true
 filterwarnings = [

@@ -4,14 +4,12 @@
 
 from __future__ import annotations
 
-import logging
 import sys
 from pathlib import Path
 
 import pytest
 
 from tabsdatak.common._enums import WorkerCallbackStatus
-from tabsdatak.server._tdrunner.function._commons.run import command as command_module
 from tabsdatak.server._tdrunner.function._commons.run.arguments import (
     Arguments,
     ArgumentsParser,
@@ -268,8 +266,7 @@ def test_a_command_logs_the_query_engine_settings_in_effect(monkeypatch, caplog)
     monkeypatch.setenv(POLARS_TEMP_DIR, "/dataflow/temporary")
     monkeypatch.setenv(POLARS_OOC_SPILL_DIR, "/dataflow/spill")
 
-    with caplog.at_level(logging.INFO, logger=command_module.logger.name):
-        show_dataflow_settings()
+    show_dataflow_settings()
 
     assert caplog.messages == [
         f"Query engine setting {POLARS_TEMP_DIR} is '/dataflow/temporary'",
@@ -281,8 +278,7 @@ def test_a_command_says_when_the_query_engine_keeps_its_defaults(monkeypatch, ca
     for name in POLARS_VARIABLES:
         monkeypatch.delenv(name, raising=False)
 
-    with caplog.at_level(logging.INFO, logger=command_module.logger.name):
-        show_dataflow_settings()
+    show_dataflow_settings()
 
     assert caplog.messages == [
         "The query engine runs on its own memory and spill defaults"

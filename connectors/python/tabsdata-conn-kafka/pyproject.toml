@@ -50,6 +50,7 @@ Source = "https://github.com/tabsdata/tabsdata"
 stream_src_kafka = "tabsdatak.conn.kafka._stream_plugin:KAFKA_STREAM_SRC"
 
 [tool.pytest.ini_options]
+log_level = "DEBUG"
 addopts = "--import-mode=importlib"
 consider_namespace_packages = true
 filterwarnings = [

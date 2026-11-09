@@ -163,8 +163,7 @@ def test_each_table_loaded_logs_its_rows_as_one_poll_of_the_source(monkeypatch, 
     chunks = [MagicMock(num_rows=3), MagicMock(num_rows=4)]
     monkeypatch.setattr(loader, "_read_chunks", lambda *_args: iter(chunks))
 
-    with caplog.at_level("DEBUG", logger="tabsdatak.conn.common._stream._poll"):
-        loader._load_table(MagicMock(qualified="s.t"), MagicMock(), PINNED_AT)
+    loader._load_table(MagicMock(qualified="s.t"), MagicMock(), PINNED_AT)
 
     polled = [r for r in caplog.records if r.name.endswith("._poll")]
     assert [r.args[0] for r in polled] == [7]

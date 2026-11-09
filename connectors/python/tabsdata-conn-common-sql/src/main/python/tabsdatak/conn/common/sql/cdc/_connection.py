@@ -19,7 +19,6 @@ from tabsdatak.conn.common.types import UserPassword, _convert
 from tabsdatak.spi import Conn
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 
 @dataclass

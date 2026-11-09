@@ -452,8 +452,7 @@ def test_a_broker_error_is_logged_and_polling_goes_on(tmp_path, caplog):
     with patch("confluent_kafka.Producer", return_value=producer):
         ingester = _opened(consumer, tmp_path, dlq_topic="evt_dlq")
 
-    with caplog.at_level("WARNING"):
-        records = list(ingester.poll_changes(consumer))
+    records = list(ingester.poll_changes(consumer))
 
     assert [record.value for record in records] == [{"a": 1}]
     producer.produce.assert_not_called()
@@ -899,8 +898,7 @@ def test_a_long_gap_between_polls_is_warned_about(tmp_path, caplog):
     ingester = _opened(consumer, tmp_path)
     ingester._polled_at = time.time() - 200
 
-    with caplog.at_level("WARNING"):
-        list(ingester.poll_changes(consumer))
+    list(ingester.poll_changes(consumer))
 
     assert "200 seconds without polling" in caplog.text
     assert "max.poll.interval.ms" in caplog.text
@@ -912,8 +910,7 @@ def test_a_short_gap_between_polls_is_quiet(tmp_path, caplog):
     ingester = _opened(consumer, tmp_path)
     ingester._polled_at = time.time() - 100
 
-    with caplog.at_level("WARNING"):
-        list(ingester.poll_changes(consumer))
+    list(ingester.poll_changes(consumer))
 
     assert "without polling" not in caplog.text
 
@@ -924,8 +921,7 @@ def test_the_poll_gap_warning_follows_the_interval_given(tmp_path, caplog):
     ingester = _opened(consumer, tmp_path, conn_cfg={"max.poll.interval.ms": 100_000})
     ingester._polled_at = time.time() - 60
 
-    with caplog.at_level("WARNING"):
-        list(ingester.poll_changes(consumer))
+    list(ingester.poll_changes(consumer))
 
     assert "60 seconds without polling, more than half of the 100 seconds" in (
         caplog.text

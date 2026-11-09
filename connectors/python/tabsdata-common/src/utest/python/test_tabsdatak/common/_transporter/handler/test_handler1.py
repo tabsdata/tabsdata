@@ -194,8 +194,7 @@ def test_stdout_lines_forwarded_at_info(monkeypatch, tmp_path, caplog):
         stdout_lines=["copying file 1/3\n", "copying file 2/3\n"],
         returncode=0,
     )
-    with caplog.at_level(logging.DEBUG, logger=handler_module.__name__):
-        run_transporter(tmp_path / "x.yaml", tmp_path / "r.yaml")
+    run_transporter(tmp_path / "x.yaml", tmp_path / "r.yaml")
 
     info_msgs = [
         r.getMessage()
@@ -212,8 +211,7 @@ def test_stderr_lines_forwarded_at_warning(monkeypatch, tmp_path, caplog):
         stderr_lines=["slow source detected\n"],
         returncode=0,
     )
-    with caplog.at_level(logging.DEBUG, logger=handler_module.__name__):
-        run_transporter(tmp_path / "x.yaml", tmp_path / "r.yaml")
+    run_transporter(tmp_path / "x.yaml", tmp_path / "r.yaml")
 
     warn_msgs = [
         r.getMessage()
@@ -243,8 +241,7 @@ def test_lines_logged_without_trailing_newline(monkeypatch, tmp_path, caplog):
         stdout_lines=["pretty output\n"],
         returncode=0,
     )
-    with caplog.at_level(logging.DEBUG, logger=handler_module.__name__):
-        run_transporter(tmp_path / "x.yaml", tmp_path / "r.yaml")
+    run_transporter(tmp_path / "x.yaml", tmp_path / "r.yaml")
     msgs = [r.getMessage() for r in caplog.records]
     assert any(m.endswith("pretty output") for m in msgs)
     assert not any(m.endswith("\n") for m in msgs)

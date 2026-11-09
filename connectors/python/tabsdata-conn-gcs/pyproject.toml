@@ -52,6 +52,7 @@ src_gcs = "tabsdatak.conn.gcs._plugin:GCS_SRC"
 dest_gcs = "tabsdatak.conn.gcs._plugin:GCS_DEST"
 
 [tool.pytest.ini_options]
+log_level = "DEBUG"
 addopts = "--import-mode=importlib"
 consider_namespace_packages = true
 filterwarnings = [

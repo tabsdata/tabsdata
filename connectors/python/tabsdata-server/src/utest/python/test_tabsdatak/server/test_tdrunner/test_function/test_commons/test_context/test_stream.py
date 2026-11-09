@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 
 import polars as pl
@@ -54,11 +53,6 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 TABSDATA_VERSION = "2.0.0-test"
 THRESHOLDS = StreamThresholds(batch=BatchThresholds(max_secs=300))
-
-
-@pytest.fixture(autouse=True)
-def warnings_logged(caplog):
-    caplog.set_level(logging.WARNING)
 
 
 class PeoplePlugin(StreamSrcPlugin):

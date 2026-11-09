@@ -53,6 +53,7 @@ dest_db2 = "tabsdatak.conn.db2._plugin:DB2_DEST"
 stream_src_db2_cdc = "tabsdatak.conn.db2._cdc_plugin:DB2_CDC_STREAM_SRC"
 
 [tool.pytest.ini_options]
+log_level = "DEBUG"
 addopts = "--import-mode=importlib"
 consider_namespace_packages = true
 filterwarnings = [

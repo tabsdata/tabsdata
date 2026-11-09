@@ -52,6 +52,7 @@ src_azureblob = "tabsdatak.conn.azureblob._plugin:AZURE_BLOB_SRC"
 dest_azureblob = "tabsdatak.conn.azureblob._plugin:AZURE_BLOB_DEST"
 
 [tool.pytest.ini_options]
+log_level = "DEBUG"
 addopts = "--import-mode=importlib"
 consider_namespace_packages = true
 filterwarnings = [

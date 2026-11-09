@@ -443,8 +443,7 @@ def test_each_poll_that_found_records_logs_the_time_spent_on_the_source(
     patch_sentinels(monkeypatch, FakeDisk(manifest=[[]]), FakeBuffer())
     ctx = FakeCtx(active_values=[True, True, True, False])
 
-    with caplog.at_level("DEBUG", logger="tabsdatak.conn.common._stream._poll"):
-        Plugin().stream(ctx=ctx, ingester=Trickle(), cfg=cfg())
+    Plugin().stream(ctx=ctx, ingester=Trickle(), cfg=cfg())
 
     polled = [r for r in caplog.records if r.name.endswith("._poll")]
     assert [r.args[0] for r in polled] == [2, 1]

@@ -1488,8 +1488,7 @@ def test_resolve_dest_cfg_applies_overrides():
 
 
 def test_resolve_dest_cfg_warns_on_unknown_key_via_raw_dict(caplog):
-    with caplog.at_level("WARNING", logger=plugin.logger.name):
-        plugin._resolve_dest_cfg({"bogus.key": "value"})
+    plugin._resolve_dest_cfg({"bogus.key": "value"})
     assert any("Unknown dest_cfg key" in r.getMessage() for r in caplog.records)
 
 
@@ -1776,8 +1775,7 @@ def test_staging_store_forwards_the_obstore_cfg_keys():
 
 
 def test_staging_store_warns_about_cfg_keys_it_ignores(caplog):
-    with caplog.at_level("WARNING", logger=impl.logger.name):
-        _STAGING_STORE(_staging({"timeout": 5}))
+    _STAGING_STORE(_staging({"timeout": 5}))
     assert any("'timeout'" in r.getMessage() for r in caplog.records)
 
 
@@ -1790,6 +1788,5 @@ def test_discard_deletes_what_was_staged_and_skips_what_was_not(staging):
 def test_discard_never_raises(caplog):
     store = MagicMock(uri=lambda key: f"gs://b/{key}")
     store.delete.side_effect = RuntimeError("denied")
-    with caplog.at_level("WARNING", logger=impl.logger.name):
-        impl.discard(store, ["a.parquet"])
+    impl.discard(store, ["a.parquet"])
     assert any("gs://b/a.parquet" in r.getMessage() for r in caplog.records)

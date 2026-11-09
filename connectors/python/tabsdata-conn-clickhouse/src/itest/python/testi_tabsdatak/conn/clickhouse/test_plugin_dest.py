@@ -201,7 +201,7 @@ def test_dest_plugin_write_out_sweeps_its_staged_files(
     import obstore
 
     # noinspection PyProtectedMember
-    from tabsdatak.conn.clickhouse import _bulk_loader, _id
+    from tabsdatak.conn.clickhouse import _id
     from tabsdatak.conn.clickhouse._impl import build_cloud_storage
 
     db = store(domain_clickhouse)
@@ -217,13 +217,12 @@ def test_dest_plugin_write_out_sweeps_its_staged_files(
 
     monkeypatch.setattr(_id, "new_upload_id", recorded)
     try:
-        with caplog.at_level("WARNING", logger=_bulk_loader.logger.name):
-            plugin._ClickHouseDestPlugin().write_out(
-                PluginDestCtx(work_dir(tmp_path)),
-                conn,
-                ClickHouseDest(tables=[table], if_table_exists="replace"),
-                [pl.LazyFrame({"id": [1, 2]})],
-            )
+        plugin._ClickHouseDestPlugin().write_out(
+            PluginDestCtx(work_dir(tmp_path)),
+            conn,
+            ClickHouseDest(tables=[table], if_table_exists="replace"),
+            [pl.LazyFrame({"id": [1, 2]})],
+        )
         assert db.count(table) == 2
         assert not [r for r in caplog.records if "Cleanup failed" in r.getMessage()]
         storage = build_cloud_storage(conn.staging)

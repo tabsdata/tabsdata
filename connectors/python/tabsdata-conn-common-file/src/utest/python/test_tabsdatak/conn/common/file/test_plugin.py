@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import logging
 import warnings
 from datetime import datetime, timezone
 from pathlib import Path
@@ -257,10 +256,7 @@ def test_resolve_dest_tokens_timestamp_has_a_fixed_length():
 
 def test_resolve_dest_tokens_keeps_the_deprecated_timestamp_token(caplog):
     ctx = _DestCtx(Path("."))
-    with (
-        caplog.at_level(logging.WARNING, logger=_plugin.logger.name),
-        warnings.catch_warnings(record=True) as caught,
-    ):
+    with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         resolved = _plugin.resolve_dest_tokens("x.${EXEC_PLAN_TS}.csv", ctx)
     assert resolved == _plugin.resolve_dest_tokens("x.${TRIGGERED_ON}.csv", ctx)
