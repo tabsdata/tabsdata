@@ -194,6 +194,8 @@ def _check_table(result: dict) -> None:
         click.echo(f"  Outputs:   {', '.join(function['outputs']) or '-'}")
         click.echo(f"  Triggers:  {', '.join(function['triggers']) or '-'}")
         click.echo(f"  Connector: {function['connector'] or '-'}")
+        if function["destination_options"]:
+            click.echo(f"  Writes:    {_options(function['destination_options'])}")
     bundle = result["bundle"]
     if bundle is not None:
         click.echo(
@@ -209,6 +211,20 @@ def _check_table(result: dict) -> None:
     if would is not None:
         target = f"function '{would['name']}' in collection '{would['collection']}'"
         click.echo(f"Would {would['action']} {target}; nothing was uploaded.")
+
+
+def _options(options: dict[str, str]) -> str:
+    return ", ".join(f"{key}={value!r}" for key, value in options.items())
+
+
+def _report_destination(ctx: click.Context, info) -> None:
+    """Say what the destination writes with once the options left out are
+    resolved, before anything is uploaded."""
+    from tabsdatak.cli._fn_check import destination_options
+
+    options = destination_options(info)
+    if options:
+        progress(ctx, f"Destination writes with {_options(options)}")
 
 
 def _render_check(ctx: click.Context, result: dict, **would) -> None:
@@ -865,6 +881,7 @@ def register(
             )
             return
         info, project_root = load_info_and_project_root(path, dir_to_bundle)
+        _report_destination(ctx, info)
         function_name = getattr(info.func, "__name__", None) or info.__class__.__name__
         existing = update and _exists(server, coll, function_name)
         if update:
@@ -1146,6 +1163,7 @@ def update(
         progress(ctx, f"Updating function '{name}' in collection '{coll}'")
         progress(ctx, "-" * 10)
         info, project_root = load_info_and_project_root(path, dir_to_bundle)
+        _report_destination(ctx, info)
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         with bundle_confinement() as confine_to:
             function = server.update_function(
@@ -1417,6 +1435,7 @@ def patch(
             )
             progress(ctx, "-" * 10)
             info, project_root = load_info_and_project_root(path, dir_to_bundle)
+            _report_destination(ctx, info)
             server: TabsdataServer = ctx.obj["tabsdataserver"]
             with bundle_confinement() as confine_to:
                 record = server.patch_function(

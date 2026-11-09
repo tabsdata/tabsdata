@@ -964,8 +964,13 @@ change something:
   `{"valid", "type", "secret_env_vars"}`; `info license|release-notes|third-party`
   give `{"title", "text"}` and `about` gives `{"version", "text"}`.
 - `fn check` gives `{"valid", "function": {"name", "kind", "inputs", "outputs",
-  "triggers", "connector"}, "bundle": {"files", "bytes", "python_version"},
-  "findings": [{"severity", "code", "message", "line"}], "server_checks"}`;
+  "triggers", "connector", "destination_options"}, "bundle": {"files", "bytes",
+  "python_version"}, "findings": [{"severity", "code", "message", "line"}],
+  "server_checks"}`; `destination_options` is what a subscriber's destination
+  writes with once the options left out are resolved (`{"if_table_exists",
+  "schema_evolution", "schema_evolution_engine"}` for a SQL or warehouse
+  destination), `{}` otherwise, and `fn register|update|patch` print it as a
+  progress line before uploading;
   `valid` is false when a finding is an `error`, and `server_checks` (with
   `--coll`) is `{"collection", "inputs_exist", "output_conflicts",
   "python_version"}`, else null. `fn register|update|patch --dry-run` give the

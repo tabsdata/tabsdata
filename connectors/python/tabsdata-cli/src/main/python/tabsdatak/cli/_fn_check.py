@@ -143,9 +143,19 @@ def _triggers(info, inputs: list[str]) -> list[str]:
     return []
 
 
+def destination_options(info) -> dict[str, str]:
+    """The options a subscriber's destination writes with once those left out
+    are resolved -- its disposition, schema evolution policy and engine -- or
+    nothing for any other function or a destination that resolves none."""
+    if _kind(info) != "subscriber":
+        return {}
+    materialized = getattr(getattr(info, "destination", None), "_materialized", None)
+    return dict(materialized()) if callable(materialized) else {}
+
+
 def describe(info) -> dict:
     """What registering ``info`` declares: its name, kind, input and output
-    tables, triggers and connector."""
+    tables, triggers, connector and the options its destination resolves."""
     # noinspection PyProtectedMember
     from tabsdatak.sdk._function_archive import (
         _connector,
@@ -161,6 +171,7 @@ def describe(info) -> dict:
         "outputs": _output_tables(info),
         "triggers": _triggers(info, inputs),
         "connector": _connector(info),
+        "destination_options": destination_options(info),
     }
 
 

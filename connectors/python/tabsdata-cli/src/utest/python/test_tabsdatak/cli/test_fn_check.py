@@ -15,7 +15,12 @@ import pytest
 from click.testing import CliRunner
 
 from tabsdatak.cli._errors import ExitCode
-from tabsdatak.cli._fn_check import check_function, check_source, dangerous_calls
+from tabsdatak.cli._fn_check import (
+    check_function,
+    check_source,
+    dangerous_calls,
+    destination_options,
+)
 from tabsdatak.cli.td.cli import cli
 from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
@@ -78,6 +83,7 @@ def test_a_valid_function_is_described_and_bundled(tmp_path):
         "outputs": ["out"],
         "triggers": ["sales/orders", "items"],
         "connector": None,
+        "destination_options": {},
     }
     assert result["bundle"]["files"] >= 3
     assert result["bundle"]["bytes"] > 0
@@ -457,3 +463,90 @@ def test_a_check_bundling_outside_the_confinement_is_not_allowed(
     result = _invoke(["fn", "check", "--path", f"{path}::clean", "--machine"], tmp_path)
     assert result.exit_code == ExitCode.USAGE, result.output
     assert _document(result)["error"]["type"] == "path_not_allowed"
+
+
+class _Destination:
+    def _materialized(self) -> dict[str, str]:
+        return {
+            "if_table_exists": "append",
+            "schema_evolution": "strict",
+            "schema_evolution_engine": "native",
+        }
+
+
+def _info(kind: str, destination=None):
+    from types import SimpleNamespace
+
+    from tabsdatak._info import (
+        KIND_PUBLISHER_DEF,
+        KIND_SUBSCRIBER_DEF,
+        KIND_TRANSFORMER_DEF,
+    )
+
+    return SimpleNamespace(
+        __kind__={
+            "publisher": KIND_PUBLISHER_DEF,
+            "subscriber": KIND_SUBSCRIBER_DEF,
+            "transformer": KIND_TRANSFORMER_DEF,
+        }[kind],
+        destination=destination,
+    )
+
+
+def test_a_subscriber_reports_what_its_destination_resolves():
+    assert destination_options(_info("subscriber", _Destination())) == {
+        "if_table_exists": "append",
+        "schema_evolution": "strict",
+        "schema_evolution_engine": "native",
+    }
+
+
+@pytest.mark.parametrize(
+    "info",
+    [
+        _info("subscriber", object()),
+        _info("subscriber", None),
+        _info("publisher", _Destination()),
+        _info("transformer", _Destination()),
+    ],
+    ids=["no-hook", "no-destination", "publisher", "transformer"],
+)
+def test_nothing_is_reported_where_no_destination_resolves_options(info):
+    assert destination_options(info) == {}
+
+
+def _check_result(destination_options: dict) -> dict:
+    return {
+        "valid": True,
+        "function": {
+            "name": "sub",
+            "kind": "subscriber",
+            "inputs": ["c/t"],
+            "outputs": [],
+            "triggers": ["c/t"],
+            "connector": "tabsdatak.conn.postgres:PostgresDest",
+            "destination_options": destination_options,
+        },
+        "bundle": None,
+        "findings": [],
+    }
+
+
+def test_the_check_table_shows_what_the_destination_writes_with(capsys):
+    from tabsdatak.cli.td.fn_group import _check_table
+
+    _check_table(_check_result(_Destination()._materialized()))
+    assert (
+        "  Writes:    if_table_exists='append', schema_evolution='strict',"
+        " schema_evolution_engine='native'"
+    ) in capsys.readouterr().out
+
+
+def test_the_check_table_says_nothing_of_a_destination_that_resolves_nothing(
+    capsys,
+):
+    from tabsdatak.cli.td.fn_group import _check_table
+
+    _check_table(_check_result({}))
+    assert "Writes:" not in capsys.readouterr().out
+

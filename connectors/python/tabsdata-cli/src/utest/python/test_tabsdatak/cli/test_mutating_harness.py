@@ -715,6 +715,73 @@ def test_fn_patch_maps_flags_to_patch_function(tmp_path):
     assert "Patch registered successfully" in result.output
 
 
+class _Destination:
+    def _materialized(self) -> dict[str, str]:
+        return {
+            "if_table_exists": "replace",
+            "schema_evolution": "update",
+            "schema_evolution_engine": "iceberg",
+        }
+
+
+class _SubscriberInfo(_FnInfo):
+    def __init__(self):
+        from tabsdatak._info import KIND_SUBSCRIBER_DEF
+
+        super().__init__()
+        self.__kind__ = KIND_SUBSCRIBER_DEF
+        self.destination = _Destination()
+
+
+_WRITES = (
+    "Destination writes with if_table_exists='replace', schema_evolution='update',"
+    " schema_evolution_engine='iceberg'"
+)
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["fn", "register", "-c", "coll1", "--path", "/x.py::f"],
+        ["fn", "register", "--update", "-c", "coll1", "--path", "/x.py::f"],
+        ["fn", "update", "-n", "f1", "-c", "coll1", "--path", "/x.py::f"],
+        [
+            "fn",
+            "patch",
+            "-n",
+            "f1",
+            "-c",
+            "coll1",
+            "--fn-version",
+            "fv1",
+            "--path",
+            "/x.py::f",
+        ],
+    ],
+    ids=["register", "register-update", "update", "patch"],
+)
+def test_fn_registration_reports_what_the_destination_writes_with(argv, tmp_path):
+    with patch(
+        "tabsdatak.cli.td.fn_group.load_info_and_project_root",
+        return_value=(_SubscriberInfo(), _ROOT),
+    ):
+        result = _invoke(argv, client=_client(), tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert _WRITES in result.output
+
+
+def test_fn_registration_reports_nothing_for_a_function_without_a_destination(
+    tmp_path,
+):
+    result = _invoke_fn(
+        ["fn", "register", "-c", "coll1", "--path", "/x.py::f"],
+        client=_client(),
+        tmp_path=tmp_path,
+    )
+    assert result.exit_code == 0, result.output
+    assert "Destination writes with" not in result.output
+
+
 def test_fn_register_update_existing_updates_instead_of_registering(tmp_path):
     # --update + the function already exists (get_function succeeds) -> the
     # command updates rather than registers.
