@@ -117,17 +117,23 @@ class StarRocksStore(SqlAlchemyStore):
     def __init__(self, domain: StarrocksDomain) -> None:
         super().__init__(domain.sqlalchemy_uri, delimiters=DELIMITERS)
 
-    def create_table(self, table: str, columns: dict[str, str]) -> None:
-        """Create (replacing any prior) `table` from a ``{column: starrocks_type}``
-        spec -- see :func:`column_spec`."""
+    def create_table(
+        self, table: str, columns: dict[str, str], *, replace: bool = True
+    ) -> None:
+        """Create `table` from a ``{column: starrocks_type}`` spec -- see
+        :func:`column_spec` -- replacing any prior one, or keeping it when
+        ``replace`` is off."""
         from sqlalchemy import text
 
         spec = ", ".join(
             f"{self.quote(name)} {type_}" for name, type_ in columns.items()
         )
         with self._engine.begin() as conn:
-            conn.execute(text(f"DROP TABLE IF EXISTS {self.quote(table)}"))
-            conn.execute(text(f"CREATE TABLE {self.quote(table)} ({spec})"))
+            if replace:
+                conn.execute(text(f"DROP TABLE IF EXISTS {self.quote(table)}"))
+            conn.execute(
+                text(f"CREATE TABLE IF NOT EXISTS {self.quote(table)} ({spec})")
+            )
 
     def insert_rows(self, table: str, rows: list[dict]) -> None:
         from sqlalchemy import text

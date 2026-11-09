@@ -14,6 +14,7 @@ from testi_tabsdatak.conn.bigquery.backend import dest_conn, store, table_fqn
 from testi_tabsdatak.conn.common.sql.plugin_io import work_dir
 from testi_tabsdatak.conn.common.sql.schema.policy import (
     APPEND_CASES,
+    REPLACE_CASES,
     ID,
     MERGE,
     MERGE_CASES,
@@ -52,9 +53,9 @@ def _policy(domain: BigQueryDomain, work: Path) -> Policy:
     return Policy(write=write, read=db.read_table, drop=db.drop_table)
 
 
-@pytest.mark.parametrize("case", APPEND_CASES)
+@pytest.mark.parametrize("case", APPEND_CASES + REPLACE_CASES)
 @bigquery_domain("bigquery")
-def test_schema_policy_append(
+def test_schema_policy_bulk(
     domain_bigquery: BigQueryDomain, tmp_path: Path, case, request
 ):
     run(case, _policy(domain_bigquery, work_dir(tmp_path)), table_for(request))

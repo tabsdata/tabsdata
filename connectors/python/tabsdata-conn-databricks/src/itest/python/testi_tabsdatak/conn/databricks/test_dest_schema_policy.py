@@ -16,6 +16,7 @@ from tabsdatax.itest.fixture.functions.files import PluginDestCtx
 from testi_tabsdatak.conn.common.sql.plugin_io import work_dir
 from testi_tabsdatak.conn.common.sql.schema.policy import (
     APPEND_CASES,
+    REPLACE_CASES,
     ID,
     MERGE,
     MERGE_CASES,
@@ -52,7 +53,7 @@ def _policy(domain: DatabricksDomain, work: Path) -> Policy:
     return Policy(write=write, read=db.read_table, drop=db.drop_table)
 
 
-@pytest.mark.parametrize("case", APPEND_CASES + MERGE_CASES)
+@pytest.mark.parametrize("case", APPEND_CASES + REPLACE_CASES + MERGE_CASES)
 @databricks_domain("databricks")
 def test_schema_policy(
     domain_databricks: DatabricksDomain, tmp_path: Path, case, request

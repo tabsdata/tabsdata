@@ -18,6 +18,7 @@ from testi_tabsdatak.conn.clickhouse.backend import dest_conn, store
 from testi_tabsdatak.conn.common.sql.plugin_io import work_dir
 from testi_tabsdatak.conn.common.sql.schema.policy import (
     APPEND_CASES,
+    REPLACE_CASES,
     Policy,
     run,
     table_for,
@@ -48,7 +49,7 @@ def _policy(domain: ClickhouseDomain, staging: S3Domain, work: Path) -> Policy:
     return Policy(write=write, read=db.read_table, drop=db.drop_table)
 
 
-@pytest.mark.parametrize("case", APPEND_CASES)
+@pytest.mark.parametrize("case", APPEND_CASES + REPLACE_CASES)
 @clickhouse_domain("clickhouse")
 @s3_domain("s3")
 def test_schema_policy(

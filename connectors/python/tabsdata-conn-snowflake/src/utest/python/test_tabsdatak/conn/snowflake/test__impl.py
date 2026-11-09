@@ -683,6 +683,40 @@ def test_iceberg_engine_evolves_before_it_truncates_a_replace(
     assert alter < truncate < copy
 
 
+def test_strict_replace_refuses_a_new_column_before_truncating(monkeypatch, tmp_path):
+    """A replace keeps the table, so the refused batch leaves its rows."""
+    fake = _evolving_connection(
+        monkeypatch, ["ID"], [("ID", "NUMBER(38,0)"), ("NOTE", "TEXT")]
+    )
+    cfg = _iceberg_cfg(
+        if_table_exists="replace",
+        schema_evolution="strict",
+        schema_evolution_engine="native",
+    )
+    with pytest.raises(SqlCommonRuntimeException):
+        impl.write_all_tables(cfg, [_parquet(tmp_path / "in.parquet")])
+    assert not any(s.startswith(("TRUNCATE", "COPY INTO")) for s in fake.log)
+
+
+def test_native_update_replace_marks_the_table_then_truncates(monkeypatch, tmp_path):
+    """Native update leaves the new column to COPY INTO's own evolution: no
+    ALTER of the connector's, the mark on, and the table emptied first."""
+    fake = _evolving_connection(
+        monkeypatch, ["ID"], [("ID", "NUMBER(38,0)"), ("NOTE", "TEXT")]
+    )
+    cfg = _iceberg_cfg(
+        if_table_exists="replace",
+        schema_evolution="update",
+        schema_evolution_engine="native",
+    )
+    impl.write_all_tables(cfg, [_parquet(tmp_path / "in.parquet")])
+    assert _alters(fake.log) == []
+    mark = fake.log.index(_evolution_mark(True))
+    truncate = next(i for i, s in enumerate(fake.log) if s.startswith("TRUNCATE"))
+    copy = next(i for i, s in enumerate(fake.log) if s.startswith("COPY INTO"))
+    assert mark < truncate < copy
+
+
 @pytest.mark.parametrize("engine", ["iceberg", "native"])
 def test_strict_refuses_a_new_column_on_either_engine(monkeypatch, tmp_path, engine):
     """A COPY matching by name would drop the column without a word; strict

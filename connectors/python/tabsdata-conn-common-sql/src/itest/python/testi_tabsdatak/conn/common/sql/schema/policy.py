@@ -224,6 +224,123 @@ def merge_update_adds_a_new_column(policy: Policy, table: str) -> None:
     _expect(policy.rows(table, [ID, EXTRA]), [(1, None), (2, "x")])
 
 
+def _replaced(policy: Policy, table: str, frame: pl.LazyFrame, evolution: str) -> None:
+    policy.write(table, frame, REPLACE, evolution)
+
+
+def replace_empties_the_table_and_keeps_it(
+    policy: Policy, table: str, evolution: str
+) -> None:
+    _seed(policy, table, _base())
+    _replaced(policy, table, _fitting(), evolution)
+    _expect(policy.columns(table), {ID, NAME, SCORE})
+    _expect(policy.rows(table, [ID, NAME, SCORE]), [(2, "two", 20)])
+
+
+def replace_twice_leaves_one_batch(policy: Policy, table: str) -> None:
+    _seed(policy, table, _base())
+    _replaced(policy, table, _fitting(), STRICT)
+    _replaced(policy, table, _fitting(), STRICT)
+    _expect(policy.rows(table, [ID]), [(2,)])
+
+
+def replace_keeps_a_column_the_batch_lacks(
+    policy: Policy, table: str, evolution: str
+) -> None:
+    """The table is kept, not rebuilt from the batch: a column only the table
+    has survives the replace, written NULL."""
+    _seed(policy, table, _base())
+    _replaced(policy, table, _lacking(), evolution)
+    _expect(policy.columns(table), {ID, NAME, SCORE})
+    _expect(policy.rows(table, [ID, NAME, SCORE]), [(2, "two", None)])
+
+
+def strict_replace_refuses_a_new_column_and_keeps_the_rows(
+    policy: Policy, table: str
+) -> None:
+    _seed(policy, table, _base())
+    _refused(policy, table, lambda: _replaced(policy, table, _added(), STRICT))
+    _expect(policy.columns(table), {ID, NAME, SCORE})
+    _expect(policy.rows(table, [ID, NAME, SCORE]), [(1, "one", 10)])
+
+
+def update_replace_adds_a_new_column(policy: Policy, table: str) -> None:
+    _seed(policy, table, _base())
+    _replaced(policy, table, _added(), UPDATE)
+    _expect(policy.columns(table), {ID, NAME, SCORE, EXTRA})
+    _expect(policy.rows(table, [ID, EXTRA]), [(2, "x")])
+
+
+def strict_replace_takes_a_wider_type_whose_values_fit(
+    policy: Policy, table: str
+) -> None:
+    _seed(policy, table, _narrow())
+    _replaced(policy, table, _fitting(), STRICT)
+    _expect(policy.rows(table, [ID, SCORE]), [(2, 20)])
+
+
+def strict_replace_refuses_a_wider_type_and_keeps_the_rows(
+    policy: Policy, table: str
+) -> None:
+    """Some destinations store both widths alike and take the batch; the rest
+    refuse it. Either way the replace never leaves the table half-written."""
+    _seed(policy, table, _narrow())
+    try:
+        _replaced(policy, table, _wide(), STRICT)
+    except Exception:
+        _expect(policy.rows(table, [ID, SCORE]), [(1, 10)])
+    else:
+        _expect(policy.rows(table, [ID, SCORE]), [(2, BEYOND_INT32)])
+
+
+def update_replace_widens_a_type(policy: Policy, table: str) -> None:
+    _seed(policy, table, _narrow())
+    _replaced(policy, table, _wide(), UPDATE)
+    _expect(policy.rows(table, [ID, SCORE]), [(2, BEYOND_INT32)])
+
+
+REPLACE_CASES = [
+    pytest.param(
+        lambda policy, table: replace_empties_the_table_and_keeps_it(
+            policy, table, STRICT
+        ),
+        id="replace-strict-same-shape",
+    ),
+    pytest.param(
+        lambda policy, table: replace_empties_the_table_and_keeps_it(
+            policy, table, UPDATE
+        ),
+        id="replace-update-same-shape",
+    ),
+    pytest.param(replace_twice_leaves_one_batch, id="replace-twice"),
+    pytest.param(
+        lambda policy, table: replace_keeps_a_column_the_batch_lacks(
+            policy, table, STRICT
+        ),
+        id="replace-strict-missing-column",
+    ),
+    pytest.param(
+        lambda policy, table: replace_keeps_a_column_the_batch_lacks(
+            policy, table, UPDATE
+        ),
+        id="replace-update-missing-column",
+    ),
+    pytest.param(
+        strict_replace_refuses_a_new_column_and_keeps_the_rows,
+        id="replace-strict-new-column",
+    ),
+    pytest.param(update_replace_adds_a_new_column, id="replace-update-new-column"),
+    pytest.param(
+        strict_replace_takes_a_wider_type_whose_values_fit,
+        id="replace-strict-fitting-type",
+    ),
+    pytest.param(
+        strict_replace_refuses_a_wider_type_and_keeps_the_rows,
+        id="replace-strict-wider-type",
+    ),
+    pytest.param(update_replace_widens_a_type, id="replace-update-wider-type"),
+]
+
 APPEND_CASES = [
     pytest.param(created_table_has_only_the_batch_columns, id="created-exact"),
     pytest.param(strict_refuses_a_new_column, id="strict-new-column"),

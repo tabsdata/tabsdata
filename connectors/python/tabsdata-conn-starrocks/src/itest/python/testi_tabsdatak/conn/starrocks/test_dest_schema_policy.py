@@ -15,6 +15,7 @@ from testi_tabsdatak.conn.common.sql.plugin_io import work_dir
 from testi_tabsdatak.conn.common.sql.schema.policy import (
     APPEND,
     APPEND_CASES,
+    REPLACE_CASES,
     REPLACE,
     STRICT,
     Policy,
@@ -35,7 +36,9 @@ def _policy(domain: StarrocksDomain, staging: S3Domain, work: Path) -> Policy:
 
     def write(table: str, frame: pl.LazyFrame, mode: str, evolution: str) -> None:
         if mode == REPLACE:
-            db.create_table(table, column_spec(frame.collect_schema()))
+            # The connector loads only into an existing table; a replace onto
+            # one the case seeded must find it as the seed left it.
+            db.create_table(table, column_spec(frame.collect_schema()), replace=False)
         plugin.StarRocksDestPlugin().write_out(
             PluginDestCtx(work),
             conn,
@@ -50,7 +53,7 @@ def _policy(domain: StarrocksDomain, staging: S3Domain, work: Path) -> Policy:
     return Policy(write=write, read=db.read_table, drop=db.drop_table)
 
 
-@pytest.mark.parametrize("case", APPEND_CASES)
+@pytest.mark.parametrize("case", APPEND_CASES + REPLACE_CASES)
 @starrocks_domain("starrocks")
 @s3_domain("s3")
 def test_schema_policy(

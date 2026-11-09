@@ -320,6 +320,51 @@ def test_dest_plugin_strict_refuses_a_wider_decimal_its_column_cannot_hold(
     assert _inserts(bq_client) == []
 
 
+def test_dest_plugin_strict_replace_truncates_before_the_cast_insert(
+    monkeypatch, work_dir
+):
+    """A replace whose values fit the narrower column empties the table first,
+    so the cast insert is all it holds afterwards."""
+    bq_client = _evolving_clients(
+        monkeypatch, [("amount", "NUMERIC")], [("amount", "BIGNUMERIC")]
+    )
+    _write_amounts(work_dir, "99999999.99", if_table_exists="replace")
+    statements = _alters(bq_client)
+    truncate = statements.index("TRUNCATE TABLE `my-project.analytics.users`")
+    [insert] = _inserts(bq_client)
+    assert truncate < statements.index(insert)
+    assert bq_client.load_table_from_uri.call_count == 0
+
+
+def test_dest_plugin_strict_replace_refuses_an_overflow_before_truncating(
+    monkeypatch, work_dir
+):
+    bq_client = _evolving_clients(
+        monkeypatch, [("amount", "NUMERIC")], [("amount", "BIGNUMERIC")]
+    )
+    with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
+        _write_amounts(work_dir, "1" + "0" * 29, if_table_exists="replace")
+    assert not [s for s in _alters(bq_client) if s.startswith("TRUNCATE")]
+    assert _inserts(bq_client) == []
+
+
+def test_dest_plugin_update_replace_adds_a_column_then_truncates_and_loads(
+    monkeypatch, work_dir
+):
+    """Under update the replace evolves natively: the load job adds the column,
+    so nothing is altered by hand, and the table is emptied before it."""
+    bq_client = _evolving_clients(
+        monkeypatch, [("id", "INTEGER")], [("id", "INTEGER"), ("note", "STRING")]
+    )
+    _replace(work_dir, "update", [{"id": 1, "note": "x"}])
+    assert _alters(bq_client) == ["TRUNCATE TABLE `my-project.analytics.users`"]
+    [call] = bq_client.load_table_from_uri.call_args_list
+    from google.cloud import bigquery
+
+    options = list(call.kwargs["job_config"].schema_update_options or [])
+    assert bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION in options
+
+
 def _replace(work_dir, schema_evolution: str, rows: list[dict]) -> None:
     dest = BigQueryDest(
         tables=["`my-project.analytics.users`"],

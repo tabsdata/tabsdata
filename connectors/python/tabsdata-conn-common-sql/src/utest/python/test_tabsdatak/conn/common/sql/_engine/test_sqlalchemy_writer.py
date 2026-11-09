@@ -678,3 +678,102 @@ def test_strict_refuses_a_wider_integer_whose_values_do_not_fit(tmp_path, value)
     assert raised.value.api_error is SqlCommonErrorCode.SQL_COMMON_10
     assert "'id' from SMALLINT to BIGINT" in str(raised.value)
     assert _rows(engine) == [(1,)]
+
+
+def _replace(engine, frame: pl.LazyFrame, evolution: str) -> None:
+    with engine.begin() as conn:
+        saw._polars_write(
+            connection=conn,
+            frame=frame,
+            table="t",
+            if_table_exists="replace",
+            chunk_size=100,
+            schema_evolution=evolution,
+        )
+
+
+def test_strict_replace_takes_a_wider_integer_whose_values_fit(tmp_path):
+    engine = _narrow(tmp_path)
+    _replace(engine, pl.LazyFrame({"id": [7, -32768]}), "strict")
+    assert _rows(engine) == [(-32768,), (7,)]
+
+
+def test_strict_replace_refuses_a_wider_integer_and_keeps_the_rows(tmp_path):
+    engine = _narrow(tmp_path)
+    with pytest.raises(SqlCommonRuntimeException) as raised:
+        _replace(engine, pl.LazyFrame({"id": [7, 32768]}), "strict")
+    assert raised.value.api_error is SqlCommonErrorCode.SQL_COMMON_10
+    assert _rows(engine) == [(1,)]
+
+
+def test_replace_keeps_a_column_the_batch_lacks(tmp_path):
+    engine = _seeded(tmp_path)
+    _replace(engine, pl.LazyFrame({"id": [2]}), "strict")
+    assert _rows(engine) == [(2, None)]
+
+
+class _Recording:
+    """A connection that records the statements it runs, over a dialect whose
+    quoting is real."""
+
+    def __init__(self, name: str, quoting) -> None:
+        from types import SimpleNamespace
+
+        self.dialect = SimpleNamespace(
+            name=name, identifier_preparer=quoting.identifier_preparer
+        )
+        self.statements: list[str] = []
+
+    def execute(self, statement) -> None:
+        self.statements.append(str(statement))
+
+
+@pytest.mark.parametrize(
+    "name,dialect,table,statement",
+    [
+        ("postgresql", "postgresql", "s.t", 'TRUNCATE TABLE s.t'),
+        ("postgresql", "postgresql", "S.My T", 'TRUNCATE TABLE "S"."My T"'),
+        ("mysql", "mysql", "db.t", "TRUNCATE TABLE db.t"),
+        ("mssql", "mssql", "dbo.My T", "TRUNCATE TABLE dbo.[My T]"),
+        # Oracle folds unquoted names to upper case, so both spell S.T.
+        ("oracle", "oracle", "S.T", 'TRUNCATE TABLE "S"."T"'),
+        ("oracle", "oracle", "s.t", "TRUNCATE TABLE s.t"),
+        # Db2 takes TRUNCATE only as the first statement of a unit of work.
+        ("ibm_db_sa", "postgresql", "S.t", 'DELETE FROM "S".t'),
+        ("sqlite", "sqlite", "t", "DELETE FROM t"),
+    ],
+)
+def test_a_replace_empties_an_existing_table_as_its_dialect_allows(
+    monkeypatch, name, dialect, table, statement
+):
+    import importlib
+
+    import sqlalchemy
+
+    quoting = importlib.import_module(f"sqlalchemy.dialects.{dialect}").dialect()
+    connection = _Recording(name, quoting)
+    seen: list[tuple] = []
+
+    def has_table(table_name, schema=None):
+        seen.append((table_name, schema))
+        return True
+
+    monkeypatch.setattr(
+        sqlalchemy, "inspect", lambda _: MagicMock(has_table=has_table)
+    )
+    saw._empty_table_if_exists(connection, table)
+    assert connection.statements == [statement]
+    *prefix, bare = table.split(".")
+    assert seen == [(bare, prefix[-1] if prefix else None)]
+
+
+def test_a_replace_of_a_missing_table_empties_nothing(monkeypatch):
+    import sqlalchemy
+    from sqlalchemy.dialects import postgresql
+
+    connection = _Recording("postgresql", postgresql.dialect())
+    monkeypatch.setattr(
+        sqlalchemy, "inspect", lambda _: MagicMock(has_table=lambda *a, **k: False)
+    )
+    saw._empty_table_if_exists(connection, "s.t")
+    assert connection.statements == []

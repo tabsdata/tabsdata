@@ -1279,3 +1279,34 @@ def test_queries_run_only_when_their_tables_are_taken(monkeypatch):
     )
     assert len(_impl.read_all_queries(cfg)) == 2
     assert built == []
+
+
+def test_strict_replace_casts_a_wider_integer_its_column_holds_after_truncating(
+    monkeypatch, tmp_path
+):
+    cursor = _NarrowCursor()
+    _bulk_clients(monkeypatch, cursor)
+    _impl.write_all_tables(_replace_cfg(), [_narrow_parquet(tmp_path, 7)])
+    [copy] = [s for s in cursor.log if s.startswith("COPY INTO")]
+    assert "CAST(`n` AS int) AS `n`" in copy
+    assert _position(cursor, "TRUNCATE TABLE") < _position(cursor, "COPY INTO")
+
+
+def test_strict_replace_refuses_an_overflow_before_truncating(monkeypatch, tmp_path):
+    cursor = _NarrowCursor()
+    _bulk_clients(monkeypatch, cursor)
+    with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
+        _impl.write_all_tables(_replace_cfg(), [_narrow_parquet(tmp_path, 2**40)])
+    assert not any(s.startswith(("TRUNCATE", "COPY INTO")) for s in cursor.log)
+
+
+def test_replace_never_drops_or_recreates_the_table(monkeypatch, tmp_path):
+    for evolution in ("strict", "update"):
+        cursor = _BulkCursor(("id",))
+        _bulk_clients(monkeypatch, cursor)
+        _impl.write_all_tables(
+            _replace_cfg(schema_evolution=evolution), [_wm_parquet(tmp_path)]
+        )
+        assert not any(
+            s.startswith(("DROP", "CREATE OR REPLACE")) for s in cursor.log
+        ), evolution

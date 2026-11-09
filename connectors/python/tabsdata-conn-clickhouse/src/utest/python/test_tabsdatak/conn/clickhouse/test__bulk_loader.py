@@ -307,6 +307,32 @@ def test_replace_under_update_adds_a_new_column_then_truncates(tmp_path):
     assert dialect.calls[-1] == "truncate_tables"
 
 
+def test_replace_under_strict_takes_integers_their_column_holds_then_truncates(
+    tmp_path,
+):
+    dialect = _Evolving([_widened()])
+    loader = _loader(tmp_path, dialect, WriteMode.REPLACE, STRICT)
+    loader.phase_validate_and_prepare(_staged_ids(loader, [1, 2]))
+    assert dialect.applied == []
+    assert dialect.calls[-1] == "truncate_tables"
+
+
+def test_replace_under_strict_refuses_an_overflow_before_truncating(tmp_path):
+    dialect = _Evolving([_widened()])
+    loader = _loader(tmp_path, dialect, WriteMode.REPLACE, STRICT)
+    with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
+        loader.phase_validate_and_prepare(_staged_ids(loader, [1, 2**40]))
+    assert "truncate_tables" not in dialect.calls
+
+
+def test_replace_under_update_widens_then_truncates(tmp_path):
+    dialect = _Evolving([_widened()])
+    loader = _loader(tmp_path, dialect, WriteMode.REPLACE, UPDATE)
+    loader.phase_validate_and_prepare(_staged_ids(loader, [1, 2**40]))
+    assert dialect.applied == [_widened()]
+    assert dialect.calls[-1] == "truncate_tables"
+
+
 def test_append_does_not_truncate(tmp_path):
     dialect = _RecordingDialect(exists=False)
     loader = _loader(tmp_path, dialect, WriteMode.APPEND)
