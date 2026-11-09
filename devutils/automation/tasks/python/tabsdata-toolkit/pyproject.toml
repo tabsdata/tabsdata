@@ -68,6 +68,7 @@ dependencies = [
 [project.entry-points.pytest11]
 tdx-harvester = "tabsdatax.pytesting.plugins.harvester.plugin"
 tdx-xdist-groups = "tabsdatax.pytesting.plugins.xdistgroups"
+tdx-logger-levels = "tabsdatax.pytesting.plugins.loggerlevels"
 tdf-instances = "tabsdatax.itest.fixture.instances.tabsdata"
 tdf-backends = "tabsdatax.itest.fixture.backend"
 tdf-functions = "tabsdatax.itest.fixture.functions.harness"
