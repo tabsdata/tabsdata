@@ -651,6 +651,36 @@ def test_a_column_the_batch_lacks_is_written_null(tmp_path, evolution):
     assert _rows(engine) == [(1, "a"), (2, None)]
 
 
+def _narrow(tmp_path: Path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'narrow.db'}")
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE t (id SMALLINT)"))
+        conn.execute(text("INSERT INTO t VALUES (1)"))
+    return engine
+
+
+def test_strict_takes_a_wider_integer_whose_values_fit(tmp_path):
+    engine = _narrow(tmp_path)
+    _append(engine, pl.LazyFrame({"id": [2, None, -32768]}), "strict")
+    assert _rows(engine) == [(-32768,), (1,), (2,), (None,)]
+
+
+def test_strict_takes_a_wider_integer_with_only_nulls(tmp_path):
+    engine = _narrow(tmp_path)
+    _append(engine, pl.LazyFrame({"id": [None]}, schema={"id": pl.Int64}), "strict")
+    assert _rows(engine) == [(1,), (None,)]
+
+
+@pytest.mark.parametrize("value", [32768, -32769])
+def test_strict_refuses_a_wider_integer_whose_values_do_not_fit(tmp_path, value):
+    engine = _narrow(tmp_path)
+    with pytest.raises(SqlCommonRuntimeException) as raised:
+        _append(engine, pl.LazyFrame({"id": [2, value]}), "strict")
+    assert raised.value.api_error is SqlCommonErrorCode.SQL_COMMON_10
+    assert "'id' from SMALLINT to BIGINT" in str(raised.value)
+    assert _rows(engine) == [(1,)]
+
+
 def test_the_schema_evolution_engine_takes_only_iceberg():
     saw._check_schema_evolution_engine({"x.schema_evolution_engine": "iceberg"})
     with pytest.raises(SqlCommonValidateException) as raised:

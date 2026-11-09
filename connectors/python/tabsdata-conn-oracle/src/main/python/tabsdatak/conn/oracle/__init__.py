@@ -303,7 +303,8 @@ class OracleDest(Dest):
             in one transactional session.
         schema_evolution: What a write does when the batch's columns differ from
             the table's, a replace included. `"strict"` (the default) refuses a
-            batch with a column the table lacks; `"update"` adds the column and
+            batch with a column the table lacks, or with a number wider than the
+            column's unless every value fits it; `"update"` adds the column and
             widens a number column the batch has outgrown (a larger integer,
             double precision, a decimal that keeps every digit); other type
             differences are left to the database, where a value a column cannot

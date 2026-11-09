@@ -6,7 +6,7 @@ import contextlib
 import logging
 from abc import ABC, abstractmethod
 from datetime import date
-from typing import Any, Callable, Iterator, Literal
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Literal
 
 import polars as pl
 from sqlalchemy import BigInteger, Connection, Numeric, cast
@@ -29,6 +29,10 @@ from tabsdatak.conn.common import _config
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.writer import SqlWriteCfg, SqlWriteEngine
+
+if TYPE_CHECKING:
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._schema.delta import SchemaChange
 
 # --- Retry ----------------------------------------------------------
 
@@ -380,14 +384,16 @@ _CASE_INSENSITIVE_COLUMNS = frozenset({"mysql", "mssql"})
 def _evolve_columns(
     connection: Connection,
     table: str,
-    schema: pl.Schema,
+    frame: pl.LazyFrame,
     dtype: dict[str, Any],
     evolution: Literal["strict", "update"],
 ) -> None:
     """Bring an existing `table` up to the batch as far as `evolution` allows:
     add the columns the batch has and the table lacks, and widen a number
     column the batch has outgrown. A column takes the type pandas would give it
-    in a table it creates, so both paths agree.
+    in a table it creates, so both paths agree. Under strict, a number column
+    the batch has outgrown is taken as it is when every value of the batch fits
+    it, and refused otherwise.
 
     A column the batch lacks is left alone and written NULL by the insert. Other
     type differences are left to the database: a value the column cannot hold
@@ -409,6 +415,7 @@ def _evolve_columns(
     # noinspection PyProtectedMember
     from tabsdatak.conn.common.sql._schema.policy import governed
 
+    schema = frame.collect_schema()
     *prefix, name = table.split(".")
     db_schema = prefix[-1] if prefix else None
     inspector = inspect(connection)
@@ -424,12 +431,12 @@ def _evolve_columns(
         fold(column["name"]): column
         for column in inspector.get_columns(name, schema=db_schema)
     }
-    frame = pl.DataFrame(schema=schema).to_pandas(use_pyarrow_extension_array=True)
+    empty = pl.DataFrame(schema=schema).to_pandas(use_pyarrow_extension_array=True)
     with SQLDatabase(connection, schema=db_schema) as database:
         columns = SQLTable(
             name,
             database,
-            frame=frame,
+            frame=empty,
             index=False,
             schema=db_schema,
             dtype=dtype or None,
@@ -459,13 +466,14 @@ def _evolve_columns(
                         detail={
                             "old_type": current,
                             "new_type": spelling,
-                            "same_base": True,
                             "nullable": existing.get("nullable", True),
                         },
                     )
                 )
     if not changes:
         return
+    if evolution == "strict":
+        changes = _fitting(frame, changes, dialect.name)
     delta = governed(
         SchemaDelta(table_name=table, is_create=False, changes=changes), evolution
     )
@@ -494,6 +502,55 @@ def _evolve_columns(
             text("CALL SYSPROC.ADMIN_CMD(:command)"),
             {"command": f"REORG TABLE {target}"},
         )
+
+
+def _fitting(
+    frame: pl.LazyFrame, changes: list["SchemaChange"], dialect: str
+) -> list["SchemaChange"]:
+    """``changes`` with each widening marked as fitting when every value of the
+    batch fits the column as it is (:func:`holds`); the batch is read for the
+    smallest and largest value of those columns only."""
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._engine.widening import holds
+
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._schema.delta import Action, SchemaChange
+
+    checks = {
+        change.column: check
+        for change in changes
+        if change.action is Action.ALTER_TYPE
+        and (
+            check := holds(
+                change.detail["old_type"], change.detail["new_type"], dialect
+            )
+        )
+    }
+    if not checks:
+        return changes
+    bounds = (
+        frame
+        .select(
+            *(pl.col(column).min().alias(f"{column}\0min") for column in checks),
+            *(pl.col(column).max().alias(f"{column}\0max") for column in checks),
+        )
+        .collect()
+        .row(0, named=True)
+    )
+    fitting = []
+    for change in changes:
+        check = checks.get(change.column)
+        low = bounds.get(f"{change.column}\0min")
+        high = bounds.get(f"{change.column}\0max")
+        if check and (low is None or (check(low) and check(high))):
+            change = SchemaChange(
+                action=change.action,
+                column=change.column,
+                safe=change.safe,
+                detail={**change.detail, "fits": True},
+            )
+        fitting.append(change)
+    return fitting
 
 
 _ADD_COLUMN: dict[str, str] = {
@@ -534,7 +591,7 @@ def _polars_write(
     # reflects it first, which fails on Oracle -- its identifier
     # normalize/denormalize asymmetry makes the reflect's name-membership check
     # miss the table ("requested table(s) not available").
-    _evolve_columns(connection, table, schema, _dtype, schema_evolution)
+    _evolve_columns(connection, table, frame, _dtype, schema_evolution)
     if if_table_exists == "replace":
         _empty_table_if_exists(connection, table)
         if_table_exists = "append"

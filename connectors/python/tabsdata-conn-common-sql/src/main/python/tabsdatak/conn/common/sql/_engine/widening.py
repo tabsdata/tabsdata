@@ -15,6 +15,8 @@ database stores as a small integer is not a number the batch has outgrown.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
+from decimal import Decimal
 
 _EXACT_DIGITS = {
     "TINYINT": 3,
@@ -35,7 +37,8 @@ _TYPE = re.compile(
 def kind(spelling: str, dialect: str) -> tuple[str, int, int] | None:
     """``("exact", precision, scale)`` or ``("float", bytes, 0)`` for a number
     type, ``None`` for anything else. A bare ``FLOAT`` is single precision in
-    MySQL and double everywhere else."""
+    MySQL and double everywhere else; ``REAL`` is double in MySQL and SQLite
+    and single everywhere else."""
     match = _TYPE.match(spelling.upper())
     if match is None:
         return None
@@ -48,6 +51,8 @@ def kind(spelling: str, dialect: str) -> tuple[str, int, int] | None:
         if first is None:
             return None
         return "exact", int(first), int(second or 0)
+    if base == "REAL" and dialect in ("mysql", "sqlite"):
+        return "float", 8, 0
     if base in _FLOAT4:
         return "float", 4, 0
     if base in _FLOAT8:
@@ -73,3 +78,38 @@ def outgrows(stored: str, batch: str, dialect: str) -> bool:
         and new_scale >= old_scale
     )
     return widens
+
+
+_INTEGER_BITS = {
+    "TINYINT": 8,
+    "SMALLINT": 16,
+    "MEDIUMINT": 24,
+    "INT": 32,
+    "INTEGER": 32,
+    "BIGINT": 64,
+}
+
+
+def holds(stored: str, batch: str, dialect: str) -> Callable[[object], bool] | None:
+    """Whether a column spelled ``stored``, which a ``batch`` column outgrows,
+    holds a given value of it: an integer within the column's range, or a
+    decimal within its integer digits; ``None`` for a float, which loses
+    precision rather than overflows, and for a batch decimal with more
+    fractional digits than the column keeps, which would be rounded away."""
+    old, new = kind(stored, dialect), kind(batch, dialect)
+    if old is None or new is None or old[0] != "exact" or new[0] != "exact":
+        return None
+    if new[2] > old[2]:
+        return None
+    match = _TYPE.match(stored.upper())
+    bits = _INTEGER_BITS.get(match[1]) if match else None
+    if bits is not None:
+        unsigned = "UNSIGNED" in stored.upper() or (
+            dialect == "mssql" and match[1] == "TINYINT"
+        )
+        low, high = (
+            (0, 2**bits - 1) if unsigned else (-(2 ** (bits - 1)), 2 ** (bits - 1) - 1)
+        )
+        return lambda value: low <= value <= high
+    limit = Decimal(10) ** (old[1] - old[2])
+    return lambda value: -limit < Decimal(value) < limit
