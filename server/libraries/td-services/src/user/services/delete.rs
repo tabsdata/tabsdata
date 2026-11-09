@@ -4,12 +4,14 @@
 
 use crate::auth::retire_sessions::retire_sessions;
 use crate::user::UserError;
+use std::cmp::Reverse;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{ManageAccess, System, SystemEntity};
 use td_database::access::{DbPool, Global, retrying};
 use td_error::TdError;
+use td_objects::and;
 use td_objects::dxo::crudl::DeleteRequest;
 use td_objects::dxo::service_token::ServiceTokenDB;
 use td_objects::dxo::ui_data::UserUiDataDB;
@@ -37,6 +39,14 @@ async fn delete_user(
         delete_user_validate(&user, &ctx.user_id)?;
 
         retire_sessions(conn, &user.id, ctx.time, SessionStatus::InvalidUserDisabled).await?;
+        // Role id descending, as delete_project_roles takes them: two deletes
+        // locking the same memberships in opposite orders deadlock.
+        let mut memberships: Vec<UserRoleDB> = conn.fetch_all(user.id).await?;
+        memberships.sort_unstable_by_key(|membership| Reverse(membership.role_id));
+        for membership in &memberships {
+            conn.delete::<UserRoleDB>(and!(&user.id, &membership.role_id))
+                .await?;
+        }
         conn.delete::<UserRoleDB>(user.id).await?;
         // Restricting foreign keys: token and UI data rows go first.
         conn.delete::<ServiceTokenDB>(user.id).await?;
