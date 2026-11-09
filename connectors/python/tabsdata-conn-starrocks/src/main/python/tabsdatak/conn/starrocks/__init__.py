@@ -52,6 +52,9 @@ from tabsdatak.api import (
 from tabsdatak.conn.common import _validation as _common_validation
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.matrix import Resolution, resolve_dest
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     AwsRegionSpec,
@@ -101,18 +104,10 @@ names that differ only in quoting, or in the case of an unquoted part
 (unchanged, as StarRocks table names are case-sensitive), are the same table."""
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 SchemaEvolutionSpec: TypeAlias = Literal["strict", "update"]
-SchemaEvolutionEngineSpec: TypeAlias = Literal["iceberg"]
-"""Which machinery evolves the target's schema. StarRocks has no schema
-evolution of its own, so the only engine is `"iceberg"`: the connector diffs
-the target against the incoming batch and emits the `ALTER` statements
-itself."""
 
 
 # --- StarRocksDest.dest_cfg keys ------------------------------------
-DestCfgKey: TypeAlias = Literal[
-    "starrocks.logging_level",
-    "starrocks.schema_evolution_engine",
-]
+DestCfgKey: TypeAlias = Literal["starrocks.logging_level",]
 
 DestCfgSpec: TypeAlias = Annotated[
     Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
@@ -327,12 +322,35 @@ class StarRocksDest(Dest):
             number column takes a batch whose values all fit it; `"update"`
             adds the column and widens the type, and refuses a change StarRocks
             cannot make. A column the batch lacks is written NULL either way.
-        dest_cfg: Optional connector config. Supported keys:
-            `starrocks.logging_level`, and
-            `starrocks.schema_evolution_engine` -- `"iceberg"`, the default
-            and only engine: StarRocks has no schema evolution of its own. A
-            column type change runs as a StarRocks job, which the write waits
-            for before loading.
+        dest_cfg: Optional connector config. The only supported key is
+            `starrocks.logging_level`. StarRocks has no schema evolution of its
+            own, so the connector evolves the table itself; a column type
+            change runs as a StarRocks job, which the write waits for before
+            loading.
+
+    Schema evolution:
+        What each written `schema_evolution`, and engine, resolves to
+        per `if_table_exists`; registration refuses every INVALID and
+        PLANNED combination and reports the one it resolves:
+
+        .. code-block:: text
+
+            +----------------+----------------+----------------+---------+
+            |                | append         | replace        | merge   |
+            +----------------+----------------+----------------+---------+
+            | engine         | iceberg        | iceberg        | PLANNED |
+            | left out       | strict         | strict         | PLANNED |
+            | strict         | strict         | strict         | PLANNED |
+            | update         | update/iceberg | update/iceberg | PLANNED |
+            | update+iceberg | INVALID        | INVALID        | PLANNED |
+            | other engine   | INVALID        | INVALID        | PLANNED |
+            +----------------+----------------+----------------+---------+
+
+            merge: planned -- backend can (Primary Key upsert).
+
+            [6] StarRocks upserts by key when it loads into a Primary Key table,
+                and deletes through __op. The target must be a Primary Key table
+                whose key is the merge columns.
 
     Examples:
         Append to an existing table -- row count grows each run:
@@ -366,3 +384,19 @@ class StarRocksDest(Dest):
     if_table_exists: IfTableExistsSpec = "append"
     schema_evolution: SchemaEvolutionSpec = "strict"
     dest_cfg: DestCfgSpec | None = None
+
+    def validate(self) -> None:
+        """Cross-field validation: `if_table_exists`, `schema_evolution` and
+        the engine form a combination this destination offers.
+
+        Called by the framework; raises `SqlCommonValidateException`.
+        """
+        self._evolution()
+
+    def _evolution(self) -> Resolution:
+        """The disposition, policy and engine a write applies, resolved
+        against the schema evolution matrix."""
+        return resolve_dest("starrocks", self)
+
+    def _materialized(self) -> dict[str, str]:
+        return self._evolution().options()

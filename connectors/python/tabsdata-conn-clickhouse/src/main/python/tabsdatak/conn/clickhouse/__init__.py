@@ -57,6 +57,9 @@ from tabsdatak.conn.clickhouse.error import ClickHouseErrorCode
 from tabsdatak.conn.common import _validation as _common_validation
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.matrix import Resolution, resolve_dest
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     AwsRegionSpec,
@@ -104,11 +107,6 @@ names that differ only in quoting, or in the case of an unquoted part
 (unchanged, as ClickHouse names are case-sensitive), are the same table."""
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 SchemaEvolutionSpec: TypeAlias = Literal["strict", "update"]
-SchemaEvolutionEngineSpec: TypeAlias = Literal["iceberg"]
-"""Which machinery evolves the target's schema. ClickHouse has no schema
-evolution of its own, so the only engine is `"iceberg"`: the connector diffs
-the target against the incoming batch and emits the `ALTER` statements
-itself."""
 
 
 # --- ClickHouseDest.dest_cfg keys ------------------------------------
@@ -118,10 +116,7 @@ itself."""
 # of keys at validation time, so unknown keys are rejected at
 # construction; `CONN_CFG_VALIDATION` reuses the conn_cfg basic-value
 # checks (str/int/float/bool/None, plus list/dict compositions).
-DestCfgKey: TypeAlias = Literal[
-    "clickhouse.logging_level",
-    "clickhouse.schema_evolution_engine",
-]
+DestCfgKey: TypeAlias = Literal["clickhouse.logging_level",]
 
 DestCfgSpec: TypeAlias = Annotated[
     Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
@@ -354,10 +349,35 @@ class ClickHouseDest(Dest):
             batch with a column the table lacks or a wider type; `"update"` adds
             the column and widens the type, and refuses a change ClickHouse
             cannot make. A column the batch lacks is written NULL either way.
-        dest_cfg: Optional connector config. Supported keys:
-            `clickhouse.logging_level`, and
-            `clickhouse.schema_evolution_engine` -- `"iceberg"`, the default
-            and only engine: ClickHouse has no schema evolution of its own.
+        dest_cfg: Optional connector config. The only supported key is
+            `clickhouse.logging_level`.
+
+    Schema evolution:
+        What each written `schema_evolution`, and engine, resolves to
+        per `if_table_exists`; registration refuses every INVALID and
+        PLANNED combination and reports the one it resolves:
+
+        .. code-block:: text
+
+            +----------------+----------------+----------------+---------+
+            |                | append         | replace        | merge   |
+            +----------------+----------------+----------------+---------+
+            | engine         | iceberg        | iceberg        | PLANNED |
+            | left out       | strict         | strict         | PLANNED |
+            | strict         | strict         | strict         | PLANNED |
+            | update         | update/iceberg | update/iceberg | PLANNED |
+            | update+iceberg | INVALID        | INVALID        | PLANNED |
+            | other engine   | INVALID        | INVALID        | PLANNED |
+            +----------------+----------------+----------------+---------+
+
+            merge: planned -- semantics to define.
+
+            [5] ClickHouse has no MERGE. There are two workable designs: a
+                ReplacingMergeTree table keyed on the merge columns, cheap but
+                deduplicated only eventually, so readers need FINAL; or
+                rebuilding the touched partitions and swapping them in with
+                REPLACE PARTITION, exact and atomic, but each touched partition
+                is rewritten. Which one to use is still to be defined.
 
     Note:
         ClickHouse 24.8 has no time-of-day and no interval type, so a `Time`
@@ -370,7 +390,7 @@ class ClickHouseDest(Dest):
 
     Examples:
         Write a table with the `replace` disposition -- the first run
-        creates it, later runs drop and recreate it (row count stays):
+        creates it, later runs empty it and reload it (row count stays):
 
         .. code-block:: python
 
@@ -414,3 +434,13 @@ class ClickHouseDest(Dest):
         """
         if not self.tables:
             raise ClickHouseErrorCode.CLICKHOUSE_3.exception()
+        # Refuses a combination the matrix does not offer.
+        self._evolution()
+
+    def _evolution(self) -> Resolution:
+        """The disposition, policy and engine a write applies, resolved
+        against the schema evolution matrix."""
+        return resolve_dest("clickhouse", self)
+
+    def _materialized(self) -> dict[str, str]:
+        return self._evolution().options()

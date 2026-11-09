@@ -29,7 +29,7 @@ from tabsdatak.conn.snowflake import MergeCfg, SnowflakeDest, _plugin as plugin
 pytestmark = pytest.mark.snowflake
 
 
-def _policy(domain: SnowflakeDomain, work: Path, engine: str) -> Policy:
+def _policy(domain: SnowflakeDomain, work: Path) -> Policy:
     db = store(domain)
     conn = dest_conn(domain)
 
@@ -42,7 +42,9 @@ def _policy(domain: SnowflakeDomain, work: Path, engine: str) -> Policy:
                 if_table_exists=mode,
                 merge_cfg=[MergeCfg(on=[ID], op_column=OP)] if mode == MERGE else None,
                 schema_evolution=evolution,
-                dest_cfg={"snowflake.schema_evolution_engine": engine},
+                dest_cfg={"snowflake.schema_evolution_engine": "iceberg"}
+                if mode == MERGE and evolution == "update"
+                else None,
             ),
             [frame],
         )
@@ -51,14 +53,13 @@ def _policy(domain: SnowflakeDomain, work: Path, engine: str) -> Policy:
 
 
 @pytest.mark.parametrize("case", APPEND_CASES)
-@pytest.mark.parametrize("engine", ["native", "iceberg"])
 @snowflake_domain("snowflake")
 def test_schema_policy_append(
-    domain_snowflake: SnowflakeDomain, tmp_path: Path, engine: str, case, request
+    domain_snowflake: SnowflakeDomain, tmp_path: Path, case, request
 ):
     run(
         case,
-        _policy(domain_snowflake, work_dir(tmp_path), engine),
+        _policy(domain_snowflake, work_dir(tmp_path)),
         table_for(request).upper(),
     )
 
@@ -70,6 +71,6 @@ def test_schema_policy_merge(
 ):
     run(
         case,
-        _policy(domain_snowflake, work_dir(tmp_path), "iceberg"),
+        _policy(domain_snowflake, work_dir(tmp_path)),
         table_for(request).upper(),
     )

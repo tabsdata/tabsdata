@@ -145,11 +145,6 @@ def test_bigquery_conn_rejects_missing_staging():
 # ---------------------------------------------------------------------------
 
 
-# A MERGE takes no load-job options, so the connector evolves its target with
-# ALTER statements or not at all -- and the write has to say so.
-_ICEBERG = {"bigquery.schema_evolution_engine": "iceberg"}
-
-
 def _merge_cfg(**overrides) -> MergeCfg:
     kwargs: dict = dict(on=["order_id"], op_column="op")
     kwargs.update(overrides)
@@ -245,7 +240,7 @@ def test_bigquery_dest_round_trips_a_merge():
     dest = BigQueryDest(
         tables=["`my-project.analytics.orders`"],
         if_table_exists="merge",
-        merge_cfg=[_merge_cfg()], dest_cfg=_ICEBERG,
+        merge_cfg=[_merge_cfg()],
     )
     loaded = BigQueryDest.from_json(dest.to_json())
     assert loaded == dest
@@ -256,7 +251,7 @@ def test_bigquery_dest_round_trips_a_merge_cfg_per_table():
     dest = BigQueryDest(
         tables=["`p.ds.orders`", "`p.ds.items`"],
         if_table_exists="merge",
-        merge_cfg=[_merge_cfg(), _merge_cfg(on=["item_id"])], dest_cfg=_ICEBERG,
+        merge_cfg=[_merge_cfg(), _merge_cfg(on=["item_id"])],
     )
     loaded = BigQueryDest.from_json(dest.to_json())
     assert [c.on for c in loaded.merge_cfg] == [["order_id"], ["item_id"]]
@@ -267,7 +262,7 @@ def test_bigquery_dest_takes_one_merge_cfg_per_table():
     dest = BigQueryDest(
         tables=["`p.ds.a`", "`p.ds.b`"],
         if_table_exists="merge",
-        merge_cfg=cfgs, dest_cfg=_ICEBERG,
+        merge_cfg=cfgs,
     )
     assert dest._merge_cfgs() == cfgs
 
@@ -277,7 +272,7 @@ def test_bigquery_dest_takes_a_one_entry_list_for_a_single_table():
     dest = BigQueryDest(
         tables=["`p.ds.a`"],
         if_table_exists="merge",
-        merge_cfg=[cfg], dest_cfg=_ICEBERG,
+        merge_cfg=[cfg],
     )
     assert dest._merge_cfgs() == [cfg]
 
@@ -289,7 +284,7 @@ def test_bigquery_dest_refuses_a_bare_merge_cfg():
         BigQueryDest(
             tables=["`p.ds.a`"],
             if_table_exists="merge",
-            merge_cfg=_merge_cfg(), dest_cfg=_ICEBERG,
+            merge_cfg=_merge_cfg(),
         )
     assert "valid list" in str(ei.value)
 
@@ -303,14 +298,14 @@ def test_bigquery_dest_keeps_a_list_of_cfgs_in_order():
     dest = BigQueryDest(
         tables=["`p.ds.a`", "`p.ds.b`"],
         if_table_exists="merge",
-        merge_cfg=[first, second], dest_cfg=_ICEBERG,
+        merge_cfg=[first, second],
     )
     assert dest._merge_cfgs() == [first, second]
 
 
 def test_bigquery_dest_rejects_merge_without_a_merge_cfg():
     with pytest.raises(BigQueryValidateException) as ei:
-        BigQueryDest(tables=["`p.ds.a`"], if_table_exists="merge", dest_cfg=_ICEBERG)
+        BigQueryDest(tables=["`p.ds.a`"], if_table_exists="merge")
     assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_12
     assert "requires merge_cfg" in str(ei.value)
 
@@ -332,7 +327,7 @@ def test_bigquery_dest_rejects_a_cfg_list_that_does_not_match_tables():
         BigQueryDest(
             tables=["`p.ds.a`", "`p.ds.b`"],
             if_table_exists="merge",
-            merge_cfg=[_merge_cfg()], dest_cfg=_ICEBERG,
+            merge_cfg=[_merge_cfg()],
         )
     assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_14
     assert "1 entries but tables has 2" in str(ei.value)
@@ -383,7 +378,6 @@ def test_bigquery_dest_watermark_named_on_the_merge_cfg_does_not_arrive():
         tables=["`p.ds.t`"],
         if_table_exists="merge",
         merge_cfg=[_merge_cfg(watermark_column=_WATERMARK)],
-            dest_cfg=_ICEBERG,
     )
     assert dest._watermark_column() is None
     assert not hasattr(dest._merge_cfgs()[0], "watermark_column")
@@ -398,7 +392,6 @@ def test_bigquery_dest_hands_its_merge_cfgs_over_untouched():
         if_table_exists="merge",
         merge_cfg=[a, b],
         watermark_column=_WATERMARK,
-            dest_cfg=_ICEBERG,
     )
     assert dest._merge_cfgs() == [a, b]
 
@@ -426,7 +419,6 @@ def test_bigquery_dest_rejects_a_watermark_colliding_with_a_key():
             if_table_exists="merge",
             merge_cfg=[_merge_cfg()],
             watermark_column="order_id",
-            dest_cfg=_ICEBERG,
         )
     assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_7
 
@@ -441,7 +433,6 @@ def test_bigquery_dest_rejects_a_quoted_watermark_colliding_with_a_quoted_key():
             if_table_exists="merge",
             merge_cfg=[_merge_cfg(on=['`MyCol`'])],
             watermark_column='`MYCOL`',
-            dest_cfg=_ICEBERG,
         )
     assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_7
 
@@ -453,7 +444,6 @@ def test_bigquery_dest_rejects_a_watermark_colliding_with_the_op_column():
             if_table_exists="merge",
             merge_cfg=[_merge_cfg()],
             watermark_column="op",
-            dest_cfg=_ICEBERG,
         )
     assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_8
 
@@ -465,7 +455,6 @@ def test_bigquery_dest_rejects_a_quoted_watermark_colliding_with_a_quoted_op_col
             if_table_exists="merge",
             merge_cfg=[_merge_cfg(op_column='`OpCol`')],
             watermark_column='`OPCOL`',
-            dest_cfg=_ICEBERG,
         )
     assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_8
 
@@ -494,12 +483,42 @@ def test_bigquery_dest_merges_on_the_default_engine():
     )
 
 
-def test_bigquery_dest_refuses_the_native_engine_for_a_merge():
-    with pytest.raises(BigQueryValidateException) as ei:
+@pytest.mark.parametrize(
+    "schema_evolution,engine,reason",
+    [
+        ("strict", "native", "written only as 'iceberg'"),
+        ("update", "native", "written only as 'iceberg'"),
+        ("strict", "iceberg", "schema_evolution='update'"),
+        ("update", None, "native evolution does not apply to MERGE"),
+    ],
+)
+def test_bigquery_dest_merges_only_on_the_engine_the_matrix_offers(
+    schema_evolution, engine, reason
+):
+    with pytest.raises(SqlCommonValidateException) as ei:
         BigQueryDest(
             tables=["`p.d.t`"],
             if_table_exists="merge",
+            schema_evolution=schema_evolution,
             merge_cfg=[MergeCfg(on=["id"], op_column="op")],
-            dest_cfg={"bigquery.schema_evolution_engine": "native"},
+            dest_cfg=None
+            if engine is None
+            else {"bigquery.schema_evolution_engine": engine},
         )
-    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_22
+    assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_11
+    assert reason in str(ei.value)
+
+
+def test_bigquery_dest_merges_with_update_on_the_iceberg_engine():
+    dest = BigQueryDest(
+        tables=["`p.d.t`"],
+        if_table_exists="merge",
+        schema_evolution="update",
+        merge_cfg=[MergeCfg(on=["id"], op_column="op")],
+        dest_cfg={"bigquery.schema_evolution_engine": "iceberg"},
+    )
+    assert dest._materialized() == {
+        "if_table_exists": "merge",
+        "schema_evolution": "update",
+        "schema_evolution_engine": "iceberg",
+    }

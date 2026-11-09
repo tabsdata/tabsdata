@@ -10,10 +10,10 @@ target against the incoming file instead reaches what that cannot: a column
 whose type the batch has outgrown is widened, and a change Snowflake could
 not make refuses the write rather than letting the load discover it.
 
-A merge always comes through here -- the mark is read by ``COPY INTO`` and
-not by a ``MERGE``, so a merge target is evolved here or not at all. A bulk
-load comes through only when the write asks for it with
-``dest_cfg={"snowflake.schema_evolution_engine": "iceberg"}``.
+A merge comes through here -- the mark is read by ``COPY INTO`` and not by a
+``MERGE``, so a merge target is evolved here or not at all; the write asks for
+it with ``dest_cfg={"snowflake.schema_evolution_engine": "iceberg"}`` and
+``schema_evolution="update"``. A bulk load evolves natively.
 """
 
 from __future__ import annotations

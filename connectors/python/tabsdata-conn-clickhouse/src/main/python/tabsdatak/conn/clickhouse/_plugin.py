@@ -39,16 +39,12 @@ logger = logging.getLogger(__name__)
 # ``DestCfgKey`` annotation means a typo or rename gets flagged
 # against the schema's Literal.
 _KEY_DEST_LOGGING_LEVEL: DestCfgKey = "clickhouse.logging_level"
-_KEY_DEST_SCHEMA_EVOLUTION_ENGINE: DestCfgKey = "clickhouse.schema_evolution_engine"
 
 # Defaults for every ``DestCfgKey``. ``_resolve_dest_cfg`` reads
 # from cfg and falls back to these.
 _DEST_CFGS_DEFAULTS: dict[DestCfgKey, Any] = {
     _KEY_DEST_LOGGING_LEVEL: logging.ERROR,
-    _KEY_DEST_SCHEMA_EVOLUTION_ENGINE: "iceberg",
 }
-
-_SCHEMA_EVOLUTION_ENGINES = ("iceberg",)
 
 
 @dataclass(frozen=True)
@@ -71,13 +67,6 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
 
     def _get(key: DestCfgKey) -> Any:
         return cfg.get(key, _DEST_CFGS_DEFAULTS[key])
-
-    engine = _get(_KEY_DEST_SCHEMA_EVOLUTION_ENGINE)
-    if engine not in _SCHEMA_EVOLUTION_ENGINES:
-        raise ClickHouseErrorCode.CLICKHOUSE_13.exception(
-            value=engine,
-            allowed=" or ".join(repr(e) for e in _SCHEMA_EVOLUTION_ENGINES),
-        )
 
     return _WriterCfg(
         logging_level=int(_get(_KEY_DEST_LOGGING_LEVEL)),
@@ -123,7 +112,7 @@ class _ClickHouseDestPlugin(
             conn=conn,
             target_tables=list(dest.tables),
             if_table_exists=dest.if_table_exists,
-            schema_evolution=dest.schema_evolution,
+            schema_evolution=dest._evolution().schema_evolution,
         )
 
         try:

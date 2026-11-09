@@ -138,20 +138,6 @@ class BigQueryErrorCode(ErrorCode):
         " columns match the table's",
     )  # the merge driver: nothing to write
 
-    # --- schema_evolution_engine (tabsdatak.conn.bigquery) ----------
-    BIGQUERY_21 = ErrorDef(
-        BigQueryValidateException,
-        "BigQueryDest.dest_cfg['bigquery.schema_evolution_engine']={value!r} is"
-        " not a schema evolution engine; it is {allowed} or unset",
-    )  # _resolve_dest_cfg
-    BIGQUERY_22 = ErrorDef(
-        BigQueryValidateException,
-        'BigQueryDest.if_table_exists="merge" does not take'
-        " dest_cfg={{'bigquery.schema_evolution_engine': 'native'}}."
-        " A MERGE takes no schema_update_options, so the connector evolves a"
-        " merge target with ALTER statements: leave the engine unset or set it"
-        " to 'iceberg'",
-    )  # BigQueryDest.validate()
     BIGQUERY_23 = ErrorDef(
         BigQueryRuntimeException,
         "BigQuery schema evolution of table {table} failed",

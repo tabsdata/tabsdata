@@ -377,6 +377,11 @@ class Dest(ABC, _api.DescriptorBase):
 
     __kind__ = KIND_DESTINATION_DEF
 
+    def _materialized(self) -> dict[str, str]:
+        """The options a write applies once those left out are resolved, by
+        name, for registration to report; empty where nothing is resolved."""
+        return {}
+
 
 class OnTablesAction(ABC, _api.JsonSerde):
     """Abstract base for declarative table-side-effect actions.

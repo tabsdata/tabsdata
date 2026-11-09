@@ -175,9 +175,8 @@ def test_dest_plugin_write_out_resolves_table_name_spelling(
 
 
 # A MERGE takes no load-job options, so the connector evolves its target with
-# ALTER statements or not at all -- and the write has to say so.
+# ALTER statements or not at all -- and an update has to say so.
 _ICEBERG = {"bigquery.schema_evolution_engine": "iceberg"}
-_NATIVE = {"bigquery.schema_evolution_engine": "native"}
 
 
 def _batch(path: Path, columns: dict[str, list | pl.Series]) -> Path:
@@ -242,7 +241,7 @@ def _merge_out(
             merge_cfg=[merge_cfg],
             schema_evolution=schema_evolution,
             watermark_column=watermark_column,
-            dest_cfg=_ICEBERG,
+            dest_cfg=_ICEBERG if schema_evolution == "update" else None,
         ),
         [pl.scan_parquet(parquet)],
     )
@@ -634,13 +633,29 @@ def test_dest_plugin_write_out_merge_resolves_table_name_spelling(
         db.drop_table(table)
 
 
+def _unoffered_iceberg(monkeypatch) -> None:
+    """Route a bulk load through the iceberg pass. The matrix never offers it --
+    registration refuses the engine on an append -- but the path stays in the
+    plugin, so it stays tested."""
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._schema.matrix import Resolution
+
+    monkeypatch.setattr(
+        BigQueryDest,
+        "_evolution",
+        lambda self: Resolution(self.if_table_exists, self.schema_evolution, "iceberg"),
+    )
+
+
 # ---------------------------------------------------------------------------
-# schema_evolution_engine="iceberg" on a bulk load
+# The iceberg pass on a bulk load
 #
 # BigQuery's schema_update_options only add a column or relax one to nullable,
 # so a bulk load cannot widen one however the batch has grown. Diffing the
 # target against the batch reaches what those cannot -- and refuses what
-# BigQuery could not do at all.
+# BigQuery could not do at all. The matrix does not offer it on a bulk load,
+# which evolves natively, so the tests below force the resolution
+# (`_unoffered_iceberg`) to keep the path covered.
 #
 # A target of a particular type has to be built with DDL: one the load job
 # creates is inferred from the batch itself, so both sides would agree by
@@ -675,6 +690,7 @@ def _load_out(
 def test_dest_plugin_write_out_iceberg_engine_widens_a_numeric(
     domain_bigquery: BigQueryDomain,
     tmp_path: Path,
+    monkeypatch,
 ):
     # An INT64 target against a NUMERIC batch: a widening BigQuery allows and
     # the load-job options cannot reach, so it is the plainest thing the engine
@@ -683,6 +699,7 @@ def test_dest_plugin_write_out_iceberg_engine_widens_a_numeric(
     table = "td_dest_iceberg_widen_numeric"
     work = work_dir(tmp_path)
     conn = dest_conn(domain_bigquery)
+    _unoffered_iceberg(monkeypatch)
     db.create_typed_table(table, "order_id INT64, amount INT64")
     batch = _batch(
         tmp_path / "priced.parquet",
@@ -692,7 +709,7 @@ def test_dest_plugin_write_out_iceberg_engine_widens_a_numeric(
         },
     )
     try:
-        _load_out(conn, work, table, batch, dest_cfg=_ICEBERG)
+        _load_out(conn, work, table, batch)
         assert db.column_types(table)["amount"][0] == "NUMERIC"
         assert db.count(table) == 1
     finally:
@@ -700,13 +717,13 @@ def test_dest_plugin_write_out_iceberg_engine_widens_a_numeric(
 
 
 @bigquery_domain("bigquery")
-def test_dest_plugin_write_out_native_engine_cannot_widen(
+def test_dest_plugin_write_out_a_bulk_load_cannot_widen(
     domain_bigquery: BigQueryDomain,
     tmp_path: Path,
 ):
-    # The counterpart, and the reason the option exists: schema_update_options
-    # add columns and relax nullability, so the retype has nowhere to go and
-    # the load job refuses the batch.
+    # What a bulk load does: schema_update_options add columns and relax
+    # nullability, so the retype has nowhere to go and the load job refuses the
+    # batch.
     db = store(domain_bigquery)
     table = "td_dest_native_widen_numeric"
     work = work_dir(tmp_path)
@@ -721,7 +738,7 @@ def test_dest_plugin_write_out_native_engine_cannot_widen(
     )
     try:
         with pytest.raises(BigQueryRuntimeException):
-            _load_out(conn, work, table, batch, dest_cfg=_NATIVE)
+            _load_out(conn, work, table, batch)
         assert db.column_types(table)["amount"][0] == "INTEGER"
     finally:
         db.drop_table(table)
@@ -731,6 +748,7 @@ def test_dest_plugin_write_out_native_engine_cannot_widen(
 def test_dest_plugin_write_out_iceberg_engine_adds_a_new_column(
     domain_bigquery: BigQueryDomain,
     tmp_path: Path,
+    monkeypatch,
 ):
     # The half both engines can do, so the Iceberg pass has to do it too --
     # with the load-job options off, it is the only thing that would.
@@ -738,16 +756,17 @@ def test_dest_plugin_write_out_iceberg_engine_adds_a_new_column(
     table = "td_dest_iceberg_add_column"
     work = work_dir(tmp_path)
     conn = dest_conn(domain_bigquery)
+    _unoffered_iceberg(monkeypatch)
     narrow = _batch(tmp_path / "narrow.parquet", {"order_id": [1], "status": ["new"]})
     widened = _batch(
         tmp_path / "widened.parquet",
         {"order_id": [2], "status": ["new"], "priority": ["high"]},
     )
     try:
-        _load_out(conn, work, table, narrow, dest_cfg=_ICEBERG)
+        _load_out(conn, work, table, narrow)
         assert "priority" not in db.read_table(table).columns
 
-        _load_out(conn, work, table, widened, dest_cfg=_ICEBERG)
+        _load_out(conn, work, table, widened)
         got = db.read_table(table)
         assert "priority" in got.columns
         assert got.filter(got["order_id"] == 2)["priority"].to_list() == ["high"]
@@ -759,6 +778,7 @@ def test_dest_plugin_write_out_iceberg_engine_adds_a_new_column(
 def test_dest_plugin_write_out_iceberg_engine_refuses_an_impossible_retype(
     domain_bigquery: BigQueryDomain,
     tmp_path: Path,
+    monkeypatch,
 ):
     # No ALTER reconciles two kinds, so the write stops before the load rather
     # than after it has half-applied.
@@ -766,6 +786,7 @@ def test_dest_plugin_write_out_iceberg_engine_refuses_an_impossible_retype(
     table = "td_dest_iceberg_unsafe"
     work = work_dir(tmp_path)
     conn = dest_conn(domain_bigquery)
+    _unoffered_iceberg(monkeypatch)
     db.create_typed_table(table, "order_id INT64, amount NUMERIC")
     before = db.column_types(table)
     batch = _batch(
@@ -774,7 +795,7 @@ def test_dest_plugin_write_out_iceberg_engine_refuses_an_impossible_retype(
     )
     try:
         with pytest.raises(SqlCommonRuntimeException) as ei:
-            _load_out(conn, work, table, batch, dest_cfg=_ICEBERG)
+            _load_out(conn, work, table, batch)
         assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_10
         assert db.column_types(table) == before
         assert db.count(table) == 0
@@ -803,9 +824,7 @@ def test_dest_plugin_write_out_iceberg_engine_still_refuses_a_widened_batch_on_s
     )
     try:
         with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
-            _load_out(
-                conn, work, table, batch, schema_evolution="strict", dest_cfg=_ICEBERG
-            )
+            _load_out(conn, work, table, batch, schema_evolution="strict")
         assert db.column_types(table) == before
         assert db.count(table) == 0
     finally:
@@ -827,9 +846,7 @@ def test_dest_plugin_write_out_iceberg_engine_loads_a_same_shape_batch_on_strict
     before = db.column_types(table)
     batch = _batch(tmp_path / "same.parquet", {"order_id": [1], "status": ["new"]})
     try:
-        _load_out(
-            conn, work, table, batch, schema_evolution="strict", dest_cfg=_ICEBERG
-        )
+        _load_out(conn, work, table, batch, schema_evolution="strict")
         assert db.column_types(table) == before
         assert db.count(table) == 1
     finally:

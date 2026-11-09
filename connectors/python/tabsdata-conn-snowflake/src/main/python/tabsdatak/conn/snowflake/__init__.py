@@ -47,6 +47,9 @@ from tabsdatak.conn.common import _validation as _common_validation
 from tabsdatak.conn.common.sql._merge import MergeCfg as SqlMergeCfg
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.matrix import Resolution, resolve_dest
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._watermark import validate_watermark_column
 
 # noinspection PyProtectedMember
@@ -109,11 +112,11 @@ MergeColumnSpec: TypeAlias = SnowflakeColumnSpec
 MergeColumnsSpec: TypeAlias = list[SnowflakeColumnSpec]
 
 
-SchemaEvolutionEngineSpec: TypeAlias = Literal["native", "iceberg"]
-"""Which machinery evolves the target's schema. `"native"` leans on
-Snowflake's own `ENABLE_SCHEMA_EVOLUTION`, which `COPY INTO` honours;
-`"iceberg"` has the connector diff the target against the incoming file and
-emit the `ALTER` statements itself."""
+SchemaEvolutionEngineSpec: TypeAlias = Literal["iceberg"]
+"""The only engine a user writes, and only to evolve a merge: append and
+replace evolve natively, through Snowflake's own `ENABLE_SCHEMA_EVOLUTION`,
+which `COPY INTO` honours, and a `MERGE` takes no such option, so the connector
+diffs the target against the batch and emits the `ALTER` statements itself."""
 
 
 # --- SnowflakeDest.dest_cfg keys ------------------------------------
@@ -340,17 +343,42 @@ class SnowflakeDest(Dest):
             behind.
         dest_cfg: Optional connector config. Supported keys:
             `snowflake.logging_level`, and
-            `snowflake.schema_evolution_engine` -- `"iceberg"` (the default
-            when unset) or `"native"`. `"iceberg"` diffs the target against
-            the incoming file and runs the `ALTER` statements itself: it adds
-            a column and widens one whose type the batch has outgrown, and
-            refuses a change Snowflake could not make. `"native"` leaves
-            `schema_evolution="update"` to Snowflake's
-            `ENABLE_SCHEMA_EVOLUTION`, which `COPY INTO` honours and which
-            only ever adds a column, never widens one; a `MERGE` does not read
-            it at all, so `if_table_exists="merge"` refuses `"native"`.
-            Under `schema_evolution="strict"` both engines refuse a batch
-            with a new column or a wider type.
+            `snowflake.schema_evolution_engine`, written only as `"iceberg"`
+            and only with `if_table_exists="merge"` and
+            `schema_evolution="update"`: a merge evolves the target by
+            diffing it against the batch and running the `ALTER` statements
+            itself, adding a column and widening one whose type the batch
+            has outgrown. Append and replace always evolve natively, which
+            only ever adds a column or relaxes one to nullable, never widens
+            one.
+
+    Schema evolution:
+        What each written `schema_evolution`, and engine, resolves to
+        per `if_table_exists`; registration refuses every INVALID and
+        PLANNED combination and reports the one it resolves:
+
+        .. code-block:: text
+
+            +----------------+---------------+---------------+----------------+
+            |                | append        | replace       | merge          |
+            +----------------+---------------+---------------+----------------+
+            | engine         | native        | native        | iceberg        |
+            | left out       | strict        | strict        | strict         |
+            | strict         | strict        | strict        | strict         |
+            | update         | update/native | update/native | INVALID        |
+            | update+iceberg | INVALID       | INVALID       | update/iceberg |
+            | other engine   | INVALID       | INVALID       | INVALID        |
+            +----------------+---------------+---------------+----------------+
+
+            The engine is written as
+            dest_cfg={'snowflake.schema_evolution_engine': 'iceberg'}.
+
+            [1] Native evolution on BigQuery and Snowflake adds columns and
+                makes columns nullable, but never widens a type.
+
+            [2] Their native evolution doesn't apply to MERGE. To evolve a
+                merge, write the engine iceberg explicitly; update alone is
+                rejected with a message saying so.
 
     Examples:
         Append rows to a table -- the default disposition, which
@@ -393,6 +421,7 @@ class SnowflakeDest(Dest):
                     tables=["cap_merge"],
                     if_table_exists="merge",
                     merge_cfg=[MergeCfg(on=["cap_id"], op_column="op")],
+                    schema_evolution="update",
                     dest_cfg={"snowflake.schema_evolution_engine": "iceberg"},
                 ),
                 input_tables=["caps_input/cap_changes"],
@@ -424,8 +453,8 @@ class SnowflakeDest(Dest):
     def validate(self) -> None:
         """Cross-field validation: `merge_cfg` and `if_table_exists="merge"`
         require each other, a list of configs must line up with `tables`,
-        `watermark_column` is not a replace's to name, and merging refuses
-        `schema_evolution_engine="native"`.
+        `watermark_column` is not a replace's to name, and the disposition,
+        policy and engine form a combination the destination offers.
 
         Called by the framework; raises `SnowflakeValidateException`.
         """
@@ -452,7 +481,12 @@ class SnowflakeDest(Dest):
             validate_watermark_column(cfg._sql_merge_cfg(), self._watermark_column())
         # Last, so a merge that is malformed in a more basic way reports that
         # instead: a missing merge_cfg is the thing to fix first.
-        engine = (self.dest_cfg or {}).get("snowflake.schema_evolution_engine")
-        if merging and engine == "native":
-            # noinspection PyProtectedMember
-            raise SnowflakeErrorCode.SNOWFLAKE_22.exception()
+        self._evolution()
+
+    def _evolution(self) -> Resolution:
+        """The disposition, policy and engine a write applies, resolved
+        against the schema evolution matrix."""
+        return resolve_dest("snowflake", self)
+
+    def _materialized(self) -> dict[str, str]:
+        return self._evolution().options()

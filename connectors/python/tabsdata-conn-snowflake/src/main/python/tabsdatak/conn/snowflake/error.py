@@ -121,21 +121,6 @@ class SnowflakeErrorCode(ErrorCode):
         " so columns whose names differ only in case cannot be told apart",
     )  # _coalesced_parquet: ambiguous case-insensitive match
 
-    # --- schema_evolution_engine (tabsdatak.conn.snowflake) ---------
-    SNOWFLAKE_21 = ErrorDef(
-        SnowflakeValidateException,
-        "SnowflakeDest.dest_cfg['snowflake.schema_evolution_engine']={value!r}"
-        " is not a schema evolution engine; it is {allowed} or unset",
-    )  # _resolve_dest_cfg
-    SNOWFLAKE_22 = ErrorDef(
-        SnowflakeValidateException,
-        'SnowflakeDest.if_table_exists="merge" does not take'
-        " dest_cfg={{'snowflake.schema_evolution_engine': 'native'}}."
-        " A MERGE does not read ENABLE_SCHEMA_EVOLUTION, so the connector"
-        " evolves a merge target with ALTER statements: leave the engine unset"
-        " or set it to 'iceberg'",
-    )  # SnowflakeDest.validate()
-
     # --- watermark_column (tabsdatak.conn.snowflake) ----------------
     SNOWFLAKE_23 = ErrorDef(
         SnowflakeValidateException,

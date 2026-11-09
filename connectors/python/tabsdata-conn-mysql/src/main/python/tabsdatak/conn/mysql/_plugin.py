@@ -218,7 +218,7 @@ class MySQLDestPlugin(DestPlugin[MySQLDestConn, MySQLDest, list[pl.LazyFrame]]):
             target_tables=list(dest.tables),
             if_table_exists=dest.if_table_exists,
             transactional=dest.transactional,
-            schema_evolution=dest.schema_evolution,
+            schema_evolution=dest._evolution().schema_evolution,
             cfg=cast(dict, dest.dest_cfg),
         )
 

@@ -225,7 +225,7 @@ class BigQueryWriteCfg:
             conn=conn,
             target_tables=target_tables,
             if_table_exists=dest.if_table_exists,
-            schema_evolution=dest.schema_evolution,
+            schema_evolution=dest._evolution().schema_evolution,
             merge_cfgs=dest._merge_cfgs(),
             watermark_column=dest._watermark_column(),
             dest_cfg=dest.dest_cfg,

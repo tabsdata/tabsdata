@@ -61,6 +61,9 @@ from tabsdatak.conn.common import _validation as _common_validation
 from tabsdatak.conn.common.sql._merge import MergeCfg as SqlMergeCfg
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.matrix import Resolution, resolve_dest
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._watermark import validate_watermark_column
 
 # noinspection PyProtectedMember
@@ -448,6 +451,24 @@ class DatabricksDest(Dest):
         dest_cfg: Optional connector config; the only supported key is
             `databricks.logging_level`.
 
+    Schema evolution:
+        What each written `schema_evolution`, and engine, resolves to
+        per `if_table_exists`; registration refuses every INVALID and
+        PLANNED combination and reports the one it resolves:
+
+        .. code-block:: text
+
+            +----------------+---------------+---------------+---------------+
+            |                | append        | replace       | merge         |
+            +----------------+---------------+---------------+---------------+
+            | engine         | native        | native        | native        |
+            | left out       | strict        | strict        | strict        |
+            | strict         | strict        | strict        | strict        |
+            | update         | update/native | update/native | update/native |
+            | update+iceberg | INVALID       | INVALID       | INVALID       |
+            | other engine   | INVALID       | INVALID       | INVALID       |
+            +----------------+---------------+---------------+---------------+
+
     Examples:
         Overwrite a Databricks table on each run:
 
@@ -563,3 +584,13 @@ class DatabricksDest(Dest):
             # The watermark is named here, so the checks against what the merge
             # already reads are made here too.
             validate_watermark_column(cfg._sql_merge_cfg(), self._watermark_column())
+        # Refuses a combination the matrix does not offer.
+        self._evolution()
+
+    def _evolution(self) -> Resolution:
+        """The disposition, policy and engine a write applies, resolved
+        against the schema evolution matrix."""
+        return resolve_dest("databricks", self)
+
+    def _materialized(self) -> dict[str, str]:
+        return self._evolution().options()

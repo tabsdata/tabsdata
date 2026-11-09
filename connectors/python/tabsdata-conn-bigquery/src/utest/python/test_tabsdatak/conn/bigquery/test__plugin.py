@@ -29,11 +29,14 @@ from tabsdatak.conn.bigquery._explorer import BigQueryConnectionExplorer
 from tabsdatak.conn.bigquery.error import (
     BigQueryErrorCode,
     BigQueryRuntimeException,
-    BigQueryValidateException,
 )
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.file._store import FileStore
-from tabsdatak.conn.common.sql.error import SqlCommonRuntimeException
+from tabsdatak.conn.common.sql.error import (
+    SqlCommonErrorCode,
+    SqlCommonRuntimeException,
+    SqlCommonValidateException,
+)
 from tabsdatak.conn.common.types import GCPJson
 
 pytestmark = pytest.mark.bigquery
@@ -169,12 +172,11 @@ def _evolving_clients(monkeypatch, target_columns, batch_columns, target_exists=
     return bq_client
 
 
-def _write(work_dir, dest_cfg=None, schema_evolution="update"):
+def _write(work_dir, schema_evolution="update"):
     dest = BigQueryDest(
         tables=["`my-project.analytics.users`"],
         if_table_exists="append",
         schema_evolution=schema_evolution,
-        dest_cfg=dest_cfg,
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     plugin._BigQueryDestPlugin().write_out(
@@ -186,13 +188,23 @@ def _alters(bq_client):
     return [c.args[0] for c in bq_client.query_and_wait.call_args_list]
 
 
-_ICEBERG_ENGINE = {"bigquery.schema_evolution_engine": "iceberg"}
-_NATIVE_ENGINE = {"bigquery.schema_evolution_engine": "native"}
+def _unoffered_iceberg(monkeypatch):
+    """Route an append through the iceberg pass. The matrix never offers it --
+    registration refuses the engine on an append -- but the path stays in the
+    plugin, so it stays tested."""
+    from tabsdatak.conn.common.sql._schema.matrix import Resolution
+
+    monkeypatch.setattr(
+        BigQueryDest,
+        "_evolution",
+        lambda self: Resolution(self.if_table_exists, self.schema_evolution, "iceberg"),
+    )
 
 
 def test_dest_plugin_iceberg_engine_widens_a_column(monkeypatch, work_dir):
     bq_client = _evolving_clients(monkeypatch, [("id", "INTEGER")], [("id", "NUMERIC")])
-    _write(work_dir, _ICEBERG_ENGINE)
+    _unoffered_iceberg(monkeypatch)
+    _write(work_dir)
     assert _alters(bq_client) == [
         "ALTER TABLE `my-project.analytics.users`"
         " ALTER COLUMN IF EXISTS `id` SET DATA TYPE NUMERIC"
@@ -205,7 +217,8 @@ def test_dest_plugin_iceberg_engine_adds_a_column_the_target_lacks(
     bq_client = _evolving_clients(
         monkeypatch, [("id", "INTEGER")], [("id", "INTEGER"), ("note", "STRING")]
     )
-    _write(work_dir, _ICEBERG_ENGINE)
+    _unoffered_iceberg(monkeypatch)
+    _write(work_dir)
     assert _alters(bq_client) == [
         "ALTER TABLE `my-project.analytics.users`"
         " ADD COLUMN IF NOT EXISTS `note` STRING"
@@ -216,8 +229,9 @@ def test_dest_plugin_iceberg_engine_refuses_a_change_bigquery_cannot_make(
     monkeypatch, work_dir
 ):
     bq_client = _evolving_clients(monkeypatch, [("id", "NUMERIC")], [("id", "STRING")])
+    _unoffered_iceberg(monkeypatch)
     with pytest.raises(SqlCommonRuntimeException):
-        _write(work_dir, _ICEBERG_ENGINE)
+        _write(work_dir)
     assert _alters(bq_client) == []
 
 
@@ -226,7 +240,8 @@ def test_dest_plugin_iceberg_engine_evolves_before_it_loads(monkeypatch, work_di
     bq_client = _evolving_clients(
         monkeypatch, [("id", "INTEGER")], [("id", "INTEGER"), ("note", "STRING")]
     )
-    _write(work_dir, _ICEBERG_ENGINE)
+    _unoffered_iceberg(monkeypatch)
+    _write(work_dir)
     # The batch is loaded once, into the target; its types are read off an
     # external table over the staged file, created before that load.
     loaded = [c.args[1] for c in bq_client.load_table_from_uri.call_args_list]
@@ -241,22 +256,20 @@ def test_dest_plugin_iceberg_engine_drops_the_table_it_read_the_batch_from(
     monkeypatch, work_dir
 ):
     bq_client = _evolving_clients(monkeypatch, [("id", "INTEGER")], [("id", "INTEGER")])
-    _write(work_dir, _ICEBERG_ENGINE)
+    _unoffered_iceberg(monkeypatch)
+    _write(work_dir)
     dropped = [c.args[0] for c in bq_client.delete_table.call_args_list]
     assert len(dropped) == 1 and dropped[0].startswith("my-project.analytics.users_")
 
 
-@pytest.mark.parametrize("engine", [_ICEBERG_ENGINE, _NATIVE_ENGINE])
-def test_dest_plugin_strict_refuses_a_new_column_before_the_load(
-    monkeypatch, work_dir, engine
-):
-    """Strict pins the target's schema whatever the engine, and refuses with
-    the policy's error rather than the load job's."""
+def test_dest_plugin_strict_refuses_a_new_column_before_the_load(monkeypatch, work_dir):
+    """Strict pins the target's schema, and refuses with the policy's error
+    rather than the load job's."""
     bq_client = _evolving_clients(
         monkeypatch, [("id", "INTEGER")], [("id", "INTEGER"), ("note", "STRING")]
     )
     with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
-        _write(work_dir, engine, schema_evolution="strict")
+        _write(work_dir, schema_evolution="strict")
     assert _alters(bq_client) == []
     assert bq_client.load_table_from_uri.call_count == 0
 
@@ -363,7 +376,7 @@ def test_dest_plugin_native_engine_emits_no_alters_of_its_own(monkeypatch, work_
     bq_client = _evolving_clients(
         monkeypatch, [("id", "INTEGER")], [("id", "INTEGER"), ("note", "STRING")]
     )
-    _write(work_dir, _NATIVE_ENGINE)
+    _write(work_dir)
     assert _alters(bq_client) == []
     assert bq_client.load_table_from_uri.call_count == 1
 
@@ -376,29 +389,43 @@ def test_dest_plugin_iceberg_engine_skips_a_target_that_does_not_exist(
     bq_client = _evolving_clients(
         monkeypatch, [], [("id", "INTEGER")], target_exists=False
     )
-    _write(work_dir, _ICEBERG_ENGINE)
+    _unoffered_iceberg(monkeypatch)
+    _write(work_dir)
     assert _alters(bq_client) == []
 
 
-def test_dest_plugin_defaults_to_the_iceberg_engine():
-    assert plugin._resolve_dest_cfg(None).schema_evolution_engine == "iceberg"
+def test_dest_plugin_appends_and_replaces_on_the_native_engine():
+    for disposition in ("append", "replace"):
+        dest = BigQueryDest(tables=["`p.ds.t`"], if_table_exists=disposition)
+        assert dest._evolution().engine == "native"
 
 
-@pytest.mark.parametrize("engine", ["native", "iceberg"])
-def test_dest_plugin_reads_the_engine_off_dest_cfg(engine):
-    cfg = plugin._resolve_dest_cfg({"bigquery.schema_evolution_engine": engine})
-    assert cfg.schema_evolution_engine == engine
+def test_dest_plugin_merges_on_the_iceberg_engine_written_with_update():
+    dest = BigQueryDest(
+        tables=["`p.ds.t`"],
+        if_table_exists="merge",
+        schema_evolution="update",
+        merge_cfg=[MergeCfg(on=["id"], op_column="op")],
+        dest_cfg=_ICEBERG,
+    )
+    assert dest._evolution().engine == "iceberg"
 
 
-def test_dest_plugin_rejects_an_unknown_engine():
-    with pytest.raises(BigQueryValidateException) as ei:
-        plugin._resolve_dest_cfg({"bigquery.schema_evolution_engine": "icebrg"})
-    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_21
+def test_dest_rejects_an_unknown_engine():
+    with pytest.raises(SqlCommonValidateException) as ei:
+        BigQueryDest(
+            tables=["`p.ds.t`"],
+            if_table_exists="merge",
+            schema_evolution="update",
+            merge_cfg=[MergeCfg(on=["id"], op_column="op")],
+            dest_cfg={"bigquery.schema_evolution_engine": "icebrg"},
+        )
+    assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_11
     assert "'icebrg'" in str(ei.value)
 
 
 # A MERGE takes no load-job options, so the connector evolves its target with
-# ALTER statements or not at all -- and the write has to say so.
+# ALTER statements or not at all -- and an update has to say so.
 _ICEBERG = {"bigquery.schema_evolution_engine": "iceberg"}
 
 
@@ -713,7 +740,6 @@ def test_write_cfg_carries_one_merge_cfg_per_table():
         tables=["`p.ds.users`", "`p.ds.orders`"],
         if_table_exists="merge",
         merge_cfg=[users, orders],
-        dest_cfg=_ICEBERG,
     )
     cfg = impl.BigQueryWriteCfg.from_dest(_bare_conn(), dest)
     assert cfg.merge_cfgs == [users, orders]
@@ -726,7 +752,6 @@ def test_write_cfg_keeps_a_merge_cfg_per_table_aligned_with_target_tables():
         tables=["`users`", "`orders`"],
         if_table_exists="merge",
         merge_cfg=[first, second],
-        dest_cfg=_ICEBERG,
     )
     cfg = impl.BigQueryWriteCfg.from_dest(_bare_conn(), dest)
     assert cfg.target_tables == [
@@ -989,7 +1014,6 @@ def test_dest_plugin_loads_a_merge_batch_into_a_staging_table(monkeypatch, work_
         tables=["`my-project.analytics.users`"],
         if_table_exists="merge",
         merge_cfg=[MergeCfg(on=["id"], op_column="op")],
-        dest_cfg=_ICEBERG,
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
     plugin._BigQueryDestPlugin().write_out(
@@ -1023,7 +1047,6 @@ def test_dest_plugin_gives_each_merge_table_its_own_staging_table(
         tables=["`p.ds.users`", "`p.ds.orders`"],
         if_table_exists="merge",
         merge_cfg=[MergeCfg(on=["id"], op_column="op")] * 2,
-        dest_cfg=_ICEBERG,
     )
     src1 = _make_parquet(work_dir / "in1.parquet", [{"id": 1, "op": "i"}])
     src2 = _make_parquet(work_dir / "in2.parquet", [{"id": 2, "op": "i"}])
@@ -1046,7 +1069,6 @@ def test_dest_plugin_merges_the_staging_table_then_drops_it(monkeypatch, work_di
         tables=["`my-project.analytics.users`"],
         if_table_exists="merge",
         merge_cfg=[MergeCfg(on=["id"], op_column="op")],
-        dest_cfg=_ICEBERG,
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
     plugin._BigQueryDestPlugin().write_out(
@@ -1109,7 +1131,7 @@ def _merge_dest(schema_evolution):
         if_table_exists="merge",
         schema_evolution=schema_evolution,
         merge_cfg=[MergeCfg(on=["id"], op_column="op")],
-        dest_cfg=_ICEBERG,
+        dest_cfg=_ICEBERG if schema_evolution == "update" else None,
     )
 
 
@@ -1376,7 +1398,6 @@ def test_dest_plugin_pairs_each_table_with_its_own_merge_cfg(monkeypatch, work_d
             MergeCfg(on=["id"], op_column="op"),
             MergeCfg(on=["other_id"], op_column="op"),
         ],
-        dest_cfg=_ICEBERG,
     )
     rows = [{"id": 1, "other_id": 10, "op": "i"}]
     src1 = _make_parquet(work_dir / "in1.parquet", rows)
@@ -1407,7 +1428,6 @@ def test_dest_plugin_names_the_staging_table_in_a_failed_merge_load(
         tables=["`my-project.analytics.users`"],
         if_table_exists="merge",
         merge_cfg=[MergeCfg(on=["id"], op_column="op")],
-        dest_cfg=_ICEBERG,
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
     with pytest.raises(BigQueryRuntimeException) as ei:
@@ -1698,7 +1718,8 @@ def test_dest_plugin_append_watermark_leaves_the_iceberg_pass_nothing_to_add(
         target_columns=(("id", "INTEGER"),),
         batch_columns=(("id", "INTEGER"), (_WATERMARK, "STRING")),
     )
-    _watermark_write(work_dir, schema_evolution="update", dest_cfg=_ICEBERG_ENGINE)
+    _unoffered_iceberg(monkeypatch)
+    _watermark_write(work_dir, schema_evolution="update")
     assert len(_watermark_alters(bq_client)) == 1
 
 

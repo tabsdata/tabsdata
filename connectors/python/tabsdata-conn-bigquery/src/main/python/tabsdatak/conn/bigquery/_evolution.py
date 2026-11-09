@@ -11,10 +11,11 @@ cannot: a column whose type the batch has outgrown is widened, and a change
 BigQuery could not make refuses the write rather than letting the load job
 discover it.
 
-A merge always comes through here -- a ``MERGE`` takes no load-job options,
-so a merge target is evolved here or not at all. A bulk load comes through
-only when the write asks for it with
-``dest_cfg={"bigquery.schema_evolution_engine": "iceberg"}``.
+A merge comes through here -- a ``MERGE`` takes no load-job options, so a
+merge target is evolved here or not at all; the write asks for it with
+``dest_cfg={"bigquery.schema_evolution_engine": "iceberg"}`` and
+``schema_evolution="update"``. A bulk load evolves natively, and only its
+strict check diffs here.
 """
 
 from __future__ import annotations

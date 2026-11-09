@@ -51,6 +51,9 @@ from tabsdatak.api import (
 from tabsdatak.conn.common import _validation as _common_validation
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.matrix import Resolution, resolve_dest
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     AwsRegionSpec,
@@ -84,6 +87,9 @@ DruidTableNamesSpec: TypeAlias = Annotated[
 """A list of Druid datasources (see `DruidTableNameSpec`), each at most once;
 datasource names are case-sensitive."""
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
+SchemaEvolutionSpec: TypeAlias = Literal["update"]
+"""Druid cannot enforce a schema: a datasource takes whatever columns a batch
+brings, so `"update"` is the only policy."""
 # Druid's accepted segment-granularity tokens (subset, the most-used
 # values; the engine accepts more but these cover the common cases).
 SegmentGranularitySpec: TypeAlias = Literal[
@@ -335,6 +341,9 @@ class DruidDest(Dest):
             `/`, backslash or NUL).
         if_table_exists: `"append"` (default) or `"replace"`
             (overwrite the datasource).
+        schema_evolution: `"update"`, the default and only policy: Druid
+            cannot enforce a schema, so a datasource takes whatever columns
+            a batch brings.
         time_column: Name of the row-level timestamp column Druid uses
             as its primary `__time` field at ingest. Druid requires a
             time column on every datasource; if the rows carry none,
@@ -357,6 +366,29 @@ class DruidDest(Dest):
             `druid.retry_attempts` and
             `druid.retry_backoff_seconds`.
 
+    Schema evolution:
+        What each written `schema_evolution`, and engine, resolves to
+        per `if_table_exists`; registration refuses every INVALID and
+        PLANNED combination and reports the one it resolves:
+
+        .. code-block:: text
+
+            +----------------+---------------+---------------+---------+
+            |                | append        | replace       | merge   |
+            +----------------+---------------+---------------+---------+
+            | engine         | native        | native        | -       |
+            | left out       | update/native | update/native | INVALID |
+            | strict         | INVALID       | INVALID       | INVALID |
+            | update         | update/native | update/native | INVALID |
+            | update+iceberg | INVALID       | INVALID       | INVALID |
+            | other engine   | INVALID       | INVALID       | INVALID |
+            +----------------+---------------+---------------+---------+
+
+            merge: impossible -- no keyed upsert.
+
+            [4] Druid can't enforce a schema, so update is its only policy and
+                its default.
+
     Examples:
         Overwrite the datasource on every run instead of appending:
 
@@ -372,6 +404,7 @@ class DruidDest(Dest):
 
     tables: DruidTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
+    schema_evolution: SchemaEvolutionSpec = "update"
     time_column: str | None = None
     segment_granularity: SegmentGranularitySpec = "ALL"
     max_concurrent_subtasks: int = 1
@@ -379,3 +412,19 @@ class DruidDest(Dest):
     max_rows_in_memory: int = 1_000_000
     http_timeout_sec: int = 300
     dest_cfg: DestCfgSpec | None = None
+
+    def validate(self) -> None:
+        """Cross-field validation: `if_table_exists`, `schema_evolution` and
+        the engine form a combination this destination offers.
+
+        Called by the framework; raises `SqlCommonValidateException`.
+        """
+        self._evolution()
+
+    def _evolution(self) -> Resolution:
+        """The disposition, policy and engine a write applies, resolved
+        against the schema evolution matrix."""
+        return resolve_dest("druid", self)
+
+    def _materialized(self) -> dict[str, str]:
+        return self._evolution().options()

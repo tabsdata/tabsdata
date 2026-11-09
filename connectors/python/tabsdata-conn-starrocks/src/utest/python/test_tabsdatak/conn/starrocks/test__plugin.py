@@ -13,6 +13,7 @@ import pytest
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from tabsdatak.api import Secret
+from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     UserPassword,
@@ -27,7 +28,6 @@ from tabsdatak.conn.starrocks import _plugin as plugin
 from tabsdatak.conn.starrocks.error import (
     StarRocksErrorCode,
     StarRocksRuntimeException,
-    StarRocksValidateException,
 )
 from tabsdatak.conn.starrocks._explorer import StarRocksConnectionExplorer
 
@@ -336,14 +336,13 @@ def test_resolve_dest_cfg_warns_on_unknown_key_via_raw_dict(caplog):
     assert any("Unknown dest_cfg key" in r.getMessage() for r in caplog.records)
 
 
-def test_dest_cfg_takes_the_iceberg_engine():
-    plugin._resolve_dest_cfg({"starrocks.schema_evolution_engine": "iceberg"})
-
-
-def test_dest_cfg_rejects_another_engine():
-    with pytest.raises(StarRocksValidateException) as ei:
-        plugin._resolve_dest_cfg({"starrocks.schema_evolution_engine": "native"})
-    assert ei.value.api_error is StarRocksErrorCode.STARROCKS_13
+@pytest.mark.parametrize("engine", ["iceberg", "native"])
+def test_dest_takes_no_engine(engine):
+    """StarRocks evolves with its one engine; writing any is refused."""
+    with pytest.raises(ConnInitException, match="schema_evolution_engine"):
+        StarRocksDest(
+            tables=["t"], dest_cfg={"starrocks.schema_evolution_engine": engine}
+        )
 
 
 def test_execute_evolves_each_table_before_loading_it(monkeypatch, _evolutions):

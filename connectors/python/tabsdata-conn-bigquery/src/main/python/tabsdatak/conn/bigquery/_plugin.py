@@ -42,16 +42,13 @@ _KEY_DEST_SCHEMA_EVOLUTION_ENGINE: DestCfgKey = "bigquery.schema_evolution_engin
 
 _DEST_CFGS_DEFAULTS: dict[DestCfgKey, Any] = {
     _KEY_DEST_LOGGING_LEVEL: logging.ERROR,
-    _KEY_DEST_SCHEMA_EVOLUTION_ENGINE: "iceberg",
+    _KEY_DEST_SCHEMA_EVOLUTION_ENGINE: None,
 }
-
-_SCHEMA_EVOLUTION_ENGINES = ("native", "iceberg")
 
 
 @dataclass(frozen=True)
 class _WriterCfg:
     logging_level: int
-    schema_evolution_engine: str
 
 
 def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
@@ -66,18 +63,8 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
     def _get(key: DestCfgKey) -> Any:
         return cfg.get(key, _DEST_CFGS_DEFAULTS[key])
 
-    engine = _get(_KEY_DEST_SCHEMA_EVOLUTION_ENGINE)
-    if engine not in _SCHEMA_EVOLUTION_ENGINES:
-        # A typo here would otherwise fall back to the default engine, with
-        # nothing said about it.
-        raise BigQueryErrorCode.BIGQUERY_21.exception(
-            value=engine,
-            allowed=" or ".join(repr(e) for e in _SCHEMA_EVOLUTION_ENGINES),
-        )
-
     return _WriterCfg(
         logging_level=int(_get(_KEY_DEST_LOGGING_LEVEL)),
-        schema_evolution_engine=engine,
     )
 
 
@@ -222,7 +209,7 @@ class _BigQueryDestPlugin(
             strict = write_cfg.schema_evolution == "strict"
             diffing = strict or (
                 write_cfg.schema_evolution == "update"
-                and cfg.schema_evolution_engine == "iceberg"
+                and dest._evolution().engine == "iceberg"
             )
 
             # Append is the only disposition that stamps: a merge has returned
@@ -339,7 +326,7 @@ class _BigQueryDestPlugin(
                     continue
                 job_config = build_load_job_config(
                     write_cfg.schema_evolution,
-                    cfg.schema_evolution_engine,
+                    dest._evolution().engine,
                 )
                 try:
                     _load_table_from_uri(

@@ -171,7 +171,6 @@ def test_dest_plugin_write_out_resolves_table_name_spelling(
 # A MERGE does not read ENABLE_SCHEMA_EVOLUTION, so the connector evolves its
 # target with ALTER statements or not at all -- and the write has to say so.
 _ICEBERG = {"snowflake.schema_evolution_engine": "iceberg"}
-_NATIVE = {"snowflake.schema_evolution_engine": "native"}
 
 
 def _batch(path: Path, columns: dict[str, list | pl.Series]) -> Path:
@@ -231,7 +230,7 @@ def _merge_out(
             merge_cfg=[merge_cfg],
             schema_evolution=schema_evolution,
             watermark_column=watermark_column,
-            dest_cfg=_ICEBERG,
+            dest_cfg=_ICEBERG if schema_evolution == "update" else None,
         ),
         [pl.scan_parquet(parquet)],
     )
@@ -564,7 +563,6 @@ def test_dest_plugin_write_out_merge_applies_one_cfg_per_table(
             MergeCfg(on=["order_id"], op_column="op"),
             MergeCfg(on=["item_id"], op_column="op"),
         ],
-        dest_cfg=_ICEBERG,
     )
     seeds = [
         _batch(
@@ -710,12 +708,29 @@ def test_dest_plugin_write_out_takes_a_new_column_on_update(
         db.drop_table(table)
 
 
+def _unoffered_iceberg(monkeypatch) -> None:
+    """Route a bulk load through the iceberg pass. The matrix never offers it --
+    registration refuses the engine on an append -- but the path stays in the
+    plugin, so it stays tested."""
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._schema.matrix import Resolution
+
+    monkeypatch.setattr(
+        SnowflakeDest,
+        "_evolution",
+        lambda self: Resolution(self.if_table_exists, self.schema_evolution, "iceberg"),
+    )
+
+
 # ---------------------------------------------------------------------------
-# schema_evolution_engine="iceberg" on a bulk load
+# The iceberg pass on a bulk load
 #
 # Snowflake's own evolution only ever adds a column, so a bulk load cannot widen
 # one however the batch has grown. Diffing the target against the staged file
 # reaches what the mark cannot -- and refuses what Snowflake could not do at all.
+# The matrix does not offer it on a bulk load, which evolves natively, so the
+# tests below force the resolution (`_unoffered_iceberg`) to keep the path
+# covered.
 #
 # A target of a particular width has to be built with DDL: one the connector
 # creates is templated from the staged file itself, so both sides would agree by
@@ -741,6 +756,7 @@ def _load_out(conn, work: Path, table: str, parquet: Path, **dest_kwargs) -> Non
 def test_dest_plugin_write_out_iceberg_engine_widens_a_bounded_text_column(
     domain_snowflake: SnowflakeDomain,
     tmp_path: Path,
+    monkeypatch,
 ):
     # A parquet string carries no length, so infer_schema reports the widest
     # text type and the bounded target column is widened to it. Recorded rather
@@ -751,11 +767,12 @@ def test_dest_plugin_write_out_iceberg_engine_widens_a_bounded_text_column(
     table = "TD_DEST_ICEBERG_WIDEN_TEXT"
     work = work_dir(tmp_path)
     conn = dest_conn(domain_snowflake)
+    _unoffered_iceberg(monkeypatch)
     db.create_typed_table(table, "ORDER_ID NUMBER(38,0), STATUS VARCHAR(10)")
     assert db.column_types(table)["status"] == ("TEXT", 10, None)
     batch = _batch(tmp_path / "short.parquet", {"order_id": [1], "status": ["new"]})
     try:
-        _load_out(conn, work, table, batch, dest_cfg=_ICEBERG)
+        _load_out(conn, work, table, batch)
         assert db.column_types(table)["status"] == ("TEXT", 16777216, None)
         assert db.count(table) == 1
     finally:
@@ -763,12 +780,12 @@ def test_dest_plugin_write_out_iceberg_engine_widens_a_bounded_text_column(
 
 
 @snowflake_domain("snowflake")
-def test_dest_plugin_write_out_native_engine_leaves_the_width_alone(
+def test_dest_plugin_write_out_a_bulk_load_leaves_the_width_alone(
     domain_snowflake: SnowflakeDomain,
     tmp_path: Path,
 ):
-    # The counterpart, and the reason the option exists: ENABLE_SCHEMA_EVOLUTION
-    # adds columns and nothing else, so the bounded column keeps its width.
+    # What a bulk load does: ENABLE_SCHEMA_EVOLUTION adds columns and nothing
+    # else, so the bounded column keeps its width.
     db = store(domain_snowflake)
     table = "TD_DEST_NATIVE_WIDEN_TEXT"
     work = work_dir(tmp_path)
@@ -776,7 +793,7 @@ def test_dest_plugin_write_out_native_engine_leaves_the_width_alone(
     db.create_typed_table(table, "ORDER_ID NUMBER(38,0), STATUS VARCHAR(10)")
     batch = _batch(tmp_path / "short.parquet", {"order_id": [1], "status": ["new"]})
     try:
-        _load_out(conn, work, table, batch, dest_cfg=_NATIVE)
+        _load_out(conn, work, table, batch)
         assert db.column_types(table)["status"] == ("TEXT", 10, None)
     finally:
         db.drop_table(table)
@@ -786,6 +803,7 @@ def test_dest_plugin_write_out_native_engine_leaves_the_width_alone(
 def test_dest_plugin_write_out_iceberg_engine_adds_a_new_column(
     domain_snowflake: SnowflakeDomain,
     tmp_path: Path,
+    monkeypatch,
 ):
     # The half both engines can do, so the Iceberg pass has to do it too --
     # with the mark off, it is the only thing that would.
@@ -793,16 +811,17 @@ def test_dest_plugin_write_out_iceberg_engine_adds_a_new_column(
     table = "TD_DEST_ICEBERG_ADD_COLUMN"
     work = work_dir(tmp_path)
     conn = dest_conn(domain_snowflake)
+    _unoffered_iceberg(monkeypatch)
     narrow = _batch(tmp_path / "narrow.parquet", {"order_id": [1], "status": ["new"]})
     widened = _batch(
         tmp_path / "widened.parquet",
         {"order_id": [2], "status": ["new"], "priority": ["high"]},
     )
     try:
-        _load_out(conn, work, table, narrow, dest_cfg=_ICEBERG)
+        _load_out(conn, work, table, narrow)
         assert "priority" not in db.read_table(table).columns
 
-        _load_out(conn, work, table, widened, dest_cfg=_ICEBERG)
+        _load_out(conn, work, table, widened)
         got = db.read_table(table)
         assert "priority" in got.columns
         assert got.filter(got["order_id"] == 2)["priority"].to_list() == ["high"]
@@ -814,6 +833,7 @@ def test_dest_plugin_write_out_iceberg_engine_adds_a_new_column(
 def test_dest_plugin_write_out_iceberg_engine_refuses_an_impossible_retype(
     domain_snowflake: SnowflakeDomain,
     tmp_path: Path,
+    monkeypatch,
 ):
     # No ALTER reconciles two bases, so the write stops before anything is
     # loaded rather than after COPY INTO has half-applied it.
@@ -821,6 +841,7 @@ def test_dest_plugin_write_out_iceberg_engine_refuses_an_impossible_retype(
     table = "TD_DEST_ICEBERG_UNSAFE"
     work = work_dir(tmp_path)
     conn = dest_conn(domain_snowflake)
+    _unoffered_iceberg(monkeypatch)
     db.create_typed_table(table, "ORDER_ID NUMBER(38,0), AMOUNT NUMBER(10,2)")
     before = db.column_types(table)
     batch = _batch(
@@ -829,7 +850,7 @@ def test_dest_plugin_write_out_iceberg_engine_refuses_an_impossible_retype(
     )
     try:
         with pytest.raises(SqlCommonRuntimeException):
-            _load_out(conn, work, table, batch, dest_cfg=_ICEBERG)
+            _load_out(conn, work, table, batch)
         assert db.column_types(table) == before
         assert db.count(table) == 0
     finally:
@@ -850,9 +871,7 @@ def test_dest_plugin_write_out_iceberg_engine_does_nothing_under_strict(
     db.create_typed_table(table, "ORDER_ID NUMBER(38,0), STATUS VARCHAR(10)")
     batch = _batch(tmp_path / "short.parquet", {"order_id": [1], "status": ["new"]})
     try:
-        _load_out(
-            conn, work, table, batch, schema_evolution="strict", dest_cfg=_ICEBERG
-        )
+        _load_out(conn, work, table, batch, schema_evolution="strict")
         assert db.column_types(table)["status"] == ("TEXT", 10, None)
         assert db.count(table) == 1
     finally:
@@ -2049,7 +2068,6 @@ def test_dest_plugin_write_out_merges_a_batch_staged_in_parts(
                 tables=[table],
                 if_table_exists="merge",
                 merge_cfg=[MergeCfg(on=["id"], op_column="op")],
-                dest_cfg=_ICEBERG,
             ),
             [batch],
         )

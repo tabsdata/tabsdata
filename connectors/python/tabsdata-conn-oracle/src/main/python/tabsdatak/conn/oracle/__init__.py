@@ -53,6 +53,9 @@ from tabsdatak.api import (
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._schema.matrix import Resolution, resolve_dest
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import (
     CfgSpec,
@@ -123,7 +126,6 @@ SrcCfgSpec: TypeAlias = Annotated[
 # --- OracleDest.dest_cfg keys ---------------------------------------
 DestCfgKey: TypeAlias = Literal[
     "oracle.logging_level",
-    "oracle.schema_evolution_engine",
     "tabsdata.sql.write_engine",
     "tabsdata.sql.chunk_size",
 ]
@@ -313,8 +315,29 @@ class OracleDest(Dest):
         dest_cfg: Optional config mapping over the allowed keys only
             (`oracle.logging_level`, `tabsdata.sql.write_engine`,
             `tabsdata.sql.chunk_size`).
-            `oracle.schema_evolution_engine` takes only `"iceberg"`, the
-            default.
+
+    Schema evolution:
+        What each written `schema_evolution`, and engine, resolves to
+        per `if_table_exists`; registration refuses every INVALID and
+        PLANNED combination and reports the one it resolves:
+
+        .. code-block:: text
+
+            +----------------+----------------+----------------+---------+
+            |                | append         | replace        | merge   |
+            +----------------+----------------+----------------+---------+
+            | engine         | iceberg        | iceberg        | PLANNED |
+            | left out       | strict         | strict         | PLANNED |
+            | strict         | strict         | strict         | PLANNED |
+            | update         | update/iceberg | update/iceberg | PLANNED |
+            | update+iceberg | INVALID        | INVALID        | PLANNED |
+            | other engine   | INVALID        | INVALID        | PLANNED |
+            +----------------+----------------+----------------+---------+
+
+            merge: planned -- backend can (MERGE).
+
+            [3] Strict refuses a wider type unless its values fit, as on every
+                other destination.
 
     Note:
         Column types are picked only when the target table is created (with
@@ -332,3 +355,19 @@ class OracleDest(Dest):
     transactional: bool = True
     schema_evolution: SchemaEvolutionSpec = "strict"
     dest_cfg: DestCfgSpec | None = None
+
+    def validate(self) -> None:
+        """Cross-field validation: `if_table_exists`, `schema_evolution` and
+        the engine form a combination this destination offers.
+
+        Called by the framework; raises `SqlCommonValidateException`.
+        """
+        self._evolution()
+
+    def _evolution(self) -> Resolution:
+        """The disposition, policy and engine a write applies, resolved
+        against the schema evolution matrix."""
+        return resolve_dest("oracle", self)
+
+    def _materialized(self) -> dict[str, str]:
+        return self._evolution().options()
