@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from typing import Any, Callable, Mapping
 
 import polars as pl
@@ -183,6 +183,18 @@ class PandasReadEngine(SqlAlchemyReadEngine):
         return _pandas_read
 
 
+def _named(
+    columns: list[str], description: Sequence[Sequence[Any]] | None
+) -> list[tuple[Any, ...]] | None:
+    """``description`` with each entry named as SQLAlchemy names its column.
+    Oracle and Db2 describe an unquoted name in upper case, which SQLAlchemy
+    folds to lower case in the result's keys; the entries are in the same
+    order as the keys."""
+    if not description or len(description) != len(columns):
+        return None
+    return [(name, *entry[1:]) for name, entry in zip(columns, description)]
+
+
 def _polars_read(
     *,
     connection: Any,
@@ -191,20 +203,46 @@ def _polars_read(
     schema_overrides: Mapping[str, Any] | None,
     parameters: Mapping[str, Any] | None = None,
 ) -> Iterator[pl.DataFrame]:
+    """Each batch of ``query``'s result, typed as its cursor description says
+    (:mod:`.described`) and as ``schema_overrides`` say over that; a column
+    neither types is inferred over every row of its batch, not only the first
+    rows, so a value after a run of NULLs is never refused."""
     from sqlalchemy import text
 
-    execute_options: dict[str, Any] = {}
-    if parameters:
-        execute_options["parameters"] = dict(parameters)
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._engine import described
 
-    yield from pl.read_database(
-        text(query),
-        connection=connection.execution_options(stream_results=True),
-        iter_batches=True,
-        batch_size=chunk_size,
-        schema_overrides=schema_overrides,
-        execute_options=execute_options or None,
+    result = connection.execution_options(stream_results=True).execute(
+        text(query), dict(parameters) if parameters else {}
     )
+    try:
+        columns = list(result.keys())
+        cursor = getattr(result, "cursor", None)
+        dtypes = described.dtypes(
+            connection.dialect.driver,
+            _named(columns, getattr(cursor, "description", None)),
+        )
+        dtypes.update(schema_overrides or {})
+        casts = {name: dtype for name, dtype in dtypes.items() if name in columns}
+        warned: set[str] = set()
+        for rows in result.partitions(chunk_size):
+            batch = pl.DataFrame(
+                [tuple(row) for row in rows],
+                schema=columns,
+                orient="row",
+                infer_schema_length=None,
+            )
+            for name, dtype in batch.schema.items():
+                if dtype == pl.Null and name not in casts and name not in warned:
+                    warned.add(name)
+                    logger.warning(
+                        "Column %r has no type in the query's description and is"
+                        " NULL in every row of a batch, so it is typed Null there",
+                        name,
+                    )
+            yield batch.cast(casts) if casts else batch
+    finally:
+        result.close()
 
 
 class PolarsReadEngine(SqlAlchemyReadEngine):
