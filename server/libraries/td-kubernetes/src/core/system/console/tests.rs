@@ -138,7 +138,7 @@ fn a_child_in_its_own_console_runs_and_reports_its_exit_code() {
 #[cfg(windows)]
 mod jobs {
     use std::ffi::OsStr;
-    use std::io::{BufRead, BufReader, Write};
+    use std::io::{Read, Write};
     use std::os::windows::ffi::OsStrExt;
     use std::os::windows::io::AsRawHandle;
     use std::process::{Command, Stdio};
@@ -230,13 +230,17 @@ mod jobs {
         let assigned = unsafe { AssignProcessToJobObject(job.0, helper.as_raw_handle() as HANDLE) };
         assert_ne!(assigned, 0, "assign helper to job {name}");
         writeln!(helper.stdin.take().expect("helper stdin")).expect("release helper");
-        let reported = BufReader::new(helper.stdout.take().expect("helper stdout"))
-            .lines()
-            .map_while(Result::ok)
-            .find_map(|line| {
-                line.split_once(IN_JOB)
-                    .map(|(_, value)| value.trim() == "true")
-            });
+        let mut output = Vec::new();
+        helper
+            .stdout
+            .take()
+            .expect("helper stdout")
+            .read_to_end(&mut output)
+            .expect("read helper");
+        let reported = String::from_utf8_lossy(&output).lines().find_map(|line| {
+            line.split_once(IN_JOB)
+                .map(|(_, value)| value.trim() == "true")
+        });
         let status = helper.wait().expect("wait helper");
         assert!(status.success(), "helper failed in job {name}: {status}");
         reported.expect("helper reported where its child ran")
