@@ -9,6 +9,7 @@ the registry, and the reader over SQLite."""
 from __future__ import annotations
 
 import datetime as dt
+import uuid
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -16,7 +17,6 @@ import polars as pl
 import pytest
 from sqlalchemy import create_engine, text
 
-# noinspection PyProtectedMember
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine import described, sqlalchemy_reader as sar
 
@@ -69,7 +69,8 @@ def _column(code, precision=None, scale=None, *extra, name="c") -> Column:
         ("DEC(5, 1)", pl.Decimal(5, 1)),
         ("NUMBER(5)", pl.Decimal(5, 0)),
         ("DECIMAL(38, 38)", pl.Decimal(38, 38)),
-        ("DECIMAL(39, 2)", None),
+        ("DECIMAL(39, 2)", pl.String),
+        ("NUMERIC(1000, 500)", pl.String),
         ("DECIMAL(5, 6)", None),
         ("REAL", pl.Float32),
         ("FLOAT4", pl.Float32),
@@ -101,6 +102,9 @@ def _column(code, precision=None, scale=None, *extra, name="c") -> Column:
         ("UNIQUEIDENTIFIER", pl.String),
         ("ROWID", pl.String),
         ("XML", pl.String),
+        ("XMLTYPE", pl.String),
+        ("JSON", pl.String),
+        ("JSONB", pl.String),
         ("BINARY(4)", pl.Binary),
         ("VARBINARY", pl.Binary),
         ("BLOB", pl.Binary),
@@ -117,6 +121,7 @@ def _column(code, precision=None, scale=None, *extra, name="c") -> Column:
         ("BIT(8)", None),
         ("YEAR", pl.Int16),
         ("OID", pl.Int64),
+        ("NULL", pl.Null),
         ("DATE", pl.Date),
         ("TIME", pl.Time),
         ("TIME WITHOUT TIME ZONE", pl.Time),
@@ -129,8 +134,6 @@ def _column(code, precision=None, scale=None, *extra, name="c") -> Column:
         ("timestamp with time zone", pl.Datetime("us", "UTC")),
         ("INTERVAL", pl.Duration("us")),
         ("INTERVAL DAY TO SECOND", pl.Duration("us")),
-        ("JSON", None),
-        ("JSONB", None),
         ("GEOMETRY", None),
         ("TIME WITH TIME ZONE", None),
         ("", None),
@@ -154,9 +157,13 @@ def test_the_parameters_in_a_name_win_over_the_described_ones():
 @pytest.mark.parametrize(
     "precision,scale,dtype",
     [
+        (1, 0, pl.Decimal(1, 0)),
+        (1, 1, pl.Decimal(1, 1)),
         (10, 2, pl.Decimal(10, 2)),
         (38, 0, pl.Decimal(38, 0)),
-        (39, 0, None),
+        (38, 38, pl.Decimal(38, 38)),
+        (39, 0, pl.String),
+        (65, 30, pl.String),
         (0, 0, None),
         (10, -1, None),
         (10, 11, None),
@@ -164,8 +171,24 @@ def test_the_parameters_in_a_name_win_over_the_described_ones():
         (10, None, None),
     ],
 )
-def test_a_decimal_needs_a_precision_and_scale_polars_can_hold(precision, scale, dtype):
+def test_a_decimal_is_held_by_a_decimal_or_else_by_text(precision, scale, dtype):
     assert names.decimal(precision, scale) == dtype
+
+
+@pytest.mark.parametrize(
+    "name,precision,wide",
+    [
+        ("DECIMAL(39, 2)", None, True),
+        ("NUMERIC(38, 2)", None, False),
+        ("DECIMAL", 39, True),
+        ("DECIMAL", 38, False),
+        ("NUMBER(65, 30)", None, True),
+        ("VARCHAR(100)", None, False),
+        ("BIGINT", 99, False),
+    ],
+)
+def test_a_decimal_wider_than_a_decimal_column_is_told_apart(name, precision, wide):
+    assert names.too_wide(name, precision) is wide
 
 
 @pytest.mark.parametrize(
@@ -194,12 +217,14 @@ def test_a_reported_class_maps_to_its_dtype(code, precision, scale, dtype):
 
 
 def test_a_column_names_the_standard_fields_and_keeps_the_rest():
-    column = Column.of(("id", 3, 11, 4, 10, 0, False, 32, 63))
+    entry = ("id", 3, 11, 4, 10, 0, False, 32, 63)
+    column = Column.of(entry)
     assert column.name == "id"
     assert column.code == 3
     assert (column.display_size, column.internal_size) == (11, 4)
     assert (column.precision, column.scale, column.null_ok) == (10, 0, False)
     assert column.extra == (32, 63)
+    assert column.entry is entry
 
 
 def test_a_short_entry_leaves_the_missing_fields_empty():
@@ -208,6 +233,10 @@ def test_a_short_entry_leaves_the_missing_fields_empty():
 
 
 # --- MySQL ------------------------------------------------------------------
+
+UNSIGNED = mysql.UNSIGNED_FLAG
+BINARY = mysql.BINARY_CHARSET
+UTF8MB4 = 255
 
 
 def test_the_mysql_field_types_are_the_drivers_own():
@@ -222,53 +251,40 @@ def test_the_mysql_field_types_are_the_drivers_own():
 @pytest.mark.parametrize(
     "code,flags,charset,name",
     [
-        (mysql.FieldType.TINY, 0, 63, "TINYINT"),
-        (mysql.FieldType.TINY, 32, 63, "TINYINT UNSIGNED"),
-        (mysql.FieldType.SHORT, 32, 63, "SMALLINT UNSIGNED"),
-        (mysql.FieldType.INT24, 0, 63, "MEDIUMINT"),
-        (mysql.FieldType.LONG, 32, 63, "INT UNSIGNED"),
-        (mysql.FieldType.LONGLONG, 0, 63, "BIGINT"),
-        (mysql.FieldType.LONGLONG, 32 | 1, 63, "BIGINT UNSIGNED"),
-        (mysql.FieldType.VARCHAR, 0, 45, "VARCHAR"),
-        (mysql.FieldType.VAR_STRING, 0, 45, "VARCHAR"),
-        (mysql.FieldType.VAR_STRING, 128, 63, "VARBINARY"),
+        (mysql.FieldType.TINY, 0, BINARY, "TINYINT"),
+        (mysql.FieldType.TINY, UNSIGNED, BINARY, "TINYINT UNSIGNED"),
+        (mysql.FieldType.SHORT, UNSIGNED, BINARY, "SMALLINT UNSIGNED"),
+        (mysql.FieldType.INT24, 0, BINARY, "MEDIUMINT"),
+        (mysql.FieldType.INT24, UNSIGNED, BINARY, "MEDIUMINT UNSIGNED"),
+        (mysql.FieldType.LONG, UNSIGNED, BINARY, "INT UNSIGNED"),
+        (mysql.FieldType.LONGLONG, 0, BINARY, "BIGINT"),
+        (mysql.FieldType.LONGLONG, UNSIGNED | 1, BINARY, "BIGINT UNSIGNED"),
+        (mysql.FieldType.VARCHAR, 0, UTF8MB4, "VARCHAR"),
+        (mysql.FieldType.VAR_STRING, 0, UTF8MB4, "VARCHAR"),
+        (mysql.FieldType.VAR_STRING, 128, BINARY, "VARBINARY"),
         (mysql.FieldType.STRING, 0, 33, "VARCHAR"),
-        (mysql.FieldType.BLOB, 16, 45, "VARCHAR"),
-        (mysql.FieldType.BLOB, 144, 63, "VARBINARY"),
-        (mysql.FieldType.LONG_BLOB, 144, 63, "VARBINARY"),
-        (mysql.FieldType.YEAR, 0, 63, "YEAR"),
-        (mysql.FieldType.FLOAT, 0, 63, "REAL"),
-        (mysql.FieldType.DOUBLE, 0, 63, "DOUBLE"),
-        (mysql.FieldType.DATE, 0, 63, "DATE"),
-        (mysql.FieldType.DATETIME, 0, 63, "DATETIME"),
-        (mysql.FieldType.TIMESTAMP, 0, 63, "DATETIME"),
-        (mysql.FieldType.TIME, 0, 63, "INTERVAL"),
-        (mysql.FieldType.ENUM, 0, 45, "ENUM"),
-        (246, 0, 63, None),
-        (245, 0, 63, None),
+        (mysql.FieldType.BLOB, 16, UTF8MB4, "VARCHAR"),
+        (mysql.FieldType.BLOB, 144, BINARY, "VARBINARY"),
+        (mysql.FieldType.LONG_BLOB, 144, BINARY, "VARBINARY"),
+        (mysql.FieldType.YEAR, 0, BINARY, "YEAR"),
+        (mysql.FieldType.FLOAT, 0, BINARY, "REAL"),
+        (mysql.FieldType.DOUBLE, 0, BINARY, "DOUBLE"),
+        (mysql.FieldType.DATE, 0, BINARY, "DATE"),
+        (mysql.FieldType.DATETIME, 0, BINARY, "DATETIME"),
+        (mysql.FieldType.TIMESTAMP, 0, BINARY, "DATETIME"),
+        (mysql.FieldType.TIME, 0, BINARY, "INTERVAL"),
+        (mysql.FieldType.BIT, UNSIGNED, BINARY, "BIGINT UNSIGNED"),
+        (mysql.FieldType.JSON, 144, BINARY, "JSON"),
+        (mysql.FieldType.GEOMETRY, 144, BINARY, "VARBINARY"),
+        (mysql.FieldType.NULL, 128, BINARY, "NULL"),
+        (mysql.FieldType.ENUM, 0, UTF8MB4, "VARCHAR"),
+        (mysql.FieldType.SET, 0, UTF8MB4, "VARCHAR"),
+        (mysql.FieldType.NEWDECIMAL, 0, BINARY, None),
+        (242, 0, BINARY, None),
     ],
 )
-def test_mysqlconnector_names_by_type_flags_and_charset(code, flags, charset, name):
-    assert mysql.mysqlconnector(_column(code, None, None, flags, charset)) == name
-
-
-def test_mysqlconnector_without_flags_or_charset_takes_signed_text():
-    assert mysql.mysqlconnector(_column(mysql.FieldType.LONG)) == "INT"
-    assert mysql.mysqlconnector(_column(mysql.FieldType.BLOB)) == "VARCHAR"
-
-
-@pytest.mark.parametrize(
-    "code,flags,name",
-    [
-        (mysql.FieldType.SHORT, 32, "SMALLINT UNSIGNED"),
-        (mysql.FieldType.LONGLONG, 0, "BIGINT"),
-        (mysql.FieldType.VAR_STRING, 0, None),
-        (mysql.FieldType.BLOB, 128, None),
-        (mysql.FieldType.DATE, 0, "DATE"),
-    ],
-)
-def test_mariadbconnector_reads_the_flags_but_leaves_text_and_bytes(code, flags, name):
-    assert mysql.mariadbconnector(_column(code, None, None, flags)) == name
+def test_mysql_names_by_type_flags_and_charset(code, flags, charset, name):
+    assert mysql.describe(_column(code, None, None, flags, charset)) == name
 
 
 @pytest.mark.parametrize(
@@ -283,42 +299,233 @@ def test_mariadbconnector_reads_the_flags_but_leaves_text_and_bytes(code, flags,
         (mysql.FieldType.BLOB, None),
         (mysql.FieldType.DATETIME, "DATETIME"),
         (mysql.FieldType.TIME, "INTERVAL"),
+        (mysql.FieldType.JSON, "JSON"),
     ],
 )
-def test_the_flagless_drivers_widen_integers_and_leave_text_and_bytes(code, name):
-    assert mysql.flagless(_column(code)) == name
+def test_mysql_without_flags_widens_integers_and_leaves_text_and_bytes(code, name):
+    assert mysql.describe(_column(code)) == name
+
+
+def test_mysql_with_flags_but_no_charset_leaves_text_and_bytes():
+    assert mysql.describe(_column(mysql.FieldType.SHORT, None, None, UNSIGNED)) == (
+        "SMALLINT UNSIGNED"
+    )
+    assert mysql.describe(_column(mysql.FieldType.BLOB, None, None, 128)) is None
+
+
+@pytest.mark.parametrize(
+    "precision,scale,name",
+    [
+        (10, 2, "DECIMAL(10, 2)"),
+        (65, 30, "DECIMAL(65, 30)"),
+        (None, 2, None),
+        (12, None, None),
+    ],
+)
+def test_mysql_names_a_decimal_by_its_precision_and_scale(precision, scale, name):
+    column = _column(mysql.FieldType.NEWDECIMAL, precision, scale, 0, BINARY)
+    assert mysql.describe(column) == name
+
+
+DECIMAL_SHAPES = [
+    (precision, scale, unsigned)
+    for precision in (1, 2, 5, 9, 10, 18, 19, 30, 38, 39, 50, 65)
+    for scale in sorted({0, 1, 2, precision // 2, min(precision, 30)})
+    if scale <= min(precision, 30)
+    for unsigned in (False, True)
+]
+
+
+def _field(type_code, length, scale, flags, charset=BINARY):
+    return SimpleNamespace(
+        type_code=type_code, length=length, scale=scale, flags=flags, charsetnr=charset
+    )
+
+
+def _pymysql_query(*fields):
+    cursor = SimpleNamespace(_result=SimpleNamespace(fields=list(fields)))
+    return described.Query(None, cursor, "SELECT c", {})
+
+
+@pytest.mark.parametrize("precision,scale,unsigned", DECIMAL_SHAPES)
+def test_pymysql_gets_a_decimals_precision_back_from_its_length(
+    precision, scale, unsigned
+):
+    length = precision + (scale > 0) + (0 if unsigned else 1)
+    flags = UNSIGNED if unsigned else 0
+    field = _field(mysql.FieldType.NEWDECIMAL, length, scale, flags)
+    entry = ("c", mysql.FieldType.NEWDECIMAL, None, length, length, scale, True)
+    [column] = mysql.from_fields(_pymysql_query(field), [Column.of(entry)])
+    assert (column.precision, column.scale) == (precision, scale)
+    assert column.extra == (flags, BINARY)
+    expected = names.decimal(precision, scale)
+    assert described.dtypes("pymysql", [entry], _pymysql_query(field))["c"] == expected
+
+
+def test_pymysql_takes_the_flags_and_charset_of_every_field():
+    fields = [
+        _field(mysql.FieldType.LONGLONG, 20, 0, UNSIGNED),
+        _field(mysql.FieldType.VAR_STRING, 80, 0, 0, UTF8MB4),
+        _field(mysql.FieldType.VAR_STRING, 4, 0, 128),
+    ]
+    entries = [
+        (name, field.type_code, None, field.length, field.length, 0, True)
+        for name, field in zip("abc", fields)
+    ]
+    dtypes = described.dtypes("pymysql", entries, _pymysql_query(*fields))
+    assert dtypes == {"a": pl.UInt64(), "b": pl.String(), "c": pl.Binary()}
+
+
+def test_pymysql_fields_that_do_not_match_the_description_are_not_used():
+    entries = [("a", mysql.FieldType.LONG, None, 11, 11, 0, True)]
+    query = _pymysql_query()
+    assert described.dtypes("pymysql", entries, query) == {"a": pl.Int64()}
+
+
+class _Database:
+    """A connection whose database declares the given types for a query's
+    columns, recording what it was asked."""
+
+    def __init__(self, *declared, refuse=False):
+        self.declared = declared
+        self.refuse = refuse
+        self.statements: list[str] = []
+
+    def execute(self, statement, parameters=None):
+        self.statements.append(str(statement))
+        if self.refuse and "CREATE" in str(statement):
+            raise RuntimeError("CREATE TEMPORARY TABLES denied")
+        if "SHOW COLUMNS" in str(statement):
+            return [(f"c{index}", kind) for index, kind in enumerate(self.declared)]
+        return None
+
+
+def _connector_entry(name, code, flags=0, charset=BINARY):
+    return (name, code, None, None, None, None, True, flags, charset)
+
+
+@pytest.mark.parametrize(
+    "declared,dtype",
+    [
+        ("decimal(10,2)", pl.Decimal(10, 2)),
+        ("decimal(5,2) unsigned", pl.Decimal(5, 2)),
+        ("decimal(1,1)", pl.Decimal(1, 1)),
+        ("decimal(38,0)", pl.Decimal(38, 0)),
+        ("decimal(65,30)", pl.String),
+        (b"decimal(12,3)", pl.Decimal(12, 3)),
+    ],
+)
+def test_mysqlconnector_gets_a_decimal_as_its_database_declares_it(declared, dtype):
+    database = _Database(declared)
+    query = described.Query(database, None, "SELECT d FROM t;", {"x": 1})
+    entries = [_connector_entry("d", mysql.FieldType.NEWDECIMAL)]
+    assert described.dtypes("mysqlconnector", entries, query) == {"d": dtype}
+    create, show, drop = database.statements
+    assert "CREATE TEMPORARY TABLE" in create
+    assert "(SELECT d FROM t) AS q LIMIT 0" in create
+    assert show.startswith("SHOW COLUMNS FROM td_described_")
+    assert drop.startswith("DROP TEMPORARY TABLE td_described_")
+
+
+def test_mysqlconnector_asks_its_database_only_for_a_decimal():
+    database = _Database("int")
+    query = described.Query(database, None, "SELECT i FROM t", {})
+    entries = [_connector_entry("i", mysql.FieldType.LONG)]
+    assert described.dtypes("mysqlconnector", entries, query) == {"i": pl.Int32()}
+    assert database.statements == []
+
+
+def test_mysqlconnector_leaves_a_decimal_to_inference_when_its_database_refuses():
+    database = _Database("decimal(10,2)", refuse=True)
+    query = described.Query(database, None, "SELECT d FROM t", {})
+    entries = [_connector_entry("d", mysql.FieldType.NEWDECIMAL)]
+    assert described.dtypes("mysqlconnector", entries, query) == {}
 
 
 # --- Postgres -----------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
-    "oid,precision,scale,name",
+    "oid,name",
     [
-        (16, None, None, "BOOLEAN"),
-        (17, None, None, "BYTEA"),
-        (20, None, None, "BIGINT"),
-        (21, None, None, "SMALLINT"),
-        (23, None, None, "INTEGER"),
-        (25, None, None, "TEXT"),
-        (700, None, None, "REAL"),
-        (701, None, None, "DOUBLE PRECISION"),
-        (1043, None, None, "VARCHAR"),
-        (1082, None, None, "DATE"),
-        (1083, None, None, "TIME"),
-        (1114, None, None, "TIMESTAMP"),
-        (1184, None, None, "TIMESTAMPTZ"),
-        (1186, None, None, "INTERVAL"),
-        (2950, None, None, "UUID"),
-        (1700, 10, 2, "NUMERIC(10, 2)"),
-        (1700, None, None, None),
-        (114, None, None, None),
-        (3802, None, None, None),
-        (1007, None, None, None),
+        (16, "BOOLEAN"),
+        (17, "BYTEA"),
+        (18, "CHAR"),
+        (19, "NAME"),
+        (20, "BIGINT"),
+        (21, "SMALLINT"),
+        (23, "INTEGER"),
+        (25, "TEXT"),
+        (26, "OID"),
+        (114, "JSON"),
+        (142, "XML"),
+        (650, "TEXT"),
+        (700, "REAL"),
+        (701, "DOUBLE PRECISION"),
+        (774, "TEXT"),
+        (790, "TEXT"),
+        (829, "TEXT"),
+        (869, "TEXT"),
+        (1042, "BPCHAR"),
+        (1043, "VARCHAR"),
+        (1082, "DATE"),
+        (1083, "TIME"),
+        (1114, "TIMESTAMP"),
+        (1184, "TIMESTAMPTZ"),
+        (1186, "INTERVAL"),
+        (1266, "TEXT"),
+        (1560, "TEXT"),
+        (1562, "TEXT"),
+        (2950, "UUID"),
+        (3614, "TEXT"),
+        (3802, "JSON"),
+        (600, None),
+        (1007, None),
+        (3904, None),
     ],
 )
-def test_postgres_names_a_column_by_its_oid(oid, precision, scale, name):
-    assert postgres.describe(_column(oid, precision, scale)) == name
+def test_postgres_names_a_column_by_its_oid(oid, name):
+    assert postgres.describe(_column(oid)) == name
+
+
+NUMERIC_SHAPES = [
+    (precision, scale)
+    for precision in (1, 2, 5, 10, 18, 19, 38, 39, 100, 1000)
+    for scale in sorted({0, 1, precision // 2, precision})
+]
+
+
+@pytest.mark.parametrize("precision,scale", NUMERIC_SHAPES)
+def test_postgres_names_a_numeric_by_its_precision_and_scale(precision, scale):
+    name = postgres.describe(_column(postgres.NUMERIC, precision, scale))
+    assert name == f"NUMERIC({precision}, {scale})"
+    assert names.dtype(name) == names.decimal(precision, scale)
+
+
+@pytest.mark.parametrize(
+    "precision,described_scale,name",
+    [
+        (5, 2046, "NUMERIC(7, 0)"),
+        (5, 2048 - 5, "NUMERIC(10, 0)"),
+        (36, 2046, "NUMERIC(38, 0)"),
+        (37, 2046, "NUMERIC(39, 0)"),
+        (3, 5, "NUMERIC(5, 5)"),
+        (1, 38, "NUMERIC(38, 38)"),
+    ],
+)
+def test_postgres_names_a_numeric_by_what_a_negative_or_wide_scale_holds(
+    precision, described_scale, name
+):
+    assert postgres.describe(_column(postgres.NUMERIC, precision, described_scale)) == (
+        name
+    )
+
+
+@pytest.mark.parametrize(
+    "precision,scale", [(65535, 65535), (None, None), (0, 0), ("10", 2)]
+)
+def test_postgres_leaves_an_unconstrained_numeric_to_inference(precision, scale):
+    assert postgres.describe(_column(postgres.NUMERIC, precision, scale)) is None
 
 
 def test_the_postgres_oids_are_psycopg2s_own():
@@ -333,29 +540,39 @@ def test_the_postgres_oids_are_psycopg2s_own():
 
 
 @pytest.mark.parametrize(
-    "code,precision,scale,name",
+    "code,display,precision,scale,name",
     [
-        (int, 3, 0, "SMALLINT"),
-        (int, 5, 0, "SMALLINT"),
-        (int, 10, 0, "INT"),
-        (int, 19, 0, "BIGINT"),
-        (int, 7, 0, "BIGINT"),
-        (float, 24, None, "REAL"),
-        (float, 53, None, "FLOAT"),
-        (Decimal, 10, 2, "DECIMAL(10, 2)"),
-        (Decimal, None, None, None),
-        (bool, 1, 0, "BOOLEAN"),
-        (str, 20, 0, "VARCHAR"),
-        (bytes, 4, 0, "VARBINARY"),
-        (bytearray, 4, 0, "VARBINARY"),
-        (dt.datetime, 27, 7, "DATETIME2"),
-        (dt.date, 10, 0, "DATE"),
-        (dt.time, 16, 7, "TIME"),
-        (object, None, None, None),
+        (int, 3, 3, 0, "SMALLINT"),
+        (int, 5, 5, 0, "SMALLINT"),
+        (int, 10, 10, 0, "INT"),
+        (int, 19, 19, 0, "BIGINT"),
+        (int, 7, 7, 0, "BIGINT"),
+        (float, 24, 24, None, "REAL"),
+        (float, 53, 53, None, "FLOAT"),
+        (Decimal, 10, 10, 2, "DECIMAL(10, 2)"),
+        (Decimal, 19, 19, 4, "DECIMAL(19, 4)"),
+        (Decimal, 38, 38, 38, "DECIMAL(38, 38)"),
+        (Decimal, None, None, None, None),
+        (bool, 1, 1, 0, "BOOLEAN"),
+        (str, 20, 20, 0, "VARCHAR"),
+        (str, 0, 0, 0, "VARCHAR"),
+        (str, 34, 34, 7, "TIMESTAMP WITH TIME ZONE"),
+        (str, 30, 30, 3, "TIMESTAMP WITH TIME ZONE"),
+        (str, 26, 26, 0, None),
+        (bytes, 4, 4, 0, "VARBINARY"),
+        (bytearray, 4, 4, 0, "VARBINARY"),
+        (dt.datetime, 27, 27, 7, "DATETIME2"),
+        (dt.date, 10, 10, 0, "DATE"),
+        (dt.time, 16, 16, 7, "TIME"),
+        (uuid.UUID, 36, 36, 0, "UUID"),
+        (object, None, None, None, None),
     ],
 )
-def test_odbc_names_a_column_by_its_class_and_size(code, precision, scale, name):
-    assert odbc.describe(_column(code, precision, scale)) == name
+def test_odbc_names_a_column_by_its_class_and_size(
+    code, display, precision, scale, name
+):
+    column = Column.of(("c", code, display, display, precision, scale, True))
+    assert odbc.describe(column) == name
 
 
 @pytest.mark.parametrize(
@@ -378,12 +595,13 @@ def test_pymssql_names_only_text_and_bytes(group, name):
 @pytest.mark.parametrize(
     "kind,precision,scale,name",
     [
-        ("DB_TYPE_NUMBER", 10, 0, "BIGINT"),
-        ("DB_TYPE_NUMBER", 18, 0, "BIGINT"),
-        ("DB_TYPE_NUMBER", 19, 0, "NUMBER(19, 0)"),
         ("DB_TYPE_NUMBER", 10, 2, "NUMBER(10, 2)"),
+        ("DB_TYPE_NUMBER", 38, 38, "NUMBER(38, 38)"),
+        ("DB_TYPE_NUMBER", 3, 5, "NUMBER(5, 5)"),
         ("DB_TYPE_NUMBER", 126, -127, "FLOAT(126)"),
+        ("DB_TYPE_NUMBER", 10, -127, "FLOAT(10)"),
         ("DB_TYPE_NUMBER", 0, -127, None),
+        ("DB_TYPE_NUMBER", 0, 0, None),
         ("DB_TYPE_NUMBER", None, None, None),
         ("DB_TYPE_BINARY_FLOAT", None, None, "BINARY_FLOAT"),
         ("DB_TYPE_BINARY_DOUBLE", None, None, "BINARY_DOUBLE"),
@@ -398,16 +616,21 @@ def test_pymssql_names_only_text_and_bytes(group, name):
         ("DB_TYPE_CLOB", None, None, "CLOB"),
         ("DB_TYPE_NCLOB", None, None, "NCLOB"),
         ("DB_TYPE_ROWID", None, None, "ROWID"),
+        ("DB_TYPE_UROWID", None, None, "UROWID"),
         ("DB_TYPE_RAW", None, None, "RAW"),
         ("DB_TYPE_LONG_RAW", None, None, "LONG RAW"),
         ("DB_TYPE_BLOB", None, None, "BLOB"),
         ("DB_TYPE_DATE", None, None, "TIMESTAMP"),
         ("DB_TYPE_TIMESTAMP", None, None, "TIMESTAMP"),
+        ("DB_TYPE_TIMESTAMP_TZ", None, None, "TIMESTAMP"),
+        ("DB_TYPE_TIMESTAMP_LTZ", None, None, "TIMESTAMP"),
         ("DB_TYPE_INTERVAL_DS", None, None, "INTERVAL DAY TO SECOND"),
-        ("DB_TYPE_TIMESTAMP_TZ", None, None, None),
-        ("DB_TYPE_TIMESTAMP_LTZ", None, None, None),
-        ("DB_TYPE_INTERVAL_YM", None, None, None),
-        ("DB_TYPE_JSON", None, None, None),
+        ("DB_TYPE_INTERVAL_YM", None, None, oracle.INTERVAL_YM),
+        ("DB_TYPE_JSON", None, None, "JSON"),
+        ("DB_TYPE_XMLTYPE", None, None, "XMLTYPE"),
+        ("DB_TYPE_OBJECT", None, None, None),
+        ("DB_TYPE_CURSOR", None, None, None),
+        ("DB_TYPE_BFILE", None, None, None),
     ],
 )
 def test_oracle_names_a_column_by_its_db_type(kind, precision, scale, name):
@@ -417,22 +640,56 @@ def test_oracle_names_a_column_by_its_db_type(kind, precision, scale, name):
     assert oracle.describe(_column(code, precision, scale)) == name
 
 
-@pytest.mark.parametrize(
-    "kind,dtype",
-    [
-        ("DB_TYPE_NUMBER", pl.Int64),
-        ("DB_TYPE_DATE", pl.Datetime("us")),
-        ("DB_TYPE_CLOB", pl.String),
-        ("DB_TYPE_RAW", pl.Binary),
-        ("DB_TYPE_BINARY_FLOAT", pl.Float32),
-        ("DB_TYPE_INTERVAL_DS", pl.Duration("us")),
-    ],
-)
-def test_every_name_oracle_gives_has_a_dtype(kind, dtype):
+@pytest.mark.parametrize("precision", range(1, 39))
+@pytest.mark.parametrize("scale", [0, -1, -2, -10])
+def test_oracle_names_a_whole_number_by_the_narrowest_integer_that_holds_it(
+    precision, scale
+):
     import oracledb
 
-    name = oracle.describe(_column(getattr(oracledb, kind), 10, 0))
-    assert names.dtype(name) == dtype
+    digits = precision - scale
+    dtype = names.dtype(
+        oracle.describe(_column(oracledb.DB_TYPE_NUMBER, precision, scale))
+    )
+    expected = (
+        pl.Int8
+        if digits <= 2
+        else pl.Int16
+        if digits <= 4
+        else pl.Int32
+        if digits <= 9
+        else pl.Int64
+        if digits <= 18
+        else names.decimal(digits, 0)
+    )
+    assert dtype == expected
+
+
+@pytest.mark.parametrize(
+    "format_,dtype",
+    [
+        (2, pl.List(pl.Float32)),
+        (3, pl.List(pl.Float64)),
+        (4, pl.List(pl.Int8)),
+        (5, pl.List(pl.UInt8)),
+        (None, pl.List(pl.Float64)),
+    ],
+)
+def test_oracle_names_a_vector_by_its_element_format(format_, dtype):
+    import oracledb
+
+    entry = SimpleNamespace(is_json=False, vector_format=format_)
+    column = _column(oracledb.DB_TYPE_VECTOR)._replace(entry=entry)
+    assert oracle.describe(column) == dtype
+
+
+@pytest.mark.parametrize("kind", ["DB_TYPE_VARCHAR", "DB_TYPE_CLOB", "DB_TYPE_JSON"])
+def test_oracle_names_a_column_holding_json_by_its_text(kind):
+    import oracledb
+
+    entry = SimpleNamespace(is_json=True, vector_format=None)
+    column = _column(getattr(oracledb, kind))._replace(entry=entry)
+    assert oracle.describe(column) == "JSON"
 
 
 def test_oracle_ignores_a_code_that_is_not_a_db_type():
@@ -443,30 +700,46 @@ def test_oracle_ignores_a_code_that_is_not_a_db_type():
 # --- Db2 ----------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "group,precision,scale,name",
-    [
-        ("STRING", None, None, "VARCHAR"),
-        ("TEXT", None, None, "CLOB"),
-        ("XML", None, None, "XML"),
-        ("BINARY", None, None, "BLOB"),
-        ("NUMBER", None, None, "INTEGER"),
-        ("BIGINT", None, None, "BIGINT"),
-        ("FLOAT", None, None, "DOUBLE"),
-        ("DECIMAL", 10, 2, "DECIMAL(10, 2)"),
-        ("DECIMAL", None, None, None),
-        ("DATE", None, None, "DATE"),
-        ("TIME", None, None, "TIME"),
-        ("DATETIME", None, None, "TIMESTAMP"),
-        ("BOOLEAN", None, None, "BOOLEAN"),
-        ("ROWID", None, None, None),
-    ],
-)
-def test_db2_names_a_column_by_its_type_group(group, precision, scale, name):
+def _db2(group, precision=None, scale=None, display=None):
     import ibm_db_dbi
 
     code = getattr(ibm_db_dbi, group)
-    assert db2.describe(_column(code, precision, scale)) == name
+    return Column.of(("c", code, display, display, precision, scale, True))
+
+
+@pytest.mark.parametrize(
+    "group,precision,scale,display,name",
+    [
+        ("NUMBER", 1, 0, 1, "BOOLEAN"),
+        ("NUMBER", 5, 0, 6, "SMALLINT"),
+        ("NUMBER", 10, 0, 11, "INTEGER"),
+        ("NUMBER", None, None, None, "INTEGER"),
+        ("BIGINT", 19, 0, 20, "BIGINT"),
+        ("FLOAT", 7, 0, 13, "REAL"),
+        ("FLOAT", 15, 0, 22, "DOUBLE"),
+        ("FLOAT", 16, 0, 23, "DOUBLE"),
+        ("FLOAT", 34, 0, 42, "DOUBLE"),
+        ("DECIMAL", 10, 2, 12, "DECIMAL(10, 2)"),
+        ("DECIMAL", 31, 31, 33, "DECIMAL(31, 31)"),
+        ("DECIMAL", None, None, None, None),
+        ("STRING", 20, 0, 20, "VARCHAR"),
+        ("STRING", 32700, 0, 32700, "VARCHAR"),
+        ("STRING", 2, 0, 4, None),
+        ("STRING", 20, 0, 40, None),
+        ("TEXT", 1048576, 0, 1048576, "CLOB"),
+        ("XML", 0, 0, 0, "XML"),
+        ("BINARY", 1048576, 0, 2097152, "BLOB"),
+        ("DATE", 10, 0, 10, "DATE"),
+        ("TIME", 8, 0, 8, "TIME"),
+        ("DATETIME", 26, 6, 26, "TIMESTAMP"),
+        ("BOOLEAN", 1, 0, 1, "BOOLEAN"),
+        ("ROWID", None, None, None, None),
+    ],
+)
+def test_db2_names_a_column_by_its_group_and_precision(
+    group, precision, scale, display, name
+):
+    assert db2.describe(_db2(group, precision, scale, display)) == name
 
 
 def test_every_db2_group_member_fits_the_type_it_is_named_by():
@@ -593,24 +866,26 @@ def test_dtypes_types_each_described_column_by_name(registry):
         ("id", 20, None, None, None, None, False),
         ("amount", 1700, None, None, 10, 2, True),
         ("payload", 3802, None, None, None, None, True),
+        ("spot", 600, None, None, None, None, True),
     ]
     assert described.dtypes(Driver.PSYCOPG2, description) == {
         "id": pl.Int64,
         "amount": pl.Decimal(10, 2),
+        "payload": pl.String,
     }
 
 
 def test_dtypes_warns_once_about_every_column_it_cannot_type(registry, caplog):
     description = [
         ("id", 20, None, None, None, None, False),
-        ("payload", 3802, None, None, None, None, True),
+        ("spot", 600, None, None, None, None, True),
         ("tags", 1009, None, None, None, None, True),
     ]
     described.dtypes(Driver.PSYCOPG2, description)
     warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
     assert warnings == [
         "The description of SQL driver 'psycopg2' gives no type for column(s)"
-        " 'payload', 'tags'; they are typed from their values in each batch"
+        " 'spot', 'tags'; they are typed from their values in each batch"
     ]
 
 

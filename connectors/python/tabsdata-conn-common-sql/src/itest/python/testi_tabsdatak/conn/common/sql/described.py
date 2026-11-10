@@ -22,6 +22,7 @@ import math
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any
 
 import polars as pl
@@ -54,6 +55,51 @@ class TypeCase:
     @property
     def column(self) -> str:
         return f"c_{self.id}"
+
+
+MAX_DECIMAL_PRECISION = 38
+
+
+def decimal_cases(
+    shapes: Iterable[tuple[int, int]],
+    *,
+    ddl: str = "DECIMAL",
+    unsigned: bool = False,
+) -> list[TypeCase]:
+    """A column per ``(precision, scale)``, holding its widest value: every
+    digit a 9, negative unless ``unsigned``. One wider than a decimal column
+    holds must come back as its exact text."""
+    cases = []
+    for precision, scale in shapes:
+        sign = "" if unsigned else "-"
+        whole = "9" * (precision - scale)
+        fraction = "." + "9" * scale if scale else ""
+        # A literal with no whole digits leaves out the 0, which Db2 counts
+        # as one more digit than the column holds.
+        literal = sign + whole + fraction
+        text = sign + (whole or "0") + fraction
+        wide = precision > MAX_DECIMAL_PRECISION
+        cases.append(
+            TypeCase(
+                f"{ddl.lower()}_{precision}_{scale}" + ("_u" if unsigned else ""),
+                f"{ddl}({precision}, {scale})" + (" UNSIGNED" if unsigned else ""),
+                literal,
+                pl.String if wide else pl.Decimal(precision, scale),
+                text if wide else Decimal(text),
+            )
+        )
+    return cases
+
+
+def shapes(precisions: Iterable[int], max_scale: int) -> list[tuple[int, int]]:
+    """Each precision with no scale, a scale of one, half its digits and all
+    of them, as far as ``max_scale`` allows."""
+    return [
+        (precision, scale)
+        for precision in precisions
+        for scale in sorted({0, 1, precision // 2, precision})
+        if scale <= min(precision, max_scale)
+    ]
 
 
 Read = Callable[[str, int], Iterable[pl.DataFrame]]

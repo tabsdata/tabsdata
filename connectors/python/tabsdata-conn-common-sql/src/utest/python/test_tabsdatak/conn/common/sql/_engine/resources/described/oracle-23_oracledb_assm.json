@@ -1,0 +1,10 @@
+{"driver": "oracledb", "cases": [
+{"id": "json", "sql": "JSON", "entry": ["C", {"oracle": "DB_TYPE_JSON"}, null, null, null, null, true], "info": {"is_json": true, "vector_format": null}, "dtype": "String"},
+{"id": "json_scalar", "sql": "JSON", "entry": ["C", {"oracle": "DB_TYPE_JSON"}, null, null, null, null, true], "info": {"is_json": true, "vector_format": null}, "dtype": "String"},
+{"id": "json_vc", "sql": "VARCHAR2(100) CHECK (c IS JSON)", "entry": ["C", {"oracle": "DB_TYPE_VARCHAR"}, 100, 100, null, null, true], "info": {"is_json": true, "vector_format": null}, "dtype": "String"},
+{"id": "vector", "sql": "VECTOR(3, FLOAT32)", "entry": ["C", {"oracle": "DB_TYPE_VECTOR"}, null, null, null, null, true], "info": {"is_json": false, "vector_format": 2}, "dtype": "List(Float32)"},
+{"id": "vector_any", "sql": "VECTOR", "entry": ["C", {"oracle": "DB_TYPE_VECTOR"}, null, null, null, null, true], "info": {"is_json": false, "vector_format": null}, "dtype": "List(Float64)"},
+{"id": "binary_double", "sql": "BINARY_DOUBLE", "entry": ["C", {"oracle": "DB_TYPE_BINARY_DOUBLE"}, 127, null, null, null, true], "info": {"is_json": false, "vector_format": null}, "dtype": "Float64"},
+{"id": "x_json_value", "sql": "JSON_VALUE", "entry": ["JSON_VALUE(C,'$.A[1]')", {"oracle": "DB_TYPE_VARCHAR"}, 4000, 4000, null, null, true], "info": {"is_json": false, "vector_format": null}, "dtype": "String"},
+{"id": "x_json_query", "sql": "JSON_QUERY", "entry": ["JSON_QUERY(C,'$.A')", {"oracle": "DB_TYPE_JSON"}, null, null, null, null, true], "info": {"is_json": true, "vector_format": null}, "dtype": "String"}
+]}

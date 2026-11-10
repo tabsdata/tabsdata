@@ -203,41 +203,77 @@ def _polars_read(
     parameters: Mapping[str, Any] | None = None,
 ) -> Iterator[pl.DataFrame]:
     """Each batch of ``query``'s result, typed as its cursor description says
-    (:mod:`.described`) and as ``schema_overrides`` say over that; a column
-    neither types is inferred over every row of its batch, not only the first
-    rows, so a value after a run of NULLs is never refused."""
+    (:mod:`.described`) and as ``schema_overrides`` say over that, its values
+    converted to what each dtype holds (:mod:`.described.commons.values`); a
+    column neither types is inferred over every row of its batch, not only the
+    first rows, so a value after a run of NULLs is never refused."""
     from sqlalchemy import text
 
     # noinspection PyProtectedMember
     from tabsdatak.conn.common.sql._engine import described
 
+    bound = dict(parameters) if parameters else {}
     result = connection.execution_options(stream_results=True).execute(
-        text(query), dict(parameters) if parameters else {}
+        text(query), bound
     )
     try:
         columns, description = _columns(result)
-        dtypes = described.dtypes(connection.dialect.driver, description)
-        dtypes.update(schema_overrides or {})
-        casts = {name: dtype for name, dtype in dtypes.items() if name in columns}
+        dtypes = described.dtypes(
+            connection.dialect.driver,
+            description,
+            described.Query(connection, getattr(result, "cursor", None), query, bound),
+        )
+        dtypes.update(
+            (name, _instance(dtype)) for name, dtype in (schema_overrides or {}).items()
+        )
         warned: set[str] = set()
         for rows in result.partitions(chunk_size):
-            batch = pl.DataFrame(
-                [tuple(row) for row in rows],
-                schema=columns,
-                orient="row",
-                infer_schema_length=None,
-            )
-            for name, dtype in batch.schema.items():
-                if dtype == pl.Null and name not in casts and name not in warned:
-                    warned.add(name)
-                    logger.warning(
-                        "Column %r has no type in the query's description and is"
-                        " NULL in every row of a batch, so it is typed Null there",
-                        name,
-                    )
-            yield batch.cast(casts) if casts else batch
+            yield _batch(columns, rows, dtypes, warned)
     finally:
         result.close()
+
+
+def _instance(dtype: Any) -> Any:
+    return dtype() if isinstance(dtype, type) else dtype
+
+
+def _batch(
+    columns: list[str],
+    rows: Sequence[Sequence[Any]],
+    dtypes: Mapping[str, pl.DataType],
+    warned: set[str],
+) -> pl.DataFrame:
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._engine.described.commons import values
+
+    by_column = list(zip(*rows)) if rows else [() for _ in columns]
+    series = []
+    for name, column in zip(columns, by_column):
+        dtype = dtypes.get(name)
+        built = values.build(name, column, dtype)
+        if built.nulled and name not in warned:
+            warned.add(name)
+            logger.warning(
+                "Column %r holds NaN or infinite decimals, which a decimal column"
+                " cannot hold; they are read as null",
+                name,
+            )
+        if built.wide and name not in warned:
+            warned.add(name)
+            logger.warning(
+                "Column %r holds decimals wider than a decimal column holds;"
+                " it is read as text",
+                name,
+            )
+        if dtype is None and built.series.dtype == pl.Null and name not in warned:
+            warned.add(name)
+            logger.warning(
+                "Column %r has no type in the query's description and is"
+                " NULL in every row of a batch, so it is typed Null there",
+                name,
+            )
+        series.append(built.series)
+    return pl.DataFrame(series)
 
 
 class PolarsReadEngine(SqlAlchemyReadEngine):

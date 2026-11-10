@@ -5,8 +5,9 @@
 """SQL type names, and the Python classes a driver reports for its values,
 mapped to Polars dtypes. Names are matched whatever their case and spacing,
 with their parameters (``VARCHAR(20)``, ``DECIMAL(10, 2)``) and an
-``UNSIGNED`` suffix. A name with no single correct dtype -- JSON, a time zone
-that is not UTC -- maps to ``None``."""
+``UNSIGNED`` suffix. A decimal wider than a Polars decimal holds maps to
+text, which keeps every digit; JSON maps to its text. A name with no single
+correct dtype -- a time zone that is not UTC -- maps to ``None``."""
 
 from __future__ import annotations
 
@@ -71,6 +72,9 @@ _STRINGS = {
     "ROWID",
     "UROWID",
     "XML",
+    "XMLTYPE",
+    "JSON",
+    "JSONB",
 }
 _BINARIES = {
     "BINARY",
@@ -86,6 +90,7 @@ _BINARIES = {
     "BINARY LARGE OBJECT",
 }
 _OTHERS: dict[str, pl.DataType] = {
+    "NULL": pl.Null(),
     "BOOL": pl.Boolean(),
     "BOOLEAN": pl.Boolean(),
     "BIT": pl.Boolean(),
@@ -124,13 +129,24 @@ _SINGLE_BIT = 1
 
 
 def decimal(precision: Any, scale: Any) -> pl.DataType | None:
-    """``Decimal(precision, scale)``, or ``None`` when they are not usable or
-    Polars cannot hold them."""
+    """``Decimal(precision, scale)``; text when ``precision`` is more than a
+    Polars decimal holds; ``None`` when they are not usable."""
     if not isinstance(precision, int) or not isinstance(scale, int):
         return None
-    if not 0 < precision <= MAX_DECIMAL_PRECISION or not 0 <= scale <= precision:
+    if precision <= 0 or not 0 <= scale <= precision:
         return None
+    if precision > MAX_DECIMAL_PRECISION:
+        return pl.String()
     return pl.Decimal(precision, scale)
+
+
+def too_wide(name: str, precision: Any = None) -> bool:
+    """Whether SQL type ``name`` is a decimal wider than a Polars decimal."""
+    match = _NAME.match(name.upper())
+    if match is None or " ".join(match["base"].split()) not in _DECIMALS:
+        return False
+    declared = int(match["first"]) if match["first"] is not None else precision
+    return isinstance(declared, int) and declared > MAX_DECIMAL_PRECISION
 
 
 def dtype(name: str, precision: Any = None, scale: Any = None) -> pl.DataType | None:

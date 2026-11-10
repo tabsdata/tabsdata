@@ -19,6 +19,8 @@ from testi_tabsdatak.conn.common.sql.described import (
     CHUNK_SIZES,
     TypeCase,
     check,
+    decimal_cases,
+    shapes,
     table_for,
 )
 from testi_tabsdatak.conn.common.sql.plugin_io import work_dir
@@ -68,7 +70,62 @@ CASES = [
         pl.Duration("us"),
         dt.timedelta(hours=1),
     ),
+    TypeCase("number_1", "NUMBER(1)", "-9", pl.Int8, -9),
+    TypeCase("number_4", "NUMBER(4)", "-9999", pl.Int16, -9999),
+    TypeCase("number_9", "NUMBER(9)", "-999999999", pl.Int32, -999999999),
+    TypeCase("number_negative_scale", "NUMBER(5, -2)", "-9999900", pl.Int32, -9999900),
+    TypeCase(
+        "number_wide_scale",
+        "NUMBER(3, 5)",
+        "0.00999",
+        pl.Decimal(5, 5),
+        Decimal("0.00999"),
+    ),
+    TypeCase("integer", "INTEGER", "-7", pl.Decimal(38, 0), Decimal(-7)),
+    TypeCase("float_10", "FLOAT(10)", "1.5", pl.Float32, 1.5),
+    TypeCase("boolean", "BOOLEAN", "TRUE", pl.Boolean, True),
+    TypeCase("nclob", "NCLOB", "TO_NCLOB('abç')", pl.String, "abç"),
+    TypeCase(
+        "json_text",
+        "VARCHAR2(100) CHECK (c_json_text IS JSON)",
+        "'{\"a\": [1, 2.5]}'",
+        pl.String,
+        '{"a": [1, 2.5]}',
+    ),
+    TypeCase(
+        "timestamp_tz",
+        "TIMESTAMP WITH TIME ZONE",
+        "TIMESTAMP '2026-04-19 06:30:24 +02:00'",
+        pl.Datetime("us"),
+        dt.datetime(2026, 4, 19, 6, 30, 24),
+    ),
+    TypeCase(
+        "interval_ym",
+        "INTERVAL YEAR TO MONTH",
+        "INTERVAL '1-2' YEAR TO MONTH",
+        pl.Struct({"years": pl.Int64, "months": pl.Int64}),
+        {"years": 1, "months": 2},
+    ),
 ]
+
+
+# A NUMBER with no scale is a whole number, read as an integer above.
+DECIMALS = [
+    case
+    for case in decimal_cases(shapes((1, 5, 10, 18, 19, 38), 38), ddl="NUMBER")
+    if case.dtype.scale > 0
+]
+
+
+def _read(domain: OracleDomain, tmp_path: Path):
+    def read(query: str, size: int):
+        src = OracleSrc(queries=[query], src_cfg={"tabsdata.sql.chunk_size": size})
+        [slot] = plugin.OracleSrcPlugin().read_in(
+            PluginSrcCtx(work_dir(tmp_path)), src_conn(domain), src
+        )
+        return [table.frame.collect() for table in slot]
+
+    return read
 
 
 @pytest.mark.parametrize("chunk_size", CHUNK_SIZES)
@@ -77,12 +134,14 @@ def test_src_columns_are_typed_from_the_description(
     domain_oracle: OracleDomain, tmp_path: Path, chunk_size: int, request
 ):
     domain = domain_oracle
-
-    def read(query: str, size: int):
-        src = OracleSrc(queries=[query], src_cfg={"tabsdata.sql.chunk_size": size})
-        [slot] = plugin.OracleSrcPlugin().read_in(
-            PluginSrcCtx(work_dir(tmp_path)), src_conn(domain), src
-        )
-        return [table.frame.collect() for table in slot]
-
+    read = _read(domain, tmp_path)
     check(store(domain)._engine, read, table_for(request), CASES, chunk_size)
+
+
+@oracle_domain("oracle")
+def test_src_numbers_are_typed_with_their_precision_and_scale(
+    domain_oracle: OracleDomain, tmp_path: Path
+):
+    domain = domain_oracle
+    read = _read(domain, tmp_path)
+    check(store(domain)._engine, read, "td_src_described_numbers", DECIMALS, 100)

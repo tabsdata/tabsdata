@@ -11,7 +11,8 @@ Each column is typed by the first of these that pins it down:
    the column's SQL type from the driver's own type code. The built-in ones are
    in :mod:`.drivers`; a driver they do not cover gets one from the
    :data:`ENTRY_POINT_GROUP` entry points or :func:`register`, so it is
-   supported without a new release.
+   supported without a new release. A built-in driver whose description leaves
+   something out has it completed first, from its cursor or its database.
 2. What the driver reports itself, when its type code is a SQL type name or the
    Python class of its values.
 3. Neither: the column is left out, to be inferred over every row of its batch.
@@ -22,7 +23,7 @@ Every SQL type name, whoever produced it, is mapped by :mod:`.commons.names`.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from enum import StrEnum
 from functools import cache
 from importlib.metadata import entry_points
@@ -38,7 +39,8 @@ logger = logging.getLogger(__name__)
 
 class Column(NamedTuple):
     """One entry of a cursor description: the seven fields DB-API 2.0 (PEP 249)
-    defines, then whatever the driver adds after them, in ``extra``."""
+    defines, then whatever the driver adds after them, in ``extra``. ``entry``
+    is the entry itself, for a driver whose entries carry more than a tuple."""
 
     name: str
     code: Any
@@ -48,17 +50,32 @@ class Column(NamedTuple):
     scale: Any = None
     null_ok: Any = None
     extra: tuple[Any, ...] = ()
+    entry: Any = None
 
     @classmethod
     def of(cls, entry: Sequence[Any]) -> Column:
         standard = tuple(entry[:7])
-        return cls(*standard, extra=tuple(entry[7:]))
+        return cls(*standard, extra=tuple(entry[7:]), entry=entry)
 
 
-Describer = Callable[[Column], str | None]
+class Query(NamedTuple):
+    """The query a description belongs to, for a driver whose description is
+    completed from its cursor or its database."""
+
+    connection: Any
+    cursor: Any
+    text: str
+    parameters: Mapping[str, Any]
+
+
+Describer = Callable[[Column], "str | pl.DataType | None"]
 """Names the SQL type of one described column, or ``None`` when its
 description does not tell. The name may carry its parameters, as in
-``DECIMAL(10, 2)`` or ``BIGINT UNSIGNED``."""
+``DECIMAL(10, 2)`` or ``BIGINT UNSIGNED``; a type no SQL name stands for, such
+as a list, is given as its dtype."""
+
+Completer = Callable[[Query, list[Column]], list[Column]]
+"""Fills in what a driver's description leaves out."""
 
 ENTRY_POINT_GROUP = "tabsdatak.sql.describers"
 """Entry points registering a :data:`Describer` under the driver name it
@@ -96,10 +113,10 @@ def _built_in() -> dict[str, Describer]:
     )
 
     return {
-        Driver.MYSQLCONNECTOR: mysql.mysqlconnector,
-        Driver.MARIADBCONNECTOR: mysql.mariadbconnector,
-        Driver.PYMYSQL: mysql.flagless,
-        Driver.MYSQLDB: mysql.flagless,
+        Driver.MYSQLCONNECTOR: mysql.describe,
+        Driver.MARIADBCONNECTOR: mysql.describe,
+        Driver.PYMYSQL: mysql.describe,
+        Driver.MYSQLDB: mysql.describe,
         Driver.PSYCOPG2: postgres.describe,
         Driver.PSYCOPG2CFFI: postgres.describe,
         Driver.PSYCOPG: postgres.describe,
@@ -109,6 +126,17 @@ def _built_in() -> dict[str, Describer]:
         Driver.ORACLEDB: oracle.describe,
         Driver.CX_ORACLE: oracle.describe,
         Driver.IBM_DB: db2.describe,
+    }
+
+
+@cache
+def _completers() -> dict[str, Completer]:
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._engine.described.drivers import mysql
+
+    return {
+        Driver.PYMYSQL: mysql.from_fields,
+        Driver.MYSQLCONNECTOR: mysql.from_database,
     }
 
 
@@ -159,25 +187,47 @@ def describer(driver: str) -> Describer | None:
     return _from_entry_point(driver)
 
 
+def columns(
+    driver: str, description: Sequence[Sequence[Any]] | None, query: Query | None
+) -> list[Column]:
+    """``description``'s columns, completed from ``query`` when ``driver``'s
+    description leaves something out. A completion that fails leaves the
+    description as it is."""
+    described = [Column.of(entry) for entry in description or ()]
+    complete = _completers().get(str(driver))
+    if complete is None or query is None or not described:
+        return described
+    try:
+        completed = complete(query, described)
+    except Exception:  # noqa: BLE001 -- the description alone still types the read
+        logger.debug(
+            "Cannot complete the description of SQL driver %r", driver, exc_info=True
+        )
+        return described
+    return completed if len(completed) == len(described) else described
+
+
 def dtypes(
-    driver: str, description: Sequence[Sequence[Any]] | None
+    driver: str,
+    description: Sequence[Sequence[Any]] | None,
+    query: Query | None = None,
 ) -> dict[str, pl.DataType]:
     """The dtype of each column ``description`` pins down, by column name. A
     column it does not is left out, with a warning: the reader types it from
     its values, over every row of each batch."""
-    if not description:
-        return {}
     driver = str(driver)
+    described = columns(driver, description, query)
+    if not described:
+        return {}
     describe = describer(driver)
-    described: dict[str, pl.DataType] = {}
+    typed: dict[str, pl.DataType] = {}
     untyped: list[str] = []
-    for entry in description:
-        column = Column.of(entry)
+    for column in described:
         dtype = _dtype(describe, column)
         if dtype is None:
             untyped.append(column.name)
         else:
-            described[column.name] = dtype
+            typed[column.name] = dtype
     if untyped:
         logger.warning(
             "The description of SQL driver %r gives no type for column(s) %s;"
@@ -187,21 +237,38 @@ def dtypes(
         )
     logger.debug(
         "Typed %d of %d column(s) from the description of SQL driver %r (%s)",
+        len(typed),
         len(described),
-        len(description),
         driver,
         "with a describer" if describe is not None else "without a describer",
     )
-    return described
+    return typed
 
 
 def _dtype(describe: Describer | None, column: Column) -> pl.DataType | None:
     if describe is not None:
-        name = describe(column)
-        if name is not None:
-            return names.dtype(name)
+        described = describe(column)
+        if isinstance(described, pl.DataType):
+            return described
+        if described is not None:
+            return _named(column, described)
     if isinstance(column.code, str):
-        return names.dtype(column.code, column.precision, column.scale)
+        return _named(column, column.code, column.precision, column.scale)
     if isinstance(column.code, type):
         return names.from_class(column.code, column.precision, column.scale)
     return None
+
+
+def _named(
+    column: Column, name: str, precision: Any = None, scale: Any = None
+) -> pl.DataType | None:
+    dtype = names.dtype(name, precision, scale)
+    if names.too_wide(name, precision):
+        logger.warning(
+            "Column %r is a %s, wider than the %d digits a decimal holds;"
+            " it is read as text",
+            column.name,
+            name,
+            names.MAX_DECIMAL_PRECISION,
+        )
+    return dtype
