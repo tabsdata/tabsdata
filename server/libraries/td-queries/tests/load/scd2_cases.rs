@@ -67,7 +67,7 @@ async fn load_scd2_open_chunked(db: TdPool) -> Result<(), TdError> {
 
 /// A new attempt of the handle's first run, and (not inserted) its
 /// materialization of that run's first output.
-async fn build_materialization(
+pub(crate) async fn build_materialization(
     db: &TdPool,
     h: &ChainHandle,
 ) -> Result<PhysicalTableDataVersionInsertDB, TdError> {
@@ -105,6 +105,18 @@ async fn load_scd2_pending_chunked(db: TdPool) -> Result<(), TdError> {
     Ok(())
 }
 
+pub(crate) fn settled_report() -> PhysicalTableDataVersionUpdateDB {
+    PhysicalTableDataVersionUpdateDB {
+        has_data: Some(HasData::TRUE),
+        schema_changed: None,
+        column_count: None,
+        row_count: None,
+        data_bytes: None,
+        schema_hash: None,
+        with_data_table_data_version_id: None,
+    }
+}
+
 #[td_test::test(db)]
 async fn load_scd2_settle(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
@@ -115,19 +127,10 @@ async fn load_scd2_settle(db: TdPool) -> Result<(), TdError> {
         .table_data_versions()
         .pending(std::slice::from_ref(&row), at)
         .await?;
-    let reported = PhysicalTableDataVersionUpdateDB {
-        has_data: Some(HasData::TRUE),
-        schema_changed: None,
-        column_count: None,
-        row_count: None,
-        data_bytes: None,
-        schema_hash: None,
-        with_data_table_data_version_id: None,
-    };
     let t = Instant::now();
     let r = (&scoped)
         .table_data_versions()
-        .settle(&reported, &row.id, at)
+        .settle(&settled_report(), &row.id, at)
         .await?;
     record(
         "scd2::settle",

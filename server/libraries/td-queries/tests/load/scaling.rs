@@ -18,12 +18,13 @@ use crate::default_write_cases::build_lfri;
 use crate::harness::{analyze, timed, timed_once};
 use crate::profile::{ChainKnobs, MetricsKnobs};
 use crate::raw::delete_by_pk;
-use crate::scd2_cases::build_attempt;
+use crate::scd2_cases::{build_attempt, build_materialization, settled_report};
 use std::collections::BTreeSet;
 use std::collections::HashSet;
 use ta_objects::Typed;
 use td_common::datetime::Timestamp;
-use td_database::access::LockInstant;
+use td_common::execution_status::WorkerCallbackStatus;
+use td_database::access::{Grant, LockInstant};
 use td_database::connection::PgConnectionExt;
 use td_database::pool::TdPool;
 use td_error::TdError;
@@ -41,6 +42,7 @@ use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow};
 use td_objects::dxo::table::{Table, TableDB};
 use td_objects::dxo::tag::TagFacetParams;
 use td_objects::dxo::topology::ProjectTopologyDB;
+use td_objects::dxo::worker::WorkerExecutionUpdate;
 use td_objects::types::basic::{
     AtTime, DependencyPos, EpochMs, FactSide, IncludePrivate, IncludeReplaced, InputIdx,
     LogicalFunctionRunInputId, LogicalFunctionRunStatus, PhysicalFunctionRunStatus, TagKey,
@@ -48,7 +50,7 @@ use td_objects::types::basic::{
 };
 use td_objects::types::visible_projects::VisibleProjects;
 use td_queries::Queries;
-use td_queries::test_utils::{derive_metrics_facts, topology_write};
+use td_queries::test_utils::{begin_locked, derive_metrics_facts, topology_write};
 
 type Ptdv = PhysicalTableDataVersionDB;
 
@@ -268,6 +270,15 @@ async fn time_chain_queries(
             .committed_data_at(&h.table_id, Some(&AtTime::from(h.before_time)))
             .await?
     );
+    let newest_ltdv = h.ltdv_ids.last().expect("seeded logical versions");
+    let _ = timed!(
+        out,
+        "ltdv::committed_data_before",
+        (db).table_data_versions()
+            .committed_data_before(newest_ltdv)
+            .await?
+    );
+    let _ = timed!(out, "projects::draining", (db).projects().draining().await?);
 
     let _ = timed!(
         out,
@@ -493,6 +504,40 @@ async fn time_chain_queries(
         "default::delete",
         delete_by_pk::<LogicalFunctionRunInputInsertDB, _>(&scoped, &lfri.id).await?
     );
+    {
+        let mut trx = begin_locked(db, h.project_id).await?;
+        let conn = trx.get(Grant::asserted("load case"));
+        timed_once!(
+            out,
+            "lfr::set_status",
+            conn.logical_runs()
+                .set_status(&h.producer_lfrs[..1], LogicalFunctionRunStatus::Done)
+                .await?
+        );
+        trx.commit().await?;
+    }
+    {
+        let physical_run: PhysicalFunctionRunDB = db.scd2().fetch_one(&h.producer_lfrs[0]).await?;
+        let report = WorkerExecutionUpdate {
+            started_on: Some(AtTime::now().into()),
+            ended_on: Some(AtTime::now().into()),
+            status: WorkerCallbackStatus::Done,
+        };
+        let mut trx = begin_locked(db, h.project_id).await?;
+        let conn = trx.get(Grant::asserted("load case"));
+        timed_once!(out, "pfr::reported", {
+            if conn
+                .physical_runs()
+                .reported(&physical_run, &report)
+                .await?
+            {
+                conn.physical_runs()
+                    .ended(std::slice::from_ref(&physical_run.id))
+                    .await?;
+            }
+        });
+        trx.commit().await?;
+    }
     let update = PhysicalFunctionRunUpdateDB {
         dispatched_on: None,
         started_on: None,
@@ -744,6 +789,23 @@ async fn time_chain_queries(
             out,
             "scd2::open_chunked",
             (&scoped).scd2().chunked().open(&attempts, at).await?
+        );
+        let pending = build_materialization(db, h).await?;
+        timed_once!(
+            out,
+            "scd2::pending_chunked",
+            (&scoped)
+                .table_data_versions()
+                .pending(std::slice::from_ref(&pending), at)
+                .await?
+        );
+        timed_once!(
+            out,
+            "scd2::settle",
+            (&scoped)
+                .table_data_versions()
+                .settle(&settled_report(), &pending.id, at)
+                .await?
         );
     }
     // Closes go last: they end the seeded table's open interval, which every

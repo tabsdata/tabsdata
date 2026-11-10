@@ -386,6 +386,15 @@ pub(crate) async fn time_dv_queries(db: &TdPool) -> Result<Vec<(&'static str, f6
             .fetch_relative_offset::<LoadDvDao>(&Version::Head(0))
             .await?
     );
+    let partitions = [p.clone()];
+    let _ = timed!(
+        out,
+        "data_version::heads",
+        (db).timeline()
+            .heads_at(&on, &partitions)
+            .fetch_all::<LoadDvDao>()
+            .await?
+    );
     // `upsert` replaces the first seeded id; `insert_or_ignore` hits its
     // conflict path.
     let row = keyed_row()?;
