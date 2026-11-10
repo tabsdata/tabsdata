@@ -19,6 +19,7 @@ from tabsdatak.conn.common.file._read._avro import Avro
 from tabsdatak.conn.common.file._read._blocks import BLOCK_SIZE, Readable
 from tabsdatak.conn.common.file._read._csv import AutoCsv
 from tabsdatak.conn.common.file._read._excel import Excel
+from tabsdatak.conn.common.file._read._format import Format
 from tabsdatak.conn.common.file._read._log import Log
 from tabsdatak.conn.common.file._read._ndjson import AutoNdjson
 from tabsdatak.conn.common.file._read._parquet import Parquet
@@ -27,15 +28,6 @@ from tabsdatak.spi import LazyFrameInput
 
 class Inference(Enum):
     AUTO = "auto"
-
-
-class Format(Enum):
-    AVRO = "avro"
-    CSV = "csv"
-    EXCEL = "excel"
-    LOG = "log"
-    NDJSON = "ndjson"
-    PARQUET = "parquet"
 
 
 class Policy(Protocol):

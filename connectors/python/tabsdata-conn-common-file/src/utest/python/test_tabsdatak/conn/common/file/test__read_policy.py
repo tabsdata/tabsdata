@@ -13,13 +13,16 @@ from tabsdatak.conn.common.file._read._avro import Avro
 from tabsdatak.conn.common.file._read._csv import AutoCsv
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common.file._read._format import Format
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.file._read._log import Log
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file._read._ndjson import AutoNdjson
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.file._read._policy import Format, Inference, policy
+from tabsdatak.conn.common.file._read._policy import Inference, policy
 
 pytestmark = [pytest.mark.unit]
 

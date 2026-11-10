@@ -25,7 +25,8 @@ from tabsdatak.conn.common.file._plugin import (
     sheet_in,
 )
 from tabsdatak.conn.common.file._read._blocks import Readable, close
-from tabsdatak.conn.common.file._read._policy import Format, policy
+from tabsdatak.conn.common.file._read._format import Format
+from tabsdatak.conn.common.file._read._policy import policy
 from tabsdatak.conn.common.file._select import accepts, archive, plain, wrapper
 from tabsdatak.conn.common.file._store import FileStore
 from tabsdatak.conn.common.file.constants import FILE_META_PATH
