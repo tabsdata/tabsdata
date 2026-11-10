@@ -21,7 +21,6 @@ from tabsdatak.server._tdrunner.function._commons.document.message.request impor
 from tabsdatak.server._tdrunner.function._commons.manifests.stage import (
     StageManifest,
 )
-from tabsdatak.server._tdrunner.function._commons.run import shutdown
 from tabsdatak.server._tdrunner.function._commons.storage.stage import Stage
 from tabsdatak.server._tdrunner.function._handlers import trigger
 from tabsdatak.server._tdrunner.function._handlers.sweeper import Sweeper
@@ -478,11 +477,27 @@ def test_trigger_pending_honors_inactive_flag(tmp_path):
     assert queued(command) == []
 
 
-def test_a_shutdown_stops_the_trigger(tmp_path, monkeypatch):
-    monkeypatch.setattr(shutdown, "requested", False)
+def test_a_shutdown_stops_the_trigger(tmp_path):
     command = manifest_trigger(tmp_path)
-    command.shutdown(15, None)
+    command.shutdown()
     assert command.is_active() is False
+
+
+def test_a_stop_requested_while_loading_triggers_nothing(tmp_path, monkeypatch):
+    command = manifest_trigger(tmp_path)
+    monkeypatch.setattr(runner, "listen_for_shutdown", lambda stop: None)
+
+    def load() -> None:
+        command.sweeper = Sweeper(Stage(Location(uri=tmp_path.as_uri())))
+        command.shutdown()
+
+    def trigger_pending() -> None:
+        raise AssertionError("The trigger ran after a stop")
+
+    monkeypatch.setattr(command, "load", load)
+    monkeypatch.setattr(command, "trigger_pending", trigger_pending)
+
+    assert command.run() == 0
 
 
 # --- end-to-end (one consume cycle) ---------------------------------------

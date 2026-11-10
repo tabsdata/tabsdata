@@ -5,10 +5,8 @@
 from __future__ import annotations
 
 import logging
-import signal
 from datetime import datetime, timezone
 from pathlib import Path
-from types import FrameType
 from urllib.parse import urlparse
 
 from tabsdatak._connectors import get_stream_src
@@ -30,7 +28,7 @@ from tabsdatak.server._tdrunner.function._commons.http.retry import is_retriable
 from tabsdatak.server._tdrunner.function._commons.run.command import Command
 from tabsdatak.server._tdrunner.function._commons.run.shutdown import (
     is_shutdown_requested,
-    request_shutdown,
+    listen_for_shutdown,
 )
 from tabsdatak.server._tdrunner.function._commons.storage.stage import Stage
 from tabsdatak.server._tdrunner.function._commons.symbols.function import (
@@ -78,10 +76,15 @@ class StreamSourcePlugin(Command[RunStreamSourcePluginArguments]):
         self.journal_file = arguments.journal_file
 
     def run(self) -> int:
+        listen_for_shutdown(self.shutdown)
         logger.info("Starting the stream source plugin")
         self.load()
-        self.listen_for_shutdown()
-        self.stream()
+        if is_shutdown_requested():
+            logger.info(
+                "Not starting the plugin, as a stop was requested while loading"
+            )
+        else:
+            self.stream()
         self.record_end()
         self.report_completion()
         return 0
@@ -154,20 +157,9 @@ class StreamSourcePlugin(Command[RunStreamSourcePluginArguments]):
                 scheme=urlparse(function_stage.uri).scheme,
             )
 
-    def listen_for_shutdown(self) -> None:
-        try:
-            signal.signal(signal.SIGTERM, self.shutdown)
-            signal.signal(signal.SIGINT, self.shutdown)
-        except ValueError:
-            logger.debug("Not on the main thread; the shutdown signals are not handled")
-
-    def shutdown(self, signal_number: int, frame: FrameType | None) -> None:
-        logger.info(
-            f"Received signal {signal_number}; the plugin stops at its next "
-            f"active check"
-        )
-        request_shutdown()
-        self.context.deactivate()
+    def shutdown(self) -> None:
+        if hasattr(self, "context"):
+            self.context.deactivate()
 
     def stream(self) -> None:
         thresholds = self.publisher.thresholds

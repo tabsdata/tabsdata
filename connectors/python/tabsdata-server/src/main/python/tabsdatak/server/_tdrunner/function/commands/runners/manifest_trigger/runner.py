@@ -5,11 +5,9 @@
 from __future__ import annotations
 
 import logging
-import signal
 import time
 from enum import Enum, auto
 from pathlib import Path
-from types import FrameType
 from typing import assert_never
 from urllib.parse import urlparse
 
@@ -27,7 +25,7 @@ from tabsdatak.server._tdrunner.function._commons.manifests.stage import (
 )
 from tabsdatak.server._tdrunner.function._commons.run.command import Command
 from tabsdatak.server._tdrunner.function._commons.run.shutdown import (
-    request_shutdown,
+    listen_for_shutdown,
 )
 from tabsdatak.server._tdrunner.function._commons.storage.stage import (
     FILES_FOLDER,
@@ -95,11 +93,11 @@ class ManifestTrigger(Command[RunManifestTriggerArguments]):
         self.active = True
 
     def run(self) -> int:
+        listen_for_shutdown(self.shutdown)
         logger.info(
             f"Starting the manifest trigger, backing off {self.back_off_seconds}s"
         )
         self.load()
-        self.listen_for_shutdown()
         while self.active:
             self.trigger_pending()
             if not self.active:
@@ -134,16 +132,7 @@ class ManifestTrigger(Command[RunManifestTriggerArguments]):
             f"{self.trigger.method} {self.trigger.url}"
         )
 
-    def listen_for_shutdown(self) -> None:
-        try:
-            signal.signal(signal.SIGTERM, self.shutdown)
-            signal.signal(signal.SIGINT, self.shutdown)
-        except ValueError:
-            logger.debug("Not on the main thread; the shutdown signals are not handled")
-
-    def shutdown(self, signal_number: int, frame: FrameType | None) -> None:
-        logger.info(f"Received signal {signal_number}; stopping at the next check")
-        request_shutdown()
+    def shutdown(self) -> None:
         self.active = False
 
     def is_active(self) -> bool:

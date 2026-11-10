@@ -265,12 +265,32 @@ def test_completion_rejected_on_shutdown_propagates(
         command.report_completion()
 
 
-def test_a_shutdown_turns_the_context_inactive(tmp_path, shutdown_flag):
+def test_a_shutdown_turns_the_context_inactive(tmp_path):
     context = SimpleNamespace(running=True)
     context.deactivate = lambda: setattr(context, "running", False)
-    stream_source_plugin(tmp_path, context=context).shutdown(15, None)
+    stream_source_plugin(tmp_path, context=context).shutdown()
     assert context.running is False
-    assert shutdown.requested is True
+
+
+def test_a_shutdown_before_the_context_is_loaded_is_tolerated(tmp_path):
+    stream_source_plugin(tmp_path).shutdown()
+
+
+def test_a_stop_requested_while_loading_skips_the_plugin(
+    tmp_path, monkeypatch, shutdown_flag
+):
+    command = stream_source_plugin(tmp_path)
+    ended: list[str] = []
+    monkeypatch.setattr(runner, "listen_for_shutdown", lambda stop: None)
+    monkeypatch.setattr(command, "load", shutdown.request_shutdown)
+    monkeypatch.setattr(command, "stream", lambda: ended.append("stream"))
+    monkeypatch.setattr(command, "record_end", lambda: ended.append("end"))
+    monkeypatch.setattr(
+        command, "report_completion", lambda: ended.append("completion")
+    )
+
+    assert command.run() == 0
+    assert ended == ["end", "completion"]
 
 
 def test_a_connection_that_cannot_be_loaded_is_reported(tmp_path):
