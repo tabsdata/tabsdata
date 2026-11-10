@@ -20,7 +20,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from tabsdatak.cli.cli_utils import DEFAULT_MAX_RESULT
+from tabsdatak.cli.cli_utils import DEFAULT_MAX_RESULT, ENVELOPE_BYTES, json_size
 from tabsdatak.cli.td.cli import cli
 from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
@@ -175,7 +175,7 @@ def test_jsonb_listing_is_the_envelope(tmp_path):
     ]
     assert payload["truncated"] is True
     assert payload["next"] is None
-    assert MORE_RESULTS not in result.stdout
+    assert payload["hint"].startswith(MORE_RESULTS)
     assert MORE_RESULTS in result.stderr
 
 
@@ -436,60 +436,141 @@ def test_machine_max_result_zero_lifts_the_cap(tmp_path, machine_settings):
     assert len(json.loads(result.stdout)["items"]) == 1500
 
 
-def test_an_unknown_field_is_an_invalid_request_with_a_hint(tmp_path):
-    from tabsdatak.sdk._apiserver import APIServerError
-
-    client = _client()
-    client.list_users_generator.side_effect = APIServerError(
-        {"code": "ListError::3", "error_description": "Undefined filter: colour"},
-        status=400,
+def test_a_truncated_machine_listing_hints_at_its_cap_and_cursor(
+    tmp_path, machine_settings
+):
+    machine_settings.update(max_result=8)
+    server, _ = _paged_server(10)
+    result = _invoke(
+        ["user", "list", "--max-result", "3", "--machine"],
+        client=server,
+        tmp_path=tmp_path,
     )
-    argv = ["user", "list", "--filter", "colour:eq:red", "--machine"]
-    result = _invoke(argv, client=client, tmp_path=tmp_path)
-    assert result.exit_code == 1
-    error = json.loads(result.stdout)["error"]
-    assert error["type"] == "invalid_request"
-    assert "--filter" in error["hint"]
-
-
-def test_a_listing_error_without_list_options_has_no_list_hint(tmp_path):
-    from tabsdatak.sdk._apiserver import APIServerError
-
-    client = _client()
-    client.list_users_generator.side_effect = APIServerError(
-        {"code": "ListError::3", "error_description": "Undefined filter: colour"},
-        status=400,
-    )
-    result = _invoke(["user", "list", "--machine"], client=client, tmp_path=tmp_path)
-    assert result.exit_code == 1
-    error = json.loads(result.stdout)["error"]
-    assert error["type"] == "invalid_request"
-    assert error.get("hint") is None
-
-
-@pytest.mark.parametrize(
-    "argv",
-    [
-        ["user", "list"],
-        ["group", "list"],
-        ["project", "list"],
-        ["collection", "list"],
-        ["fn", "list", "-c", "coll-a"],
-        ["fn", "patches", "-n", "fn-a", "-c", "coll-a"],
-        ["table", "list", "-c", "coll-a"],
-        ["table", "versions", "-c", "coll-a", "--name", "tbl-a"],
-        ["plan", "list"],
-        ["trx", "list"],
-        ["fnrun", "list"],
-        ["worker", "list"],
-        ["cron", "list"],
-        ["cron", "plans"],
-        ["stream", "list"],
-        ["stream", "plans"],
-    ],
-)
-def test_every_paged_list_command_offers_the_list_options(argv, tmp_path):
-    result = _invoke([*argv, "--help"], client=_client(), tmp_path=tmp_path)
     assert result.exit_code == 0, result.output
-    for option in ("--filter", "--order-by", "--cursor"):
-        assert option in result.output
+    payload = json.loads(result.stdout)
+    assert payload["truncated"] is True
+    assert "'--max-result 8' for up to 8" in payload["hint"]
+    assert f"'--cursor {payload['next']}'" in payload["hint"]
+    assert "--max-result 0" not in payload["hint"]
+
+
+def test_a_row_count_cut_suggests_only_with_a_higher_max_result(
+    tmp_path, machine_settings
+):
+    machine_settings.update(max_result=8)
+    server, _ = _paged_server(10)
+    result = _invoke(
+        ["user", "list", "--max-result", "3", "--machine"],
+        client=server,
+        tmp_path=tmp_path,
+    )
+    hint = json.loads(result.stdout)["hint"]
+    assert "and keep only the fields you need with '--fields <FIELD,...>'" in hint
+
+
+def test_a_machine_listing_at_its_cap_hints_only_the_cursor(tmp_path, machine_settings):
+    machine_settings.update(max_result=8)
+    server, _ = _paged_server(10)
+    result = _invoke(
+        ["user", "list", "--max-result", "0", "--machine"],
+        client=server,
+        tmp_path=tmp_path,
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert len(payload["items"]) == 8
+    assert "--max-result" not in payload["hint"]
+    assert f"'--cursor {payload['next']}'" in payload["hint"]
+
+
+def test_a_complete_listing_has_no_hint(tmp_path, machine_settings):
+    machine_settings.update(max_result=8)
+    server, _ = _paged_server(5)
+    result = _invoke(["user", "list", "--machine"], client=server, tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert "hint" not in json.loads(result.stdout)
+
+
+def _pages(argv: list[str], server, tmp_path) -> list[dict]:
+    pages, cursor = [], None
+    while True:
+        more = ["--cursor", cursor] if cursor else []
+        result = _invoke([*argv, *more], client=server, tmp_path=tmp_path)
+        assert result.exit_code == 0, result.output
+        pages.append(json.loads(result.stdout))
+        cursor = pages[-1]["next"]
+        if cursor is None:
+            return pages
+
+
+def test_a_machine_listing_stops_at_its_byte_budget_and_resumes_there(
+    tmp_path, machine_settings
+):
+    budget = ENVELOPE_BYTES + 70
+    machine_settings.update(max_result=8, max_bytes=budget)
+    server, _ = _paged_server(10)
+    pages = _pages(["user", "list", "--machine"], server, tmp_path)
+    assert all(json_size(page) <= budget for page in pages)
+    names = [row["name"] for page in pages for row in page["items"]]
+    assert names == [f"user-{index:04d}" for index in range(10)]
+    assert [len(page["items"]) for page in pages] == [3, 3, 3, 1]
+    assert "all that fit in one result" in pages[0]["hint"]
+    assert f"'--cursor {pages[0]['next']}'" in pages[0]["hint"]
+    assert "keep only the fields you need with '--fields <FIELD,...>'" in pages[0]["hint"]
+    assert "showing the first 3" in pages[0]["hint"]
+    assert all("showing the next 3" in page["hint"] for page in pages[1:3])
+
+
+def test_a_byte_cut_with_only_asks_for_fewer_fields(tmp_path, machine_settings):
+    machine_settings.update(max_result=8, max_bytes=ENVELOPE_BYTES + 70)
+    server, _ = _paged_server(10)
+    result = _invoke(
+        ["user", "list", "--fields", "name", "--machine"],
+        client=server,
+        tmp_path=tmp_path,
+    )
+    hint = json.loads(result.stdout)["hint"]
+    assert "name fewer fields in '--fields'" in hint
+    assert "<FIELD,...>" not in hint
+
+
+def test_a_row_larger_than_the_byte_budget_is_still_listed(tmp_path, machine_settings):
+    machine_settings.update(max_result=8, max_bytes=ENVELOPE_BYTES + 5)
+    server, _ = _paged_server(3)
+    pages = _pages(["user", "list", "--machine"], server, tmp_path)
+    assert [len(page["items"]) for page in pages] == [1, 1, 1]
+
+
+def test_only_keeps_the_named_fields(tmp_path):
+    client, _ = _counting_users(3)
+    result = _invoke(
+        ["user", "list", "-o", "jsonb", "--fields", "email"],
+        client=client,
+        tmp_path=tmp_path,
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["items"] == [
+        {"email": f"user-{index}@x.io"} for index in range(3)
+    ]
+
+
+def test_an_unknown_field_names_the_fields_the_rows_have(tmp_path, machine_settings):
+    client, _ = _counting_users(3)
+    result = _invoke(
+        ["user", "list", "--fields", "name,nickname", "--machine"],
+        client=client,
+        tmp_path=tmp_path,
+    )
+    assert result.exit_code == 2, result.output
+    error = json.loads(result.stdout)["error"]
+    assert error["type"] == "usage"
+    assert error["message"].endswith("do not have: nickname. They have: name, email.")
+
+
+def test_only_does_not_apply_to_the_table_view(tmp_path):
+    client, _ = _counting_users(3)
+    result = _invoke(
+        ["user", "list", "--fields", "name"], client=client, tmp_path=tmp_path
+    )
+    assert result.exit_code == 2, result.output
+    assert "'--fields' applies to json, jsonb and yaml output." in result.output

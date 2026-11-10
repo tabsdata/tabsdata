@@ -601,27 +601,41 @@ def pick_worker(ctx: click.Context, workers: list, subject: str):
     return workers[index - 1]
 
 
+LOGS_CUT_HINT = (
+    "Logs marked 'log_truncated' show only their end: '--tail N' picks their "
+    "last N lines, '--file PATH' writes every log whole to a local file."
+)
+
+
 def _capped(entries: list[dict]) -> list[dict]:
     """In a machine run, each log's tail up to its ``log_cap_bytes``, within
-    its ``logs_budget_bytes`` over the whole document."""
+    its ``logs_budget_bytes`` over the whole document, shared evenly: a log
+    shorter than its share leaves the rest to the others."""
     run = machine()
     if run is None or run.log_cap_bytes is None:
         return entries
+    encoded = {
+        index: entry["log"].encode()
+        for index, entry in enumerate(entries)
+        if entry.get("log") is not None
+    }
     left = run.logs_budget_bytes or run.log_cap_bytes
+    keeps = {}
+    for index in sorted(encoded, key=lambda i: len(encoded[i])):
+        share = left // (len(encoded) - len(keeps))
+        keeps[index] = min(len(encoded[index]), run.log_cap_bytes, share)
+        left -= keeps[index]
     capped = []
-    for entry in entries:
-        log = entry.get("log")
-        if log is None:
+    for index, entry in enumerate(entries):
+        if index not in encoded or keeps[index] == len(encoded[index]):
             capped.append(entry)
             continue
-        encoded = log.encode()
-        keep = min(len(encoded), run.log_cap_bytes, left)
-        left -= keep
-        if keep == len(encoded):
-            capped.append(entry)
-            continue
-        tail = encoded[len(encoded) - keep :].decode(errors="ignore")
-        capped.append({**entry, "log": tail, "log_truncated": True})
+        tail = encoded[index][len(encoded[index]) - keeps[index] :]
+        capped.append({
+            **entry,
+            "log": tail.decode(errors="ignore"),
+            "log_truncated": True,
+        })
     return capped
 
 
@@ -679,11 +693,17 @@ def emit_logs(ctx: click.Context, entries: list[dict], truncated: bool, file: st
             click.echo(text)
         else:
             click.echo("No worker logs to show.")
+    capped = _capped(entries)
     render_list(
         ctx,
-        items=lambda: _capped(entries),
+        items=capped,
         truncated=truncated,
         compat=lambda: _compat_logs(entries),
+        cut_hint=lambda: (
+            LOGS_CUT_HINT
+            if any(entry.get("log_truncated") for entry in capped)
+            else None
+        ),
     )
 
 

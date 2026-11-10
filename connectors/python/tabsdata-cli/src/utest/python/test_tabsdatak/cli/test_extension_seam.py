@@ -60,6 +60,7 @@ CONTRACT = [
     "mode_option",
     "option_strings",
     "output_format",
+    "paged_options",
     "path_params",
     "pinned",
     "present",

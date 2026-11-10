@@ -19,8 +19,9 @@ from typing import Any
 class Machine:
     """``command`` is the invocation as the program names it, for resuming it;
     ``max_wait`` the longest a command waits and what sets that; ``max_result``
-    the most rows a listing returns (0 for no cap); ``confine_to`` the
-    directory every local file must resolve under."""
+    the most rows a listing returns (0 for no cap); ``max_bytes`` the most
+    UTF-8 bytes the document a command emits takes;
+    ``confine_to`` the directory every local file must resolve under."""
 
     emit: Callable[[Any], None]
     command: list[str] = field(default_factory=list)
@@ -28,6 +29,7 @@ class Machine:
     wait_seconds: float | None = None
     max_wait: tuple[float, str] | None = None
     max_result: int | None = None
+    max_bytes: int | None = None
     log_cap_bytes: int | None = None
     logs_budget_bytes: int | None = None
     confine_to: str | None = None

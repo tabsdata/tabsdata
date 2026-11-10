@@ -23,6 +23,7 @@ from tabsdatak.cli.cli_utils import (
     format_option,
     max_result_option,
     output_format,
+    paged_options,
     render,
     render_list,
     take,
@@ -116,10 +117,10 @@ def _render_entries(ctx: click.Context, context, entries) -> None:
 
 
 @capability("knowledge", "read")
-@docs.command("list")
 @docs.command("list", login=False)
 @_category_option
 @max_result_option
+@paged_options
 @format_option
 @view_options()
 @click.pass_context
@@ -140,6 +141,7 @@ def list_(ctx: click.Context, category: str | None):
 )
 @_category_option
 @max_result_option
+@paged_options
 @format_option
 @view_options()
 @click.pass_context

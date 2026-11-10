@@ -19,6 +19,7 @@ import hashlib
 import importlib.machinery
 import importlib.util
 import io
+import itertools
 import json
 import logging
 import os
@@ -27,9 +28,8 @@ import sys
 import weakref
 from contextlib import contextmanager
 from http import HTTPStatus
-from itertools import islice
 from types import ModuleType
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, Sequence
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, NamedTuple, Sequence
 
 import rich_click as click
 from rich_click import Option, UsageError
@@ -912,28 +912,109 @@ def render_status_done(
 
 
 def render_list(
-    ctx: click.Context, *, items, truncated: bool, view=None, compat=_AS_DATA
+    ctx: click.Context,
+    *,
+    items,
+    truncated: bool,
+    view=None,
+    compat=_AS_DATA,
+    cut_hint=None,
 ) -> None:
     """Render a listing: ``view`` for humans, as in :func:`render`; in ``jsonb``
     and a machine run the list envelope ``{"items": [...], "truncated": bool,
     "next": cursor}``, where ``next`` is the ``--cursor`` that continues a
-    truncated listing, or null; in ``json`` and ``yaml`` the bare items, or
-    ``compat`` when given."""
+    truncated listing, or null, and a truncated listing adds ``hint``, how to
+    get the rest; in ``json`` and ``yaml`` the bare items, or ``compat`` when
+    given. Rows keep only the fields ``--fields`` names, and a machine run stops
+    them at its ``max_bytes``. ``cut_hint``, a callable, says how to get rows
+    the command shortened itself, or returns None when it shortened none."""
+    if (ctx.obj or {}).get("list_fields") and output_format(ctx) == "table":
+        raise click.UsageError("'--fields' applies to json, jsonb and yaml output.")
 
     def _items():
-        return items() if callable(items) else items
+        return _only_fields(ctx, items() if callable(items) else items)
+
+    def _compat():
+        return _only_fields(ctx, compat() if callable(compat) else compat)
+
+    def _envelope():
+        rows = _items()
+        fitted = _fit(ctx, rows)
+        cut = truncated or len(fitted) < len(rows)
+        envelope = {"items": fitted, "truncated": cut, "next": list_next(ctx)}
+        hints = [more_results_message(ctx)] if cut else []
+        shortened = cut_hint() if cut_hint is not None else None
+        if shortened:
+            hints.append(shortened)
+        if hints:
+            envelope["hint"] = " ".join(hints)
+        return envelope
 
     render(
         ctx,
-        data=lambda: {
-            "items": _items(),
-            "truncated": truncated,
-            "next": list_next(ctx),
-        },
+        data=_envelope,
         view=view,
         truncated=truncated,
-        compat=_items if compat is _AS_DATA else compat,
+        compat=_items if compat is _AS_DATA else _compat,
     )
+
+
+def _only_fields(ctx: click.Context, rows):
+    return only_fields(rows, (ctx.obj or {}).get("list_fields"))
+
+
+def only_fields(rows, fields: list[str] | None):
+    """Each of ``rows`` with only ``fields``; a field no row has is a usage
+    error naming the fields the rows have."""
+    if not fields or not isinstance(rows, list):
+        return rows
+    records = [row for row in rows if isinstance(row, dict)]
+    known = list(dict.fromkeys(key for row in records for key in row))
+    unknown = [name for name in fields if name not in known]
+    if records and unknown:
+        raise click.UsageError(
+            f"'--fields' names fields the rows do not have: {', '.join(unknown)}. "
+            f"They have: {', '.join(known)}."
+        )
+    return [
+        {name: row[name] for name in fields if name in row}
+        if isinstance(row, dict)
+        else row
+        for row in rows
+    ]
+
+
+def json_size(value) -> int:
+    """Escaped, the most any reader of the document counts it at."""
+    return len(json.dumps(value, separators=(",", ":"), default=str))
+
+
+# Room for the envelope around the rows: its keys, the cursor in 'next' and
+# the hint that repeats it.
+ENVELOPE_BYTES = 1024
+
+
+def _fit(ctx: click.Context, rows: list) -> list:
+    """The leading ``rows`` that fit, with the envelope around them, in the
+    machine run's ``max_bytes``, at least one, with ``next`` resuming at the
+    first left out. Only a listing a cursor can resume is cut: any other keeps
+    every row."""
+    run = machine()
+    budget = run.max_bytes if run is not None else None
+    ctx.ensure_object(dict)
+    if not budget or len(rows) != ctx.obj.get("list_taken"):
+        return rows
+    used = ENVELOPE_BYTES
+    for index, row in enumerate(rows):
+        used += json_size(row) + 1
+        if used > budget and index:
+            cursor = _cursor_at(ctx, index)
+            if cursor is None:
+                return rows
+            ctx.obj["list_fitted"] = index
+            ctx.obj["list_next"] = cursor
+            return rows[:index]
+    return rows
 
 
 def server_version(server) -> str | None:
@@ -1022,6 +1103,12 @@ def _apply_max_result(ctx: click.Context, param, value):
     return value
 
 
+def _apply_fields(ctx: click.Context, param, value):
+    ctx.ensure_object(dict)
+    ctx.obj["list_fields"] = split_csv(value) or None
+    return value
+
+
 def max_result_option(fn):
     """Decorator adding ``--max-result`` to a list command."""
     return click.option(
@@ -1032,7 +1119,10 @@ def max_result_option(fn):
         show_default=True,
         expose_value=False,
         callback=_apply_max_result,
-        help="Maximum number of rows to list. Use 0 for no limit.",
+        help=(
+            "Maximum number of rows to list. Use 0 for no limit, or for the "
+            "most a program running tdk allows."
+        ),
     )(fn)
 
 
@@ -1114,20 +1204,41 @@ def _apply_cursor(ctx: click.Context, param, value):
     return value
 
 
+_FIELDS_OPTION = click.option(
+    "--fields",
+    metavar="FIELD,...",
+    expose_value=False,
+    callback=_apply_fields,
+    help=(
+        "Keep only these fields of each row, comma-separated, in json, jsonb and "
+        "yaml output."
+    ),
+)
+_CURSOR_OPTION = click.option(
+    "--cursor",
+    expose_value=False,
+    callback=_apply_cursor,
+    help=(
+        "Continue a listing from the 'next' cursor it returned, with the same "
+        "filters and order."
+    ),
+)
+
+
+def paged_options(fn):
+    """Decorator adding ``--cursor`` and ``--fields`` to a list command whose
+    rows tdk holds itself (bundled, or read whole from the server):
+    :func:`take` pages them."""
+    return _FIELDS_OPTION(_CURSOR_OPTION(fn))
+
+
 def list_options(fn):
-    """Decorator adding ``--filter``, ``--order-by`` and ``--cursor`` to a list
-    command backed by a paged server listing; read them with
-    :func:`list_params`."""
+    """Decorator adding ``--filter``, ``--order-by``, ``--cursor`` and
+    ``--fields`` to a list command backed by a paged server listing; read the
+    first three with :func:`list_params`."""
     for option in (
-        click.option(
-            "--cursor",
-            expose_value=False,
-            callback=_apply_cursor,
-            help=(
-                "Continue a listing from the 'next' cursor it returned, with the "
-                "same filters and order."
-            ),
-        ),
+        _FIELDS_OPTION,
+        _CURSOR_OPTION,
         click.option(
             "--order-by",
             "order_by",
@@ -1204,22 +1315,81 @@ def take(ctx: click.Context, rows: Iterable) -> tuple[list, bool]:
     Fetches one row beyond the cap so a full page is distinguishable from a
     truncated one, then discards it. Returns the capped rows and whether the
     server holds more; when it does and ``rows`` is an SDK ``Listing``, the
-    cursor of the first row left out becomes :func:`list_next`."""
+    cursor of the first row left out becomes :func:`list_next`. The cursor of
+    every row taken is kept, so a listing cut shorter still resumes where it
+    stopped."""
     limit = max_result(ctx)
     ctx.ensure_object(dict)
     ctx.obj["list_next"] = None
-    if not limit:
-        return list(rows), False
-    capped = list(islice(rows, limit + 1))
-    if len(capped) <= limit:
-        return capped, False
-    position = getattr(rows, "position", None)
+    if not hasattr(rows, "position") and _pages_itself(ctx):
+        rows = _HeldListing(ctx, rows)
+    taken, positions = [], []
+    for row in rows:
+        positions.append(getattr(rows, "position", None))
+        if limit and len(taken) == limit:
+            break
+        taken.append(row)
+    ctx.obj["list_taken"] = len(taken)
+    ctx.obj["list_positions"] = positions
+    truncated = len(positions) > len(taken)
+    if truncated:
+        ctx.obj["list_next"] = _cursor_at(ctx, len(taken))
+    return taken, truncated
+
+
+class _Offset(NamedTuple):
+    pagination_id: None
+    next_step: None
+    skip: int
+
+
+def _pages_itself(ctx: click.Context) -> bool:
+    """A command with ``--cursor`` that no server listing pages."""
+    return "list_key" not in ctx.obj and any(
+        "--cursor" in param.opts for param in ctx.command.params
+    )
+
+
+class _HeldListing:
+    """Rows tdk holds itself, from the ``--cursor`` offset on; ``position`` is
+    where the row last yielded sits, as a cursor resumes there."""
+
+    def __init__(self, ctx: click.Context, rows: Iterable):
+        key = _listing_key(ctx, [], None)
+        ctx.obj["list_key"] = key
+        start = 0
+        cursor = ctx.obj.get("list_cursor")
+        if cursor is not None:
+            pagination_id, _, skip, listing = cursor
+            if listing != key or pagination_id is not None:
+                raise click.UsageError(
+                    "'--cursor' continues a different listing; pass it with the "
+                    "same command and options that returned it."
+                )
+            start = skip
+        self._rows = itertools.islice(iter(rows), start, None)
+        self._next = start
+        self.position = None
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        row = next(self._rows)
+        self.position = _Offset(None, None, self._next)
+        self._next += 1
+        return row
+
+
+def _cursor_at(ctx: click.Context, index: int) -> str | None:
+    positions = ctx.obj.get("list_positions") or []
     listing = ctx.obj.get("list_key")
-    if position is not None and listing is not None:
-        ctx.obj["list_next"] = encode_cursor(
-            position.pagination_id, position.next_step, position.skip, listing
-        )
-    return capped[:limit], True
+    position = positions[index] if index < len(positions) else None
+    if position is None or listing is None:
+        return None
+    return encode_cursor(
+        position.pagination_id, position.next_step, position.skip, listing
+    )
 
 
 def more_results_notes(ctx: click.Context, truncated: bool) -> list[str]:
@@ -1228,10 +1398,48 @@ def more_results_notes(ctx: click.Context, truncated: bool) -> list[str]:
 
 def more_results_message(ctx: click.Context) -> str:
     cursor = list_next(ctx)
-    return (
-        f"More results available: showing the first {max_result(ctx)}. Raise "
-        "'--max-result <N>', pass '--max-result 0' for all"
-        + (f", or continue with '--cursor {cursor}'." if cursor else ".")
+    more = f"'--cursor {cursor}'" if cursor else None
+    which = "the next" if (ctx.obj or {}).get("list_cursor") else "the first"
+    fitted = (ctx.obj or {}).get("list_fitted")
+    if fitted is not None:
+        ways = [f"continue with {more}"]
+        if (ctx.obj or {}).get("list_fields"):
+            ways.append("name fewer fields in '--fields'")
+        elif any(param.name == "fields" for param in ctx.command.params):
+            ways.append(
+                "keep only the fields you need with '--fields <FIELD,...>' and raise "
+                "'--max-result <N>', so more rows fit in one result"
+            )
+        return (
+            f"More results available: showing {which} {fitted}, all that fit "
+            f"in one result. To get them, {', or '.join(ways)}."
+        )
+    shown = max_result(ctx)
+    run = machine()
+    cap = run.max_result if run is not None else None
+    if cap and shown >= cap:
+        ways = [f"continue with {more}"] if more else []
+    else:
+        most = (
+            f"'--max-result {cap}' for up to {cap}"
+            if cap
+            else "'--max-result 0' for all"
+        )
+        raise_it = f"raise '--max-result <N>' ({most})"
+        if (
+            output_format(ctx) != "table"
+            and not (ctx.obj or {}).get("list_fields")
+            and any(param.name == "fields" for param in ctx.command.params)
+        ):
+            raise_it += (
+                " and keep only the fields you need with '--fields <FIELD,...>', "
+                "so more rows fit in one result"
+            )
+        ways = [raise_it]
+        if more:
+            ways.append(f"continue with {more}")
+    return f"More results available: showing {which} {shown}." + (
+        f" To get them, {', or '.join(ways)}." if ways else ""
     )
 
 

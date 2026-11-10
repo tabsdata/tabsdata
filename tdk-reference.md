@@ -103,18 +103,27 @@ Applied where shown in each command. Every value option takes an argument.
                                   from `tdk set --profile`, else the default
                                   profile. On every command; see Profiles.
       --max-result N              Maximum rows a `list` command shows. Default: 100.
-                                  0 lists everything. When rows are left over,
-                                  the command says so (on stderr under
-                                  --format json|jsonb|yaml, so stdout stays
-                                  parseable).
+                                  0 lists everything, or as many as a program
+                                  running tdk allows; a program may also cap
+                                  the size of the rows. When rows are left over,
+                                  the command says so and how to get them (on
+                                  stderr under --format json|jsonb|yaml, so
+                                  stdout stays parseable; in the listing's
+                                  `hint` under jsonb).
       --filter FIELD:OP:VALUE     Server-side filter on a paged `list` (every one
                                   with --max-result), OP one of eq ne gt ge lt le
                                   lk btw is. Repeatable: conditions on different
                                   fields all hold, on the same field any one
                                   does. Combines with the command's own filters.
       --order-by FIELD[+|-]       Sort a paged `list`, ascending by default.
-      --cursor CURSOR             Continue a paged `list` from the `next` cursor
-                                  it returned; pass the same filters and order.
+      --cursor CURSOR             Continue a paged `list` (and `docs list|search`)
+                                  from the `next` cursor it returned; pass the
+                                  same filters and order.
+      --fields FIELD,...          Keep only these fields of each row of a paged
+                                  `list` (and `docs list|search`) in json, jsonb
+                                  and yaml output; a
+                                  field no row has is a usage error naming the
+                                  fields the rows have.
       --confirm WORD              Confirm a destructive op without the prompt by
                                   giving its word: `delete`, or `cancel` for
                                   `plan|trx cancel`; another word is a usage
@@ -592,7 +601,7 @@ connection validate --file FILE                       # validate a connection do
 connection list     [--proj PROJECT | --all-projects] [--type TYPE] [--mode src|dest]
                     [--status STATUS] [--max-result N] [--filter F] [--order-by F] [--cursor C] [-o]
 connection get      --name COLLECTION [--proj PROJECT] [--definition] [-o]
-connection entities --name COLLECTION [--proj PROJECT] [--fields]
+connection entities --name COLLECTION [--proj PROJECT] [--schema]
                     [--max-result N] [--filter F] [--order-by F] [--cursor C] [-o]
 connection check    --name COLLECTION [--proj PROJECT] [--no-wait] [--timeout S] [-o]
 connection check    --conn-file FILE [--metadata] [--sample FQN [--len N]] [-o]   # offline
@@ -622,7 +631,7 @@ refresh found and their schema fingerprint.
   class.
 - `entities` gives the list envelope of `{"id", "fqn", "entity_kind",
   "field_count", "doc"}`; `doc`, the explorer's entity with its fields, only
-  with `--fields`. A file's fields are its columns, read from the file's head
+  with `--schema`. A file's fields are its columns, read from the file's head
   at refresh (CSV header and first lines, NDJSON first lines, the Parquet
   footer, the Avro header); files of a folder whose newest files agree share
   that schema, a folder whose newest files differ has each file read for its
@@ -773,8 +782,8 @@ refused:
 
 ```
 docs show   --name SYMBOL [--category C] [-o]
-docs list   [--category C] [--max-result N] [-o]
-docs search --query WORDS [--category C] [--max-result N] [-o]
+docs list   [--category C] [--max-result N] [--cursor C] [--fields F] [-o]
+docs search --query WORDS [--category C] [--max-result N] [--cursor C] [--fields F] [-o]
 ```
 
 Reference pages introspected from the installed `tabsdatak` packages, so they
@@ -908,7 +917,8 @@ gives the `jsonb` document, `-o json` included.
 In `jsonb` a listing is always an object, never a bare array:
 `{"items": [...], "truncated": bool, "next": cursor}`, where
 `truncated` says `--max-result` cut it short and `next`, on a paged listing, is
-the `--cursor` that continues it (null otherwise). A cursor continues only the
+the `--cursor` that continues it (null otherwise). A truncated listing adds
+`hint`, which says how to get the rest. A cursor continues only the
 command, options, filters and order that returned it; anything else is a usage
 error.
 `table data` gives

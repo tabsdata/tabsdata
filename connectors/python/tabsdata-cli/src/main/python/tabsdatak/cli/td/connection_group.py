@@ -717,13 +717,13 @@ def sample(ctx: click.Context, name, entity, limit, wait, timeout):
 @connection.command()
 @proj_option
 @_collection_option
-@click.option("--fields", is_flag=True, help="Add each entity's document.")
+@click.option("--schema", is_flag=True, help="Add each entity's fields.")
 @format_option
 @view_options()
 @max_result_option
 @list_options
 @click.pass_context
-def entities(ctx: click.Context, name, fields):
+def entities(ctx: click.Context, name, schema):
     """List the entities the last refresh of a collection's connection found.
     Match names with '--filter fqn:lk:GLOB', where '*' matches any text"""
     try:
@@ -732,7 +732,7 @@ def entities(ctx: click.Context, name, fields):
             ctx,
             server.list_connection_entities_generator(
                 name,
-                fields=fields,
+                fields=schema,
                 **list_params(ctx),
             ),
         )

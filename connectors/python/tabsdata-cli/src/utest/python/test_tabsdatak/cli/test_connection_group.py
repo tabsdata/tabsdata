@@ -542,7 +542,7 @@ def test_entities_pages_with_the_list_options(tmp_path):
             "entities",
             "-n",
             "crm",
-            "--fields",
+            "--schema",
             "--filter",
             "fqn:lk:db.*",
             "--max-result",

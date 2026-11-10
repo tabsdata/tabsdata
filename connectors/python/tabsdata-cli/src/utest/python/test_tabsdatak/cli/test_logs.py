@@ -224,5 +224,25 @@ def test_machine_logs_have_a_budget_over_the_whole_document(
     items = json.loads(result.stdout)["items"]
     sizes = [len(item["log"].encode()) for item in items]
     assert sum(sizes) == 2 * 1024 * 1024
-    assert max(sizes) == 256 * 1024 and sizes[-1] == 0
+    assert max(sizes) - min(sizes) <= 1
     assert all(item["log_truncated"] for item in items)
+
+
+def test_machine_logs_share_the_budget_and_a_short_log_leaves_its_rest(
+    tmp_path, machine_settings
+):
+    machine_settings.update(log_cap_bytes=12 * 1024, logs_budget_bytes=12 * 1024)
+    client = _client()
+    entries = [
+        _entry("W1", log="a" * (20 * 1024)),
+        _entry("W2", log="b" * 1024),
+        _entry("W3", log="c" * (20 * 1024)),
+    ]
+    client.scope_logs.return_value = (entries, False)
+    result = _invoke(["plan", "logs", "--plan", "ep20260930-1", "--all", "--machine"], client, tmp_path)
+    assert result.exit_code == 0, result.output
+    items = json.loads(result.stdout)["items"]
+    sizes = [len(item["log"].encode()) for item in items]
+    assert sizes == [5632, 1024, 5632]
+    assert [item["log_truncated"] for item in items] == [True, False, True]
+    assert items[0]["log"].endswith("a")
