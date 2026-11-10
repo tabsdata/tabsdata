@@ -2,20 +2,20 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::types::basic::{ExecutionId, LogicalFunctionRunId, TransactionId};
-use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use crate::types::basic::{
+    CollectionLabel, ExecutionId, FunctionName, LogicalFunctionRunId, TransactionId,
+};
+use ta_objects::{TypedEnum, TypedOpenApi, TypedSerde};
 
-/// How a cancel reached a run: one it was asked to cancel, another run of a
-/// transaction it ended, a run reading an output of a run it ended, or a
-/// later run of the same function, which reads the state the earlier one
-/// leaves.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
+#[derive(TypedEnum, TypedSerde, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash, Copy)]
 pub enum CancelReason {
+    #[typed_enum(rename = "requested")]
     Requested,
+    #[typed_enum(rename = "transaction")]
     Transaction,
+    #[typed_enum(rename = "downstream")]
     Downstream,
+    #[typed_enum(rename = "same_function")]
     SameFunction,
 }
 
@@ -25,6 +25,8 @@ pub struct CanceledRun {
     pub execution_id: ExecutionId,
     pub transaction_id: TransactionId,
     pub function_run_id: LogicalFunctionRunId,
+    pub function: FunctionName,
+    pub collection: CollectionLabel,
     pub reason: CancelReason,
 }
 
@@ -33,4 +35,26 @@ pub struct CanceledRun {
 #[derive(Eq, PartialEq)]
 pub struct CancelResponse {
     pub canceled: Vec<CanceledRun>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cancel_reason_wire_names() {
+        for (reason, name) in [
+            (CancelReason::Requested, "requested"),
+            (CancelReason::Transaction, "transaction"),
+            (CancelReason::Downstream, "downstream"),
+            (CancelReason::SameFunction, "same_function"),
+        ] {
+            let json = serde_json::to_value(reason).unwrap();
+            assert_eq!(json, serde_json::json!(name));
+            assert_eq!(
+                serde_json::from_value::<CancelReason>(json).unwrap(),
+                reason
+            );
+        }
+    }
 }

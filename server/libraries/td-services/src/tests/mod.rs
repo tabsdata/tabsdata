@@ -7,6 +7,7 @@ mod attempts;
 mod base_path;
 pub(crate) mod callback_outcomes;
 mod cancel_cascade;
+mod cancel_reasons;
 mod catalog_cycles;
 pub(crate) mod catalog_races;
 mod collection_races;

@@ -21,9 +21,8 @@ use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::types::basic::{
-    AccessTokenId, CollectionName, ExecutionId, ExecutionStatus, FunctionName,
-    LogicalFunctionRunStatus, PhysicalFunctionRunStatus, TableNameDto, TransactionStatus, UserId,
-    WorkerStatus,
+    AccessTokenId, CollectionName, ExecutionStatus, FunctionName, LogicalFunctionRunStatus,
+    PhysicalFunctionRunStatus, TableNameDto, TransactionStatus, UserId, WorkerStatus,
 };
 use td_objects::types::composed::TableDependencyDto;
 use td_queries::Queries;
@@ -104,9 +103,24 @@ async fn test_canceling_an_execution_cancels_the_later_transactions_it_reaches(
             async move {
                 let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .update(ExecutionParam { execution }, ());
-                Services::with_defaults(db.clone())
+                let response = Services::with_defaults(db.clone())
                     .execution_cancel(request)
-                    .await?;
+                    .await?
+                    .data;
+                let reasons: Vec<(String, CancelReason)> = response
+                    .canceled
+                    .iter()
+                    .map(|run| (run.function.to_string(), run.reason))
+                    .sorted()
+                    .collect();
+                assert_eq!(
+                    reasons,
+                    vec![
+                        ("reader".to_string(), CancelReason::Downstream),
+                        ("sibling".to_string(), CancelReason::Transaction),
+                        ("upstream".to_string(), CancelReason::Requested),
+                    ]
+                );
 
                 let runs: Vec<LogicalFunctionRunDB> = db.fetch_all(&transaction).await?;
                 let statuses: Vec<_> = runs.iter().map(|r| r.status).collect();
@@ -124,87 +138,6 @@ async fn test_canceling_an_execution_cancels_the_later_transactions_it_reaches(
                 assert_eq!(attempt.status, PhysicalFunctionRunStatus::Failed);
                 let worker: WorkerDB = db.fetch_one(&sibling_worker).await?;
                 assert_eq!(worker.status, WorkerStatus::Failed);
-                Ok(())
-            }
-        },
-    )
-    .await
-    .map(|_| ())
-}
-
-/// ep-0's `upstream` failed, so ep-1's run of `upstream` waits on the state it
-/// left; canceling ep-0 cancels that later run as a run of the same function,
-/// with the rest of its transaction, and returns every run it canceled.
-#[td_test::test(db)]
-async fn test_canceling_an_execution_returns_every_run_it_canceled(
-    db: TdPool,
-) -> Result<(), TdError> {
-    let p = db.seed().test_project().await?;
-    let test_executions = vec![
-        TestExecution {
-            expected_status: ExecutionStatus::Running,
-            transactions: vec![TestTransaction {
-                expected_status: TransactionStatus::Running,
-                functions: vec![function(
-                    "upstream",
-                    vec![],
-                    "t_up",
-                    LogicalFunctionRunStatus::Failed,
-                )?],
-            }],
-        },
-        TestExecution {
-            expected_status: ExecutionStatus::Running,
-            transactions: vec![TestTransaction {
-                expected_status: TransactionStatus::Running,
-                functions: vec![
-                    function("upstream", vec![], "t_up", LogicalFunctionRunStatus::OnHold)?,
-                    function(
-                        "sibling",
-                        vec![],
-                        "t_sibling",
-                        LogicalFunctionRunStatus::Scheduled,
-                    )?,
-                ],
-            }],
-        },
-    ];
-    run_status_scenario(
-        db.clone(),
-        p.project_id,
-        &test_executions,
-        |_, e, _, _, _| {
-            let db = db.clone();
-            let first = e[&test_executions[0]].id.clone();
-            let later = e[&test_executions[1]].id.clone();
-            async move {
-                let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-                    .update(
-                        ExecutionParam {
-                            execution: first.clone(),
-                        },
-                        (),
-                    );
-                let response = Services::with_defaults(db.clone())
-                    .execution_cancel(request)
-                    .await?
-                    .data;
-                let reasons = |execution: &ExecutionId| -> Vec<CancelReason> {
-                    response
-                        .canceled
-                        .iter()
-                        .filter(|run| &run.execution_id == execution)
-                        .map(|run| run.reason)
-                        .sorted_by_key(|reason| format!("{reason:?}"))
-                        .collect()
-                };
-                assert_eq!(reasons(&first), vec![CancelReason::Requested]);
-                assert_eq!(
-                    reasons(&later),
-                    vec![CancelReason::SameFunction, CancelReason::Transaction],
-                    "{response:?}"
-                );
-                assert_eq!(response.canceled.len(), 3);
                 Ok(())
             }
         },

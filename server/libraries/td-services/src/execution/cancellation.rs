@@ -17,7 +17,7 @@ use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::cancel::{CancelReason, CanceledRun};
 use td_objects::dxo::function::FunctionDB;
-use td_objects::dxo::logical::LogicalFunctionRunDB;
+use td_objects::dxo::logical::{FunctionRunDBWithNames, LogicalFunctionRunDB};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::worker::WorkerDBWithNames;
 use td_objects::types::basic::{
@@ -59,8 +59,10 @@ pub async fn cancel_runs(
             stops: Vec::new(),
         });
     }
-    let (lfrs, reasons): (Vec<LogicalFunctionRunDB>, Vec<CancelReason>) =
-        cancelled.into_iter().unzip();
+    let lfrs: Vec<LogicalFunctionRunDB> = cancelled
+        .iter()
+        .map(|(run, _)| LogicalFunctionRunDB::clone(run))
+        .collect();
     let stops = end_cancelled_attempts(conn, at, &lfrs).await?;
     let ids: Vec<LogicalFunctionRunId> = lfrs.iter().map(|lfr| lfr.id.clone()).collect();
     conn.logical_runs()
@@ -71,13 +73,14 @@ pub async fn cancel_runs(
         cancelled_count = ids.len(),
         "execution.cancel: cancelled LFR(s)"
     );
-    let runs = lfrs
+    let runs = cancelled
         .into_iter()
-        .zip(reasons)
-        .map(|(lfr, reason)| CanceledRun {
-            execution_id: lfr.execution_id.clone(),
-            transaction_id: lfr.transaction_id.clone(),
-            function_run_id: lfr.id.clone(),
+        .map(|(run, reason)| CanceledRun {
+            execution_id: run.execution_id.clone(),
+            transaction_id: run.transaction_id.clone(),
+            function_run_id: run.id.clone(),
+            function: run.name,
+            collection: run.collection,
             reason,
         })
         .sorted_by(|a, b| {
@@ -96,15 +99,14 @@ pub async fn cancel_runs(
 async fn cancel_closure(
     conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     named: &[LogicalFunctionRunDB],
-) -> Result<Vec<(LogicalFunctionRunDB, CancelReason)>, TdError> {
-    let mut reached: HashMap<LogicalFunctionRunId, (LogicalFunctionRunDB, CancelReason)> =
+) -> Result<Vec<(FunctionRunDBWithNames, CancelReason)>, TdError> {
+    let mut reached: HashMap<LogicalFunctionRunId, (FunctionRunDBWithNames, CancelReason)> =
         HashMap::new();
     let mut lifted: HashSet<TransactionId> = HashSet::new();
     let mut frontier: Vec<LogicalFunctionRunDB> =
         named.iter().filter(|l| unfinished(l)).cloned().collect();
-    for lfr in &frontier {
-        reached.insert(lfr.id.clone(), (lfr.clone(), CancelReason::Requested));
-    }
+    let requested: HashSet<LogicalFunctionRunId> =
+        frontier.iter().map(|lfr| lfr.id.clone()).collect();
 
     while !frontier.is_empty() {
         let transactions: Vec<TransactionId> = frontier
@@ -113,18 +115,23 @@ async fn cancel_closure(
             .filter(|t| lifted.insert(t.clone()))
             .unique()
             .collect();
-        let siblings: Vec<LogicalFunctionRunDB> = if transactions.is_empty() {
+        let siblings: Vec<FunctionRunDBWithNames> = if transactions.is_empty() {
             Vec::new()
         } else {
             conn.chunked()
-                .fetch_all::<LogicalFunctionRunDB>(&transactions, ())
+                .fetch_all::<FunctionRunDBWithNames>(&transactions, ())
                 .await?
         };
         let mut next: Vec<LogicalFunctionRunDB> = Vec::new();
-        for lfr in siblings {
-            if unfinished(&lfr) && !reached.contains_key(&lfr.id) {
-                reached.insert(lfr.id.clone(), (lfr.clone(), CancelReason::Transaction));
-                next.push(lfr);
+        for run in siblings {
+            if unfinished(&run) && !reached.contains_key(&run.id) {
+                let reason = if requested.contains(&run.id) {
+                    CancelReason::Requested
+                } else {
+                    next.push(LogicalFunctionRunDB::clone(&run));
+                    CancelReason::Transaction
+                };
+                reached.insert(run.id.clone(), (run, reason));
             }
         }
 
@@ -144,19 +151,19 @@ async fn cancel_closure(
             .downstream_one_hop(&from, &exclude)
             .await?;
         if !downstream_ids.is_empty() {
-            let downstream: Vec<LogicalFunctionRunDB> = conn
+            let downstream: Vec<FunctionRunDBWithNames> = conn
                 .chunked()
-                .fetch_all::<LogicalFunctionRunDB>(&downstream_ids, ())
+                .fetch_all::<FunctionRunDBWithNames>(&downstream_ids, ())
                 .await?;
-            for lfr in downstream {
-                if unfinished(&lfr) && !reached.contains_key(&lfr.id) {
-                    let reason = if functions.contains(&lfr.function_id) {
+            for run in downstream {
+                if unfinished(&run) && !reached.contains_key(&run.id) {
+                    let reason = if functions.contains(&run.function_id) {
                         CancelReason::SameFunction
                     } else {
                         CancelReason::Downstream
                     };
-                    reached.insert(lfr.id.clone(), (lfr.clone(), reason));
-                    next.push(lfr);
+                    next.push(LogicalFunctionRunDB::clone(&run));
+                    reached.insert(run.id.clone(), (run, reason));
                 }
             }
         }
