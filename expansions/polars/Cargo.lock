@@ -4868,6 +4868,7 @@ dependencies = [
  "chrono",
  "either",
  "fast-float2",
+ "half",
  "hashbrown 0.17.1",
  "itoa",
  "num-traits",
@@ -7513,6 +7514,7 @@ dependencies = [
  "indexmap",
  "once_cell",
  "polars",
+ "polars-expr",
  "polars-mem-engine",
  "polars-plan",
  "pyo3",
@@ -7548,6 +7550,7 @@ version = "2.3.0"
 dependencies = [
  "chrono",
  "polars",
+ "polars-expr",
  "polars-mem-engine",
  "polars-plan",
  "pyo3",
