@@ -15,8 +15,8 @@ from typing import TYPE_CHECKING, List
 import rich_click as click
 from rich.table import Table
 
-from tabsdatak.cli._command import internal_option
 from tabsdatak.cli._errors import TdkException
+from tabsdatak.cli._internal import internal_option
 from tabsdatak.cli._machine import machine
 from tabsdatak.cli.cli_utils import (
     IdType,
@@ -1028,6 +1028,10 @@ def _diagnosis_table(document: dict) -> None:
 
 def render_diagnosis(ctx: click.Context, diagnosis) -> None:
     document = diagnosis.to_dict()
+    if machine() is not None:
+        for run in document.get("failed_runs") or ():
+            if "log_argv" in run:
+                run["log_argv"] = [*run["log_argv"], "--x:from-error"]
     if output_format(ctx) == "table":
         _diagnosis_table(document)
     render(ctx, data=document)

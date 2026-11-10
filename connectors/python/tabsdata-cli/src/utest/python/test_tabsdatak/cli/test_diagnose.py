@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -103,6 +104,24 @@ def test_plan_diagnose_json_is_the_diagnosis(tmp_path):
         "ep20260930-1", max_runs=3, log_lines=200, logs=False
     )
     assert client.connection.project is None
+
+
+def test_only_a_machine_run_is_told_to_read_the_log_from_its_error(tmp_path):
+    document = copy.deepcopy(_DOCUMENT)
+    log_argv = ["worker", "logs", "--worker", "W1"]
+    document["failed_runs"][0]["log_argv"] = log_argv
+    client = _client()
+    client.diagnose_execution.return_value = SimpleNamespace(
+        to_dict=lambda: copy.deepcopy(document)
+    )
+    argv = ["plan", "diagnose", "--plan", "ep20260930-1"]
+    person = _invoke([*argv, "-o", "json"], client, tmp_path)
+    assert json.loads(person.stdout)["failed_runs"][0]["log_argv"] == log_argv
+    machine = _invoke([*argv, "--machine"], client, tmp_path)
+    assert json.loads(machine.stdout)["failed_runs"][0]["log_argv"] == [
+        *log_argv,
+        "--x:from-error",
+    ]
 
 
 def test_plan_diagnose_table(tmp_path):

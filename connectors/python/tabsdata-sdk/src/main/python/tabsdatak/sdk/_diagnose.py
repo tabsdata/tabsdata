@@ -782,13 +782,7 @@ def _failed_run(
         entry["signature"] = signature_document(text)
         entry["log_excerpt"], entry["log_truncated"] = excerpt(text, log_lines)
         if entry["log_truncated"]:
-            entry["log_argv"] = [
-                "worker",
-                "logs",
-                "--worker",
-                worker.id,
-                "--x:from-error",
-            ]
+            entry["log_argv"] = ["worker", "logs", "--worker", worker.id]
     return entry
 
 

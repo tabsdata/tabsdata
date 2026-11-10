@@ -537,7 +537,7 @@ and patch it; a retrying run gets none), its latest worker, `attempts`, the
 `signature` of that worker's log and a `log_excerpt` of its last `--log-lines`
 lines, headed by the traceback and the 20 lines before it when they lie
 earlier; over 4000 characters the lines before those go first, and `log_argv`
-reads the whole log from its error. A held run names
+reads the whole log. A held run names
 the failed runs upstream that block it in `blocked_by`, and
 `blocked_by_outside_plan` when the chain leaves the plan; `blocked_by_outside`
 lists the earlier failed or held runs of its own function in other plans
