@@ -4,8 +4,9 @@
 
 """A CLI extension for tests: ``--machine`` in argv runs the invocation as a
 :class:`Machine` whose one document, or ``{"error": {...}}``, is printed as JSON
-on stdout with the error's exit code. :data:`SETTINGS` sets the other Machine
-fields for a test."""
+on stdout with the error's exit code; click exiting on its own (help) prints
+its text instead. :data:`SETTINGS` sets the other Machine fields for a
+test."""
 
 from __future__ import annotations
 
@@ -34,15 +35,15 @@ class MachineDouble:
             emitted.append(document)
             click.echo(json.dumps(document, default=str))
 
-        error = None
+        error, exited = None, None
         with running(Machine(emit=emit, command=["tdk", *argv], **SETTINGS)):
             try:
-                run(argv, standalone_mode=False)
+                exited = run(argv, standalone_mode=False)
             except click.ClickException as e:
                 error = getattr(e, "error", None) or classify(e)
             except (click.Abort, Exception) as e:
                 error = classify(e)
-        if error is None and not emitted:
+        if error is None and not emitted and exited != 0:
             error = TdkError(type="internal", message="The command produced no result.")
         if error is None:
             sys.exit(ExitCode.OK)

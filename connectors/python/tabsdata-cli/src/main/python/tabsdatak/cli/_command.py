@@ -19,7 +19,8 @@ from tabsdatak.cli._prompted import PromptedOption
 
 class TdkCommand(click.RichCommand):
     """A tdk command; ``login=False`` for one that runs without a login, or
-    settles the login and project itself on the paths that need them."""
+    settles the login and project itself on the paths that need them. Its
+    help is plain text off a terminal (:mod:`tabsdatak.cli._plain_help`)."""
 
     def __init__(self, *args, login: bool = True, **kwargs):
         super().__init__(*args, **kwargs)
@@ -38,10 +39,20 @@ class TdkCommand(click.RichCommand):
                 param.fill(ctx)
         return super().invoke(ctx)
 
+    def get_help(self, ctx: click.Context) -> str:
+        from tabsdatak.cli._plain_help import help_shown
+
+        return help_shown(ctx, super().get_help)
+
 
 class TdkGroup(click.RichGroup):
     """A tdk group: its commands are :class:`TdkCommand` and its groups
-    :class:`TdkGroup`."""
+    :class:`TdkGroup`; its help is plain text off a terminal too."""
 
     command_class = TdkCommand
     group_class = type
+
+    def get_help(self, ctx: click.Context) -> str:
+        from tabsdatak.cli._plain_help import help_shown
+
+        return help_shown(ctx, super().get_help)

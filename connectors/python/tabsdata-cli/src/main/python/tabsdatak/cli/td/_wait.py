@@ -73,6 +73,23 @@ def wait_option(subject: str, failed: str = "a function run", default: bool = Fa
     )
 
 
+class TimeoutOption(click.Option):
+    """``--timeout``: its help names the default a person gets; a program
+    running tdk sees its own, ``Machine.wait_seconds``."""
+
+    def __init__(self, *args, head: str, shown: str, **kwargs):
+        super().__init__(*args, help=f"{head} Default: {shown}.", **kwargs)
+        self.head = head
+
+    def machine_help(self, run) -> str:
+        seconds = run.wait_seconds
+        if run.max_wait is not None and (seconds is None or seconds > run.max_wait[0]):
+            seconds = run.max_wait[0]
+        if seconds is None:
+            return self.help
+        return f"{self.head} Default: {seconds:g}."
+
+
 def timeout_option(default: float | None = None, most: float | None = None):
     """``--timeout``; ``default`` is what the command applies when it is not
     given, and only describes it here."""
@@ -80,10 +97,12 @@ def timeout_option(default: float | None = None, most: float | None = None):
     shown = "no limit" if default is None else f"{default:g}"
     return click.option(
         "--timeout",
+        cls=TimeoutOption,
         type=click.FloatRange(min=0, max=most),
         default=None,
         metavar="S",
-        help=f"Stop waiting after S seconds{at_most}. Default: {shown}.",
+        head=f"Stop waiting after S seconds{at_most}.",
+        shown=shown,
     )
 
 

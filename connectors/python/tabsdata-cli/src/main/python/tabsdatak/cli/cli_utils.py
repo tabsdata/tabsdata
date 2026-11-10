@@ -204,7 +204,7 @@ def prompt_with_escape(message, default=None, hide_input=False):
     return result if result else default
 
 
-def _is_console(stream) -> bool:
+def is_console(stream) -> bool:
     """On Windows, ``isatty`` is also true of the ``NUL`` device, which only a
     console mode check tells apart."""
     try:
@@ -224,9 +224,7 @@ def _is_console(stream) -> bool:
 
 def _prompts_in_terminal() -> bool:
     """On Windows, prompt_toolkit writes only to a console."""
-    return _is_console(sys.stdin) and (
-        sys.platform != "win32" or _is_console(sys.stdout)
-    )
+    return is_console(sys.stdin) and (sys.platform != "win32" or is_console(sys.stdout))
 
 
 def _prompting_disabled_message(ctx: click.Context) -> str:

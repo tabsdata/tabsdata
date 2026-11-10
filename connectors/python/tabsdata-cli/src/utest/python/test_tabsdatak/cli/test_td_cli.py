@@ -10,6 +10,7 @@ apiserver) lives in the CLI integration suite."""
 
 from __future__ import annotations
 
+import errno
 import json
 from unittest.mock import patch
 
@@ -17,6 +18,7 @@ import pytest
 import rich_click as click
 from click.testing import CliRunner
 
+from tabsdatak.cli._help_pages import build_full_help
 from tabsdatak.cli.td import cli as cli_module
 from tabsdatak.cli.td.cli import cli
 
@@ -254,11 +256,31 @@ def test_profile_option_does_not_materialize_lazy_groups():
 
 def test_full_help_walks_lazy_groups_and_gives_them_profile():
     root, _ = _root_with_lazy_stub()
-    tree = json.loads(cli_module.build_full_help(root, "json"))
+    tree = json.loads(build_full_help(root, "json"))
     lazy = next(c for c in tree["commands"] if c["name"] == "lazy")
     leaf = next(c for c in lazy["commands"] if c["name"] == "leaf")
     assert leaf["path"] == "tdk lazy leaf"
     assert ["--profile"] in [opt["opts"] for opt in leaf["options"]]
+
+
+def test_full_help_keeps_the_short_help_flag():
+    settings = cli_module.CONTEXT_SETTINGS
+
+    @click.group(cls=cli_module._RootGroup, context_settings=settings)
+    def root():
+        pass
+
+    @root.group()
+    def group():
+        pass
+
+    @group.command()
+    def leaf():
+        pass
+
+    build_full_help(root, "json")
+    result = CliRunner().invoke(root, ["-h"])
+    assert result.exit_code == 0, result.output
 
 
 def test_invoked_lazy_leaf_takes_profile():
@@ -450,3 +472,15 @@ class TestPinSurface:
             pinned = self._pinned(tmp_path)
             assert pinned.get("project") == "gamma"
             assert pinned.get("collection") == "c1"
+
+
+def test_full_help_into_a_closed_pipe_exits_without_a_traceback():
+    gone = BrokenPipeError(errno.EPIPE, "Broken pipe")
+    with (
+        patch("tabsdatak.cli.td.cli.click.echo", side_effect=gone),
+        patch("tabsdatak.cli.td.cli._drop_stdout") as dropped,
+    ):
+        result = CliRunner().invoke(cli, ["--help", "--full"])
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit)
+    dropped.assert_called_once()

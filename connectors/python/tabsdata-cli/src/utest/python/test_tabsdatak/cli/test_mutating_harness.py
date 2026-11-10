@@ -38,7 +38,8 @@ from unittest.mock import ANY, MagicMock, call, patch
 import pytest
 from click.testing import CliRunner
 
-from tabsdatak.cli.td.cli import build_full_help, cli
+from tabsdatak.cli._help_pages import build_full_help
+from tabsdatak.cli.td.cli import cli
 from tabsdatak.sdk.tabsdata_server import ServerStatus, TabsdataServer
 
 

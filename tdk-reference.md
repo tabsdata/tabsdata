@@ -74,6 +74,13 @@ Global options
                          e.g. `tdk --help --full --format json`.
 ```
 
+Off a terminal (piped, or run by a program), `--help` prints plain text.
+`--help --full -o jsonb` lists the commands under the group its leading words
+name as a paged listing envelope (`--cursor`, `--fields`, `--max-result`).
+When a program runs tdk (an extension's machine run), no progress line is
+shown, the output is always the `jsonb` document, and `--help` leaves out the
+table-view options (`--browse`, `--wrap`, `--max-width`, `--format`).
+
 ## Common options
 
 Applied where shown in each command. Every value option takes an argument.

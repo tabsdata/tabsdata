@@ -2,8 +2,8 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+import errno
 import functools
-import json
 import os
 import sys
 import textwrap
@@ -26,6 +26,7 @@ from tabsdatak.cli._errors import (
     TdkException,
     classify,
 )
+from tabsdatak.cli._help_pages import build_full_help, full_help_page
 from tabsdatak.cli._machine import machine
 from tabsdatak.cli._registry import cli_extensions, collect_cli_commands
 from tabsdatak.cli._unattended import unattended_cause
@@ -135,93 +136,19 @@ def _print_version(ctx: click.Context, param, value: bool):
         ctx.exit()
 
 
-def _full_help_options(command) -> list:
-    options = []
-    for param in getattr(command, "params", []):
-        if isinstance(param, click.Option) and not param.hidden:
-            options.append({
-                "opts": list(param.opts) + list(param.secondary_opts),
-                "help": param.help or "",
-                "is_flag": bool(param.is_flag),
-                "required": bool(param.required),
-                "default": None if param.is_flag else param.to_info_dict()["default"],
-                "type": getattr(param.type, "name", None),
-            })
-    return options
+def _reader_gone(error: OSError) -> bool:
+    """Whether stdout's reader closed the pipe (``| head``); Windows reports it
+    as EINVAL."""
+    return error.errno == errno.EPIPE or (
+        sys.platform == "win32" and error.errno == errno.EINVAL
+    )
 
 
-def _full_help_node(name: str, command, path: str, parent=None) -> dict:
-    node = {
-        "name": name,
-        "path": path,
-        "help": (command.help or command.short_help or "").strip(),
-        "options": _full_help_options(command),
-        "arguments": [
-            {"name": param.name, "required": bool(param.required)}
-            for param in getattr(command, "params", [])
-            if isinstance(param, click.Argument)
-        ],
-    }
-    if isinstance(command, click.Group):
-        ctx = click.Context(command, info_name=name, parent=parent)
-        subcommands = {
-            sub: command.get_command(ctx, sub) for sub in command.list_commands(ctx)
-        }
-        node["commands"] = [
-            _full_help_node(sub, subcommand, f"{path} {sub}", ctx)
-            for sub, subcommand in sorted(subcommands.items())
-            if not subcommand.hidden
-        ]
-    else:
-        words = path.split(" ", 1)[1] if " " in path else ""
-        for extension in cli_extensions():
-            node.update(extension.describe(command, words))
-    return node
-
-
-def _full_help_text(node: dict, lines: list | None = None) -> str:
-    lines = [] if lines is None else lines
-    lines.append(node["path"])
-    if node["help"]:
-        for line in node["help"].splitlines():
-            lines.append(f"    {line}".rstrip())
-    if node["arguments"]:
-        lines.append("    Arguments:")
-        for arg in node["arguments"]:
-            tag = "required" if arg["required"] else "optional"
-            lines.append(f"      {arg['name']} ({tag})")
-    if node["options"]:
-        lines.append("    Options:")
-        for opt in node["options"]:
-            flags = ", ".join(opt["opts"])
-            tag = "required" if opt["required"] else "optional"
-            suffix = f"  {opt['help']}" if opt["help"] else ""
-            lines.append(f"      {flags} ({tag}){suffix}".rstrip())
-    lines.append("")
-    for sub in node.get("commands", []):
-        _full_help_text(sub, lines)
-    return "\n".join(lines)
-
-
-def build_full_help(root, output: str = "text", compact: bool = False) -> str:
-    """Render the help for ``root`` and every command/subcommand under it.
-
-    Each option and argument is tagged ``(required)`` or ``(optional)`` in the
-    text form, and carries a ``required`` boolean in the json form.
-
-    ``output`` is ``"text"`` (a flat, indented listing) or ``"json"`` (a nested
-    tree of ``{name, path, help, options, arguments, commands}`` objects, to
-    which each CLI extension adds), which is ``compact`` in a machine run."""
-    tree = _full_help_node("tdk", root, "tdk")
-    if output == "json":
-        commands = tree.pop("commands", [])
-        for extension in cli_extensions():
-            tree.update(extension.describe_root())
-        tree = {**tree, "commands": commands}
-        if compact:
-            return json.dumps(tree, separators=(",", ":"), default=str)
-        return json.dumps(tree, indent=2, default=str)
-    return _full_help_text(tree)
+def _drop_stdout() -> None:
+    """Point stdout at the null device, so the flush at exit does not fail on
+    the closed pipe again, as click does for the commands it runs."""
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    os.dup2(devnull, sys.stdout.fileno())
 
 
 def _incoming_argv(args, kwargs) -> list:
@@ -292,14 +219,15 @@ def _full_output_format(argv: list) -> str:
     return fmt
 
 
-class _RootGroup(click.RichGroup):
+class _RootGroup(TdkGroup):
     """Top-level group. ``main`` runs each invocation through the registered
     CLI extensions (:func:`tabsdatak.cli._registry.cli_extension`), hoists
     ``--no-prompt`` and intercepts ``--help --full`` (before Click's own
     ``--help`` handling) to print the recursive full help for every command
-    and subcommand. ``--full`` is only honored together with ``--help``, and
-    ``--format`` only together with ``--full``: ``tdk --help [--full [--format
-    FORMAT]]``.
+    and subcommand; a machine run, or a person's ``jsonb``, gets the commands
+    under the group its leading words name, paged (:func:`full_help_page`).
+    ``--full`` is only honored together with ``--help``, and ``--format`` only
+    together with ``--full``: ``tdk --help [--full [--format FORMAT]]``.
 
     ``invoke`` gives every failure its canonical exit code
     (:mod:`tabsdatak.cli._errors`)."""
@@ -327,8 +255,19 @@ class _RootGroup(click.RichGroup):
         run = machine()
         document = run is None and _asks_for_document(argv)
         if ("--help" in argv or "-h" in argv) and "--full" in argv:
+            if run is not None:
+                full_help_page(self, argv)
+                return 0
+            if document:
+                return _documented(argv, lambda: full_help_page(self, argv))
             output = _full_output_format(argv)
-            click.echo(build_full_help(self, output, compact=run is not None))
+            try:
+                click.echo(build_full_help(self, output))
+            except OSError as error:
+                if not _reader_gone(error):
+                    raise
+                _drop_stdout()
+                raise SystemExit(1) from None
             raise SystemExit(0)
         args = {**kwargs, "args": _hoist_no_prompt(argv)}
         if document:
@@ -665,8 +604,9 @@ def release_notes(ctx: click.Context):
 
 
 _LOGIN_HINT = "Run 'tdk login' in a terminal."
+
+
 @capability("session", "write")
-@cli.command()
 @cli.command(login=False)
 @format_option
 @click.option(
