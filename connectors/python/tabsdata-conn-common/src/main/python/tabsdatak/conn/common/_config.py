@@ -10,7 +10,7 @@ from tabsdatak.conn.common.types import CfgSpec
 # Reserved key-prefix for tabsdata-internal knobs inside a
 # ``conn_cfg`` / ``src_cfg`` / ``dest_cfg`` dict. Connector plugins
 # strip these out before forwarding the cfg to the 3rd-party client
-# library (SQLAlchemy, mysql-connector, ...).
+# library (SQLAlchemy, pymysql, ...).
 TABSDATA_CFG_PREFIX = "tabsdata."
 
 

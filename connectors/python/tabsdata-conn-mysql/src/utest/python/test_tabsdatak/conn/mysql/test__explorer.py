@@ -28,11 +28,11 @@ def _conn(uri: str, **kwargs) -> MySQLSrcConn:
     )
 
 
-def test_make_url_injects_mysqlconnector_driver():
+def test_make_url_injects_pymysql_driver():
     url = MySQLConnectionExplorer().make_url(
         _conn("mysql://mysql.example.com:3306/analytics?charset=utf8mb4")
     )
-    assert url.drivername == "mysql+mysqlconnector"
+    assert url.drivername == "mysql+pymysql"
     assert url.username == "etl"
     assert url.password == "hunter2"
     assert url.host == "mysql.example.com"
@@ -43,12 +43,12 @@ def test_make_url_injects_mysqlconnector_driver():
 
 def test_make_url_folds_mariadb_scheme():
     url = MySQLConnectionExplorer().make_url(_conn("mariadb://host/db"))
-    assert url.drivername == "mysql+mysqlconnector"
+    assert url.drivername == "mysql+pymysql"
 
 
 def test_make_url_preserves_explicit_driver():
-    url = MySQLConnectionExplorer().make_url(_conn("mysql+pymysql://host/db"))
-    assert url.drivername == "mysql+pymysql"
+    url = MySQLConnectionExplorer().make_url(_conn("mysql+mysqlconnector://host/db"))
+    assert url.drivername == "mysql+mysqlconnector"
 
 
 def test_engine_kwargs_wrap_conn_cfg_as_connect_args():

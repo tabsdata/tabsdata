@@ -75,16 +75,15 @@ def build_starrocks_engine(
     connect_args: dict | None = None,
 ):
     """Create a SQLAlchemy engine talking to StarRocks via the
-    MySQL wire protocol. ``mysql+mysqlconnector://`` is used so the
-    runtime only needs ``mysql-connector-python`` (which the legacy
-    plugin already required) and not a separate driver shim.
+    MySQL wire protocol, through ``pymysql`` like every other MySQL
+    protocol connection the connectors open.
     """
     # noinspection PyProtectedMember
     from tabsdatak.conn.common.sql._engine import sqlalchemy_utils
 
     user = _convert(credentials.user, str)
     password = _convert(credentials.password, str)
-    url = f"mysql+mysqlconnector://{user}:{password}@{host}:{port}/{database}"
+    url = f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}"
     return sqlalchemy_utils.create_engine(url, connect_args=dict(connect_args or {}))
 
 

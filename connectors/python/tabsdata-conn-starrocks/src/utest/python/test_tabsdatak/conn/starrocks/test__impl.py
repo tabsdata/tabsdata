@@ -68,7 +68,7 @@ def _credentials() -> UserPassword:
     )
 
 
-def test_build_starrocks_engine_uses_mysqlconnector_driver(monkeypatch):
+def test_build_starrocks_engine_uses_pymysql_driver(monkeypatch):
     box: dict = {}
 
     def fake_create_engine(url, *, connect_args):
@@ -85,7 +85,7 @@ def test_build_starrocks_engine_uses_mysqlconnector_driver(monkeypatch):
         credentials=_credentials(),
     )
     assert box["url"].startswith(
-        "mysql+mysqlconnector://etl:hunter2@sr.example.com:9030/analytics",
+        "mysql+pymysql://etl:hunter2@sr.example.com:9030/analytics",
     )
     assert box["connect_args"] == {}
 
@@ -395,8 +395,8 @@ def test_execute_rejects_unknown_if_table_exists(work_dir):
 
 def test_transient_predicate_matches_backends_unavailable():
     exc = Exception(
-        "(mysql.connector.errors.DatabaseError) 1064 (HY000): "
-        "Current available backends: []"
+        "(pymysql.err.ProgrammingError) (1064, "
+        "'Current available backends: []')"
     )
     assert impl._is_transient_starrocks_error(exc) is True
 

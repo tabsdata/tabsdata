@@ -56,9 +56,8 @@ def test_check_connect_bad_credentials_raises(
             password=Secret("definitely-wrong-password"),
         ),
     )
-    # A failed MySQL logon surfaces as a mysql-connector error wrapped by
-    # SQLAlchemy (DBAPIError is the common base of those: a rejected password
-    # carries SQLSTATE 28000, which mysql-connector maps to ProgrammingError).
+    # A failed MySQL logon surfaces as a pymysql error wrapped by SQLAlchemy:
+    # a rejected password (1045) is an OperationalError, a DBAPIError.
     with pytest.raises(DBAPIError):
         MySQLConnectionExplorer().check_connect(bad)
 

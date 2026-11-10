@@ -2,4 +2,5 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+pymysql==1.2.3
 sqlalchemy==2.0.55

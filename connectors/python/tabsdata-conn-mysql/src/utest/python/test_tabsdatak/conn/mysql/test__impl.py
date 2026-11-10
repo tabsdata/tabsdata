@@ -81,14 +81,14 @@ def captured(monkeypatch):
     return box
 
 
-def test_build_mysql_engine_injects_mysqlconnector_driver_when_missing(captured):
+def test_build_mysql_engine_injects_pymysql_driver_when_missing(captured):
     impl.build_mysql_engine(
         "mysql://host:3306/db",
         _credentials(),
         connect_args=None,
     )
     url: URL = captured["url"]
-    assert url.drivername == "mysql+mysqlconnector"
+    assert url.drivername == "mysql+pymysql"
     assert url.username == "etl"
     assert url.password == "hunter2"
     assert url.host == "host"
@@ -97,11 +97,11 @@ def test_build_mysql_engine_injects_mysqlconnector_driver_when_missing(captured)
 
 def test_build_mysql_engine_preserves_explicit_driver(captured):
     impl.build_mysql_engine(
-        "mysql+pymysql://host:3306/db",
+        "mysql+mysqlconnector://host:3306/db",
         _credentials(),
         connect_args=None,
     )
-    assert captured["url"].drivername == "mysql+pymysql"
+    assert captured["url"].drivername == "mysql+mysqlconnector"
 
 
 def test_build_mysql_engine_folds_mariadb_scheme_and_injects_driver(captured):
@@ -110,16 +110,16 @@ def test_build_mysql_engine_folds_mariadb_scheme_and_injects_driver(captured):
         _credentials(),
         connect_args=None,
     )
-    assert captured["url"].drivername == "mysql+mysqlconnector"
+    assert captured["url"].drivername == "mysql+pymysql"
 
 
 def test_build_mysql_engine_folds_mariadb_scheme_keeping_explicit_driver(captured):
     impl.build_mysql_engine(
-        "mariadb+pymysql://host/db",
+        "mariadb+mysqlconnector://host/db",
         _credentials(),
         connect_args=None,
     )
-    assert captured["url"].drivername == "mysql+pymysql"
+    assert captured["url"].drivername == "mysql+mysqlconnector"
 
 
 def test_build_mysql_engine_accepts_secret_uri(captured):
@@ -128,7 +128,7 @@ def test_build_mysql_engine_accepts_secret_uri(captured):
         _credentials(),
         connect_args=None,
     )
-    assert captured["url"].drivername == "mysql+mysqlconnector"
+    assert captured["url"].drivername == "mysql+pymysql"
 
 
 def test_build_mysql_engine_passes_connect_args(captured):
@@ -168,7 +168,7 @@ def test_mysql_read_cfg_creates_engine_from_conn(captured):
         cfg=None,
     )
     cfg.create_sql_alchemy_engine()
-    assert captured["url"].drivername == "mysql+mysqlconnector"
+    assert captured["url"].drivername == "mysql+pymysql"
     # The conn_cfg dict should be the connect_args forwarded:
     assert captured["connect_args"] == {"connect_timeout": 5}
 
@@ -186,7 +186,7 @@ def test_mysql_write_cfg_creates_engine_from_conn(captured):
         cfg=None,
     )
     cfg.create_sql_alchemy_engine()
-    assert captured["url"].drivername == "mysql+mysqlconnector"
+    assert captured["url"].drivername == "mysql+pymysql"
     assert captured["connect_args"] == {"connect_timeout": 5}
 
 

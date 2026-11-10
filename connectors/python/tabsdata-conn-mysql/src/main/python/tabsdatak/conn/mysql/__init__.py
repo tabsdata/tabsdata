@@ -200,7 +200,7 @@ UriSpec: TypeAlias = Annotated[
     _validation.MYSQL_URI_VALIDATION,
 ]
 """A SQLAlchemy-style MySQL URI, e.g.
-`mysql+mysqlconnector://host:port/db`. The scheme must be `mysql` or
+`mysql+pymysql://host:port/db`. The scheme must be `mysql` or
 `mariadb` (an optional `+driver` is allowed). Accepts a plain string
 or a `Secret`."""
 
@@ -279,7 +279,7 @@ class MySQLSrcConn(Conn):
 
     Args:
         uri: SQLAlchemy-style MySQL URI
-            (`mysql+mysqlconnector://host:port/db`). Accepts a plain
+            (`mysql+pymysql://host:port/db`). Accepts a plain
             string or a `Secret`.
         credentials: `UserPassword` -- user + password spliced into
             the URI by the engine factory.
