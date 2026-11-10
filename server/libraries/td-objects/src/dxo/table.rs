@@ -276,4 +276,18 @@ mod tests {
         assert_eq!(ExtraCols::Sys.to_string(), "sys");
         assert!(serde_json::from_str::<ExtraColsParam>(r#"{"extra-cols":"nope"}"#).is_err());
     }
+
+    #[test]
+    fn test_schema_field_of_every_dtype() {
+        use polars::prelude::SchemaExt;
+        let frame = td_tableframe::dtypes::every_dtype_frame();
+        for field in frame.schema().iter_fields() {
+            let expected = serde_json::json!({
+                "name": field.name.to_string(),
+                "type": field.dtype.to_string(),
+            });
+            let schema_field = SchemaField::try_from(field).unwrap();
+            assert_eq!(serde_json::to_value(schema_field).unwrap(), expected);
+        }
+    }
 }

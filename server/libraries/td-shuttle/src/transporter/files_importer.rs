@@ -900,10 +900,29 @@ mod tests {
     }
 
     //noinspection DuplicatedCode
+    fn numbers_and_strings() -> DataFrame {
+        let col_int = Int64Chunked::from_iter((0i64..1000i64).map(Some))
+            .into_series()
+            .with_name(PlSmallStr::from("col_int"));
+        let col_string = StringChunked::from_iter((0..1000).map(|i| Some(format!("str_{}\"", i))))
+            .into_series()
+            .with_name(PlSmallStr::from("col_string"));
+        DataFrame::new_infer_height(vec![Column::from(col_int), Column::from(col_string)]).unwrap()
+    }
+
     async fn test_import(
         from_base: &Location<Url>,
         to_base: &Location<BaseUrl>,
         format: &ImportFormat,
+    ) {
+        test_import_of(from_base, to_base, format, numbers_and_strings()).await;
+    }
+
+    async fn test_import_of(
+        from_base: &Location<Url>,
+        to_base: &Location<BaseUrl>,
+        format: &ImportFormat,
+        df: DataFrame,
     ) {
         let sink_options = UnifiedSinkArgs {
             sync_on_close: SyncOnCloseType::All,
@@ -913,15 +932,6 @@ mod tests {
         };
 
         let from_file = from_base.set_file(&id().to_string()).unwrap();
-
-        let col_int = Int64Chunked::from_iter((0i64..1000i64).map(Some))
-            .into_series()
-            .with_name(PlSmallStr::from("col_int"));
-        let col_string = StringChunked::from_iter((0..1000).map(|i| Some(format!("str_{}\"", i))))
-            .into_series()
-            .with_name(PlSmallStr::from("col_string"));
-        let df = DataFrame::new_infer_height(vec![Column::from(col_int), Column::from(col_string)])
-            .unwrap();
         let lf = df.clone().lazy();
 
         let _df = match format {
@@ -1095,7 +1105,7 @@ mod tests {
                 assert_eq!(df_out.shape().0, df.shape().0 + 1); // Log format adds an extra row for the header
             }
             _ => {
-                assert!(df_out.equals(&df));
+                assert!(df_out.equals_missing(&df), "{df_out}");
             }
         }
     }
@@ -1160,6 +1170,23 @@ mod tests {
                 url: BaseUrl(base_url.clone()),
             },
             &ImportFormat::Parquet,
+        )
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_local_parquet_of_every_dtype() {
+        let test_dir = td_common::tdtestdir!();
+        let base_url = Url::from_directory_path(&test_dir).unwrap();
+        test_import_of(
+            &Location::LocalFile {
+                url: base_url.clone(),
+            },
+            &Location::LocalFile {
+                url: BaseUrl(base_url.clone()),
+            },
+            &ImportFormat::Parquet,
+            td_tableframe::dtypes::every_dtype_frame(),
         )
         .await;
     }

@@ -32,6 +32,7 @@ td-test = [
     "td-common/td-test",
     "td-error/td-test",
     "td-process/td-test",
+    "td-tableframe/td-test",
 ]
 dummy = []
 mock-env = []
@@ -95,7 +96,7 @@ itertools = { workspace = true }
 object_store = { workspace = true, features = ["aws", "azure", "gcp", "http"] }
 parquet = { workspace = true }
 pin-project-lite = { workspace = true }
-polars = { workspace = true, features = ["lazy", "polars-lazy", "async", "csv", "json", "parquet", "cloud", "aws", "azure", "gcp", "sql", "dtype-date", "dtype-decimal", "dtype-struct", "dtype-u8", "timezones"] }
+polars = { workspace = true, features = ["lazy", "polars-lazy", "async", "csv", "json", "parquet", "cloud", "aws", "azure", "gcp", "sql", "dtype-full", "timezones"] }
 polars-io = { workspace = true, features = ["cloud"] }
 polars-parquet-format = { workspace = true }
 regex = { workspace = true }

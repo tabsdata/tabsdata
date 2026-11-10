@@ -97,4 +97,5 @@ uuid = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
 td-objects = { workspace = true, features = ["td-test"] }
+td-tableframe = { workspace = true, features = ["td-test"] }
 

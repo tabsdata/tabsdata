@@ -62,4 +62,14 @@ mod tests {
             ["id"]
         );
     }
+
+    #[test]
+    fn test_drop_prefixed_columns_keeps_every_dtype() {
+        let frame = crate::dtypes::every_dtype_frame();
+        let kept = drop_prefixed_columns(frame.clone().lazy(), &[TD_COLUMN_PREFIX])
+            .unwrap()
+            .collect()
+            .unwrap();
+        assert!(kept.equals_missing(&frame));
+    }
 }

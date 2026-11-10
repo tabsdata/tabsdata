@@ -9,9 +9,9 @@ use futures_util::FutureExt;
 use http::StatusCode;
 use polars::prelude::cloud::CloudOptions;
 use polars::prelude::{
-    AnyValue, CsvWriter, DataFrame, DslPlan, Engine, IdxSize, IntoColumn, JsonWriter, LazyFrame,
-    NewChunkedArray, OptFlags, ParquetWriter, PlRefPath, PolarsError, ScanArgsParquet, SerWriter,
-    StringChunked,
+    AnyValue, CsvWriter, DataFrame, DataType, DslPlan, Engine, IdxSize, IntoColumn, JsonWriter,
+    LazyFrame, NewChunkedArray, OptFlags, ParquetWriter, PlRefPath, PolarsError, ScanArgsParquet,
+    SerWriter, StringChunked,
 };
 use polars::sql::SQLContext;
 use std::io::Cursor;
@@ -237,15 +237,31 @@ struct Page {
 /// Replace each nested column with its per-row string representation so a CSV sample of
 /// such a table degrades gracefully instead of failing. Non-nested columns and null
 /// values are left untouched. Parquet / JSON keep the original nested types.
-fn stringify_nested_columns(dataframe: DataFrame) -> Result<DataFrame, PolarsError> {
-    if !dataframe.dtypes().iter().any(|dtype| dtype.is_nested()) {
+fn csv_cannot_write(dtype: &DataType) -> bool {
+    dtype.is_nested() || matches!(dtype, DataType::Duration(_) | DataType::Binary)
+}
+
+fn json_cannot_write(dtype: &DataType) -> bool {
+    match dtype {
+        DataType::Binary => true,
+        DataType::List(inner) | DataType::Array(inner, _) => json_cannot_write(inner),
+        DataType::Struct(fields) => fields.iter().any(|field| json_cannot_write(field.dtype())),
+        _ => false,
+    }
+}
+
+fn stringify_unwritable(
+    dataframe: DataFrame,
+    cannot_write: fn(&DataType) -> bool,
+) -> Result<DataFrame, PolarsError> {
+    if !dataframe.dtypes().iter().any(cannot_write) {
         return Ok(dataframe);
     }
     let columns = dataframe
         .columns()
         .iter()
         .map(|column| {
-            if !column.dtype().is_nested() {
+            if !cannot_write(column.dtype()) {
                 return column.clone();
             }
             let values = (0..column.len()).map(|i| match column.get(i) {
@@ -264,7 +280,7 @@ fn write_sample(mut dataframe: DataFrame, format: &FileFormat) -> Result<Bytes, 
     match format {
         FileFormat::Csv => {
             let mut dataframe =
-                stringify_nested_columns(dataframe).map_err(SampleError::CsvFile)?;
+                stringify_unwritable(dataframe, csv_cannot_write).map_err(SampleError::CsvFile)?;
             CsvWriter::new(&mut cursor)
                 .finish(&mut dataframe)
                 .map_err(SampleError::CsvFile)?;
@@ -275,6 +291,8 @@ fn write_sample(mut dataframe: DataFrame, format: &FileFormat) -> Result<Bytes, 
                 .map_err(SampleError::ParquetFile)?;
         }
         FileFormat::Json => {
+            let mut dataframe = stringify_unwritable(dataframe, json_cannot_write)
+                .map_err(SampleError::JsonFile)?;
             JsonWriter::new(&mut cursor)
                 .finish(&mut dataframe)
                 .map_err(SampleError::JsonFile)?;
@@ -375,8 +393,8 @@ fn query_page(
 #[cfg(test)]
 mod tests {
     use crate::table::sample::{
-        SQL_MAX_SCAN_BYTES_ON_DISK, SQL_TIMEOUT, SampleError, TableSampler,
-        stringify_nested_columns,
+        SQL_MAX_SCAN_BYTES_ON_DISK, SQL_TIMEOUT, SampleError, TableSampler, csv_cannot_write,
+        stringify_unwritable,
     };
     use crate::table::storage::TableLocation;
     use futures_util::TryStreamExt;
@@ -1026,7 +1044,7 @@ mod tests {
     }
 
     #[test]
-    fn test_stringify_nested_columns_makes_csv_writable() {
+    fn test_stringify_unwritable_makes_nested_columns_csv_writable() {
         // A List(String) column like the `@td.medallion.pk` metadata, which CSV
         // cannot serialize natively. Second row is a null list.
         let mut pk = ListChunked::from_iter([
@@ -1048,7 +1066,7 @@ mod tests {
                 .is_err()
         );
 
-        let mut flat = stringify_nested_columns(df).unwrap();
+        let mut flat = stringify_unwritable(df, csv_cannot_write).unwrap();
         assert_eq!(
             flat.column("@td.medallion.pk").unwrap().dtype(),
             &DataType::String
@@ -1115,6 +1133,86 @@ mod tests {
                 if !matches!(e.domain_err(), SampleError::ForbiddenSqlTableReference(_)) {
                     panic!("Expected ForbiddenSqlTableReference, got: {e}")
                 }
+            }
+        }
+        Ok(())
+    }
+
+    fn create_every_dtype_table() -> DataFrame {
+        let mut frame = td_tableframe::dtypes::every_dtype_frame();
+        let file = File::create_new(td_common::tdtestdir!().join("my_table.parquet")).unwrap();
+        tokio::task::block_in_place(|| ParquetWriter::new(file).finish(&mut frame).unwrap());
+        frame
+    }
+
+    async fn sample_every_dtype(format: FileFormat, sql: Option<&str>) -> Result<PathBuf, TdError> {
+        let (file, _, _) = sample_page(
+            &TableSampler::default(),
+            0,
+            SampleLen::MAX as usize,
+            format,
+            sql.map(Sql::try_from).transpose()?,
+            ExtraCols::None,
+            None,
+        )
+        .await?;
+        Ok(file)
+    }
+
+    fn read_parquet(file: PathBuf) -> DataFrame {
+        ParquetReader::new(File::open(file).unwrap())
+            .finish()
+            .unwrap()
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_sample_reads_every_dtype() -> Result<(), TdError> {
+        let frame = create_every_dtype_table();
+        let sample = read_parquet(sample_every_dtype(FileFormat::Parquet, None).await?);
+        assert!(sample.equals_missing(&frame), "{sample}");
+        sample_every_dtype(FileFormat::Csv, None).await?;
+        sample_every_dtype(FileFormat::Json, None).await?;
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_sample_sql_reads_every_dtype() -> Result<(), TdError> {
+        let frame = create_every_dtype_table();
+        let all = sample_every_dtype(FileFormat::Parquet, Some("SELECT * FROM my_table")).await?;
+        assert!(read_parquet(all).equals_missing(&frame));
+        let filtered = sample_every_dtype(
+            FileFormat::Parquet,
+            Some("SELECT * FROM my_table WHERE u16 > 1"),
+        )
+        .await?;
+        assert_eq!(read_parquet(filtered).height(), 1);
+        let ordered: Vec<_> = frame
+            .columns()
+            .iter()
+            .filter(|column| column.dtype().is_numeric() || column.dtype().is_temporal())
+            .collect();
+        let ranges = ordered
+            .iter()
+            .map(|column| {
+                let name = column.name();
+                format!("min({name}) AS min_{name}, max({name}) AS max_{name}")
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        let ranges = sample_every_dtype(
+            FileFormat::Parquet,
+            Some(&format!("SELECT {ranges} FROM my_table")),
+        )
+        .await?;
+        let ranges = read_parquet(ranges);
+        for column in ordered {
+            for stat in ["min", "max"] {
+                let name = format!("{stat}_{}", column.name());
+                assert_eq!(
+                    ranges.column(&name).unwrap().dtype(),
+                    column.dtype(),
+                    "{name}"
+                );
             }
         }
         Ok(())

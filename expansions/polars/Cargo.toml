@@ -121,7 +121,7 @@ version = "1.21.4"
 
 [workspace.dependencies.polars]
 version = "0.55.2"
-features = ["default", "fmt", "dtype-date", "dtype-decimal", "dtype-struct", "dtype-u8", "timezones"]
+features = ["default", "fmt", "dtype-full", "timezones"]
 
 [workspace.dependencies.polars-plan]
 version = "0.55.2"
@@ -130,6 +130,11 @@ features = ["python"]
 [workspace.dependencies.polars-mem-engine]
 version = "0.55.2"
 features = ["python"]
+
+# polars-expr must have polars-plan's dtypes; its dtype-full adds extension and object.
+[workspace.dependencies.polars-expr]
+version = "0.55.2"
+features = ["dtype-array", "dtype-categorical", "dtype-date", "dtype-datetime", "dtype-decimal", "dtype-duration", "dtype-f16", "dtype-i8", "dtype-i16", "dtype-i128", "dtype-struct", "dtype-time", "dtype-u8", "dtype-u16", "dtype-u128"]
 
 # Note: Each pyo3-polars is tightly tied to a specific version of pyo3.
 # Pay attention to these any time you intend to upgrade pyo3 dependency version.
@@ -140,7 +145,7 @@ features = ["abi3-py312", "anyhow", "macros", "multiple-pymethods", "num-bigint"
 
 [workspace.dependencies.pyo3-polars]
 version = "0.28.0"
-features = ["derive"]
+features = ["derive", "dtype-full"]
 
 [workspace.dependencies.pyo3-stub-gen]
 version = "0.23.2"

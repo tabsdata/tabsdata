@@ -82,3 +82,22 @@ pub fn id() -> String {
     let u = uuid7::uuid7();
     BASE32HEX_NOPAD.encode(u.as_bytes())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tableframe::expressions::dtypes::{every_dtype_series, through_plugin};
+
+    #[test]
+    fn test_identifier_generator_of_every_dtype() {
+        for series in every_dtype_series() {
+            let kwargs = IdentifierGeneratorKwargs {
+                temp_column: "id".to_string(),
+                _index: None,
+            };
+            let ids = _identifier_generator_impl(&[through_plugin(&series)], kwargs).unwrap();
+            assert_eq!(ids.len(), series.len(), "{}", series.name());
+            assert_eq!(ids.dtype(), &DataType::String, "{}", series.name());
+        }
+    }
+}

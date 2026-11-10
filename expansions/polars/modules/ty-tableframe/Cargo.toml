@@ -41,7 +41,7 @@ dummy = []
 extension-module = ["pyo3/extension-module"]
 
 [package.metadata.cargo-machete]
-ignored = ["td-build", "td-error", "ta-tableframe", "te-tableframe", "toml", "polars-arrow", "polars-mem-engine", "polars-plan", "rayon"]
+ignored = ["td-build", "td-error", "ta-tableframe", "te-tableframe", "toml", "polars-arrow", "polars-expr", "polars-mem-engine", "polars-plan", "rayon"]
 
 # Build dependencies
 
@@ -70,11 +70,12 @@ dashmap = { workspace = true }
 data-encoding = { workspace = true }
 grok = { workspace = true }
 indexmap = { workspace = true }
-polars = { workspace = true, features = ["default", "fmt", "dtype-date", "dtype-decimal", "dtype-struct", "dtype-u8", "timezones"] }
+polars = { workspace = true, features = ["default", "fmt", "dtype-full", "timezones"] }
 polars-plan = { workspace = true, features = ["python"] }
 polars-mem-engine = { workspace = true, features = ["python"] }
+polars-expr = { workspace = true }
 pyo3 = { workspace = true, features = ["abi3-py312", "anyhow", "macros", "multiple-pymethods", "num-bigint", "num-complex", "num-rational", "rust_decimal", "serde", "smallvec"] }
-pyo3-polars = { workspace = true, features = ["derive"] }
+pyo3-polars = { workspace = true, features = ["derive", "dtype-full"] }
 pyo3-stub-gen = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

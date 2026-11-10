@@ -469,4 +469,25 @@ mod tests {
         );
         Ok(())
     }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_schema_of_every_dtype() -> Result<(), TdError> {
+        use polars::prelude::{ParquetWriter, SchemaExt};
+        let test_dir = td_common::tdtestdir!();
+        let mut frame = td_tableframe::dtypes::every_dtype_frame();
+        let file = std::fs::File::create_new(test_dir.join("t.parquet")).unwrap();
+        ParquetWriter::new(file).finish(&mut frame).unwrap();
+        let url = Url::from_directory_path(test_dir).unwrap();
+        let storage = Storage::from(vec![
+            MountDef::builder().id("id").uri(url).path("/").build()?,
+        ])?;
+        let schema = get_table_schema(&storage, &ExtraCols::None, &SPath::parse("/t.parquet")?)?;
+        let expected = frame
+            .schema()
+            .iter_fields()
+            .map(SchemaField::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(*schema.fields, expected);
+        Ok(())
+    }
 }

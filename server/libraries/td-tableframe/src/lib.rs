@@ -6,4 +6,6 @@
 
 pub mod common;
 pub mod constants;
+#[cfg(any(test, feature = "test-utils"))]
+pub mod dtypes;
 pub mod extension;

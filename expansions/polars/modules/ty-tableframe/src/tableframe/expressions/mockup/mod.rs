@@ -54,4 +54,13 @@ mod tests {
         );
         assert_eq!(result, expected);
     }
+
+    #[test]
+    fn test_dummy_expr_of_every_dtype() {
+        use crate::tableframe::expressions::dtypes::{every_dtype_series, through_plugin};
+        for series in every_dtype_series() {
+            let result = super::dummy_expr_impl(&[through_plugin(&series)]).unwrap();
+            assert_eq!(result.len(), series.len(), "{}", series.name());
+        }
+    }
 }

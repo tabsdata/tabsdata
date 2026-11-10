@@ -129,6 +129,10 @@ strip = "none"
 [profile.dev.package."*"]
 debug = false
 
+# polars-io 0.55.2 asserts, in debug builds only, that parquet holds no Float16.
+[profile.dev.package.polars-io]
+debug-assertions = false
+
 [profile.integration]
 inherits = "release"
 codegen-units = 64
@@ -592,7 +596,7 @@ version = "0.2.17"
 
 [workspace.dependencies.polars]
 version = "0.55.2"
-features = ["lazy", "polars-lazy", "async", "csv", "json", "parquet", "cloud", "aws", "azure", "gcp", "sql", "dtype-date", "dtype-decimal", "dtype-struct", "dtype-u8", "timezones"]
+features = ["lazy", "polars-lazy", "async", "csv", "json", "parquet", "cloud", "aws", "azure", "gcp", "sql", "dtype-full", "timezones"]
 
 [workspace.dependencies.polars-io]
 version = "0.55.2"
