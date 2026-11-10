@@ -50,7 +50,14 @@ def _entry(worker_id: str, **overrides) -> dict:
 def _shown(entry: dict, log_cut: list) -> dict:
     """``entry`` as the jsonb document gives it."""
     shown = {k: v for k, v in entry.items() if k not in ("log", "status", "lines")}
-    return {**shown, "lines": entry["lines"], "log_cut": log_cut}
+    view = "whole" if not log_cut else "tail" if len(log_cut) == 1 and log_cut[0][0] == 1 else "filtered"
+    return {
+        **shown,
+        "view": view,
+        "lines_shown": len(entry["lines"]),
+        "lines": entry["lines"],
+        "log_cut": log_cut,
+    }
 
 
 def _worker(id: str, status: str, run: str = "fr20260930-1"):
@@ -114,6 +121,8 @@ def test_plan_logs_all_is_the_list_envelope(tmp_path):
         max_workers=20,
         grep=None,
         from_error=False,
+        ignore_case=False,
+        level=None,
     )
 
 
@@ -228,7 +237,12 @@ def test_worker_logs_tail_and_not_found(tmp_path):
     )
     assert result.exit_code == 0, result.output
     client.worker_log_entry.assert_called_once_with(
-        "wkr20260301-1", tail=5, grep=None, from_error=False
+        "wkr20260301-1",
+        tail=5,
+        grep=None,
+        from_error=False,
+        ignore_case=False,
+        level=None,
     )
     assert json.loads(result.stdout)["items"] == [_shown(_entry("W1"), [[2, 2]])]
 
@@ -314,3 +328,29 @@ def test_machine_logs_share_the_budget_and_a_short_log_leaves_its_rest(
     share = (12 * 1024 - _lines_bytes(items[1])) // 2
     assert all(_lines_bytes(items[i]) <= share for i in (0, 2))
     assert items[0]["lines"][-1] == [200, "a" * 99]
+
+
+def test_logs_pass_level_and_case_and_say_which_view_they_show(tmp_path):
+    client = _client()
+    log = "\n".join(f"line {n}" for n in range(1, 6))
+    entry = _entry("W1", log=log, lines_total=5)
+    entry["lines"] = [[4, "line 4"], [5, "line 5"]]
+    client.worker_log_entry.return_value = entry
+    argv = ["worker", "logs", "--worker", "wkr20260301-1", "--level", "warning"]
+    result = _invoke([*argv, "--grep", "LINE", "-i", "-o", "jsonb"], client, tmp_path)
+    assert result.exit_code == 0, result.output
+    kwargs = client.worker_log_entry.call_args.kwargs
+    assert kwargs["level"] == "WARNING" and kwargs["ignore_case"] is True
+    (item,) = json.loads(result.stdout)["items"]
+    assert item["view"] == "tail" and item["lines_shown"] == 2
+
+
+def test_a_program_gets_very_long_lines_folded(tmp_path):
+    client = _client()
+    long = "x" * 5000
+    client.worker_log_entry.return_value = _entry("W1", log=long, lines_total=1)
+    argv = ["worker", "logs", "--worker", "wkr20260301-1", "--machine"]
+    (item,) = json.loads(_invoke(argv, client, tmp_path).stdout)["items"]
+    ((number, text),) = item["lines"]
+    assert number == 1 and text.startswith("x" * 600)
+    assert "4400 more characters" in text and item["view"] == "whole"

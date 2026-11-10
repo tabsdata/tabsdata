@@ -147,18 +147,22 @@ def classify(exc: BaseException, list_options_used: bool = False) -> TdkError:
         if isinstance(cause, NotFound):
             return TdkError(type="not_found", message=message)
         if isinstance(cause, APIServerError):
+            hint = (
+                _LIST_HINT
+                if list_options_used and (cause.code or "").startswith("ListError::")
+                else None
+            )
+            request_id = getattr(cause, "request_id", None)
+            if hint is None and (cause.status or 0) >= 500 and request_id:
+                hint = server_failure_hint(cause.code, request_id)
             return TdkError(
                 type=_api_error_type(cause.status, cause.error, cause.code),
                 message=message,
                 status=cause.status,
                 code=cause.code,
-                hint=(
-                    _LIST_HINT
-                    if list_options_used
-                    and (cause.code or "").startswith("ListError::")
-                    else None
-                ),
+                hint=hint,
                 retry_after=cause.retry_after,
+                extra={"request_id": request_id} if request_id else {},
             )
         if isinstance(
             cause, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
@@ -169,6 +173,16 @@ def classify(exc: BaseException, list_options_used: bool = False) -> TdkError:
     ):
         return TdkError(type="invalid_request", message=message)
     return TdkError(type="internal", message=message)
+
+
+def server_failure_hint(code: str | None, request_id: str) -> str:
+    """How to find why the server failed: it keeps the cause out of the
+    answer and logs it under the request's id."""
+    failed = f" with {code}" if code else ""
+    return (
+        f"The server failed{failed} and logged the cause under request id "
+        f"{request_id}; give the user that id to find it in the server log."
+    )
 
 
 def _unreachable(message: str, cause: BaseException) -> TdkError:

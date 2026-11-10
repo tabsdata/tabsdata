@@ -100,3 +100,77 @@ def test_a_listing_states_the_order_the_server_sorted_it_in():
     assert list_order(ctx) == "triggered_on asc"
     ctx.obj["list_requested_order"] = None
     assert list_order(ctx) is None
+
+
+def test_record_fields_on_a_listing_keep_the_fields_of_its_items():
+    import rich_click as click
+
+    from tabsdatak.cli.cli_utils import record_fields_option, render_list
+
+    @click.command()
+    @record_fields_option
+    @click.pass_context
+    def listed(ctx):
+        ctx.obj["output_format"] = "jsonb"
+        render_list(ctx, items=[{"id": "fv1", "name": "f"}], truncated=False)
+
+    result = CliRunner().invoke(listed, ["--fields", "id"], obj={})
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["items"] == [{"id": "fv1"}]
+
+
+def test_a_status_count_by_code_is_left_out_beside_the_one_by_name():
+    from tabsdatak.cli.cli_utils import jsonb_document
+
+    document = jsonb_document({
+        "function_run_status_count": {"C": 1, "F": 0},
+        "function_runs_by_status": {"Committed": 1},
+    })
+    assert document == {"function_runs_by_status": {"Committed": 1}}
+    assert jsonb_document({"function_run_status_count": {"C": 1}}) == {
+        "function_run_status_count": {"C": 1}
+    }
+
+
+def test_a_program_listing_rows_gets_them_without_internal_ids(machine_settings):
+    import rich_click as click
+
+    from tabsdatak.cli._machine import Machine, running
+    from tabsdatak.cli.cli_utils import list_options, render_list
+
+    row = {"id": "ep1", "status_name": "Finished", "topology_version_id": "t", "physical_status": "D"}
+    emitted = []
+
+    @click.command()
+    @list_options
+    @click.pass_context
+    def listed(ctx):
+        ctx.obj["output_format"] = "jsonb"
+        render_list(ctx, items=[row], truncated=False)
+
+    def run(*argv):
+        with running(Machine(emit=emitted.append)):
+            result = CliRunner().invoke(listed, list(argv), obj={})
+        assert result.exit_code == 0, result.output
+        return emitted.pop()
+
+    slim = run()
+    assert slim["items"] == [{"id": "ep1", "status_name": "Finished"}]
+    assert slim["fields_omitted"] == ["topology_version_id", "physical_status"]
+    full = run("--fields", "all")
+    assert full["items"] == [row] and "fields_omitted" not in full
+
+
+def test_a_server_failure_names_the_request_id_the_server_logged():
+    from tabsdatak.cli._errors import classify
+    from tabsdatak.sdk._apiserver import APIServerError
+
+    error = classify(
+        APIServerError(
+            {"code": "X::5000", "error_description": "An internal error occurred"},
+            status=500,
+            request_id="rid1",
+        )
+    )
+    assert error.extra["request_id"] == "rid1"
+    assert "request id rid1" in error.hint and "X::5000" in error.hint

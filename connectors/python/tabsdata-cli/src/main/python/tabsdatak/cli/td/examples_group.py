@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import errno
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -38,6 +39,7 @@ from tabsdatak.cli._examples import (
     load_examples,
     matches,
 )
+from tabsdatak.cli._machine import machine
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     format_option,
@@ -121,11 +123,22 @@ def list_(ctx: click.Context, kind: str | None, connector: str | None, tag: str 
     ]
     render_list(
         ctx,
-        items=rows,
+        items=lambda: [_listed(row) for row in rows],
         truncated=False,
         view=lambda: _examples_view(rows),
         compat=lambda: [{**row, "description": row["summary"]} for row in rows],
     )
+
+
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s")
+
+
+def _listed(row: dict) -> dict:
+    """A program listing examples gets each summary's first sentence; 'tdk
+    examples show' gives the whole of it."""
+    if machine() is None or not row.get("summary"):
+        return row
+    return {**row, "summary": _SENTENCE_END.split(row["summary"], maxsplit=1)[0]}
 
 
 def _echo_files(files: list[dict], banner: bool) -> None:

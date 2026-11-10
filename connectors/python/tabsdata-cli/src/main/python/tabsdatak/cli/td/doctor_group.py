@@ -15,6 +15,7 @@ from tabsdatak.cli.cli_utils import (
     format_option,
     output_format,
     present,
+    proj_option,
     render,
     view_options,
 )
@@ -55,6 +56,7 @@ def checks_view(results: list[dict]) -> TableView:
     default=False,
     help="Skip the checks that need the server: server, login and connectors.",
 )
+@proj_option
 @format_option
 @view_options()
 @click.pass_context

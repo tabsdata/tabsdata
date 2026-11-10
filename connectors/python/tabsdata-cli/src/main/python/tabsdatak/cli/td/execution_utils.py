@@ -36,6 +36,7 @@ from tabsdatak.cli.cli_utils import (
 )
 from tabsdatak.common._tabular import Column, Kind, TableView, show
 from tabsdatak.sdk._diagnose import (
+    LOG_LEVELS,
     attempts,
     cut_ranges,
     needs_attention,
@@ -548,9 +549,37 @@ def _apply_from_error(ctx: click.Context, param, value):
     return value
 
 
+def _apply_log_option(key: str):
+    def apply(ctx: click.Context, param, value):
+        ctx.ensure_object(dict)
+        ctx.obj[key] = value
+        return value
+
+    return apply
+
+
 def tail_option(fn):
-    """``--tail``, and the line filters it applies after: ``--from-error`` and
-    ``--grep``."""
+    """``--tail``, and the line filters it applies after: ``--from-error``,
+    ``--level`` and ``--grep`` (with ``--ignore-case``)."""
+    fn = click.option(
+        "--ignore-case",
+        "-i",
+        is_flag=True,
+        default=False,
+        expose_value=False,
+        callback=_apply_log_option("log_ignore_case"),
+        help="Match '--grep' in any case.",
+    )(fn)
+    fn = click.option(
+        "--level",
+        type=click.Choice(LOG_LEVELS, case_sensitive=False),
+        expose_value=False,
+        callback=_apply_log_option("log_level"),
+        help=(
+            "Show only the lines logged at this level or above, with the lines "
+            "that follow them, such as a traceback."
+        ),
+    )(fn)
     fn = click.option(
         "--from-error",
         is_flag=True,
@@ -567,23 +596,30 @@ def tail_option(fn):
         metavar="PATTERN",
         expose_value=False,
         callback=_apply_grep,
-        help="Show only the lines matching this regular expression.",
+        help=(
+            "Show only the lines matching this regular expression; with "
+            "'--ignore-case' (or '(?i)' in it) in any case."
+        ),
     )(fn)
     return click.option(
         "--tail",
         type=click.IntRange(min=0),
         default=None,
         help=(
-            "Show only the last N lines of each log, after '--from-error' and '--grep'."
+            "Show only the last N lines of each log, after '--from-error', "
+            "'--level' and '--grep'."
         ),
     )(fn)
 
 
 def _line_filters(ctx: click.Context) -> dict:
     obj = ctx.obj or {}
+    level = obj.get("log_level")
     return {
         "grep": obj.get("log_grep"),
         "from_error": bool(obj.get("log_from_error")),
+        "ignore_case": bool(obj.get("log_ignore_case")),
+        "level": level.upper() if level else None,
     }
 
 
@@ -733,11 +769,33 @@ def _numbered(entry: dict) -> dict:
     if entry.get("lines") is None:
         return {key: value for key, value in entry.items() if key != "log"}
     shown = {key: value for key, value in entry.items() if key not in ("log", "lines")}
-    shown["lines"] = entry["lines"]
-    shown["log_cut"] = cut_ranges(
-        (number for number, _ in entry["lines"]), entry.get("lines_total") or 0
+    total = entry.get("lines_total") or 0
+    cut = cut_ranges((number for number, _ in entry["lines"]), total)
+    shown["view"] = (
+        "whole"
+        if not cut
+        else "tail"
+        if len(cut) == 1 and cut[0][0] == 1
+        else "filtered"
     )
+    shown["lines_shown"] = len(entry["lines"])
+    shown["lines"] = [[number, _folded(text)] for number, text in entry["lines"]]
+    shown["log_cut"] = cut
     return shown
+
+
+# A program reading a log needs a line's start; the longest ones are dumps.
+LONG_LINE_CHARS = 600
+
+
+def _folded(text: str) -> str:
+    if machine() is None or len(text) <= LONG_LINE_CHARS:
+        return text
+    rest = len(text) - LONG_LINE_CHARS
+    return (
+        f"{text[:LONG_LINE_CHARS]} [... {rest} more characters; '--file PATH' "
+        "writes the whole log]"
+    )
 
 
 def _entry_text(entry: dict) -> str:

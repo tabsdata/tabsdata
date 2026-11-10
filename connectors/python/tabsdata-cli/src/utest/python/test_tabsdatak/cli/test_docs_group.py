@@ -256,3 +256,17 @@ def test_unknown_symbol_is_not_found(tmp_path):
     error = _document(result)["error"]
     assert error["type"] == "not_found"
     assert "tdk docs search" in error["hint"]
+
+
+def test_a_program_searching_the_docs_gets_the_20_best_hits():
+    from click.testing import CliRunner as _Runner
+
+    from tabsdatak.cli.td.cli import cli as _cli
+
+    result = _Runner().invoke(_cli, ["docs", "search", "--query", "table", "--machine"])
+    document = json.loads(result.stdout)
+    assert len(document["items"]) == 20 and document["truncated"] is True
+    more = _Runner().invoke(
+        _cli, ["docs", "search", "--query", "table", "--max-result", "30", "--machine"]
+    )
+    assert len(json.loads(more.stdout)["items"]) == 30

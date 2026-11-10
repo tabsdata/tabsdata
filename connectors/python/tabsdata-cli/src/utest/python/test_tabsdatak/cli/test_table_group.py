@@ -541,8 +541,8 @@ def test_data_rows_are_objects_with_the_total_and_the_next_offset(tmp_path):
     document = json.loads(result.stdout)
     assert document["rows"] == [{"n": 1, "label": "x"}, {"n": 2, "label": "y"}]
     assert document["columns"] == [
-        {"name": "n", "dtype": "Int64"},
-        {"name": "label", "dtype": "String"},
+        {"name": "n", "type": "i64"},
+        {"name": "label", "type": "str"},
     ]
     assert document["row_count"] == 2 and document["total_rows"] == 5
     assert document["truncated"] is True
@@ -673,3 +673,87 @@ def test_versions_json_keeps_the_2_2_shape(tmp_path):
     argv = ["table", "versions", "-c", "s", "-n", "t", "-o", "json"]
     items = json.loads(_invoke(argv, client, tmp_path).stdout)
     assert "latest" not in items[0] and items[0]["created_at"] == 1750074554472
+
+
+def test_schema_of_a_committed_version_without_data_names_that_version(tmp_path):
+    client = _client()
+    client.get_table_schema.return_value = None
+    client.connection.dataversion_list.return_value = _page(
+        [{"id": "dv-5", "collection": "s", "status": "C"}]
+    )
+    argv = ["table", "schema", "-c", "s", "-n", "t", "--machine"]
+    result = _invoke(argv, client, tmp_path)
+    assert result.exit_code == 5, result.output
+    error = json.loads(result.stdout)["error"]
+    assert "has committed version 'dv-5', but it holds no data" in error["message"]
+    assert "table stats" in error["hint"]
+
+
+def test_schema_with_no_committed_version_says_so(tmp_path):
+    client = _client()
+    client.get_table_schema.return_value = None
+    client.connection.dataversion_list.return_value = _page([])
+    argv = ["table", "schema", "-c", "s", "-n", "t", "--machine"]
+    error = json.loads(_invoke(argv, client, tmp_path).stdout)["error"]
+    assert error["message"] == "Table 't' in collection 's' has no committed data yet."
+
+
+def test_dtype_names_are_the_schema_names():
+    import polars as pl
+
+    from tabsdatak.cli.cli_utils import dtype_name
+
+    assert [
+        dtype_name(dtype)
+        for dtype in (
+            pl.Int64(),
+            pl.String(),
+            pl.Datetime("us"),
+            pl.Decimal(38, 4),
+            pl.Null(),
+            pl.UInt8(),
+        )
+    ] == ["i64", "str", "datetime[μs]", "decimal[38,4]", "null", "u8"]
+
+
+def test_data_cut_by_the_budget_says_so(tmp_path, machine_settings):
+    import polars as pl
+
+    machine_settings["max_bytes"] = 2048
+    client = _client()
+    _data(client, pl.DataFrame({"text": ["x" * 400] * 10}), row_count=10)
+    argv = ["table", "data", "-c", "s", "-n", "t", "--len", "10", "--machine"]
+    document = json.loads(_invoke(argv, client, tmp_path).stdout)
+    assert document["requested"] == 10 and document["capped_by"] == "byte_budget"
+    assert "'--row-format arrays'" in document["hint"]
+    assert "'--file PATH'" in document["hint"]
+
+
+def test_a_failed_read_names_the_version_and_the_request_id(tmp_path):
+    client = _client()
+    client.sample_table.side_effect = APIServerError(
+        {"code": "SampleError::5000", "error_description": "An internal error occurred"},
+        status=500,
+        request_id="rid9",
+    )
+    client.connection.dataversion_list.return_value = _page(
+        [{"id": "dv-7", "collection": "s", "status": "C"}]
+    )
+    argv = ["table", "data", "-c", "s", "-n", "t", "--machine"]
+    error = json.loads(_invoke(argv, client, tmp_path).stdout)["error"]
+    assert error["status"] == 500 and error["request_id"] == "rid9"
+    assert "data version 'dv-7' of 't'" in error["hint"]
+    assert "table stats" in error["hint"] and "rid9" in error["hint"]
+
+
+def test_data_takes_max_result_and_fields_as_its_own_options(tmp_path):
+    import polars as pl
+
+    client = _client()
+    _data(client, pl.DataFrame({"a": [1], "b": [2]}), row_count=1)
+    argv = ["table", "data", "-c", "s", "-n", "t", "--max-result", "3"]
+    document = json.loads(
+        _invoke([*argv, "--fields", "b", "--machine"], client, tmp_path).stdout
+    )
+    assert client.sample_table.call_args.kwargs["len"] == 3
+    assert document["rows"] == [{"b": 2}]

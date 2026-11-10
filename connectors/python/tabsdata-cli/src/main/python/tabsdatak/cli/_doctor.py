@@ -263,15 +263,23 @@ def _installed_connection_types() -> set[str]:
     return {*avail_srcs(), *avail_stream_srcs(), *avail_dests()}
 
 
+def _project_fix() -> str:
+    """A program running tdk names the project on the command line; only a
+    person pins one."""
+    from tabsdatak.cli._machine import machine
+
+    if machine() is not None:
+        return "Pass '-P NAME'."
+    return "Pass '-P NAME', or pin one with 'tdk set --proj NAME'."
+
+
 def check_connectors(probe: Probe) -> dict:
     if probe.unavailable:
         return _result("connectors", SKIP, probe.unavailable)
     try:
         project = probe.server.connection.project
         if not project:
-            return _result(
-                "connectors", SKIP, "no project pinned", "tdk set --proj NAME"
-            )
+            return _result("connectors", SKIP, "no project given", _project_fix())
         installed = _installed_connection_types()
         missing: dict[str, list[str]] = {}
         unreadable = []

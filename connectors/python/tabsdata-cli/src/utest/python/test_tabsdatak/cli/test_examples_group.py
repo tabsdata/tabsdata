@@ -266,3 +266,16 @@ def test_list_and_show_read_only_the_bundled_examples(root, tmp_path):
     assert [item["name"] for item in listed["items"]] == ["proj", "pub-demo", "tfr-other"]
     assert {item["source"] for item in listed["items"]} == {"bundled"}
     assert shown["files"][0]["path"] == "pub-demo.py"
+
+
+def test_a_program_listing_examples_gets_the_first_sentence_of_each():
+    from click.testing import CliRunner as _Runner
+
+    from tabsdatak.cli.td.cli import cli as _cli
+
+    listed = json.loads(_Runner().invoke(_cli, ["examples", "list", "--machine"]).stdout)
+    full = json.loads(_Runner().invoke(_cli, ["examples", "list", "-o", "json"]).stdout)
+    by_name = {row["name"]: row["summary"] for row in full}
+    for row in listed["items"]:
+        assert by_name[row["name"]].startswith(row["summary"])
+        assert len(row["summary"]) <= len(by_name[row["name"]])

@@ -1089,7 +1089,10 @@ def render_list(
     and a machine run stops them at its ``max_bytes``. ``cut_hint``, a
     callable, says how to get rows the command shortened itself, or returns
     None when it shortened none."""
-    if (ctx.obj or {}).get("list_fields") and output_format(ctx) == "table":
+    obj = ctx.ensure_object(dict)
+    if obj.get(RECORD_FIELDS) and not obj.get("list_fields"):
+        obj["list_fields"] = obj.pop(RECORD_FIELDS)
+    if obj.get("list_fields") and output_format(ctx) == "table":
         raise click.UsageError("'--fields' needs '-o json' or '-o yaml'.")
 
     def _items():
@@ -1101,13 +1104,15 @@ def render_list(
     def _envelope():
         if (ctx.obj or {}).get("list_fields") == [FIELD_NAMES]:
             return {"fields": field_names(items() if callable(items) else items)}
-        rows = jsonb_document(_items())
+        rows, omitted = _slim(ctx, jsonb_document(_items()))
         fitted = _fit(ctx, rows)
         cut = truncated or len(fitted) < len(rows)
         envelope = {"items": fitted, "truncated": cut, "next": list_next(ctx)}
         order = list_order(ctx)
         if order is not None:
             envelope["order"] = order
+        if omitted:
+            envelope["fields_omitted"] = omitted
         hints = [more_results_message(ctx)] if cut else []
         shortened = cut_hint() if cut_hint is not None else None
         if shortened:
@@ -1123,6 +1128,52 @@ def render_list(
         truncated=truncated,
         compat=_items if compat is _AS_DATA else _compat,
     )
+
+
+ALL_FIELDS = "all"
+# What a program listing rows rarely reads: per-attempt and internal ids.
+DETAIL_FIELDS = frozenset({
+    "topology_version_id",
+    "triggered_by_id",
+    "defined_by_id",
+    "storage_version",
+    "schema_hash",
+    "external_uid",
+    "bundle_id",
+    "stage_id",
+    "stage_base_path",
+    "group_id",
+    "table_version_id",
+    "producer_logical_function_run_id",
+    "function_param_pos",
+    "collection_deleted",
+})
+DETAIL_PREFIXES = ("physical_",)
+
+
+def _detail(key: str) -> bool:
+    return key in DETAIL_FIELDS or key.startswith(DETAIL_PREFIXES)
+
+
+def _slim(ctx: click.Context, rows: list) -> tuple[list, list[str]]:
+    """A machine run's rows without their :data:`DETAIL_FIELDS`, and the
+    names left out, unless ``--fields`` chose them."""
+    if machine() is None or (ctx.obj or {}).get("list_fields"):
+        return rows, []
+    omitted: dict[str, None] = {}
+    slim = []
+    for row in rows:
+        if not isinstance(row, dict):
+            slim.append(row)
+            continue
+        kept = {}
+        for key, value in row.items():
+            if _detail(key):
+                omitted[key] = None
+            else:
+                kept[key] = value
+        slim.append(kept)
+    return slim, list(omitted)
 
 
 # Server times not named '*_on'.
@@ -1142,22 +1193,33 @@ def jsonb_document(value):
     """``value`` as the ``jsonb`` document gives it: every ``*_on`` field,
     and those of :data:`EPOCH_MS_FIELDS`, holding epoch milliseconds as an
     ISO-8601 UTC time, which ``--filter`` takes back, and a ``status`` code
-    left out beside its ``status_name``; :class:`Verbatim` items are left
-    alone."""
+    (or ``function_run_status_count``) left out beside its ``status_name``
+    (``function_runs_by_status``); :class:`Verbatim` items are left alone."""
     if isinstance(value, Verbatim):
         return value
     if isinstance(value, list):
         return [jsonb_document(item) for item in value]
     if isinstance(value, dict):
-        named = "status_name" in value
+        coded = {
+            code
+            for code, name in _CODED_BESIDE_NAMED.items()
+            if code in value and name in value
+        }
         return {
             key: _iso_time(item)
             if _is_time_field(key) and type(item) is int
             else jsonb_document(item)
             for key, item in value.items()
-            if not (named and key == "status")
+            if key not in coded
         }
     return value
+
+
+# A field keyed by status code, left out beside the same field by name.
+_CODED_BESIDE_NAMED = {
+    "status": "status_name",
+    "function_run_status_count": "function_runs_by_status",
+}
 
 
 def _iso_time(millis: int) -> str | int:
@@ -1183,9 +1245,13 @@ def field_names(rows: list) -> list[str]:
 
 def only_fields(rows, fields: list[str] | None):
     """Each of ``rows`` with only ``fields``; a field no row has is a usage
-    error naming the fields the rows have. ``?`` alone keeps every field:
-    the caller lists their names."""
-    if not fields or fields == [FIELD_NAMES] or not isinstance(rows, list):
+    error naming the fields the rows have. ``all`` alone keeps every field,
+    and so does ``?``, whose caller lists their names."""
+    if (
+        not fields
+        or fields in ([FIELD_NAMES], [ALL_FIELDS])
+        or not isinstance(rows, list)
+    ):
         return rows
     records = [row for row in rows if isinstance(row, dict)]
     known = list(dict.fromkeys(key for row in records for key in row))
@@ -1299,13 +1365,16 @@ def tabular(
     offset: int = 0,
     total_rows: int | None = None,
 ) -> dict:
-    """The tabular-data shape: columns with their Polars dtype, then the rows,
-    each an object keyed by column name, or with ``row_format`` ``arrays``
-    an array in the order of ``columns``. ``row_count`` is the rows returned
-    and ``total_rows``, when known, the rows there are. ``truncated`` is true
-    when more rows follow (when ``total_rows`` is unknown, when the page is
-    full), and then ``hint`` names the ``--offset`` that reads them. A
-    machine run keeps the leading rows that fit its ``max_bytes``."""
+    """The tabular-data shape: columns with their type as the server names it
+    in a schema, then the rows, each an object keyed by column name, or with
+    ``row_format`` ``arrays`` an array in the order of ``columns``. Objects are
+    the default although they take more bytes: a reader matching values to
+    columns by position misreads wide tables. ``row_count`` is the rows
+    returned and ``total_rows``, when known, the rows there are. ``truncated``
+    is true when more rows follow (when ``total_rows`` is unknown, when the
+    page is full), and then ``hint`` names the ``--offset`` that reads them. A
+    machine run keeps the leading rows that fit its ``max_bytes``, and says
+    so with ``requested`` and ``capped_by``."""
     names = list(frame.schema)
     if row_format == "arrays":
         rows = [[_json_value(value) for value in row] for row in frame.rows()]
@@ -1315,11 +1384,13 @@ def tabular(
             for row in frame.rows()
         ]
     columns = [
-        {"name": name, "dtype": str(dtype)} for name, dtype in frame.schema.items()
+        {"name": name, "type": dtype_name(dtype)}
+        for name, dtype in frame.schema.items()
     ]
     kept = _fit_rows(rows, json_size(columns))
     shown = offset + kept
-    truncated = kept < len(rows) or (
+    capped = kept < len(rows)
+    truncated = capped or (
         frame.height >= page_len if total_rows is None else shown < total_rows
     )
     document = {
@@ -1330,12 +1401,27 @@ def tabular(
     if total_rows is not None:
         document["total_rows"] = total_rows
     document["truncated"] = truncated
-    if truncated:
+    if capped:
+        document["requested"] = page_len
+        document["capped_by"] = "byte_budget"
+        document["hint"] = (
+            f"Only {kept} of the {len(rows)} rows read fit in the result. Fit more "
+            "with '--columns', '--sql' or '--row-format arrays', write them all "
+            f"with '--file PATH', or continue with '--offset {shown}'."
+        )
+    elif truncated:
         document["hint"] = (
             f"More rows: continue with '--offset {shown}', or narrow with "
             "'--columns' and '--sql'."
         )
     return document
+
+
+def dtype_name(dtype) -> str:
+    """A Polars type as the server names it in a table's schema (``i64``,
+    ``str``, ``datetime[μs]``, ``decimal[38,4]``)."""
+    short = getattr(dtype, "_string_repr", None)
+    return short() if callable(short) else str(dtype)
 
 
 def _fit_rows(rows: list, used: int) -> int:
@@ -1480,7 +1566,9 @@ _FIELDS_OPTION = click.option(
     callback=_apply_fields,
     help=(
         "Keep only these fields of each row, comma-separated; '?' lists the "
-        "fields the rows have. Not in the table view."
+        "fields the rows have and 'all' keeps every one, which a program "
+        "running tdk otherwise gets without the internal ids. Not in the "
+        "table view."
     ),
 )
 _CURSOR_OPTION = click.option(

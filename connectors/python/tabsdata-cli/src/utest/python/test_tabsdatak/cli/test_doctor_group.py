@@ -305,3 +305,22 @@ def test_the_checks_wrap_their_detail_and_fix_instead_of_cutting_them():
     ])
 
     assert view.wrap
+
+
+def test_connectors_without_a_project_asks_a_program_for_dash_p(tmp_path):
+    client = _client()
+    client.connection.project = None
+    result = _invoke(["doctor", "--check", "connectors", "--machine"], client, tmp_path)
+    connectors = _checks(_document(result))["connectors"]
+    assert connectors["status"] == "skip"
+    assert connectors["fix"] == "Pass '-P NAME'."
+
+
+def test_connectors_take_the_project_from_dash_p(tmp_path):
+    client = _client()
+    client.connection.project = None
+    client.list_collections_generator.return_value = iter([])
+    argv = ["doctor", "--check", "connectors", "-P", "p2", "--machine"]
+    connectors = _checks(_document(_invoke(argv, client, tmp_path)))["connectors"]
+    assert connectors["status"] == "pass"
+    assert client.connection.project == "p2"

@@ -69,10 +69,10 @@ def test_the_view_has_a_column_per_field_with_its_type():
     view = table_data_view("issue_triage", FRAME)
 
     assert [(column.name, column.detail) for column in view.columns[:4]] == [
-        ("number", "Int64"),
-        ("title", "String"),
-        ("body", "String"),
-        ("labels", "List(String)"),
+        ("number", "i64"),
+        ("title", "str"),
+        ("body", "str"),
+        ("labels", "list[str]"),
     ]
 
 

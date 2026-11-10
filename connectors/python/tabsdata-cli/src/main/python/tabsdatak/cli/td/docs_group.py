@@ -6,6 +6,7 @@
 introspected from the live objects (no server call)."""
 
 import rich_click as click
+from click.core import ParameterSource
 
 from tabsdatak.cli._capability import capability
 from tabsdatak.cli._command import TdkGroup
@@ -17,6 +18,7 @@ from tabsdatak.cli._docs._catalog import (
 )
 from tabsdatak.cli._docs._render import markdown
 from tabsdatak.cli._errors import TdkException
+from tabsdatak.cli._machine import machine
 from tabsdatak.cli._prompted import prompted
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
@@ -106,6 +108,10 @@ def show(ctx: click.Context, symbol: str | None, category: str | None):
     render(ctx, data=entry.to_dict)
 
 
+# Past the best hits, a program reading search results gains little.
+MACHINE_SEARCH_RESULTS = 20
+
+
 def _render_entries(ctx: click.Context, context, entries) -> None:
     shown, truncated = take(ctx, entries)
     render_list(
@@ -147,5 +153,10 @@ def list_(ctx: click.Context, category: str | None):
 @click.pass_context
 def search(ctx: click.Context, query: str | None, category: str | None):
     """Search symbol names, qualified names and summaries, best first"""
+    if (
+        machine() is not None
+        and ctx.get_parameter_source("max_result") is ParameterSource.DEFAULT
+    ):
+        ctx.obj["max_result"] = MACHINE_SEARCH_RESULTS
     context = [("Query", query)] + ([("Category", category)] if category else [])
     _render_entries(ctx, context, _catalog(category).search(query))

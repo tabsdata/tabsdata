@@ -218,19 +218,36 @@ def get(
                 workers_view(workers),
             ]
 
+        document = {
+            "function_run": annotate(Entity.FUNCTION_RUN, function_run._data),
+            "workers": [annotate(Entity.WORKER, w._data) for w in workers],
+            **waited,
+        }
         render(
             ctx,
-            data={
-                "function_run": annotate(Entity.FUNCTION_RUN, function_run._data),
-                "workers": [annotate(Entity.WORKER, w._data) for w in workers],
-                **waited,
-            },
+            data=lambda: {**document, "warnings": _latest_warnings(server, workers)},
+            compat=document,
             view=_views,
         )
 
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to display function run: {e}")
+
+
+def _latest_warnings(server: TabsdataServer, workers: list) -> list[dict]:
+    """The warnings the run's latest worker logged; none when its log cannot
+    be read."""
+    from tabsdatak.sdk._apiserver import APIServerError
+    from tabsdatak.sdk._diagnose import log_warnings
+
+    if not workers:
+        return []
+    latest = max(workers, key=lambda worker: worker.id.lower())
+    try:
+        return log_warnings(server.get_worker_log(latest.id) or "")
+    except APIServerError:
+        return []
 
 
 @capability("operations", "read", paths={"--file": "write"})

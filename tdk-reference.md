@@ -320,8 +320,8 @@ table versions --name NAME  [--proj PROJECT] [--coll COLLECTION] [--latest] [-o]
                             #   version then keeps the data of
                             #   `with_data_table_data_version_id`. True means new data was
                             #   written, not that it differs from the version before
-table data     --name NAME  [--proj PROJECT] [--coll COLLECTION] [--sql SQL] [--len N] [--offset N]
-                            [--columns C,...] [--row-format objects|arrays]
+table data     --name NAME  [--proj PROJECT] [--coll COLLECTION] [--sql SQL] [--len|--max-result N]
+                            [--offset N] [--columns|--fields C,...] [--row-format objects|arrays]
                             [--at TS|--at-trx TRX|--version V] [--extra-cols none|meta|sys|all]
                             [--file FILE] [--browse|--print] [--wrap] [--max-width N] [-o]
                             #   --sql: server-side SQL query over the table, which is the
@@ -354,7 +354,7 @@ table download --name NAME  [--proj PROJECT] [--coll COLLECTION] --file FILE [--
 table delete   --name NAME  [--proj PROJECT] [--coll COLLECTION] [--confirm delete]
 table stats    --name NAME  [--proj PROJECT] [--coll COLLECTION] [--at TS|--at-trx TRX|--version V] [-o]
 table profile  --name NAME  [--proj PROJECT] [--coll COLLECTION] [--at TS|--at-trx TRX|--version V]
-                            [--columns A,B] [--approx [--sample-rows N]] [-o]
+                            [--columns|--fields A,B] [--approx [--sample-rows N]] [-o]
 table flow     --name NAME  [--proj PROJECT] [--coll COLLECTION] [--topology-version V|--at TS]
                             [--direction up|down|both] [--depth N] [--include-system] [-o]
 table diff     --name NAME  [--proj PROJECT] [--coll COLLECTION] [--max-events N] [-o]
@@ -459,7 +459,7 @@ plan get     --plan PLAN   [--wait [--timeout S]] [-o]      # plan details + its
 plan cancel  --plan PLAN   [--confirm cancel]
 plan recover --plan PLAN   [--wait [--timeout S] [--summary]]
 plan monitor --plan PLAN   [--timeout S]
-plan logs    --plan PLAN   [--all [--max-result N]] [--tail N] [--grep PATTERN] [--from-error]
+plan logs    --plan PLAN   [--all [--max-result N]] [--tail N] [--grep PATTERN [-i]] [--level L] [--from-error]
                            [--failed-only] [--file FILE] [-o]
 plan diagnose --plan PLAN  [--max-runs N] [--log-lines N] [--no-logs] [-o]
 ```
@@ -473,7 +473,7 @@ trx get     --trx TRX   [--wait [--timeout S]] [-o]      # transaction details +
 trx cancel  --trx TRX   [--confirm cancel]
 trx recover --trx TRX   [--wait [--timeout S]]
 trx monitor --trx TRX   [--timeout S]
-trx logs    --trx TRX   [--all [--max-result N]] [--tail N] [--grep PATTERN] [--from-error]
+trx logs    --trx TRX   [--all [--max-result N]] [--tail N] [--grep PATTERN [-i]] [--level L] [--from-error]
                         [--failed-only] [--file FILE] [-o]
 ```
 
@@ -483,7 +483,7 @@ trx logs    --trx TRX   [--all [--max-result N]] [--tail N] [--grep PATTERN] [--
 fnrun list                  [--proj PROJECT] [--coll COLLECTION] [--status S ... | --health H ...] [--plan PLAN]
                             [--plan-name PATTERN] [--fn FUNCTION] [--trx TRX] [-o]
 fnrun get     --fnrun RUN  [--wait [--attempt ATTEMPT] [--timeout S]] [-o]      # run details + its workers (retries)
-fnrun logs    --fnrun RUN  [--all [--max-result N]] [--tail N] [--grep PATTERN] [--from-error]
+fnrun logs    --fnrun RUN  [--all [--max-result N]] [--tail N] [--grep PATTERN [-i]] [--level L] [--from-error]
                            [--file FILE] [-o]
 fnrun diagnose --fnrun RUN [--log-lines N] [--no-logs] [-o]
 fnrun replay  --fnrun RUN  [--wait [--timeout S] [--summary]]      # --wait waits for the new attempt
@@ -495,7 +495,7 @@ fnrun recover --fnrun RUN  [--wait [--timeout S]]      # recovers the run's owni
 ```
 worker list                  [--proj PROJECT] [--coll COLLECTION] [--status S ... | --health H ...] [--plan PLAN]
                              [--plan-name PATTERN] [--fn FUNCTION] [--fnrun RUN] [--trx TRX] [-o]
-worker logs    --worker WORKER  [--tail N] [--grep PATTERN] [--from-error] [--file FILE] [-o]
+worker logs    --worker WORKER  [--tail N] [--grep PATTERN [-i]] [--level L] [--from-error] [--file FILE] [-o]
 worker recover --worker WORKER [--wait [--timeout S]]      # recovers the worker's owning transaction
 ```
 
@@ -522,8 +522,11 @@ listing when several ran (with prompting off, they fail naming `--all`). `--all`
 shows every worker's, newest first, at most `--max-result` (default 20, 0 for
 all); `--failed-only` keeps the workers whose health is `warning` or `error`;
 `--from-error` starts each log at its first traceback or `ERROR` line,
-`--grep PATTERN` keeps the lines matching that regular expression and
-`--tail N` the last N of what is left. A worker that did not succeed
+`--level L` (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) keeps the lines
+logged at that level or above with the unleveled lines after them (a
+traceback), `--grep PATTERN` keeps the lines matching that regular expression,
+in any case with `--ignore-case` (`-i`), and `--tail N` the last N of what is
+left. A worker that did not succeed
 carries the error signature of its log (category, code, message and the
 user-code frame); a log you may not read (it takes `DevelopProject`) is
 reported in `log_unavailable` instead of failing the command.
@@ -544,7 +547,10 @@ the failed runs upstream that block it in `blocked_by`, and
 `blocked_by_outside_plan` when the chain leaves the plan; `blocked_by_outside`
 lists the earlier failed or held runs of its own function in other plans
 (`{"plan", "function_run", "status_name"}`), and the `on_hold` hint names the
-plan to recover or cancel. The root cause is the earliest failure's signature,
+plan to recover or cancel. `warnings` lists, per run that ran, the WARNING
+lines its own code logged (`{"logger", "message", "line", "count"}`, each
+once, at most 10 per run and 20 runs read); a program running tdk gets the
+same for its run from `fnrun get`. The root cause is the earliest failure's signature,
 its `category` (`missing_dependency`, `schema_mismatch`, `auth`, `connectivity`,
 `resource`, `user_code`, `platform` or `unknown`, else `on_hold`) and a `hint`.
 `--no-logs` diagnoses from statuses alone. They exit 0 whenever the diagnosis is
@@ -886,7 +892,7 @@ connector; the function never names a connection.
 ## `tdk doctor`
 
 ```
-doctor [--check NAME ...] [--offline] [-o]
+doctor [--check NAME ...] [--offline] [--proj PROJECT] [-o]
 ```
 
 Local development preflight. Every check reports `pass`, `warn`, `fail` or
@@ -901,7 +907,7 @@ failed and never stops the others.
 | `login` | fails without valid credentials; warns when a session that cannot be renewed expires within 10 minutes |
 | `venv` | fails outside a virtual environment; warns for installed packages from no registry (editable, local, VCS), which are not bundled with functions, and for more than 25 extra registry packages |
 | `uv` | fails when `uv` is not on `PATH` |
-| `connectors` | warns for each connection type used by the pinned project's source and destination collections with no local connector package |
+| `connectors` | warns for each connection type used by the source and destination collections of the `--proj` or pinned project with no local connector package; skipped without a project |
 
 `--offline` skips `server`, `login` and `connectors`, and compares Python with
 the supported range only. `-o json` is `{"ok": bool, "checks": [{"name",

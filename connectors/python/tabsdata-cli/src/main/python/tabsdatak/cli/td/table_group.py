@@ -28,6 +28,7 @@ from tabsdatak.cli.cli_utils import (
     ancestry,
     command_failure,
     deprecated_option,
+    dtype_name,
     format_option,
     get_currently_pinned_object,
     hint_common_solutions,
@@ -82,11 +83,29 @@ def _size_mb(data_bytes) -> str | None:
 
 
 def no_data(
-    coll: str, name: str, version: str | None, at: str | None, at_trx: str | None
+    coll: str,
+    name: str,
+    version: str | None,
+    at: str | None,
+    at_trx: str | None,
+    server: TabsdataServer | None = None,
 ) -> TdkException:
     """The error for a table with no committed version holding data at the
     point asked for: never produced, its run still going or failed, or only
-    runs that produced no data. An empty table is a version with data."""
+    runs that produced no data. An empty table is a version with data. With
+    ``server``, a committed version that holds none is named as such."""
+    pinned = _pinned_version(server, coll, name, version, at, at_trx)
+    if pinned is not None:
+        return TdkException(
+            "not_found",
+            f"Table '{name}' in collection '{coll}' has committed version "
+            f"'{pinned.id}', but it holds no data: the run that wrote it returned "
+            "none, so there are no columns or rows to show.",
+            hint=(
+                f"'tdk table stats --coll {coll} --name {name}' shows that version; "
+                f"'tdk table versions --coll {coll} --name {name}' lists the others."
+            ),
+        )
     if version:
         point = f" at version {version}"
     elif at_trx:
@@ -103,6 +122,22 @@ def no_data(
             "a run still going or failed has not committed one."
         ),
     )
+
+
+def _pinned_version(server, coll, name, version, at, at_trx):
+    """The committed version a read at this point pins, or None when there
+    is none or it cannot be told."""
+    if server is None:
+        return None
+    from tabsdatak.sdk._tables import pin_ms, resolve_version
+    from tabsdatak.sdk.tabsdata_server import Table as SdkTable
+
+    table = SdkTable(server.connection, coll, name)
+    try:
+        return resolve_version(table, version, pin_ms(table.connection, at, at_trx))
+    except Exception as error:
+        logger.debug("The version a read pins could not be read: %s", error)
+        return None
 
 
 UNCOMMITTED_VERSION_STATES = {
@@ -158,7 +193,8 @@ def table_data_view(
         title="Data",
         context=context,
         columns=[
-            Column(column, detail=str(dtype)) for column, dtype in frame.schema.items()
+            Column(column, detail=dtype_name(dtype))
+            for column, dtype in frame.schema.items()
         ],
         rows=[list(values) for values in frame.iter_rows()],
         rules=True,
@@ -311,7 +347,7 @@ def download(
             ) from None
         warn_uncommitted_version(server, coll, name, version, downloaded is not None)
         if downloaded is None:
-            raise no_data(coll, name, version, at, at_trx)
+            raise no_data(coll, name, version, at, at_trx, server)
         render_done(
             ctx,
             action="download",
@@ -461,6 +497,8 @@ def list_tables(
 )
 @click.option(
     "--len",
+    "--max-result",
+    "len",
     type=int,
     help=(
         "Maximum amount of rows to be shown. Defaults to 100 rows, and to 20 "
@@ -542,6 +580,8 @@ def list_tables(
 )
 @click.option(
     "--columns",
+    "--fields",
+    "columns",
     metavar="COLUMN,...",
     help="Show only these columns, comma-separated, in this order.",
 )
@@ -605,7 +645,7 @@ def data(
         warn_uncommitted_version(server, coll, name, version, table_data is not None)
 
         if table_data is None:
-            raise no_data(coll, name, version, at, at_trx)
+            raise no_data(coll, name, version, at, at_trx, server)
         if selected:
             missing = [column for column in selected if column not in table_data.schema]
             if missing:
@@ -654,7 +694,34 @@ def data(
                     ),
                 )
             ) from e
+        found = classify(e)
+        if (found.status or 0) >= 500:
+            raise ClassifiedException(
+                replace(
+                    found,
+                    message=message,
+                    hint=_read_failure_hint(
+                        ctx, coll, name, version, at, at_trx, found
+                    ),
+                )
+            ) from e
         raise click.ClickException(message)
+
+
+def _read_failure_hint(ctx, coll, name, version, at, at_trx, found) -> str:
+    """Which data version the server failed to read, what still reads it and
+    where its log holds the cause."""
+    server = ctx.obj.get("tabsdataserver")
+    pinned = _pinned_version(server, coll, name, version, at, at_trx)
+    which = f"data version '{pinned.id}' of '{name}'" if pinned else f"'{name}'"
+    hint = (
+        f"The server failed to read {which}; 'tdk table stats --coll {coll} "
+        f"--name {name}' still reads its metadata."
+    )
+    request_id = found.extra.get("request_id")
+    if request_id:
+        hint += f" The server log has the cause under request id {request_id}."
+    return hint
 
 
 @capability("analytics", "read")
@@ -741,7 +808,7 @@ def schema(
         warn_uncommitted_version(server, coll, name, version, table_schema is not None)
 
         if table_schema is None:
-            raise no_data(coll, name, version, at, at_trx)
+            raise no_data(coll, name, version, at, at_trx, server)
 
         def _view():
             return TableView(
@@ -1047,6 +1114,8 @@ def stats(
 @_pin_options
 @click.option(
     "--columns",
+    "--fields",
+    "columns",
     help="Comma-separated columns to profile. Defaults to every column.",
 )
 @click.option(

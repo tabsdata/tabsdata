@@ -239,7 +239,7 @@ _TABLE_SCHEMA = [{"name": "id", "type": "Int64"}, {"name": "label", "type": "Str
 _TABLE_DATA_DF = pl.DataFrame({"n": [1, 2], "label": ["x", "y"]})
 _TABLE_DATA_TABULAR = {
     "columns": [
-        {"name": name, "dtype": str(dtype)}
+        {"name": name, "type": dtype._string_repr()}
         for name, dtype in _TABLE_DATA_DF.schema.items()
     ],
     "rows": _TABLE_DATA_DF.to_dicts(),
@@ -978,7 +978,7 @@ CASES: tuple[RenderCase, ...] = (
         "fnrun-get",
         ["fnrun", "get", "--fnrun", "fr20260301-1"],
         _set_run_info,
-        {"function_run": _FUNCTION_RUNS_OUT[0], "workers": _WORKERS_OUT},
+        {"function_run": _FUNCTION_RUNS_OUT[0], "workers": _WORKERS_OUT, "warnings": []},
         (
             "fr20260301-1",
             "proj-a",
@@ -992,6 +992,7 @@ CASES: tuple[RenderCase, ...] = (
             "Done",
             "WK_1",
         ),
+        {"function_run": _FUNCTION_RUNS_OUT[0], "workers": _WORKERS_OUT},
     ),
     RenderCase(
         "table-list",
@@ -1345,7 +1346,7 @@ def test_worker_logs_carries_worker_log_in_every_format(tmp_path):
         if key not in ("log", "status")
     }
     envelope = {
-        "items": [{**shown, "log_cut": []}],
+        "items": [{**shown, "view": "whole", "lines_shown": 2, "log_cut": []}],
         "truncated": False,
         "next": None,
     }
@@ -1674,7 +1675,7 @@ def test_table_data_warns_when_the_version_is_not_committed(tmp_path, rows, serv
     assert f"Warning: version dv-6 failed; {served}" in result.stderr
     if rows is not None:
         assert json.loads(result.stdout) == {
-            "columns": [{"name": "a", "dtype": "Int64"}],
+            "columns": [{"name": "a", "type": "i64"}],
             "rows": [{"a": 1}],
             "row_count": 1,
             "truncated": False,
