@@ -210,11 +210,7 @@ def _full_output_format(argv: list) -> str:
             if index + 1 < len(argv):
                 fmt = argv[index + 1]
     if fmt not in ("text", "json"):
-        click.echo(
-            f"Invalid --format '{fmt}'; expected 'text', 'json' or "
-            f"'{DOCUMENT_FORMAT}'.",
-            err=True,
-        )
+        click.echo(f"Invalid --format '{fmt}'; expected 'text' or 'json'.", err=True)
         raise SystemExit(2)
     return fmt
 

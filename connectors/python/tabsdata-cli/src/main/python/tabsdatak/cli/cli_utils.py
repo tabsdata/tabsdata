@@ -604,7 +604,20 @@ def ancestry(
 # ---------------------------------------------------------------------------
 
 DOCUMENT_FORMAT = "jsonb"
-OUTPUT_FORMATS = ("table", "json", DOCUMENT_FORMAT, "yaml")
+OUTPUT_FORMATS = ("table", "json", "yaml")
+
+
+class _Format(click.Choice):
+    """The output formats a person is shown, plus the document format a
+    program running tdk speaks, taken but not listed: its shape is the
+    machine run's to change."""
+
+    def convert(self, value, param, ctx):
+        if self.normalize_choice(value, ctx) == DOCUMENT_FORMAT:
+            return DOCUMENT_FORMAT
+        return super().convert(value, param, ctx)
+
+
 _AS_DATA = object()
 
 
@@ -625,21 +638,20 @@ def _apply_format(ctx: click.Context, param, value):
 
 
 def format_option(fn):
-    """Decorator adding ``-o/--format {table,json,jsonb,yaml}`` (default
-    ``table``, ``jsonb`` in a machine run)."""
+    """Decorator adding ``-o/--format {table,json,yaml}`` (default ``table``;
+    the unlisted ``jsonb`` document, always in a machine run)."""
     return click.option(
         "-o",
         "--format",
         "fmt",
-        type=click.Choice(OUTPUT_FORMATS),
+        type=_Format(OUTPUT_FORMATS),
         default=None,
         show_default="table",
         expose_value=False,
         callback=_apply_format,
         help=(
             "Output format. 'json' and 'yaml' give a listing as an array and "
-            "table data as one object per row; 'jsonb' gives a listing as "
-            "{items, truncated, next} and table data as columns and rows."
+            "table data as one object per row."
         ),
     )(fn)
 
@@ -942,7 +954,7 @@ def render_list(
     them at its ``max_bytes``. ``cut_hint``, a callable, says how to get rows
     the command shortened itself, or returns None when it shortened none."""
     if (ctx.obj or {}).get("list_fields") and output_format(ctx) == "table":
-        raise click.UsageError("'--fields' applies to json, jsonb and yaml output.")
+        raise click.UsageError("'--fields' needs '-o json' or '-o yaml'.")
 
     def _items():
         return _only_fields(ctx, items() if callable(items) else items)
@@ -1247,8 +1259,7 @@ _FIELDS_OPTION = click.option(
     expose_value=False,
     callback=_apply_fields,
     help=(
-        "Keep only these fields of each row, comma-separated, in json, jsonb and "
-        "yaml output."
+        "Keep only these fields of each row, comma-separated; not in the table view."
     ),
 )
 _CURSOR_OPTION = click.option(

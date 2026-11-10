@@ -9,9 +9,9 @@ the same from the installed CLI.
 
 - **Identifiers are named options** — a command takes its target via `--name NAME` (entities) or `--plan`/`--trx`/`--fnrun`/`--worker`/`--user` (execution & access). Positional arguments are kept for free text and local inputs: a search query, a symbol, an example name or path, and the server of `auth password-change`.
 - **Execution split into entity subgroups** (`plan`, `trx`, `fnrun`, `worker`).
-- **Consistent flags**: `--enabled/--disabled`, `--confirm WORD` for destructive ops, `-o/--format {table,json,jsonb,yaml}`.
+- **Consistent flags**: `--enabled/--disabled`, `--confirm WORD` for destructive ops, `-o/--format {table,json,yaml}`.
 - **Pinned-aware defaults**: `--proj` → pinned project, `--coll` → pinned collection. The
-  notice naming a pinned value goes to stderr, so `-o json|jsonb|yaml` stdout stays parseable.
+  notice naming a pinned value goes to stderr, so `-o json|yaml` stdout stays parseable.
 
 ---
 
@@ -75,11 +75,6 @@ Global options
 ```
 
 Off a terminal (piped, or run by a program), `--help` prints plain text.
-`--help --full -o jsonb` lists the commands under the group its leading words
-name as a paged listing envelope (`--cursor`, `--fields`, `--max-result`).
-When a program runs tdk (an extension's machine run), no progress line is
-shown, the output is always the `jsonb` document, and `--help` leaves out the
-table-view options (`--browse`, `--wrap`, `--max-width`, `--format`).
 
 ## Common options
 
@@ -90,9 +85,8 @@ Applied where shown in each command. Every value option takes an argument.
                                   command that needs one and has neither prompts
                                   for it before any other value.
   -c, --coll   COLLECTION         Target collection. Default: pinned collection.
-  -o, --format {table|json|jsonb|yaml}
-                                  Output format. Default: table. See Machine
-                                  output for json and yaml against jsonb.
+  -o, --format {table|json|yaml}  Output format. Default: table. See Machine
+                                  output for the json and yaml documents.
       --browse|--print            Open the table in a viewer that scrolls both
                                   ways, or print it and return. Default: --print
                                   (--browse for `table data`). Off a terminal the
@@ -110,13 +104,10 @@ Applied where shown in each command. Every value option takes an argument.
                                   from `tdk set --profile`, else the default
                                   profile. On every command; see Profiles.
       --max-result N              Maximum rows a `list` command shows. Default: 100.
-                                  0 lists everything, or as many as a program
-                                  running tdk allows; a program may also cap
-                                  the size of the rows. When rows are left over,
+                                  0 lists everything. When rows are left over,
                                   the command says so and how to get them (on
-                                  stderr under --format json|jsonb|yaml, so
-                                  stdout stays parseable; in the listing's
-                                  `hint` under jsonb).
+                                  stderr under --format json|yaml, so stdout
+                                  stays parseable).
       --filter FIELD:OP:VALUE     Server-side filter on a paged `list` (every one
                                   with --max-result), OP one of eq ne gt ge lt le
                                   lk btw is. Repeatable: conditions on different
@@ -127,10 +118,9 @@ Applied where shown in each command. Every value option takes an argument.
                                   from the `next` cursor it returned; pass the
                                   same filters and order.
       --fields FIELD,...          Keep only these fields of each row of a paged
-                                  `list` (and `docs list|search`) in json, jsonb
-                                  and yaml output; a
-                                  field no row has is a usage error naming the
-                                  fields the rows have.
+                                  `list` (and `docs list|search`); not in the
+                                  table view. A field no row has is a usage
+                                  error naming the fields the rows have.
       --confirm WORD              Confirm a destructive op without the prompt by
                                   giving its word: `delete`, or `cancel` for
                                   `plan|trx cancel`; another word is a usage
@@ -845,10 +835,9 @@ signature, and runs every transformer that carries a `SAMPLE` on it. A
 
 `list` filters by `--kind` (`publisher`, `stream_publisher`, `transformer`,
 `subscriber`, `flow`), `--connector` (a connection type id such as
-`postgres-sql-in`) and `--tag`; filters combine. `-o jsonb` uses the list
-envelope with `{"name", "form": "snippet"|"project", "title", "kind",
-"connectors", "tags", "summary", "source"}` items (`kind` is null for
-projects; `source` is `bundled`). `show` prints a
+`postgres-sql-in`) and `--tag`; filters combine. `-o json` lists `{"name", "form": "snippet"|"project",
+"title", "kind", "connectors", "tags", "summary", "source", "description"}`
+items (`kind` is null for projects; `source` is `bundled`). `show` prints a
 snippet's source, or a project's README and function files; `-o json` adds
 `"files": [{"path", "content"}]` to the list item. `path` gives `{"path"}`: the examples
 directory, or one example's file or folder. `extract` writes a snippet as
@@ -914,37 +903,14 @@ of wrapping it. `tdk --version` prints the client version.
 
 ## Machine output
 
-`-o jsonb` carries the full objects, and so does every document this section and
-the command sections describe. `-o json` and `-o yaml` give the same document but
-for the shapes tdk 2.2 printed, which scripts parse: a listing is the bare array
-of its items, `table data` an array of row objects, worker logs `{"logs": "Worker
-<id>\n<log>"}`, one block per worker, and `examples list` items also carry
-`description`. A machine run, such as the agent mode of the AI package, always
-gives the `jsonb` document, `-o json` included.
-
-In `jsonb` every `*_on` time is an ISO-8601 UTC string
-(`2025-06-16T11:49:14.472Z`, which `--filter` takes back); `json` and `yaml`
-keep epoch milliseconds. A failed `jsonb` command prints, on stdout, the error
-document instead of its result: `{"error": {"type", "status", "code",
-"message", "hint", "command", "retry_after", "resume", "state"}}`, where
-`command` is the invocation with secret values replaced by `***`, `resume`
-the command that continues a wait that ran out of time and `state` the last
-state it saw; the exit code is the error's.
-
-In `jsonb` a listing is always an object, never a bare array:
-`{"items": [...], "truncated": bool, "next": cursor}`, where
-`truncated` says `--max-result` cut it short and `next`, on a paged listing, is
-the `--cursor` that continues it (null otherwise). A truncated listing adds
-`hint`, which says how to get the rest. A cursor continues only the
-command, options, filters and order that returned it; anything else is a usage
-error.
-`table data` gives
-`{"columns": [{"name", "dtype"}], "rows": [[...]], "row_count", "truncated"}`,
-with dates as ISO-8601 strings, decimals as strings and binary as base64. Logs
-use the list envelope, one item per worker: `worker_id`, `function_run_id`,
-`collection`, `function`, the annotated `status`, `attempt`, `lines_total`,
-`log`, `log_truncated`, `log_unavailable` and `signature`
-(`{category, code, message, user_frame}` or null).
+`-o json` and `-o yaml` give the full objects, in the shapes tdk 2.2 printed,
+which scripts parse: a listing is the bare array of its items, `table data` an
+array of row objects, worker logs `{"logs": "Worker <id>\n<log>"}`, one block
+per worker, and `examples list` items also carry `description`. Every `*_on`
+time is epoch milliseconds. A cursor continues only the command, options,
+filters and order that returned it; anything else is a usage error. A program
+running tdk, such as the agent mode of the AI package, gets a document of its
+own, which that package describes.
 
 Plans, transactions, function runs, workers (including `cron|stream list`) and
 table data versions carry their raw one-letter `status` code plus three derived
@@ -1008,7 +974,7 @@ change something:
   "defining_module", "files", "skipped", "truncated"}`, the bundle's text files
   within a size budget.
 
-Under `-o json|jsonb|yaml`, stdout holds only the rendered document: hints, notices,
+Under `-o json|yaml`, stdout holds only the rendered document: hints, notices,
 progress lines and the live monitor table go to stderr.
 
 `--no-prompt` is accepted in any position before `--`.

@@ -573,7 +573,7 @@ def test_only_does_not_apply_to_the_table_view(tmp_path):
         ["user", "list", "--fields", "name"], client=client, tmp_path=tmp_path
     )
     assert result.exit_code == 2, result.output
-    assert "'--fields' applies to json, jsonb and yaml output." in result.output
+    assert "'--fields' needs '-o json' or '-o yaml'." in result.output
 
 
 def _timed_users() -> MagicMock:
