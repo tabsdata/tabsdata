@@ -11,6 +11,7 @@ from click.testing import CliRunner
 
 from tabsdatak.cli import _registry
 from tabsdatak.cli._machine import Machine, machine, running
+from tabsdatak.cli.cli_utils import _connection_limits
 from tabsdatak.cli.td.cli import cli
 
 
@@ -79,3 +80,10 @@ def test_a_machine_run_emits_the_result_instead_of_printing_it(monkeypatch):
     assert result.stdout == ""
     assert seen["machine"].command == ["tdk", "probe"]
     assert machine() is None
+
+
+def test_a_machine_run_sets_the_connection_limits():
+    assert _connection_limits(None) == {}
+    assert _connection_limits(Machine(emit=print)) == {}
+    run = Machine(emit=print, request_timeout=(1.0, 2.0), connect_attempts=0)
+    assert _connection_limits(run) == {"timeout": (1.0, 2.0), "connect_attempts": 0}

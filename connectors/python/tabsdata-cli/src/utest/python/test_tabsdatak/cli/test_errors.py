@@ -84,25 +84,47 @@ def test_client_side_causes_classify(cause, expected):
     assert classify(_wrapped(cause)).type == expected
 
 
+def _unreachable_cause(error_type: type) -> Exception:
+    request = requests.Request("GET", "http://127.0.0.1:2457/api/v1/users").prepare()
+    return error_type("HTTPConnectionPool(...): Max retries exceeded", request=request)
+
+
+@pytest.mark.parametrize(
+    "error_type, what",
+    [
+        (
+            requests.exceptions.ConnectionError,
+            "cannot connect to the server at http://127.0.0.1:2457",
+        ),
+        (
+            requests.exceptions.ReadTimeout,
+            "the server at http://127.0.0.1:2457 did not answer in time",
+        ),
+    ],
+)
+def test_an_unreachable_server_is_named_with_what_happened(error_type, what):
+    classified = classify(_wrapped(_unreachable_cause(error_type)))
+    assert classified.message == f"Failed to do it: {what}"
+    assert classified.hint == (
+        "Check that the server at http://127.0.0.1:2457 is running and reachable "
+        "from here."
+    )
+
+
 def _attended(monkeypatch):
     for name in (UNATTENDED_ENV, *UNATTENDED_MARKERS):
         monkeypatch.delenv(name, raising=False)
 
 
-def test_no_project_tells_a_person_to_set_or_pass_one(monkeypatch):
+@pytest.mark.parametrize("unattended", [None, "1"])
+def test_no_project_says_how_to_pass_or_pin_one(unattended, monkeypatch):
     _attended(monkeypatch)
+    if unattended:
+        monkeypatch.setenv(UNATTENDED_ENV, unattended)
     message = classify(_wrapped(NoProjectSelectedError())).message
     assert message.startswith("Failed to do it: No project selected.")
-    assert "tdk set --proj" in message
-
-
-def test_no_project_tells_an_agent_only_what_it_may_run(monkeypatch):
-    _attended(monkeypatch)
-    monkeypatch.setenv(UNATTENDED_ENV, "1")
-    message = classify(_wrapped(NoProjectSelectedError())).message
-    assert message.startswith("Failed to do it: No project selected.")
-    assert "tdk set" not in message
     assert "--proj <name>" in message and "tdk project list" in message
+    assert "tdk set --proj <name>" in message
 
 
 def test_bare_click_exception_is_an_invalid_request():

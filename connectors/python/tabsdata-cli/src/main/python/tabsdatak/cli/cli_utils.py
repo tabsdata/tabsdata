@@ -328,6 +328,7 @@ def utils_login(
             password,
             credentials_file=get_credentials_file_path(ctx),
             token=token,
+            **_connection_limits(machine()),
         )
     except Exception as e:
         if isinstance(e, requests.exceptions.ConnectionError):
@@ -393,15 +394,10 @@ class _LazyTabsdataServer:
             if env_credential is not None:
                 ensure_unexpired(env_credential)
             credentials = self._credentials
-            run = machine()
             connection = APIServer(
                 credentials.get("url"),
                 credentials_file=self._credentials_file,
-                **(
-                    {"timeout": run.request_timeout}
-                    if run is not None and run.request_timeout
-                    else {}
-                ),
+                **_connection_limits(machine()),
             )
             connection.refresh_token = credentials.get("refresh_token")
             connection.bearer_token = credentials.get("bearer_token")
@@ -420,6 +416,19 @@ class _LazyTabsdataServer:
 
     def __bool__(self) -> bool:
         return True
+
+
+def _connection_limits(run) -> dict:
+    if run is None:
+        return {}
+    limits = {}
+    if run.request_timeout:
+        limits["timeout"] = run.request_timeout
+    if run.connect_attempts is not None:
+        limits["connect_attempts"] = run.connect_attempts
+    if run.retry_attempts is not None:
+        limits["retry_attempts"] = run.retry_attempts
+    return limits
 
 
 class FailingTabsdataServer:
@@ -643,7 +652,9 @@ def output_format(ctx: click.Context) -> str:
 def progress(ctx: click.Context, message: str = "") -> None:
     """Echo a progress or diagnostic line: to stdout in the table view, to
     stderr in the machine formats, so stdout holds only the rendered
-    document."""
+    document; a machine run shows none."""
+    if machine() is not None:
+        return
     click.echo(message, err=output_format(ctx) != "table")
 
 
@@ -1454,10 +1465,7 @@ def verify_login_or_prompt(ctx: click.Context):
             raise TdkException(
                 "auth_required",
                 "No credentials found.",
-                hint=(
-                    "Run 'tdk login', or set TDK_SERVER together with TDK_TOKEN "
-                    "or TDK_BEARER."
-                ),
+                hint="Run 'tdk login'.",
             )
         progress(ctx, "No credentials found. Please login first.")
         server_url, username, password = request_login_information(ctx)
@@ -1758,12 +1766,6 @@ def hint_common_solutions(ctx: click.Context, e: Exception):
                 "checked by "
                 "executing 'tdserver status'.",
             )
-    elif isinstance(e, AttributeError):
-        show_hint(
-            ctx,
-            "It seems like you might have an expired session. You can "
-            "log in again with 'tdk login'.",
-        )
 
 
 def command_failure(ctx: click.Context, action: str, e: Exception) -> Exception:

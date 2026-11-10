@@ -248,7 +248,7 @@ def test_timeout_sets_the_budget(clock, tmp_path):
     assert client.trigger_function.call_count == 1
 
 
-def test_max_wait_caps_the_budget_and_says_so(clock, tmp_path, machine_settings):
+def test_max_wait_caps_the_budget_and_names_it_in_the_hint(clock, tmp_path, machine_settings):
     machine_settings.update(max_wait=(3.0, "a 3 s cap"))
     client = _client(_connection(["R"], []))
     argv = [*_TRIGGER, "--wait", "--timeout", "100", "--machine"]
@@ -256,7 +256,7 @@ def test_max_wait_caps_the_budget_and_says_so(clock, tmp_path, machine_settings)
     assert result.exit_code == ExitCode.WAIT_TIMEOUT
     assert sum(clock.sleeps) == 3
     assert "limited by a 3 s cap" in _document(result)["error"]["hint"]
-    assert "limited by a 3 s cap" in result.stderr
+    assert result.stderr == ""
 
 
 def _jwt(exp: float) -> str:

@@ -531,7 +531,8 @@ commands with `--wait`, `fnrun replay --wait`, `fnrun get --wait` and `plan|trx
 list --monitor` poll until what they wait for is final, backing off from one
 second to five. The wait lasts `--timeout` seconds, without limit when it is
 not given. The expiry of a `TDK_BEARER` session caps every wait (5 seconds
-before it); a cap that applies is reported on stderr. No request reads for
+before it); a cap that applies is reported on stderr, and named in the
+`wait_timeout` hint. No request reads for
 longer than the time left. `--timeout` (or `--attempt`) on a command that does
 not wait, without `--wait` or with `--no-wait`, is a usage
 error: `'--timeout' applies only while waiting.`; on `plan|trx list` it needs

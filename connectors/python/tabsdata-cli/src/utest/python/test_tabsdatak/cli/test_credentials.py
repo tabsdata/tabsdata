@@ -321,3 +321,28 @@ def test_login_defaults_to_tdk_server(tmp_path):
         )
     assert result.exit_code == 0, result.output
     assert seen["server"] == "http://elsewhere:2457"
+
+
+def _login(argv, tmp_path, **invoke):
+    seen = {}
+
+    def fake_login(ctx, server_url, user, password, token=None):
+        seen.update(user=user, password=password)
+
+    with (
+        patch("tabsdatak.cli.td.cli.utils_login", fake_login),
+        patch("tabsdatak.cli.td.cli.DEFAULT_TABSDATA_DIRECTORY", str(tmp_path)),
+        patch("tabsdatak.cli.td.config_utils.execute_actions_for_command"),
+    ):
+        result = CliRunner().invoke(
+            cli, ["login", "--server", "http://h:2457", *argv], **invoke
+        )
+    return result, seen
+
+
+def test_without_a_prompt_login_says_to_log_in_from_a_terminal(tmp_path):
+    result, seen = _login(["--no-prompt", "--user", "u", "-o", "jsonb"], tmp_path)
+    error = json.loads(result.stdout)["error"]
+    assert error["type"] == "missing_argument"
+    assert error["hint"] == "Run 'tdk login' in a terminal."
+    assert seen == {}

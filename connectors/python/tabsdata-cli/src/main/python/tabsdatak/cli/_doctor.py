@@ -16,7 +16,7 @@ from collections.abc import Callable
 PASS, WARN, FAIL, SKIP = "pass", "warn", "fail", "skip"
 EXPIRY_WARNING_SECONDS = 10 * 60
 MAX_BUNDLED_EXTRAS = 25
-LOGIN_FIX = "Run 'tdk login', or set TDK_SERVER together with TDK_TOKEN or TDK_BEARER."
+LOGIN_FIX = "Run 'tdk login'."
 VERSION_FIX = "Install the tabsdata release that matches the server."
 
 

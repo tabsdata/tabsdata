@@ -616,6 +616,7 @@ def release_notes(ctx: click.Context):
     _show_manifest(ctx, "RELEASE-NOTES", "Release Notes")
 
 
+_LOGIN_HINT = "Run 'tdk login' in a terminal."
 @capability("session", "write")
 @cli.command()
 @cli.command(login=False)
@@ -638,10 +639,9 @@ def release_notes(ctx: click.Context):
     "--password",
     "-p",
     help=(
-        "Password for the Tabsdata Server. It is discouraged to send the password as a "
-        "plain argument, it should be either sent as the value of an environment "
-        "variable or written through the prompt. Will be prompted for it if not "
-        "provided."
+        "Password for the Tabsdata Server. Discouraged: a password on the command "
+        "line stays in the shell history and is visible to other processes; let "
+        "tdk prompt for it. Will be prompted for it if not provided."
     ),
 )
 @click.option(
@@ -656,7 +656,13 @@ def release_notes(ctx: click.Context):
     flag_value=TOKEN_ENV,
 )
 @click.pass_context
-def login(ctx: click.Context, server: str, user: str, password: str, token: str):
+def login(
+    ctx: click.Context,
+    server: str,
+    user: str,
+    password: str,
+    token: str,
+):
     """Login to the Tabsdata Server"""
     ensure_stateful(ctx, "tdk login")
     server = (
@@ -679,13 +685,17 @@ def login(ctx: click.Context, server: str, user: str, password: str, token: str)
         utils_login(ctx, server, None, None, token=token)
     else:
         user = user or logical_prompt(
-            ctx, "Username for the Tabsdata Server", option="--user"
+            ctx,
+            "Username for the Tabsdata Server",
+            option="--user",
+            hint=_LOGIN_HINT,
         )
         password = password or logical_prompt(
             ctx,
             "Password",
             hide_input=True,
             option="--password",
+            hint=_LOGIN_HINT,
         )
         utils_login(ctx, server, user, password)
     render_done(

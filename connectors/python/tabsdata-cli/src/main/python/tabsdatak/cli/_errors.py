@@ -10,10 +10,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Any
+from urllib.parse import urlsplit
 
 import rich_click as click
-
-from tabsdatak.cli._unattended import unattended_cause
 
 
 class ExitCode(IntEnum):
@@ -56,10 +55,6 @@ ERROR_TYPES: dict[str, ExitCode] = {
 }
 
 _CONFLICT_CODES = frozenset({"SqlError::1", "SqlError::2"})
-_UNATTENDED_NO_PROJECT = (
-    "No project selected. Pass '--proj <name>' to the command; 'tdk project list' "
-    "shows the projects."
-)
 _LIST_HINT = (
     "Check the fields in '--filter' and '--order-by': the message names the one "
     "this listing does not support."
@@ -148,8 +143,6 @@ def classify(exc: BaseException, list_options_used: bool = False) -> TdkError:
         if isinstance(cause, click.UsageError):
             return TdkError(type="usage", message=cause.format_message())
         if isinstance(cause, NoProjectSelectedError):
-            if unattended_cause() is not None:
-                message = message.replace(str(cause), _UNATTENDED_NO_PROJECT)
             return TdkError(type="no_project", message=message)
         if isinstance(cause, NotFound):
             return TdkError(type="not_found", message=message)
@@ -170,12 +163,36 @@ def classify(exc: BaseException, list_options_used: bool = False) -> TdkError:
         if isinstance(
             cause, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
         ):
-            return TdkError(type="unreachable", message=message)
+            return _unreachable(message, cause)
     if isinstance(exc, click.ClickException) and (
         exc.__context__ is None or exc.__suppress_context__
     ):
         return TdkError(type="invalid_request", message=message)
     return TdkError(type="internal", message=message)
+
+
+def _unreachable(message: str, cause: BaseException) -> TdkError:
+    """The server could not be reached: the transport's own text, which names
+    pools and retries, becomes which server and what happened."""
+    import requests
+
+    url = getattr(getattr(cause, "request", None), "url", None)
+    parts = urlsplit(url) if isinstance(url, str) else None
+    server = (
+        f"the server at {parts.scheme}://{parts.netloc}"
+        if parts is not None and parts.netloc
+        else "the server"
+    )
+    if isinstance(cause, requests.exceptions.Timeout):
+        what = f"{server} did not answer in time"
+    else:
+        what = f"cannot connect to {server}"
+    raw = str(cause)
+    return TdkError(
+        type="unreachable",
+        message=message.replace(raw, what) if raw and raw in message else what,
+        hint=f"Check that {server} is running and reachable from here.",
+    )
 
 
 class ClassifiedException(click.ClickException):
