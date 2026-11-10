@@ -75,7 +75,7 @@ use td_common::execution_status::WorkerCallbackStatus;
 use td_common::files::YAML_EXTENSION;
 use td_common::id::id;
 use td_common::os::{system_with, terminate_process};
-use td_common::signal::terminate;
+use td_common::signal::Signals;
 use td_common::status::ExitStatus::{GeneralError, Success, TabsDataError};
 use td_common::worker::MessageAction;
 use td_common::worker::WorkerClass::{Ephemeral, Init, Regular};
@@ -676,7 +676,7 @@ impl Supervisor {
         }
     }
 
-    async fn run(&self) -> Result<(), RuntimeError> {
+    async fn run(&self, signals: Signals) -> Result<(), RuntimeError> {
         if let Err(e) = set_current_dir(self.params.work()) {
             return Err(RuntimeError::new(format!(
                 "Failed to set the current directory to the work folder {}: {}",
@@ -687,6 +687,8 @@ impl Supervisor {
 
         let mut monitor_handle = Box::pin(self.monitor());
         let mut manager_handle = Box::pin(self.manage());
+        let mut signal_handle = Box::pin(signals.wait());
+        let mut signals_ended = false;
 
         loop {
             select! {
@@ -699,9 +701,10 @@ impl Supervisor {
                     info!("Received STOP request. Initiating graceful stopsche...: '{:?}'", result);
                     return self.stop_workers(Signal::Term).await;
                 },
-                signal = terminate() => {
-                    if let Some(signal) = signal {
-                        return self.stop_workers(signal).await;
+                signal = signal_handle.as_mut(), if !signals_ended => {
+                    match signal {
+                        Some(signal) => return self.stop_workers(signal).await,
+                        None => signals_ended = true,
                     }
                 },
             }
@@ -3194,7 +3197,8 @@ pub fn start() {
     Cli::<Configuration, Arguments>::exec_async(
         arguments.name().as_str(),
         |config, params| async move {
-            let result = Supervisor::new(config, params).run().await;
+            let signals = Signals::install();
+            let result = Supervisor::new(config, params).run(signals).await;
             if let Err(e) = result {
                 error!("Supervisor worker failed: {e:#?}");
                 error!("Leaving with exit code: {}", TabsDataError.code());

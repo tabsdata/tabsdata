@@ -15,7 +15,7 @@ use std::time::Duration;
 use ta_edition::Edition;
 use ta_services::service::Ctx;
 use td_bridge::{BridgeProviderFactory, BridgeProviderHandle};
-use td_common::signal::terminate;
+use td_common::signal::Signals;
 use td_common::status::ExitStatus;
 use td_common::task_group::TaskGroup;
 use td_database::access::{DbPool, Global};
@@ -64,6 +64,7 @@ pub fn run(edition: Edition) {
     Cli::<Config, Params>::exec_async(
         CONFIG_NAME,
         |config, params| async move {
+            let signals = Signals::install();
             let registry = &registry;
             let config = params.resolve(config).map_err(|e| {
                 error!("Error resolving API Server configuration: {e:#?}");
@@ -219,7 +220,7 @@ pub fn run(edition: Edition) {
                 .task(worker_recovery_server)
                 .task(probe_dispatch_server);
             let outcome = te_services::extended_tasks(&server_context.extended_services, tasks)
-                .run_until(terminate())
+                .run_until(signals.wait())
                 .await;
 
             // Close every serving pool's connections explicitly, rather than at the

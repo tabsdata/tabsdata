@@ -10,7 +10,7 @@ use std::time::Duration;
 use td_common::env::get_current_dir;
 use td_common::logging;
 use td_common::logging::LoggingOptions;
-use td_common::signal::terminate;
+use td_common::signal::Signals;
 use td_common::status::ExitStatus;
 use td_common::task_group::TaskGroup;
 use td_common::worker::{REQUEST_FILE, WORKER_PID_FILE};
@@ -32,6 +32,7 @@ pub fn run() {
     Cli::<NoConfig, ArgumentParameters>::exec_async(
         CONFIG_NAME,
         |_config, params| async move {
+            let signals = Signals::install();
             let ArgumentParameters { request_folder, .. } = params;
 
             // Initialize logging
@@ -120,7 +121,7 @@ pub fn run() {
 
             TaskGroup::new(SHUTDOWN_GRACE)
                 .task(task_runner)
-                .run_until(terminate())
+                .run_until(signals.wait())
                 .await
         },
         None,

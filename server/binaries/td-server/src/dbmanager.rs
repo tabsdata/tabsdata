@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use ta_edition::Edition;
 use td_common::attach::attach;
 use td_common::crypto::install_crypto_provider;
+use td_common::signal::Signals;
 use td_common::status::ExitStatus;
 use td_common::{about, logging};
 use td_database::config::{ComponentConfig, DatabaseComponents};
@@ -126,10 +127,11 @@ struct DbManagerParams {
 /// `serve` exists to BE the database process: anything less than a bootable
 /// local server entry is a misconfiguration, not a no-op.
 async fn serve(server: Option<&ComponentConfig>) -> Result<(), DbError> {
+    let signals = Signals::install();
     bootable_server(server)?;
     let handle = serve_server(server).await?;
     info!("Database server running; waiting for shutdown signal");
-    wait_for_shutdown().await;
+    signals.wait().await;
     info!("Shutdown signal received; stopping database server");
     match handle {
         Some(handle) => handle.stop().await,
@@ -431,28 +433,6 @@ async fn with_extension_pools<T>(
     let result = op(&pools).await;
     owner.close().await;
     result
-}
-
-async fn wait_for_shutdown() {
-    #[cfg(unix)]
-    {
-        use tokio::signal::unix::{SignalKind, signal};
-        let mut terminate = match signal(SignalKind::terminate()) {
-            Ok(terminate) => terminate,
-            Err(_) => {
-                let _ = tokio::signal::ctrl_c().await;
-                return;
-            }
-        };
-        tokio::select! {
-            _ = terminate.recv() => {}
-            _ = tokio::signal::ctrl_c() => {}
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = tokio::signal::ctrl_c().await;
-    }
 }
 
 fn run(edition: Edition) {
