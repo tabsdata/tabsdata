@@ -16,10 +16,12 @@ from tabsdatak.cli._machine import machine
 from tabsdatak.cli._prompted import pinned, prompted
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
+    DOCUMENT_FORMAT,
     all_projects_option,
     ancestry,
     format_option,
     hint_common_solutions,
+    jsonb_document,
     list_options,
     list_params,
     max_result_option,
@@ -373,8 +375,10 @@ def connection_document(ctx: click.Context, fmt: str, name: str):
         raise click.ClickException(f"Failed to display connection: {e}")
     run = machine()
     if run is not None:
-        run.emit(conn_read)
+        run.emit(jsonb_document(conn_read))
         return
+    if fmt == DOCUMENT_FORMAT:
+        conn_read = jsonb_document(conn_read)
     click.echo(serialize(conn_read, fmt), nl=(fmt == "json"))
 
 

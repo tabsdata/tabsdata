@@ -405,6 +405,19 @@ def test_list_monitor_is_bounded_and_resumes_the_command(clock, tmp_path):
     assert sum(clock.sleeps) == 3
 
 
+def test_a_persons_jsonb_list_monitor_timeout_is_an_error_document(clock, tmp_path):
+    client = _client(_connection(["R"], []))
+    client.list_executions_generator.side_effect = lambda **_: iter([
+        _listed(client.connection, "R")
+    ])
+    argv = ["plan", "list", "--monitor", "--timeout", "3", "-o", "jsonb"]
+    result = _invoke(argv, client, tmp_path)
+    assert result.exit_code == ExitCode.WAIT_TIMEOUT
+    error = json.loads(result.stdout)["error"]
+    assert error["type"] == "wait_timeout"
+    assert error["state"]["items"][0]["id"] == "ep20260930-1"
+
+
 def test_list_monitor_emits_the_envelope_once_final(clock, tmp_path):
     statuses = iter(["R", "F"])
     client = _client(_connection(["R"], []))

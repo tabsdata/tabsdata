@@ -20,6 +20,7 @@ from tabsdatak.cli._credentials import (
     refine_auth_error,
     stored_expiry,
 )
+from tabsdatak.cli._error_document import error_document, redact
 from tabsdatak.cli._errors import (
     ClassifiedException,
     TdkException,
@@ -30,6 +31,7 @@ from tabsdatak.cli._registry import cli_extensions, collect_cli_commands
 from tabsdatak.cli._unattended import unattended_cause
 from tabsdatak.cli.cli_utils import (
     DEFAULT_TABSDATA_DIRECTORY,
+    DOCUMENT_FORMAT,
     OPTION_PINS,
     OPTION_PROMPT,
     SERVER_URL_DEFAULTS_HELP,
@@ -50,6 +52,7 @@ from tabsdatak.cli.cli_utils import (
     progress,
     render,
     render_done,
+    serialize,
     set_profile,
     store_cli_options,
     utils_login,
@@ -238,6 +241,40 @@ def _hoist_no_prompt(argv: list) -> list:
     return [NO_PROMPT_FLAG, *rest, *argv[len(head) :]]
 
 
+def _asks_for_document(argv: list) -> bool:
+    """Whether ``argv`` asks for the ``jsonb`` document, whose failures are a
+    document too."""
+    head = argv[: argv.index("--")] if "--" in argv else argv
+    for index, arg in enumerate(head):
+        if arg in ("-o", "--format"):
+            if index + 1 < len(head) and head[index + 1] == DOCUMENT_FORMAT:
+                return True
+        elif arg in (f"--format={DOCUMENT_FORMAT}", f"-o{DOCUMENT_FORMAT}"):
+            return True
+    return False
+
+
+def _documented(argv: list, call):
+    """Run ``call``, a ``jsonb`` invocation: a failure prints its error
+    document on stdout, as a machine run's does, and exits with its code."""
+    try:
+        result = call()
+    except (SystemExit, click.exceptions.Exit):
+        raise
+    except click.ClickException as error:
+        failure = getattr(error, "error", None) or classify(error)
+    except Exception as error:
+        failure = classify(error)
+    else:
+        raise SystemExit(result if isinstance(result, int) else 0)
+    _echo(error_document(failure, ["tdk", *redact(argv)]))
+    raise SystemExit(failure.exit_code)
+
+
+def _echo(document) -> None:
+    click.echo(serialize(document, DOCUMENT_FORMAT))
+
+
 def _full_output_format(argv: list) -> str:
     fmt = "text"
     for flag in ("--format", "-o"):
@@ -246,7 +283,11 @@ def _full_output_format(argv: list) -> str:
             if index + 1 < len(argv):
                 fmt = argv[index + 1]
     if fmt not in ("text", "json"):
-        click.echo(f"Invalid --format '{fmt}'; expected 'text' or 'json'.", err=True)
+        click.echo(
+            f"Invalid --format '{fmt}'; expected 'text', 'json' or "
+            f"'{DOCUMENT_FORMAT}'.",
+            err=True,
+        )
         raise SystemExit(2)
     return fmt
 
@@ -265,6 +306,7 @@ class _RootGroup(click.RichGroup):
 
     command_class = TdkCommand
     group_class = TdkGroup
+
     def main(self, *args, **kwargs):
         def run(argv: list, **overrides):
             return self._main(argv, {**kwargs, **overrides})
@@ -282,11 +324,17 @@ class _RootGroup(click.RichGroup):
         return run
 
     def _main(self, argv: list, kwargs: dict):
+        run = machine()
+        document = run is None and _asks_for_document(argv)
         if ("--help" in argv or "-h" in argv) and "--full" in argv:
             output = _full_output_format(argv)
-            click.echo(build_full_help(self, output, compact=machine() is not None))
+            click.echo(build_full_help(self, output, compact=run is not None))
             raise SystemExit(0)
-        return super().main(**{**kwargs, "args": _hoist_no_prompt(argv)})
+        args = {**kwargs, "args": _hoist_no_prompt(argv)}
+        if document:
+            main = super().main
+            return _documented(argv, lambda: main(**args, standalone_mode=False))
+        return super().main(**args)
 
     def invoke(self, ctx: click.Context):
         try:

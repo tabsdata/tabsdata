@@ -499,7 +499,7 @@ def test_sample_emits_the_table_data_envelope(tmp_path):
     assert document.pop("waited_ms") >= 0
     assert document == {
         "probe_id": "PR1",
-        "expires_on": 123,
+        "expires_on": "1970-01-01T00:00:00.123Z",
         "entity": "db.t",
         "columns": [{"name": "id"}, {"name": "name"}],
         "rows": [[1, "Acme"]],

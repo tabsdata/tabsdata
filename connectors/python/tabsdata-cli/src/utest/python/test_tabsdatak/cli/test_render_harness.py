@@ -46,6 +46,7 @@ import pytest
 from click.testing import CliRunner
 from ruamel.yaml import YAML
 
+from tabsdatak.cli.cli_utils import jsonb_document
 from tabsdatak.cli.td.cli import cli
 from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
@@ -1230,7 +1231,7 @@ def test_jsonb_output_matches_payload(case: RenderCase, tmp_path):
     case.setup(client)
     result = _invoke(case.argv + ["-o", "jsonb"], client=client, tmp_path=tmp_path)
     assert result.exit_code == 0, result.output
-    assert json.loads(result.output) == _normalize(case.payload)
+    assert json.loads(result.output) == _normalize(jsonb_document(case.payload))
 
 
 @pytest.mark.parametrize("case", CASES, ids=_IDS)

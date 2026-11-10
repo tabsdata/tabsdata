@@ -294,7 +294,9 @@ def logical_prompt(
                 message, default=default_value, hide_input=hide_input
             )
         try:
-            return click.prompt(message, default=default_value, hide_input=hide_input)
+            return click.prompt(
+                message, default=default_value, hide_input=hide_input, err=True
+            )
         except click.Abort:
             if option is None:
                 raise
@@ -729,10 +731,12 @@ def render(
         click.echo(more_results_message(ctx), err=True)
     run = machine()
     if run is not None:
-        run.emit(data() if callable(data) else data)
+        run.emit(jsonb_document(data() if callable(data) else data))
         return
     source = data if compat is _AS_DATA or fmt == DOCUMENT_FORMAT else compat
     payload = source() if callable(source) else source
+    if fmt == DOCUMENT_FORMAT:
+        payload = jsonb_document(payload)
     text = serialize(payload, fmt)
     # YAML already ends with a newline; JSON does not.
     click.echo(text, nl=(fmt != "yaml"))
@@ -949,7 +953,7 @@ def render_list(
         return _only_fields(ctx, compat() if callable(compat) else compat)
 
     def _envelope():
-        rows = _items()
+        rows = jsonb_document(_items())
         fitted = _fit(ctx, rows)
         cut = truncated or len(fitted) < len(rows)
         envelope = {"items": fitted, "truncated": cut, "next": list_next(ctx)}
@@ -968,6 +972,30 @@ def render_list(
         truncated=truncated,
         compat=_items if compat is _AS_DATA else _compat,
     )
+
+
+def jsonb_document(value):
+    """``value`` as the ``jsonb`` document gives it: every ``*_on`` field
+    holding epoch milliseconds as an ISO-8601 UTC time, which ``--filter``
+    takes back."""
+    if isinstance(value, list):
+        return [jsonb_document(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _iso_time(item)
+            if key.endswith("_on") and type(item) is int
+            else jsonb_document(item)
+            for key, item in value.items()
+        }
+    return value
+
+
+def _iso_time(millis: int) -> str | int:
+    try:
+        moment = datetime.datetime.fromtimestamp(millis / 1000, datetime.UTC)
+    except (OverflowError, OSError, ValueError):
+        return millis
+    return moment.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def _only_fields(ctx: click.Context, rows):

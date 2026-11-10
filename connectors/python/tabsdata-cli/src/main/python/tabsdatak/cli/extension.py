@@ -31,6 +31,12 @@ from tabsdatak.cli._credentials import (
     TOKEN_ENV,
     env_server,
 )
+from tabsdatak.cli._error_document import (
+    SECRET_OPTIONS,
+    SECRET_SHORT_OPTIONS,
+    error_document,
+    redact,
+)
 from tabsdatak.cli._errors import ExitCode, TdkError, TdkException, classify
 from tabsdatak.cli._examples import (
     SNIPPET,
@@ -97,6 +103,8 @@ __all__ = [
     "Kind",
     "Machine",
     "RecordView",
+    "SECRET_OPTIONS",
+    "SECRET_SHORT_OPTIONS",
     "SERVER_ENV",
     "SERVICE_TOKEN",
     "SERVICE_TOKEN_PREFIX",
@@ -127,6 +135,7 @@ __all__ = [
     "doc_markdown",
     "docs_catalog",
     "env_server",
+    "error_document",
     "examples_root",
     "format_option",
     "get_currently_pinned_object",
@@ -144,6 +153,7 @@ __all__ = [
     "present",
     "primary_option",
     "proj_option",
+    "redact",
     "render",
     "render_deleted",
     "render_done",

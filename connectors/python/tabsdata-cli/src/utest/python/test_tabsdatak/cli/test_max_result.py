@@ -574,3 +574,97 @@ def test_only_does_not_apply_to_the_table_view(tmp_path):
     )
     assert result.exit_code == 2, result.output
     assert "'--fields' applies to json, jsonb and yaml output." in result.output
+
+
+def _timed_users() -> MagicMock:
+    client = _client()
+    user = _User(0)
+    user._data = {"name": user.name, "defined_on": 1750074554472, "count_on": "x"}
+    client.list_users_generator.side_effect = lambda *_a, **_k: iter([user])
+    return client
+
+
+def test_a_machine_run_shows_times_as_iso(tmp_path, machine_settings):
+    result = _invoke(
+        ["user", "list", "--machine"], client=_timed_users(), tmp_path=tmp_path
+    )
+    (row,) = json.loads(result.stdout)["items"]
+    assert row == {
+        "name": "user-0000",
+        "defined_on": "2025-06-16T11:49:14.472Z",
+        "count_on": "x",
+    }
+
+
+def test_a_persons_jsonb_gives_times_as_iso(tmp_path):
+    result = _invoke(
+        ["user", "list", "-o", "jsonb"], client=_timed_users(), tmp_path=tmp_path
+    )
+    defined_on = json.loads(result.stdout)["items"][0]["defined_on"]
+    assert defined_on == "2025-06-16T11:49:14.472Z"
+
+
+def test_json_keeps_times_as_numbers(tmp_path):
+    result = _invoke(
+        ["user", "list", "-o", "json"], client=_timed_users(), tmp_path=tmp_path
+    )
+    assert json.loads(result.stdout)[0]["defined_on"] == 1750074554472
+
+
+def test_an_unknown_field_is_an_invalid_request_with_a_hint(tmp_path):
+    from tabsdatak.sdk._apiserver import APIServerError
+
+    client = _client()
+    client.list_users_generator.side_effect = APIServerError(
+        {"code": "ListError::3", "error_description": "Undefined filter: colour"},
+        status=400,
+    )
+    argv = ["user", "list", "--filter", "colour:eq:red", "--machine"]
+    result = _invoke(argv, client=client, tmp_path=tmp_path)
+    assert result.exit_code == 1
+    error = json.loads(result.stdout)["error"]
+    assert error["type"] == "invalid_request"
+    assert "--filter" in error["hint"]
+
+
+def test_a_listing_error_without_list_options_has_no_list_hint(tmp_path):
+    from tabsdatak.sdk._apiserver import APIServerError
+
+    client = _client()
+    client.list_users_generator.side_effect = APIServerError(
+        {"code": "ListError::3", "error_description": "Undefined filter: colour"},
+        status=400,
+    )
+    result = _invoke(["user", "list", "--machine"], client=client, tmp_path=tmp_path)
+    assert result.exit_code == 1
+    error = json.loads(result.stdout)["error"]
+    assert error["type"] == "invalid_request"
+    assert error.get("hint") is None
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["user", "list"],
+        ["group", "list"],
+        ["project", "list"],
+        ["collection", "list"],
+        ["fn", "list", "-c", "coll-a"],
+        ["fn", "patches", "-n", "fn-a", "-c", "coll-a"],
+        ["table", "list", "-c", "coll-a"],
+        ["table", "versions", "-c", "coll-a", "--name", "tbl-a"],
+        ["plan", "list"],
+        ["trx", "list"],
+        ["fnrun", "list"],
+        ["worker", "list"],
+        ["cron", "list"],
+        ["cron", "plans"],
+        ["stream", "list"],
+        ["stream", "plans"],
+    ],
+)
+def test_every_paged_list_command_offers_the_list_options(argv, tmp_path):
+    result = _invoke([*argv, "--help"], client=_client(), tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    for option in ("--filter", "--order-by", "--cursor"):
+        assert option in result.output

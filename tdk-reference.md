@@ -915,6 +915,15 @@ of its items, `table data` an array of row objects, worker logs `{"logs": "Worke
 `description`. A machine run, such as the agent mode of the AI package, always
 gives the `jsonb` document, `-o json` included.
 
+In `jsonb` every `*_on` time is an ISO-8601 UTC string
+(`2025-06-16T11:49:14.472Z`, which `--filter` takes back); `json` and `yaml`
+keep epoch milliseconds. A failed `jsonb` command prints, on stdout, the error
+document instead of its result: `{"error": {"type", "status", "code",
+"message", "hint", "command", "retry_after", "resume", "state"}}`, where
+`command` is the invocation with secret values replaced by `***`, `resume`
+the command that continues a wait that ran out of time and `state` the last
+state it saw; the exit code is the error's.
+
 In `jsonb` a listing is always an object, never a bare array:
 `{"items": [...], "truncated": bool, "next": cursor}`, where
 `truncated` says `--max-result` cut it short and `next`, on a paged listing, is
