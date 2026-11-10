@@ -200,9 +200,7 @@ def _full_help_text(node: dict, lines: list | None = None) -> str:
     return "\n".join(lines)
 
 
-def build_full_help(
-    root, output: str = "text", prog_name: str = "tdk", compact: bool = False
-) -> str:
+def build_full_help(root, output: str = "text", compact: bool = False) -> str:
     """Render the help for ``root`` and every command/subcommand under it.
 
     Each option and argument is tagged ``(required)`` or ``(optional)`` in the
@@ -211,7 +209,7 @@ def build_full_help(
     ``output`` is ``"text"`` (a flat, indented listing) or ``"json"`` (a nested
     tree of ``{name, path, help, options, arguments, commands}`` objects, to
     which each CLI extension adds), which is ``compact`` in a machine run."""
-    tree = _full_help_node(prog_name, root, prog_name)
+    tree = _full_help_node("tdk", root, "tdk")
     if output == "json":
         commands = tree.pop("commands", [])
         for extension in cli_extensions():
@@ -486,13 +484,7 @@ def shell(ctx: click.Context):
     """Start an interactive shell session"""
     from tabsdatak.cli.shell import run_shell
 
-    run_shell(
-        ctx,
-        cli,
-        _version(),
-        banner_title="Tabsdata Interactive Shell",
-        tool_name="tdk",
-    )
+    run_shell(ctx, _version())
 
 
 @capability("knowledge", "read")

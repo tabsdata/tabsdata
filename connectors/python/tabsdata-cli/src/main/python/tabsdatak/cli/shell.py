@@ -185,7 +185,7 @@ _utils_mod._register_internal_command(
 _utils_mod._internal_commands.pop("?", None)
 
 
-def show_banner(title, version):
+def show_banner(version):
     """Display the shell welcome banner."""
     console = make_console()
 
@@ -227,7 +227,7 @@ def show_banner(title, version):
     console.print(
         Panel(
             body,
-            title=f"[bold]{title}[/bold] v{version}",
+            title=f"[bold]Tabsdata Interactive Shell[/bold] v{version}",
             title_align="left",
             border_style="#82c369",
             padding=(0, 1),
@@ -240,9 +240,8 @@ def show_banner(title, version):
 class SessionInfo:
     """Tracks login state by watching the connection file."""
 
-    def __init__(self, credentials_path, tool_name):
+    def __init__(self, credentials_path):
         self._cred_path = credentials_path
-        self._tool_name = tool_name
         self._mtime = None
         self.user = None
         self.server = None
@@ -296,30 +295,31 @@ class SessionInfo:
                 ("dim", " - "),
                 ("bold #b4d296", self.user),
                 ("", " "),
-                ("bold", self._tool_name),
+                ("bold", "tdk"),
                 ("", " ❯ "),
             ]
         else:
             return [
                 ("dim", "[not logged in]"),
                 ("", " "),
-                ("bold", self._tool_name),
+                ("bold", "tdk"),
                 ("", " ❯ "),
             ]
 
 
-def run_shell(ctx, cli_group, version, *, banner_title, tool_name):
+def run_shell(ctx, version):
     """Run an interactive shell (REPL)."""
 
-    history_path = os.path.join(ctx.obj["tabsdata_directory"], f".{tool_name}.history")
+    cli_group = ctx.find_root().command
+    history_path = os.path.join(ctx.obj["tabsdata_directory"], ".tdk.history")
 
     _utils_mod._register_internal_command(
         ["?"],
-        lambda: show_banner(banner_title, version),
+        lambda: show_banner(version),
         "shows the shell quick reference",
     )
 
-    show_banner(banner_title, version)
+    show_banner(version)
 
     # Register exit/quit/help so they work without the ':' prefix that
     # click-repl normally requires for internal commands.
@@ -338,7 +338,7 @@ def run_shell(ctx, cli_group, version, *, banner_title, tool_name):
     cli_group.add_command(exit, "quit")
     cli_group.add_command(help, "help")
 
-    session_info = SessionInfo(get_credentials_file_path(ctx), tool_name)
+    session_info = SessionInfo(get_credentials_file_path(ctx))
 
     # Key bindings: when the completion menu is visible, Enter accepts
     # the selected completion instead of executing the current input.
