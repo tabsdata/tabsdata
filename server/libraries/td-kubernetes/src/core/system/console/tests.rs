@@ -233,7 +233,10 @@ mod jobs {
         let reported = BufReader::new(helper.stdout.take().expect("helper stdout"))
             .lines()
             .map_while(Result::ok)
-            .find_map(|line| line.strip_prefix(IN_JOB).map(|value| value == "true"));
+            .find_map(|line| {
+                line.split_once(IN_JOB)
+                    .map(|(_, value)| value.trim() == "true")
+            });
         let status = helper.wait().expect("wait helper");
         assert!(status.success(), "helper failed in job {name}: {status}");
         reported.expect("helper reported where its child ran")
