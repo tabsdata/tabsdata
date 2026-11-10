@@ -9,8 +9,8 @@ blobs under the conn's ``base_path``, with their schemas read from the blobs'
 heads by range requests (``_schema.attach_schemas``); ``data`` previews the
 first ``limit`` rows of a single blob, fetching only the bytes it needs (never
 the whole blob) and dispatching by format: parquet via pyarrow, avro via
-fastavro, json / ndjson as newline-delimited JSON, and every other format
-(csv, log, ...) via CSV parsing.
+fastavro, xlsx via the Excel reader, json / ndjson as newline-delimited JSON,
+and every other format (csv, log, ...) via CSV parsing.
 """
 
 import csv
@@ -24,7 +24,10 @@ from tabsdatak.conn.common.file._explorer import (
     FilePattern,
     FileStorageConnMetaModel,
     FileStorageEntity,
+    preview_format,
+    read_excel_rows,
 )
+from tabsdatak.conn.common.file._read._format import Format
 from tabsdatak.conn.common.file._schema import attach_schemas
 
 # noinspection PyProtectedMember
@@ -93,17 +96,20 @@ class AzureBlobConnectionExplorer(Explorer):
     ) -> list[dict]:
         if entity.file is None:
             return []
-        fmt = (entity.file.format or "").lower()
         key = entity.object_key()
-        if fmt == "parquet":
-            return _read_parquet(conn, key, limit)
-        container = _container_client(conn)
-        if fmt == "avro":
-            return _read_avro(container, key, limit)
-        if fmt in ("json", "ndjson", "jsonl"):
-            return _read_ndjson(container, key, limit)
-        # csv and every other format fall back to CSV parsing.
-        return _read_csv(container, key, limit)
+        match preview_format(entity):
+            case Format.AVRO:
+                return _read_avro(_container_client(conn), key, limit)
+            case Format.CSV:
+                return _read_csv(_container_client(conn), key, limit)
+            case Format.EXCEL:
+                return _read_excel(conn, key, limit)
+            case Format.NDJSON:
+                return _read_ndjson(_container_client(conn), key, limit)
+            case Format.PARQUET:
+                return _read_parquet(conn, key, limit)
+            case _:
+                return _read_csv(_container_client(conn), key, limit)
 
 
 def _filesystem(conn: AzureBlobConn):
@@ -157,20 +163,6 @@ def _stream_lines(container, key: str, n: int) -> list[str]:
     return [line.decode("utf-8") for line in lines[:n]]
 
 
-def _read_csv(container, key: str, limit: int) -> list[dict]:
-    # Header line + the first ``limit`` data rows -> dicts keyed by header.
-    rows = _stream_lines(container, key, limit + 1)
-    return list(csv.DictReader(io.StringIO("\n".join(rows))))
-
-
-def _read_ndjson(container, key: str, limit: int) -> list[dict]:
-    return [
-        json.loads(line)
-        for line in _stream_lines(container, key, limit)
-        if line.strip()
-    ]
-
-
 def _read_avro(container, key: str, limit: int) -> list[dict]:
     # fastavro reads the container block-by-block off the streaming downloader.
     import fastavro
@@ -182,6 +174,27 @@ def _read_avro(container, key: str, limit: int) -> list[dict]:
             break
         rows.append(dict(record))
     return rows
+
+
+def _read_csv(container, key: str, limit: int) -> list[dict]:
+    # Header line + the first ``limit`` data rows -> dicts keyed by header.
+    rows = _stream_lines(container, key, limit + 1)
+    return list(csv.DictReader(io.StringIO("\n".join(rows))))
+
+
+def _read_excel(conn: AzureBlobConn, key: str, limit: int) -> list[dict]:
+    return read_excel_rows(
+        lambda: _filesystem(conn).open_input_file(f"{conn._container()}/{key}"),
+        limit,
+    )
+
+
+def _read_ndjson(container, key: str, limit: int) -> list[dict]:
+    return [
+        json.loads(line)
+        for line in _stream_lines(container, key, limit)
+        if line.strip()
+    ]
 
 
 def _read_parquet(conn: AzureBlobConn, key: str, limit: int) -> list[dict]:

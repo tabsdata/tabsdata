@@ -23,12 +23,12 @@ from tabsdatak.conn.gcs._explorer import GCSConnectionExplorer
 pytestmark = pytest.mark.gcs
 
 TABLES = ("country", "city", "country_language")
-FORMATS = ("csv", "ndjson", "parquet")
+FORMATS = ("avro", "csv", "ndjson", "parquet", "xlsx")
 
 # The first five city rows (in id order). The staged objects include the `id`
-# column (native int for ndjson / parquet; string for csv, like every other
-# value). ndjson / parquet preserve native types; csv comes back with every
-# value as a string.
+# column (native int for ndjson / parquet / avro / xlsx; string for csv, like
+# every other value). Every format but csv preserves native types; csv comes
+# back with every value as a string.
 CITY_HEAD = [
     {
         "id": 1,
@@ -132,7 +132,7 @@ def test_metadata_lists_domain_objects(domain_gcs_world_xs: GCSDomain):
     assert all(isinstance(e.size, int) and e.size > 0 for e in entities)
     assert all(e.last_modified for e in entities)
 
-    # Exactly the world dataset: three tables in three formats.
+    # Exactly the world dataset: three tables in five formats.
     assert {_logical(e.file.pattern) for e in entities} == {
         f"{table}.{fmt}" for table in TABLES for fmt in FORMATS
     }
@@ -163,7 +163,7 @@ def test_data_returns_first_rows(domain_gcs_world_xs: GCSDomain, fmt: str):
     rows = explorer.data(conn, entity, limit=5)
 
     assert isinstance(rows, list)
-    # csv comes back as strings; ndjson / parquet keep native types.
+    # csv comes back as strings; every other format keeps native types.
     if fmt == "csv":
         expected = [{k: str(v) for k, v in r.items()} for r in CITY_HEAD]
     else:

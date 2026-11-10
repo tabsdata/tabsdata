@@ -9,8 +9,8 @@ objects under the conn's ``base_path``, with their schemas read from the
 objects' heads by range requests (``_schema.attach_schemas``); ``data``
 previews the first ``limit`` rows of a single object, fetching only the bytes
 it needs (never the whole object) and dispatching by format: parquet via
-pyarrow, avro via fastavro, json / ndjson as newline-delimited JSON, and every
-other format (csv, log, ...) via CSV parsing.
+pyarrow, avro via fastavro, xlsx via the Excel reader, json / ndjson as
+newline-delimited JSON, and every other format (csv, log, ...) via CSV parsing.
 """
 
 import csv
@@ -23,7 +23,10 @@ from tabsdatak.conn.common.file._explorer import (
     FilePattern,
     FileStorageConnMetaModel,
     FileStorageEntity,
+    preview_format,
+    read_excel_rows,
 )
+from tabsdatak.conn.common.file._read._format import Format
 from tabsdatak.conn.common.file._schema import attach_schemas
 
 # noinspection PyProtectedMember
@@ -94,17 +97,21 @@ class GCSConnectionExplorer(Explorer):
     ) -> list[dict]:
         if entity.file is None:
             return []
-        fmt = (entity.file.format or "").lower()
         bucket = entity.bucket or conn._bucket()
         blob = _storage_client(conn).bucket(bucket).blob(entity.object_key())
-        if fmt == "parquet":
-            return _read_parquet(blob, limit)
-        if fmt == "avro":
-            return _read_avro(blob, limit)
-        if fmt in ("json", "ndjson", "jsonl"):
-            return _read_ndjson(blob, limit)
-        # csv and every other format fall back to CSV parsing.
-        return _read_csv(blob, limit)
+        match preview_format(entity):
+            case Format.AVRO:
+                return _read_avro(blob, limit)
+            case Format.CSV:
+                return _read_csv(blob, limit)
+            case Format.EXCEL:
+                return _read_excel(blob, limit)
+            case Format.NDJSON:
+                return _read_ndjson(blob, limit)
+            case Format.PARQUET:
+                return _read_parquet(blob, limit)
+            case _:
+                return _read_csv(blob, limit)
 
 
 def _storage_client(conn: GCSConn):
@@ -146,16 +153,6 @@ def _stream_lines(blob, n: int) -> list[str]:
     return [line.decode("utf-8") for line in lines[:n]]
 
 
-def _read_csv(blob, limit: int) -> list[dict]:
-    # Header line + the first ``limit`` data rows -> dicts keyed by header.
-    rows = _stream_lines(blob, limit + 1)
-    return list(csv.DictReader(io.StringIO("\n".join(rows))))
-
-
-def _read_ndjson(blob, limit: int) -> list[dict]:
-    return [json.loads(line) for line in _stream_lines(blob, limit) if line.strip()]
-
-
 def _read_avro(blob, limit: int) -> list[dict]:
     # fastavro reads the container block-by-block off the range-backed reader.
     import fastavro
@@ -167,6 +164,20 @@ def _read_avro(blob, limit: int) -> list[dict]:
                 break
             rows.append(dict(record))
     return rows
+
+
+def _read_csv(blob, limit: int) -> list[dict]:
+    # Header line + the first ``limit`` data rows -> dicts keyed by header.
+    rows = _stream_lines(blob, limit + 1)
+    return list(csv.DictReader(io.StringIO("\n".join(rows))))
+
+
+def _read_excel(blob, limit: int) -> list[dict]:
+    return read_excel_rows(lambda: blob.open("rb", chunk_size=1024 * 1024), limit)
+
+
+def _read_ndjson(blob, limit: int) -> list[dict]:
+    return [json.loads(line) for line in _stream_lines(blob, limit) if line.strip()]
 
 
 def _read_parquet(blob, limit: int) -> list[dict]:

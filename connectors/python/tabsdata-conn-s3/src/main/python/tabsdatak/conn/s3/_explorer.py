@@ -10,8 +10,8 @@
 requests (``_schema.attach_schemas``); ``data`` previews the first ``limit``
 rows of a single object, fetching only the bytes it needs (never the whole
 object) and dispatching by format: parquet via pyarrow range requests, avro
-via fastavro, json / ndjson as newline-delimited JSON, and every other format
-(csv, log, ...) via CSV parsing.
+via fastavro, xlsx via the Excel reader, json / ndjson as newline-delimited
+JSON, and every other format (csv, log, ...) via CSV parsing.
 """
 
 import csv
@@ -24,7 +24,10 @@ from tabsdatak.conn.common.file._explorer import (
     FilePattern,
     FileStorageConnMetaModel,
     FileStorageEntity,
+    preview_format,
+    read_excel_rows,
 )
+from tabsdatak.conn.common.file._read._format import Format
 from tabsdatak.conn.common.file._schema import attach_schemas
 
 # noinspection PyProtectedMember
@@ -95,17 +98,21 @@ class S3ConnectionExplorer(Explorer):
     ) -> list[dict]:
         if entity.file is None:
             return []
-        fmt = (entity.file.format or "").lower()
         bucket = entity.bucket or conn._bucket()
         key = entity.object_key()
-        if fmt == "parquet":
-            return _read_parquet(conn, bucket, key, limit)
-        if fmt == "avro":
-            return _read_avro(_s3_client(conn), bucket, key, limit)
-        if fmt in ("json", "ndjson", "jsonl"):
-            return _read_ndjson(_s3_client(conn), bucket, key, limit)
-        # csv and every other format fall back to CSV parsing.
-        return _read_csv(_s3_client(conn), bucket, key, limit)
+        match preview_format(entity):
+            case Format.AVRO:
+                return _read_avro(_s3_client(conn), bucket, key, limit)
+            case Format.CSV:
+                return _read_csv(_s3_client(conn), bucket, key, limit)
+            case Format.EXCEL:
+                return _read_excel(conn, bucket, key, limit)
+            case Format.NDJSON:
+                return _read_ndjson(_s3_client(conn), bucket, key, limit)
+            case Format.PARQUET:
+                return _read_parquet(conn, bucket, key, limit)
+            case _:
+                return _read_csv(_s3_client(conn), bucket, key, limit)
 
 
 def _filesystem(conn: S3Conn):
@@ -164,20 +171,6 @@ def _stream_lines(client, bucket: str, key: str, n: int) -> list[str]:
     return [line.decode("utf-8") for line in lines[:n]]
 
 
-def _read_csv(client, bucket: str, key: str, limit: int) -> list[dict]:
-    # Header line + the first ``limit`` data rows -> dicts keyed by header.
-    rows = _stream_lines(client, bucket, key, limit + 1)
-    return list(csv.DictReader(io.StringIO("\n".join(rows))))
-
-
-def _read_ndjson(client, bucket: str, key: str, limit: int) -> list[dict]:
-    return [
-        json.loads(line)
-        for line in _stream_lines(client, bucket, key, limit)
-        if line.strip()
-    ]
-
-
 def _read_avro(client, bucket: str, key: str, limit: int) -> list[dict]:
     # fastavro is imported lazily so importing this module stays cheap; it
     # reads the avro container block-by-block off the streaming body.
@@ -193,6 +186,26 @@ def _read_avro(client, bucket: str, key: str, limit: int) -> list[dict]:
     finally:
         body.close()
     return rows
+
+
+def _read_csv(client, bucket: str, key: str, limit: int) -> list[dict]:
+    # Header line + the first ``limit`` data rows -> dicts keyed by header.
+    rows = _stream_lines(client, bucket, key, limit + 1)
+    return list(csv.DictReader(io.StringIO("\n".join(rows))))
+
+
+def _read_excel(conn: S3Conn, bucket: str, key: str, limit: int) -> list[dict]:
+    return read_excel_rows(
+        lambda: _filesystem(conn).open_input_file(f"{bucket}/{key}"), limit
+    )
+
+
+def _read_ndjson(client, bucket: str, key: str, limit: int) -> list[dict]:
+    return [
+        json.loads(line)
+        for line in _stream_lines(client, bucket, key, limit)
+        if line.strip()
+    ]
 
 
 def _read_parquet(conn: S3Conn, bucket: str, key: str, limit: int) -> list[dict]:

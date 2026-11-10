@@ -2,10 +2,13 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+from collections.abc import Callable
 from dataclasses import field
 
 import tabsdatak._api as _api
 from tabsdatak.conn.common._explorer import BaseConnMetaModel, Column
+from tabsdatak.conn.common.file._read._blocks import Seekable
+from tabsdatak.conn.common.file._read._format import Format
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.spi import (
     Entity,
@@ -129,3 +132,26 @@ class FileStorageEntity(Entity):
             columns=[Column.from_dict(c) for c in data.get("columns", [])],
             schema_from=data.get("schema_from", ""),
         )
+
+
+_PREVIEW_FORMATS = {
+    "avro": Format.AVRO,
+    "json": Format.NDJSON,
+    "jsonl": Format.NDJSON,
+    "ndjson": Format.NDJSON,
+    "parquet": Format.PARQUET,
+    "xlsx": Format.EXCEL,
+}
+
+
+def preview_format(entity: FileStorageEntity) -> Format:
+    """How ``data`` previews the entity's file: by its extension, and as CSV
+    for any extension without a reader of its own (csv, log, ...)."""
+    return _PREVIEW_FORMATS.get((entity.file.format or "").lower(), Format.CSV)
+
+
+def read_excel_rows(open_: Callable[[], Seekable], limit: int) -> list[dict]:
+    from tabsdatak.conn.common.file._read._excel import Excel
+
+    frame = Excel(batch_rows=max(limit, 1)).read(open_).frame
+    return frame.head(limit).collect().to_dicts()
