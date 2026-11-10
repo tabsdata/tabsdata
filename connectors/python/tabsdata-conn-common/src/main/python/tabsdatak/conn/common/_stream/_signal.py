@@ -33,10 +33,10 @@ class StopSignal:
         if threading.current_thread() is not threading.main_thread():
             return stop_signal
 
-        previous = {
-            signum: signal.getsignal(signum)
-            for signum in (signal.SIGINT, signal.SIGTERM)
-        }
+        signums = [signal.SIGINT, signal.SIGTERM]
+        if sys.platform == "win32":
+            signums.append(signal.SIGBREAK)
+        previous = {signum: signal.getsignal(signum) for signum in signums}
 
         def handle_signal(signum, frame):
             logger.info(f"Received termination signal ({signum}). Shutting down...")
@@ -45,16 +45,20 @@ class StopSignal:
             if callable(chained) and chained is not signal.default_int_handler:
                 chained(signum, frame)
 
-        signal.signal(signal.SIGINT, handle_signal)
-        signal.signal(signal.SIGTERM, handle_signal)
+        def handle_console_event(event: int) -> bool:
+            logger.info(f"Received console event {event}. Shutting down...")
+            stop_signal.set()
+            return False
+
+        for signum in signums:
+            signal.signal(signum, handle_signal)
 
         if sys.platform == "win32":
-            signal.signal(signal.SIGBREAK, handle_signal)
             try:
                 # noinspection PyPackageRequirements,PyUnresolvedReferences
                 import win32api
 
-                win32api.SetConsoleCtrlHandler(handle_signal, True)
+                win32api.SetConsoleCtrlHandler(handle_console_event, True)
             except ImportError:
                 pass
 
