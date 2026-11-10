@@ -3,21 +3,9 @@
 //
 
 use grok::{Grok, Pattern, patterns};
-use polars::datatypes::{DataType, Field};
-use polars::prelude::PolarsResult;
 use pyo3::PyResult;
 use pyo3::exceptions::PyValueError;
 use std::collections::BTreeMap;
-use uuid::Uuid;
-
-#[inline]
-pub fn grok_schema(_: &[Field]) -> PolarsResult<Field> {
-    let transient_column = format!("__tmp_{}", Uuid::new_v4().simple());
-    Ok(Field::new(
-        transient_column.into(),
-        DataType::List(Box::new(DataType::String)),
-    ))
-}
 
 #[inline]
 pub fn grok_patterns() -> PyResult<BTreeMap<&'static str, &'static str>> {
@@ -41,18 +29,6 @@ pub fn grok_compile(grok: &Grok, pattern: &str) -> PyResult<Pattern> {
         ))
     })?;
     Ok(matcher)
-}
-
-#[inline]
-pub fn grok_values(matcher: &Pattern, input: &str, fields: &[String]) -> Vec<Option<String>> {
-    if let Some(capture) = matcher.match_against(input) {
-        fields
-            .iter()
-            .map(|field| capture.get(field).map(|value| value.to_string()))
-            .collect()
-    } else {
-        vec![None; fields.len()]
-    }
 }
 
 #[cfg(test)]
@@ -198,22 +174,6 @@ mod tests {
         let capture_half = matcher.match_against(line_half).expect("should match");
         assert_eq!(capture_half.get("p1"), Some("cron"));
         assert_eq!(capture_half.get("p2"), Some("syslogd"));
-    }
-
-    #[test]
-    fn test_grok_parse_function() {
-        let grok = Grok::default();
-        let matcher = grok_compile(&grok, r"%{WORD:word} %{NUMBER:num}").unwrap();
-        let capture_names = matcher.capture_names().collect::<Vec<_>>();
-        let capture_names_string: Vec<String> =
-            capture_names.iter().map(|s| s.to_string()).collect();
-
-        let capture = grok_values(&matcher, "hello 42", &capture_names_string);
-        assert!(capture.contains(&Some("hello".to_string())));
-        assert!(capture.contains(&Some("42".to_string())));
-
-        let capture = grok_values(&matcher, "no match", &capture_names_string);
-        assert!(capture.iter().all(|item| item.is_none()));
     }
 
     #[test]

@@ -9,6 +9,7 @@ from timeit import default_timer as timer
 import polars as pl
 import pytest
 
+from tabsdata.expansions.tableframe.features.grok.api._handler import GrokParser
 from tabsdatak.common._temps import tabsdata_temp_folder
 from tabsdatak.tableframe import TableFrame, datatypes as td_datatypes
 from tabsdatak.tableframe.functions import col
@@ -468,6 +469,47 @@ class TestGrokSchemaOrdering:
         assert collected["source_address"][0] == "192.168.1.100"
         assert collected["source_port"][0] == 8080
         assert collected["protocol"][0] == "tcp"
+
+    def test_existing_columns_are_kept_and_no_temporary_column_is_left(self):
+        pattern = r"%{WORD:verb} %{INT:count}"
+        schema = {
+            "verb": ColumnDefinition("action", td_datatypes.String),
+            "count": ColumnDefinition("times", td_datatypes.Int64),
+        }
+
+        tf = TableFrame.from_dict({"line": ["load 7"], "grok": ["kept"]})
+        result = tf.grok("line", pattern, schema)
+
+        collected = result._lf.collect()
+        columns = [name for name in collected.columns if not name.startswith("$td.")]
+        assert columns == ["line", "grok", "action", "times"]
+        assert collected.schema["times"] == pl.Int64
+        assert collected["grok"][0] == "kept"
+        assert collected["action"][0] == "load"
+        assert collected["times"][0] == 7
+
+
+class TestGrokParser:
+
+    def test_apply_pipes_into_a_plain_lazyframe(self):
+        parser = GrokParser(
+            r"%{WORD:verb} %{INT:count}",
+            {
+                "verb": ColumnDefinition(None, pl.String),
+                "count": ColumnDefinition("times", pl.UInt8),
+            },
+        )
+
+        lf = pl.LazyFrame({"line": ["load 7", "nothing"]})
+        result = lf.pipe(parser.apply, pl.col("line")).collect()
+
+        assert result.schema == pl.Schema({
+            "line": pl.String,
+            "verb": pl.String,
+            "times": pl.UInt8,
+        })
+        assert result.row(0) == ("load 7", "load", 7)
+        assert result.row(1) == ("nothing", None, None)
 
 
 class TestGrokPerformance:

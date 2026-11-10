@@ -27,10 +27,13 @@ class GrokParser:
     )
     index: int = field(init=False, default_factory=lambda: -1)
 
-    def rust(self, expression: IntoExpr) -> pl.Expr:
-        mapping = {
+    @property
+    def names(self) -> dict[str, str]:
+        return {
             capture: column.name or capture for capture, column in self.schema.items()
         }
+
+    def rust(self, expression: IntoExpr) -> pl.Expr:
         return register_plugin_function(
             plugin_path=PLUGIN_PATH,
             function_name="_grok",
@@ -39,7 +42,20 @@ class GrokParser:
                 "temp_column": self.temp_column,
                 "index": self.index,
                 "pattern": self.pattern,
-                "mapping": mapping,
+                "mapping": self.names,
             },
             is_elementwise=True,
+        )
+
+    def apply(self, lf: pl.LazyFrame, expression: IntoExpr) -> pl.LazyFrame:
+        names = self.names
+        dtypes = {
+            names[capture]: column.dtype or pl.String
+            for capture, column in self.schema.items()
+        }
+        return (
+            lf
+            .with_columns(self.rust(expression).alias(self.temp_column))
+            .unnest(self.temp_column)
+            .cast(dtypes)
         )

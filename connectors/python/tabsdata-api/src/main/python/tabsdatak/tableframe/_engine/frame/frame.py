@@ -523,37 +523,5 @@ class EngineFrame(BaseFrame):
         )
         from tabsdatak.tableframe._core.translate import unwrap
 
-        def group_by_dtype(dmap) -> dict[Any, list[str]]:
-            groups = {}
-            for name, dtype in dmap.items():
-                groups.setdefault(dtype, []).append(name)
-            return groups
-
         target = pl.col(expr) if isinstance(expr, str) else unwrap(expr)
-
-        parser = GrokParser(pattern, schema)
-        grok = parser.rust(target)
-
-        lf = self._lf.with_columns(grok.alias(parser.temp_column))
-
-        fields = [schema[capture].name or capture for capture in schema.keys()]
-        dtypes = {
-            schema[capture].name or capture: schema[capture].dtype or pl.String
-            for capture in schema.keys()
-        }
-
-        lf = (
-            lf
-            .with_columns(
-                pl.col(parser.temp_column).list.to_struct(fields=fields).alias("grok")
-            )
-            .unnest("grok")
-            .with_columns(*[
-                pl.col(column).cast(dtype)
-                for dtype, column in group_by_dtype(dtypes).items()
-                if column
-            ])
-            .drop(parser.temp_column)
-        )
-
-        return self._clone(lf)
+        return self._clone(self._lf.pipe(GrokParser(pattern, schema).apply, target))
