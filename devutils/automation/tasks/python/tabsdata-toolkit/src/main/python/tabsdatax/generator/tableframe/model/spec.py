@@ -74,6 +74,12 @@ def function_roots() -> list[FunctionRoot]:
     return [FunctionRoot("polars.functions", "functions")]
 
 
+# Aliased in datatypes.py but left out of its allow-list: types a stored table
+# cannot hold. The server reads no extension type, parquet cannot store Object,
+# and Unknown is an unresolved type, never a column's.
+UNSTORABLE_DATATYPES = frozenset({"BaseExtension", "Extension", "Object", "Unknown"})
+
+
 def datatype_names() -> list[str]:
     """Public polars ``DataType`` subclasses (incl. the ``DataType`` base) to alias
     as ours in ``datatypes.py``. They are aliased leaf types (passthrough), not

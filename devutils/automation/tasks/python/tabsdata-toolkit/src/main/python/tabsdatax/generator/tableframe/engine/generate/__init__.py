@@ -44,7 +44,10 @@ from tabsdatax.generator.tableframe.engine.generate.stubs import (
     parse_pyi,
 )
 from tabsdatax.generator.tableframe.model.model import Report, Symbol
-from tabsdatax.generator.tableframe.model.spec import datatype_names
+from tabsdatax.generator.tableframe.model.spec import (
+    UNSTORABLE_DATATYPES,
+    datatype_names,
+)
 
 _PYI_CHANGED = "# Signature changed; validate and fix the docstring below."
 _PYI_NEW = "# New signature; write the docstring below."
@@ -374,12 +377,16 @@ def _write_datatypes(base: Path, module: str, names: list[str]) -> Path:
         '"""',
         "",
         "",
-        "# The datatypes this API accepts. Defaults to every alias above; remove",
-        "# entries to restrict the allowed set. Enforced on datatype arguments and",
-        "# on the schema of any LazyFrame entering a TableFrame.",
+        "# The datatypes this API accepts, enforced on datatype arguments and on",
+        "# the schema of any LazyFrame entering a TableFrame.",
         "_ALLOWED_TYPES = [",
     ]
-    lines += [f"    {name}," for name in names]
+    lines += [
+        f"    # {name},  # Banned: a stored table cannot hold it"
+        if name in UNSTORABLE_DATATYPES
+        else f"    {name},"
+        for name in names
+    ]
     lines += [
         "]",
         "",
@@ -398,6 +405,9 @@ def _write_datatypes(base: Path, module: str, names: list[str]) -> Path:
         "        _valid_type(inner)",
         '    for field in getattr(dtype, "fields", None) or ():  # Struct fields',
         "        _valid_type(field.dtype)",
+        "    if isinstance(dtype, pl.Map):",
+        "        _valid_type(dtype.key)",
+        "        _valid_type(dtype.value)",
         "    return dtype",
         "",
         "",

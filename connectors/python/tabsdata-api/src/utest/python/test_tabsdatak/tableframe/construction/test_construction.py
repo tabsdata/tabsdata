@@ -96,3 +96,26 @@ def test_base_frame_is_generic_and_ungated():
     frame = BaseFrame({"a": [1]})
     assert not isinstance(frame, TableFrame)
     assert frame._state is None
+
+
+_EXTENSION = pl.Extension("test.ext", pl.Int64)
+
+
+@pytest.mark.parametrize(
+    "dtype",
+    [_EXTENSION, pl.List(_EXTENSION), pl.Map(pl.String, _EXTENSION)],
+    ids=["extension", "listed", "mapped"],
+)
+def test_tableframe_of_refuses_an_extension_type(dtype):
+    frame = pl.LazyFrame(schema={"a": dtype})
+    with pytest.raises(TypeError, match="'Extension' is not allowed"):
+        tableframe_of(frame)
+
+
+@pytest.mark.parametrize("dtype", [_EXTENSION, pl.Object])
+def test_a_cast_to_an_unstorable_type_is_refused(dtype):
+    from tabsdatak.tableframe import functions as tdf
+
+    frame = tableframe_of(pl.LazyFrame({"a": [1, 2]}))
+    with pytest.raises(TypeError, match="is not allowed"):
+        frame.with_columns(tdf.col("a").cast(dtype))

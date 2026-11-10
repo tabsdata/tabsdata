@@ -172,3 +172,42 @@ def test_stats_reject_a_footer_that_is_not_parquet_metadata(tmp_path):
 def test_stats_of_a_missing_file_fail(tmp_path):
     with pytest.raises(Exception):
         TableFile.local(tmp_path / "absent.parquet").stats()
+
+
+EXTENSION = pl.Extension("test.ext", pl.Int64)
+
+
+def test_sink_stores_extension_types_as_their_storage(tmp_path):
+    frame = pl.DataFrame({
+        "plain": [1, None],
+        "ext": pl.Series([1, None]).cast(EXTENSION),
+        "listed": pl.Series([[1], None]).cast(pl.List(EXTENSION)),
+        "arrayed": pl.Series([[1, 2], None]).cast(pl.Array(EXTENSION, 2)),
+        "nested": pl.Series([{"a": 1, "b": "x"}, None]).cast(
+            pl.Struct({"a": EXTENSION, "b": pl.String})
+        ),
+    })
+    target = TableFile.local(tmp_path / "out.parquet")
+    target.sink(frame.lazy()).collect()
+    stored = pl.read_parquet(tmp_path / "out.parquet")
+    assert stored.schema == pl.Schema({
+        "plain": pl.Int64,
+        "ext": pl.Int64,
+        "listed": pl.List(pl.Int64),
+        "arrayed": pl.Array(pl.Int64, 2),
+        "nested": pl.Struct({"a": pl.Int64, "b": pl.String}),
+    })
+    assert stored.to_dicts() == [
+        {"plain": 1, "ext": 1, "listed": [1], "arrayed": [1, 2],
+         "nested": {"a": 1, "b": "x"}},
+        {"plain": None, "ext": None, "listed": None, "arrayed": None,
+         "nested": None},
+    ]
+
+
+def test_sink_refuses_an_extension_type_inside_a_map(tmp_path):
+    frame = pl.LazyFrame(
+        {"m": pl.Series([{"k": 1}], dtype=pl.Map(pl.String, pl.Int64))}
+    ).with_columns(pl.col("m").cast(pl.Map(pl.String, EXTENSION)))
+    with pytest.raises(TableFileError, match="'m' cannot be stored"):
+        TableFile.local(tmp_path / "out.parquet").sink(frame)

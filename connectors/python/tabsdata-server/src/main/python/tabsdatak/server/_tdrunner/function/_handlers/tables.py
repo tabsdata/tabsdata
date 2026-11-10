@@ -5,11 +5,12 @@
 from __future__ import annotations
 
 import hashlib
+import io
 from pathlib import Path
 
 import polars as pl
-import pyarrow as pa
 import pyarrow.parquet as pq
+from polars.datatypes import DataTypeClass
 
 from tabsdatak.common._storage.frames import FrameLocator
 from tabsdatak.common._storage.mounts import (
@@ -31,6 +32,48 @@ SCHEMA_HASH_PREFIX = "sha256:"
 
 class TableFileError(ValueError):
     pass
+
+
+def storable(frame: pl.LazyFrame) -> pl.LazyFrame:
+    columns = [
+        _storage(name, pl.col(name), dtype).alias(name)
+        for name, dtype in frame.collect_schema().items()
+        if _extended(dtype)
+    ]
+    return frame.with_columns(columns) if columns else frame
+
+
+def _extended(dtype: pl.DataType | DataTypeClass) -> bool:
+    if isinstance(dtype, pl.BaseExtension):
+        return True
+    if isinstance(dtype, (pl.List, pl.Array)):
+        return _extended(dtype.inner)
+    if isinstance(dtype, pl.Struct):
+        return any(_extended(field.dtype) for field in dtype.fields)
+    if isinstance(dtype, pl.Map):
+        return _extended(dtype.key) or _extended(dtype.value)
+    return False
+
+
+def _storage(column: str, expr: pl.Expr, dtype: pl.DataType | DataTypeClass) -> pl.Expr:
+    if not _extended(dtype):
+        return expr
+    if isinstance(dtype, pl.BaseExtension):
+        return _storage(column, expr.ext.storage(), dtype.ext_storage())
+    if isinstance(dtype, pl.List):
+        return expr.list.eval(_storage(column, pl.element(), dtype.inner))
+    if isinstance(dtype, pl.Array):
+        return expr.arr.eval(_storage(column, pl.element(), dtype.inner))
+    if isinstance(dtype, pl.Struct):
+        return expr.struct.with_fields([
+            _storage(column, pl.field(field.name), field.dtype).alias(field.name)
+            for field in dtype.fields
+            if _extended(field.dtype)
+        ])
+    raise TableFileError(
+        f"Column {column!r} cannot be stored: its type {dtype} holds an "
+        "extension type where tabsdata cannot replace it with its storage type"
+    )
 
 
 class TableFile:
@@ -73,7 +116,7 @@ class TableFile:
         metadata: dict[str, str] | None = None,
     ) -> pl.LazyFrame:
         locator = self.locator()
-        return frame.sink_parquet(
+        return frame.pipe(storable).sink_parquet(
             locator.uri,
             storage_options=locator.storage_options,
             metadata=metadata,
@@ -99,8 +142,8 @@ class TableFile:
             raise TableFileError(f"Table file {self.uri} has a truncated footer")
         footer = location.read_range(size - TRAILER_SIZE - footer_length, size)
         try:
-            metadata = pq.read_metadata(pa.BufferReader(PARQUET_MAGIC + footer))
-        except (OSError, pa.ArrowException) as error:
+            metadata = pq.read_metadata(io.BytesIO(PARQUET_MAGIC + footer))
+        except (OSError, ValueError) as error:
             raise TableFileError(
                 f"Table file {self.uri} has an unreadable footer: {error}"
             ) from error

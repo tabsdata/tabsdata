@@ -56,12 +56,11 @@ ColumnDataType: TypeAlias = DataType | type[DataType]
 """
 
 
-# The datatypes this API accepts. Defaults to every alias above; remove
-# entries to restrict the allowed set. Enforced on datatype arguments and
-# on the schema of any LazyFrame entering a TableFrame.
+# The datatypes this API accepts, enforced on datatype arguments and on
+# the schema of any LazyFrame entering a TableFrame.
 _ALLOWED_TYPES = [
     Array,
-    BaseExtension,
+    # BaseExtension,  # Banned: a stored table cannot hold it
     Binary,
     Boolean,
     Categorical,
@@ -71,7 +70,7 @@ _ALLOWED_TYPES = [
     Decimal,
     Duration,
     Enum,
-    Extension,
+    # Extension,  # Banned: a stored table cannot hold it
     Float16,
     Float32,
     Float64,
@@ -83,7 +82,7 @@ _ALLOWED_TYPES = [
     List,
     Map,
     Null,
-    Object,
+    # Object,  # Banned: a stored table cannot hold it
     String,
     Struct,
     Time,
@@ -92,7 +91,7 @@ _ALLOWED_TYPES = [
     UInt32,
     UInt64,
     UInt8,
-    Unknown,
+    # Unknown,  # Banned: a stored table cannot hold it
     Utf8,
 ]
 
@@ -111,6 +110,9 @@ def _valid_type(dtype):
         _valid_type(inner)
     for field in getattr(dtype, "fields", None) or ():  # Struct fields
         _valid_type(field.dtype)
+    if isinstance(dtype, pl.Map):
+        _valid_type(dtype.key)
+        _valid_type(dtype.value)
     return dtype
 
 

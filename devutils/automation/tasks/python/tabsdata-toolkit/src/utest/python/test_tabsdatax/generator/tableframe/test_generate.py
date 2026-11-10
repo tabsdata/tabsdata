@@ -178,8 +178,11 @@ def test_datatypes_module_aliases_passthrough_and_allowlist(main_root):
     assert "Int64 = pl.Int64" in dt and "String = pl.String" in dt
     assert "DataType = pl.DataType" in dt
     assert "ColumnDataType: TypeAlias = DataType | type[DataType]" in dt
-    # editable allow-list seeded with every alias, plus the validator + registration
     assert "_ALLOWED_TYPES = [" in dt and "    Int64," in dt
+    allowed = dt.split("_ALLOWED_TYPES = [", 1)[1].split("]", 1)[0]
+    for name in ("Extension", "BaseExtension", "Object", "Unknown"):
+        assert f"{name} = pl.{name}" in dt
+        assert f"    # {name},  # Banned: a stored table cannot hold it" in allowed
     assert "def _valid_type(dtype):" in dt
     assert "register_passthrough(pl.DataType)" in dt
     assert "register_type_validator(_valid_type)" in dt
