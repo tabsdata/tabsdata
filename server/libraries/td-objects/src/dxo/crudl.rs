@@ -216,9 +216,6 @@ impl RequestContext {
 #[ta_objects::Dto]
 pub struct ListResponse<LL> {
     pub list_params: ListParams,
-    /// The order the rows are in, `<field>+` or `<field>-`, whether or not
-    /// the request named one.
-    #[serde(default)]
     pub sorted_by: Option<String>,
     pub len: usize,
     pub data: Vec<LL>,

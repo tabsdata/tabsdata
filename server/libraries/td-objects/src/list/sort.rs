@@ -3,11 +3,11 @@
 //
 
 use crate::dxo::crudl::ListParams;
-use crate::list::params::{ListError, accepted, parse_value};
+use crate::list::params::{ListError, ListIden, accepted, parse_value};
 use crate::parse::IDENTIFIER_PATTERN;
 use regex::Regex;
 use std::sync::LazyLock;
-use ta_objects::{Dao, ListDto, ListRole, SeaValue, SortDir};
+use ta_objects::{ListDto, ListField, ListRole, SeaValue, SortDir};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Toward {
@@ -18,12 +18,12 @@ pub enum Toward {
 /// A request's value of a sort key, where a keyset page starts.
 pub type KeyValue = Box<dyn SeaValue>;
 
-/// How a listing orders its rows, every key in `dir`.
-#[derive(Debug)]
+/// How a listing orders its rows, every key in `dir`: by `field` first.
 #[non_exhaustive]
-pub struct Sort<I> {
+pub struct Sort<D: ListDto> {
+    pub field: &'static ListField<D>,
     pub dir: SortDir,
-    pub keys: SortKeys<I>,
+    pub keys: SortKeys<ListIden<D>>,
 }
 
 /// The ORDER BY columns, and the cursor's value of each when the request
@@ -43,50 +43,37 @@ pub enum SortKeys<I> {
     },
 }
 
-impl<I: Copy> Sort<I> {
-    /// The column the cursor values page through first.
-    pub fn primary(&self) -> I {
-        match self.keys {
-            SortKeys::Tiebreak { tiebreak, .. } => tiebreak,
-            SortKeys::By { by, .. } => by,
-        }
-    }
-
+impl<D: ListDto> Sort<D> {
     pub fn toward(&self) -> Option<Toward> {
         match &self.keys {
             SortKeys::Tiebreak { after, .. } => after.as_ref().map(|(toward, _)| *toward),
             SortKeys::By { after, .. } => after.as_ref().map(|(toward, _, _)| *toward),
         }
     }
-}
 
-impl<I: Copy + Eq> Sort<I> {
     /// `order_by` is `<field>[+|-]`, ascending by default; `previous` or
-    /// `next` carries the cursor's primary value, `pagination_id` the
+    /// `next` carries the cursor's value of the field, `pagination_id` the
     /// tiebreak's.
-    pub fn parse<D>(params: &ListParams) -> Result<Self, ListError>
-    where
-        D: ListDto<Dao: Dao<Iden = I>>,
-    {
+    pub fn parse(params: &ListParams) -> Result<Self, ListError> {
         static ORDER_BY_REGEX: LazyLock<Regex> = LazyLock::new(|| {
             Regex::new(&format!("^(?<field>{IDENTIFIER_PATTERN})(?<dir>[+-])?$")).unwrap()
         });
-        let (tiebreak, natural) = D::pagination_col();
-        let (by, dir) = match params.order_by.as_deref() {
-            None => (None, natural),
+        let (tiebreak, natural) = D::PAGINATION_BY;
+        let (field, dir) = match params.order_by.as_deref() {
+            None => (tiebreak, natural),
             Some(order_by) => {
                 let caps = ORDER_BY_REGEX
                     .captures(order_by)
                     .ok_or_else(|| ListError::InvalidOrderBy(order_by.to_string()))?;
-                let field = caps.name("field").unwrap().as_str();
-                let by = D::column(ListRole::Order, field).ok_or_else(|| {
-                    ListError::UndefinedOrderBy(field.to_string(), accepted::<D>(ListRole::Order))
+                let name = caps.name("field").unwrap().as_str();
+                let field = D::field(ListRole::Order, name).ok_or_else(|| {
+                    ListError::UndefinedOrderBy(name.to_string(), accepted::<D>(ListRole::Order))
                 })?;
                 let dir = match caps.name("dir").map(|m| m.as_str()) {
                     Some("-") => SortDir::Desc,
                     _ => SortDir::Asc,
                 };
-                ((by != tiebreak).then_some(by), dir)
+                (field, dir)
             }
         };
         let cursor = match (&params.previous, &params.next, &params.pagination_id) {
@@ -96,27 +83,28 @@ impl<I: Copy + Eq> Sort<I> {
             (None, Some(value), Some(id)) => Some((Toward::Next, value, id)),
             _ => Err(ListError::MissingPaginationParams)?,
         };
-        let keys = match by {
-            None => SortKeys::Tiebreak {
-                tiebreak,
+        let keys = if field.column == tiebreak.column {
+            SortKeys::Tiebreak {
+                tiebreak: tiebreak.column,
                 after: cursor
-                    .map(|(toward, _, id)| Ok((toward, parse_value::<D>(&tiebreak, id)?)))
+                    .map(|(toward, _, id)| Ok((toward, parse_value(tiebreak, id)?)))
                     .transpose()?,
-            },
-            Some(by) => SortKeys::By {
-                by,
-                tiebreak,
+            }
+        } else {
+            SortKeys::By {
+                by: field.column,
+                tiebreak: tiebreak.column,
                 after: cursor
                     .map(|(toward, value, id)| {
                         Ok::<_, ListError>((
                             toward,
-                            parse_value::<D>(&by, value)?,
-                            parse_value::<D>(&tiebreak, id)?,
+                            parse_value(field, value)?,
+                            parse_value(tiebreak, id)?,
                         ))
                     })
                     .transpose()?,
-            },
+            }
         };
-        Ok(Self { dir, keys })
+        Ok(Self { field, dir, keys })
     }
 }

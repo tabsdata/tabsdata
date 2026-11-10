@@ -69,12 +69,11 @@ pub trait ListDto: Dto + Send + FromDao + 'static {
     /// direction.
     const PAGINATION_BY: (&'static ListField<Self>, SortDir);
 
-    /// The column of `field`, when the DTO marks it for `role`.
-    fn column(role: ListRole, field: &str) -> Option<<Self::Dao as Dao>::Iden> {
+    /// The field `name`, when the DTO marks it for `role`.
+    fn field(role: ListRole, name: &str) -> Option<&'static ListField<Self>> {
         Self::LIST_FIELDS
             .iter()
-            .find(|f| f.name == field && f.roles.contains(&role))
-            .map(|f| f.column)
+            .find(|f| f.name == name && f.roles.contains(&role))
     }
 
     /// The fields the DTO marks for `role`.
@@ -103,30 +102,7 @@ pub trait ListDto: Dto + Send + FromDao + 'static {
             .collect()
     }
 
-    fn pagination_col() -> (<Self::Dao as Dao>::Iden, SortDir) {
-        (Self::PAGINATION_BY.0.column, Self::PAGINATION_BY.1)
-    }
-
     fn pagination_value(&self) -> String {
         (Self::PAGINATION_BY.0.value)(self)
-    }
-
-    /// A request's value of `column`, a field the DTO marks.
-    fn parse_value(
-        column: &<Self::Dao as Dao>::Iden,
-        value: &str,
-    ) -> Option<Result<Box<dyn SeaValue>, TdError>> {
-        Self::LIST_FIELDS
-            .iter()
-            .find(|f| f.column == *column)
-            .map(|f| (f.parse)(value))
-    }
-
-    /// The row's cursor value of `column`, an order-by field's.
-    fn order_by_value(&self, column: &<Self::Dao as Dao>::Iden) -> Option<String> {
-        Self::LIST_FIELDS
-            .iter()
-            .find(|f| f.column == *column && f.roles.contains(&ListRole::Order))
-            .map(|f| (f.value)(self))
     }
 }

@@ -47,27 +47,22 @@ impl<D: ListDto> ListQueryParams<D> {
             (_, last) if has_more => last,
             _ => None,
         };
-        let primary = self.sort.primary();
+        let field = self.sort.field;
         let cursor = |row: Option<&D>| match row {
-            Some(row) => (row.order_by_value(&primary), Some(row.pagination_value())),
+            Some(row) => (Some((field.value)(row)), Some(row.pagination_value())),
             None => (None, None),
         };
         let (previous, previous_pagination_id) = cursor(first);
         let (next, next_pagination_id) = cursor(last);
-        let sorted_by = D::LIST_FIELDS
-            .iter()
-            .find(|field| field.column == primary)
-            .map(|field| {
-                let dir = match self.sort.dir {
-                    SortDir::Asc => '+',
-                    SortDir::Desc => '-',
-                };
-                format!("{}{dir}", field.name)
-            });
+        let dir = match self.sort.dir {
+            SortDir::Asc => '+',
+            SortDir::Desc => '-',
+        };
+        let sorted_by = format!("{}{dir}", field.name);
 
         Ok(ListResponse {
             list_params: self.request,
-            sorted_by,
+            sorted_by: Some(sorted_by),
             len: rows.len(),
             data: rows,
             previous,
@@ -104,6 +99,21 @@ mod tests {
     }
 
     impl FromDao for TestDto {
+        type Dao = TestDao;
+
+        fn from_dao(dao: TestDao) -> Result<Self, TdError> {
+            Ok(Self { a: dao.a })
+        }
+    }
+
+    #[ta_objects::Dto]
+    #[dto(list(on = TestDao))]
+    struct TestDescDto {
+        #[dto(list(pagination_by = "-"))]
+        a: StringType,
+    }
+
+    impl FromDao for TestDescDto {
         type Dao = TestDao;
 
         fn from_dao(dao: TestDao) -> Result<Self, TdError> {
@@ -271,6 +281,21 @@ mod tests {
             .respond(make_items(2))
             .unwrap();
         assert_eq!(resp.sorted_by.as_deref(), Some("a-"));
+    }
+
+    #[test]
+    fn test_sorted_by_names_a_descending_natural_order() {
+        let resp = ListQueryParams::<TestDescDto>::try_from(ListParams::default())
+            .unwrap()
+            .respond(vec![])
+            .unwrap();
+        assert_eq!(resp.sorted_by.as_deref(), Some("a-"));
+    }
+
+    #[test]
+    fn test_sorted_by_keeps_the_order_on_a_previous_page() {
+        let resp = respond(10, Request::Previous, make_items(2)).unwrap();
+        assert_eq!(resp.sorted_by.as_deref(), Some("a+"));
     }
 
     #[test]

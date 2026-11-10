@@ -11,8 +11,7 @@ use crate::list::filter::{Field, Filter};
 use crate::list::sort::Sort;
 use crate::list::tags::TagSelector;
 use crate::types::basic::PageLen;
-use sea_query::Iden as _;
-use ta_objects::{Dao, FromDao, ListDto, ListRole, SeaValue};
+use ta_objects::{Dao, FromDao, ListDto, ListField, ListRole, SeaValue};
 use td_error::{TdError, td_error};
 
 #[td_error]
@@ -56,16 +55,12 @@ pub(crate) fn accepted<D: ListDto>(role: ListRole) -> String {
     }
 }
 
-/// A value of `column`, a filter or order-by column of `D`.
-pub(crate) fn parse_value<D: ListDto>(
-    column: &ListIden<D>,
+/// A request's value of `field`.
+pub(crate) fn parse_value<D: FromDao>(
+    field: &ListField<D>,
     value: &str,
 ) -> Result<Box<dyn SeaValue>, ListError> {
-    D::parse_value(column, value)
-        .ok_or_else(|| {
-            ListError::UndefinedField(column.to_string(), accepted::<D>(ListRole::Filter))
-        })?
-        .map_err(ListError::InvalidFieldValue)
+    (field.parse)(value).map_err(ListError::InvalidFieldValue)
 }
 
 /// Built only by parsing a request against `D`, as are its parts
@@ -74,7 +69,7 @@ pub struct ListQueryParams<D: ListDto> {
     pub len: PageLen,
     pub columns: ColumnSelector<ListIden<D>>,
     pub tags: TagSelector<ListIden<D>>,
-    pub sort: Sort<ListIden<D>>,
+    pub sort: Sort<D>,
     /// Echoed by the response.
     pub(crate) request: ListParams,
 }
@@ -94,7 +89,7 @@ impl<D: ListDto> TryFrom<ListParams> for ListQueryParams<D> {
                 }
             }
         }
-        let sort = Sort::parse::<D>(&params)?;
+        let sort = Sort::parse(&params)?;
         Ok(Self {
             len: params.len,
             columns,
@@ -254,6 +249,14 @@ mod tests {
             sorted(ordered("name-")),
             (Some(Iden::Name), Iden::Id, SortDir::Desc, None)
         );
+    }
+
+    #[test]
+    fn test_sort_keeps_the_field_it_orders_by_first() {
+        let field = |params| parse(params).unwrap().sort.field.name;
+        assert_eq!(field(ListParams::default()), "id");
+        assert_eq!(field(ordered("name-")), "name");
+        assert_eq!(field(ordered("id-")), "id");
     }
 
     #[test]

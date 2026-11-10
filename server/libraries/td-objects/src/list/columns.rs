@@ -5,11 +5,10 @@
 //! The column filters of a listing. Same column → OR, otherwise AND.
 
 use crate::list::filter::{FilterOp, IsFilter, convert_to_like_pattern};
-use crate::list::params::{ListError, ListIden, accepted, parse_value};
+use crate::list::params::{ListError, accepted, parse_value};
 use crate::types::basic::LikeFilter;
-use sea_query::Iden as _;
 use std::str::FromStr;
-use ta_objects::{ListDto, ListRole, SeaValue};
+use ta_objects::{FromDao, ListDto, ListField, ListRole, SeaValue};
 use td_error::TdError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,7 +68,7 @@ impl<I: Copy + Eq> ColumnSelector<I> {
             FilterOp::Like => ListRole::Like,
             _ => ListRole::Filter,
         };
-        let column = D::column(role, field).ok_or_else(|| match role {
+        let listed = D::field(role, field).ok_or_else(|| match role {
             ListRole::Like => {
                 ListError::UndefinedLikeFilter(field.to_string(), accepted::<D>(role))
             }
@@ -78,7 +77,7 @@ impl<I: Copy + Eq> ColumnSelector<I> {
         let compare = |comparison| -> Result<_, TdError> {
             Ok(ColumnTest::Compare(
                 comparison,
-                condition_value::<D>(&column, value)?,
+                condition_value(listed, value)?,
             ))
         };
         let test = match op {
@@ -94,8 +93,8 @@ impl<I: Copy + Eq> ColumnSelector<I> {
                     Err(ListError::InvalidBetweenCondition(filter.to_string()))?
                 };
                 ColumnTest::Between(
-                    condition_value::<D>(&column, low)?,
-                    condition_value::<D>(&column, high)?,
+                    condition_value(listed, low)?,
+                    condition_value(listed, high)?,
                 )
             }
             FilterOp::Is => match IsFilter::from_str(value)
@@ -105,6 +104,7 @@ impl<I: Copy + Eq> ColumnSelector<I> {
                 IsFilter::NotNull => ColumnTest::NotNull,
             },
         };
+        let column = listed.column;
         match self.0.iter_mut().find(|term| term.column == column) {
             Some(term) => term.tests.push(test),
             None => self.0.push(ColumnTerm {
@@ -118,13 +118,13 @@ impl<I: Copy + Eq> ColumnSelector<I> {
 
 /// A compared value: the empty NULL marker would build a never-true
 /// `col = NULL`.
-fn condition_value<D: ListDto>(
-    column: &ListIden<D>,
+fn condition_value<D: FromDao>(
+    field: &ListField<D>,
     value: &str,
 ) -> Result<Box<dyn SeaValue>, ListError> {
-    let value = parse_value::<D>(column, value)?;
+    let value = parse_value(field, value)?;
     if value.is_sql_null() {
-        return Err(ListError::EmptyFilterValue(column.to_string()));
+        return Err(ListError::EmptyFilterValue(field.name.to_string()));
     }
     Ok(value)
 }
