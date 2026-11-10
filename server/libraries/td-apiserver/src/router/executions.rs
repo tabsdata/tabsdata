@@ -14,6 +14,7 @@ use axum_extra::extract::Query;
 use ta_apiserver::status::error_status::ErrorStatus;
 use ta_apiserver::status::ok_status::{GetStatus, ListStatus, NoContent, UpdateStatus};
 use td_apiforge::apiserver_path;
+use td_objects::dxo::cancel::CancelResponse;
 use td_objects::dxo::crudl::{ListParams, RequestContext};
 use td_objects::dxo::execution::{Execution, ExecutionDetails, ExecutionParam, ExecutionResponse};
 use td_objects::dxo::function::FunctionVersionParam;
@@ -34,7 +35,7 @@ pub async fn cancel_execution(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
     Path(execution): Path<ExecutionParam>,
-) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
+) -> Result<UpdateStatus<CancelResponse>, ErrorStatus> {
     let request = context.update(execution, ());
     let response = state.execution_cancel(request).await?;
     Ok(UpdateStatus::OK(response))

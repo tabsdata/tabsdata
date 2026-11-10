@@ -92,7 +92,7 @@ async fn cancel_execution(db: &TdPool, execution: ExecutionId) -> Result<(), TdE
     Services::with_defaults(db.clone())
         .execution_cancel(request)
         .await
-        .map(|response| response.data)
+        .map(|_| ())
 }
 
 async fn assert_discarded(db: &TdPool, transaction: &TransactionId) -> Result<(), TdError> {

@@ -15,12 +15,13 @@ use td_common::worker::WorkerName;
 use td_database::access::{Holds, InProject, LockInstant, ProjectLock};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
+use td_objects::dxo::cancel::{CancelReason, CanceledRun};
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::worker::WorkerDBWithNames;
 use td_objects::types::basic::{
-    Decorator, FunctionVersionId, LogicalFunctionRunId, LogicalFunctionRunStatus,
+    Decorator, FunctionId, FunctionVersionId, LogicalFunctionRunId, LogicalFunctionRunStatus,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, TransactionId,
 };
 use td_queries::Queries;
@@ -35,10 +36,10 @@ fn unfinished(lfr: &LogicalFunctionRunDB) -> bool {
     )
 }
 
-/// What a cancel did: the runs it cancelled, and the stops of their workers
-/// to send once the unit of work commits.
+/// What a cancel did: the runs it cancelled, with how it reached each, and
+/// the stops of their workers to send once the unit of work commits.
 pub struct Cancelled {
-    pub runs: Vec<LogicalFunctionRunId>,
+    pub runs: Vec<CanceledRun>,
     pub stops: Vec<FunctionStopRequest>,
 }
 
@@ -58,8 +59,10 @@ pub async fn cancel_runs(
             stops: Vec::new(),
         });
     }
-    let stops = end_cancelled_attempts(conn, at, &cancelled).await?;
-    let ids: Vec<LogicalFunctionRunId> = cancelled.iter().map(|lfr| lfr.id.clone()).collect();
+    let (lfrs, reasons): (Vec<LogicalFunctionRunDB>, Vec<CancelReason>) =
+        cancelled.into_iter().unzip();
+    let stops = end_cancelled_attempts(conn, at, &lfrs).await?;
+    let ids: Vec<LogicalFunctionRunId> = lfrs.iter().map(|lfr| lfr.id.clone()).collect();
     conn.logical_runs()
         .set_status(&ids, LogicalFunctionRunStatus::Canceled)
         .await?;
@@ -68,23 +71,39 @@ pub async fn cancel_runs(
         cancelled_count = ids.len(),
         "execution.cancel: cancelled LFR(s)"
     );
-    Ok(Cancelled { runs: ids, stops })
+    let runs = lfrs
+        .into_iter()
+        .zip(reasons)
+        .map(|(lfr, reason)| CanceledRun {
+            execution_id: lfr.execution_id.clone(),
+            transaction_id: lfr.transaction_id.clone(),
+            function_run_id: lfr.id.clone(),
+            reason,
+        })
+        .sorted_by(|a, b| {
+            (&a.execution_id, &a.function_run_id).cmp(&(&b.execution_id, &b.function_run_id))
+        })
+        .collect();
+    Ok(Cancelled { runs, stops })
 }
 
-/// The unfinished runs a cancel of `named` ends. Alternates two steps from
-/// the newly reached runs: their transactions' other runs, and the runs
-/// reading their outputs (across executions). Finished runs end nothing, so
-/// the walk does not continue from them.
+/// The unfinished runs a cancel of `named` ends, each with how it was
+/// reached. Alternates two steps from the newly reached runs: their
+/// transactions' other runs, and the runs reading their outputs (across
+/// executions); a reader of the same function reads the state its earlier
+/// run leaves. Finished runs end nothing, so the walk does not continue from
+/// them.
 async fn cancel_closure(
     conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     named: &[LogicalFunctionRunDB],
-) -> Result<Vec<LogicalFunctionRunDB>, TdError> {
-    let mut reached: HashMap<LogicalFunctionRunId, LogicalFunctionRunDB> = HashMap::new();
+) -> Result<Vec<(LogicalFunctionRunDB, CancelReason)>, TdError> {
+    let mut reached: HashMap<LogicalFunctionRunId, (LogicalFunctionRunDB, CancelReason)> =
+        HashMap::new();
     let mut lifted: HashSet<TransactionId> = HashSet::new();
     let mut frontier: Vec<LogicalFunctionRunDB> =
         named.iter().filter(|l| unfinished(l)).cloned().collect();
     for lfr in &frontier {
-        reached.insert(lfr.id.clone(), lfr.clone());
+        reached.insert(lfr.id.clone(), (lfr.clone(), CancelReason::Requested));
     }
 
     while !frontier.is_empty() {
@@ -104,7 +123,7 @@ async fn cancel_closure(
         let mut next: Vec<LogicalFunctionRunDB> = Vec::new();
         for lfr in siblings {
             if unfinished(&lfr) && !reached.contains_key(&lfr.id) {
-                reached.insert(lfr.id.clone(), lfr.clone());
+                reached.insert(lfr.id.clone(), (lfr.clone(), CancelReason::Transaction));
                 next.push(lfr);
             }
         }
@@ -113,6 +132,11 @@ async fn cancel_closure(
             .iter()
             .chain(next.iter())
             .map(|lfr| lfr.id.clone())
+            .collect();
+        let functions: HashSet<FunctionId> = frontier
+            .iter()
+            .chain(next.iter())
+            .map(|lfr| lfr.function_id)
             .collect();
         let exclude: Vec<LogicalFunctionRunId> = reached.keys().cloned().collect();
         let downstream_ids: Vec<LogicalFunctionRunId> = conn
@@ -126,7 +150,12 @@ async fn cancel_closure(
                 .await?;
             for lfr in downstream {
                 if unfinished(&lfr) && !reached.contains_key(&lfr.id) {
-                    reached.insert(lfr.id.clone(), lfr.clone());
+                    let reason = if functions.contains(&lfr.function_id) {
+                        CancelReason::SameFunction
+                    } else {
+                        CancelReason::Downstream
+                    };
+                    reached.insert(lfr.id.clone(), (lfr.clone(), reason));
                     next.push(lfr);
                 }
             }

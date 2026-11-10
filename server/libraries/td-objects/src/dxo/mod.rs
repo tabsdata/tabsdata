@@ -26,6 +26,7 @@
 pub mod auth;
 pub mod bundle;
 pub mod callback;
+pub mod cancel;
 pub mod collection;
 pub mod connection;
 pub mod connection_catalog;

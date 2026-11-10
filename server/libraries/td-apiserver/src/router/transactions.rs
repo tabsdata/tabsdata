@@ -14,6 +14,7 @@ use ta_apiserver::status::error_status::ErrorStatus;
 use ta_apiserver::status::ok_status::{ListStatus, NoContent, UpdateStatus};
 use td_apiforge::apiserver_path;
 use td_database::pool::scoped::ScopedExt;
+use td_objects::dxo::cancel::CancelResponse;
 use td_objects::dxo::crudl::{ListParams, RequestContext};
 use td_objects::dxo::synchrotron::SynchrotronResponse;
 use td_objects::dxo::transaction::{Transaction, TransactionParam};
@@ -33,7 +34,7 @@ pub async fn cancel_transaction(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
     Path(transaction): Path<TransactionParam>,
-) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
+) -> Result<UpdateStatus<CancelResponse>, ErrorStatus> {
     let request = context.update(transaction, ());
     let response = state.transaction_cancel(request).await?;
     Ok(UpdateStatus::OK(response))

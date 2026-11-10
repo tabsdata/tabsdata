@@ -13,6 +13,7 @@ use td_bridge::BridgeProviderHandle;
 use td_database::access::{AcrossProjects, DbPool, retrying};
 use td_error::TdError;
 use td_execution::{Concerns, ProjectWakes};
+use td_objects::dxo::cancel::CancelResponse;
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::transaction::{TransactionDB, TransactionParam};
@@ -26,7 +27,7 @@ async fn transaction_cancel(
     msgs: &mut ReqCtx,
     db: DbPool<AcrossProjects>,
     request: UpdateRequest<(), TransactionParam>,
-) -> Result<(), TdError> {
+) -> Result<CancelResponse, TdError> {
     let (ctx, param, _) = request.into_parts();
     let transaction_id = param.transaction;
 
@@ -40,7 +41,7 @@ async fn transaction_cancel(
             .await?;
         (project, grant)
     };
-    let (stops, recorded) = retrying(|attempt| async {
+    let (stops, canceled, recorded) = retrying(|attempt| async {
         let mut recorded = ReqCtx::default();
         let mut trx = db
             .in_project(&project)
@@ -55,14 +56,14 @@ async fn transaction_cancel(
             recorded.warning(Message::of(UpdateStatusRunError::NoOpStatusUpdate));
         }
         trx.commit().await?;
-        Ok((cancelled.stops, recorded))
+        Ok((cancelled.stops, cancelled.runs, recorded))
     })
     .await?;
     msgs.merge(recorded);
 
     stop_function_workers(&bridge, stops).await;
     wakes.wake(&project, Concerns::RUNS);
-    Ok(())
+    Ok(CancelResponse { canceled })
 }
 
 #[cfg(test)]
@@ -111,7 +112,7 @@ mod tests {
                 Services::with_defaults(db.clone())
                     .transaction_cancel(request)
                     .await
-                    .map(|response| response.data)
+                    .map(|_| ())
             }
         })
         .await
