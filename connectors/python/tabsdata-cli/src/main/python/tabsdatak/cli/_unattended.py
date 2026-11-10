@@ -15,11 +15,26 @@ UNATTENDED_ENV = "TDK_AGENT"
 # Each host sets its marker only in the shells its agent runs commands in.
 UNATTENDED_MARKERS = (
     "CLAUDECODE",
+    "CLAUDE_CODE",
     "GEMINI_CLI",
+    "ANTIGRAVITY_AGENT",
     "CODEX_THREAD_ID",
+    "CODEX_SANDBOX",
+    "CODEX_CI",
     "CURSOR_AGENT",
     "VSCODE_AGENT",
+    "COPILOT_CLI",
+    "COPILOT_AGENT",
     "OPENCODE",
+    "AUGMENT_AGENT",
+    "JUNIE_DATA",
+    "QWEN_CODE",
+    "KILO",
+    "CLINE_ACTIVE",
+    "ROO_ACTIVE",
+    "ROO_CLI_RUNTIME",
+    "AI_AGENT",
+    "AGENT",
 )
 _OFF = ("", "0", "false")
 

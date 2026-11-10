@@ -23,9 +23,6 @@ class _Recording:
         self.calls.append((self.name, list(argv)))
         return run(argv, **self.overrides)
 
-    def root_params(self):
-        return []
-
     def describe_root(self) -> dict:
         return {f"{self.name}_root": True}
 

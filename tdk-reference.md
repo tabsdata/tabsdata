@@ -1049,12 +1049,17 @@ reports which kind of credential is in use. `TDK_PROJECT` is the default
 project, in every mode: `--proj` overrides it, and it overrides the pinned
 project.
 
-### `TDK_AGENT`, `CLAUDECODE`, `GEMINI_CLI`, `CODEX_THREAD_ID`, `CURSOR_AGENT`, `VSCODE_AGENT`, `OPENCODE`
+### `TDK_AGENT` and the coding agents' variables
 
 An unattended session never prompts: `TDK_AGENT=1`, or any of the variables
-coding agents set (`CLAUDECODE`, `GEMINI_CLI`, `CODEX_THREAD_ID`,
-`CURSOR_AGENT`, `VSCODE_AGENT`, `OPENCODE`; set to `0` or `false`, one counts
-as unset), turns prompting off as `--no-prompt` does, and a missing value fails
+coding agents set in the shells they run commands in (`CLAUDECODE` and `CLAUDE_CODE` (Claude Code), `GEMINI_CLI` (Gemini CLI),
+`ANTIGRAVITY_AGENT` (Antigravity), `CODEX_THREAD_ID`, `CODEX_SANDBOX` and
+`CODEX_CI` (Codex), `CURSOR_AGENT` (Cursor), `VSCODE_AGENT` (VS Code),
+`COPILOT_CLI` and `COPILOT_AGENT` (GitHub Copilot), `OPENCODE` (OpenCode),
+`AUGMENT_AGENT` (Augment), `JUNIE_DATA` (Junie), `QWEN_CODE` (Qwen Code),
+`KILO` (Kilo Code), `CLINE_ACTIVE` (Cline), `ROO_ACTIVE` and `ROO_CLI_RUNTIME`
+(Roo Code), and the variables any agent may set, `AI_AGENT` and `AGENT`;
+set to `0` or `false`, one counts as unset), turns prompting off as `--no-prompt` does, and a missing value fails
 naming the variable. An installed extension may read the same variables for
 more. Without any of them, a prompt whose standard input is not a terminal and
 ends without an answer fails the same way (`missing_argument`, exit 2, naming

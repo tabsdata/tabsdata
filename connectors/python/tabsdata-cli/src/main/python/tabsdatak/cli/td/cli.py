@@ -458,8 +458,6 @@ def cli(ctx: click.Context, no_prompt: bool):
 # in sync -- a new command only needs the @cli_command annotation.
 for _command in collect_cli_commands():
     cli.add_command(_command)
-for _extension in cli_extensions():
-    cli.params.extend(_extension.root_params())
 
 
 @capability("session", "read", interactive=True)

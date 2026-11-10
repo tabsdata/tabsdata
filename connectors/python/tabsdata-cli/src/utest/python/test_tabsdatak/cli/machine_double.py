@@ -59,9 +59,6 @@ class MachineDouble:
         click.echo(json.dumps({"error": envelope}, default=str))
         sys.exit(error.exit_code)
 
-    def root_params(self):
-        return []
-
     def describe_root(self) -> dict:
         return {}
 

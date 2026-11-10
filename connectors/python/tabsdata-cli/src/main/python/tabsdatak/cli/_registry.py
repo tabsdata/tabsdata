@@ -33,7 +33,7 @@ program sets a :class:`tabsdatak.cli._machine.Machine` for the invocation.
 from __future__ import annotations
 
 import importlib
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
@@ -104,10 +104,6 @@ class CliExtension(Protocol):
         """Run one invocation of ``root``: ``run(argv, **main_kwargs)`` is the
         plain one, taking the argv to parse and any override of the keyword
         arguments of :meth:`click.BaseCommand.main`."""
-
-    def root_params(self) -> Sequence["click.Parameter"]:
-        """Options the root group shows in its help; their values reach no
-        command."""
 
     def describe_root(self) -> dict:
         """Keys added to the root of the ``--help --full`` JSON tree."""
