@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, List
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkGroup
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     format_option,
@@ -20,11 +21,9 @@ from tabsdatak.cli.cli_utils import (
     progress,
     render_list,
     render_status_done,
-    require_id,
     show_hint,
     status_changed,
     take,
-    verify_login_or_prompt,
     view_options,
 )
 from tabsdatak.cli.td._wait import (
@@ -34,10 +33,10 @@ from tabsdatak.cli.td._wait import (
     wait_option,
 )
 from tabsdatak.cli.td.execution_utils import (
-    FNRUN_ID_HINT,
-    PLAN_ID_HINT,
-    TRX_ID_HINT,
-    WORKER_ID_HINT,
+    FNRUN_ID,
+    PLAN_ID,
+    TRX_ID,
+    WORKER_ID,
     emit_worker_logs,
     obtain_list_worker_filters,
     span_projects,
@@ -54,7 +53,7 @@ if TYPE_CHECKING:
 
 
 @cli_command
-@click.group()
+@click.group(cls=TdkGroup)
 def worker():
     """Worker management commands"""
 
@@ -74,7 +73,7 @@ def worker():
 @click.option(
     "--fn", type=str, help="Name of the function to which the workers belong."
 )
-@click.option("--plan", type=str, help="ID of the plan to filter workers by.")
+@click.option("--plan", type=PLAN_ID, help="ID of the plan to filter workers by.")
 @click.option(
     "--plan-name",
     help=(
@@ -83,8 +82,10 @@ def worker():
         "with names starting with 'my_plan'."
     ),
 )
-@click.option("--fnrun", type=str, help="ID of the function run to filter workers by.")
-@click.option("--trx", type=str, help="ID of the transaction to filter workers by.")
+@click.option(
+    "--fnrun", type=FNRUN_ID, help="ID of the function run to filter workers by."
+)
+@click.option("--trx", type=TRX_ID, help="ID of the transaction to filter workers by.")
 @format_option
 @view_options()
 @max_result_option
@@ -103,10 +104,6 @@ def list_workers(
     trx: str,
 ):
     """List workers across every project you can view."""
-    require_id("--plan", plan, PLAN_ID_HINT)
-    require_id("--fnrun", fnrun, FNRUN_ID_HINT)
-    require_id("--trx", trx, TRX_ID_HINT)
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         span_projects(server)
@@ -149,7 +146,12 @@ def list_workers(
 
 @capability("operations", "read", paths={"--file": "write"})
 @worker.command()
-@click.option("--worker", required=True, help="ID of the worker whose logs to show.")
+@click.option(
+    "--worker",
+    type=WORKER_ID,
+    required=True,
+    help="ID of the worker whose logs to show.",
+)
 @tail_option
 @click.option(
     "--file",
@@ -166,8 +168,6 @@ def logs(ctx: click.Context, worker: str, tail: int | None, file: str):
     Show the logs of a worker, with the error signature of its log when it
     did not succeed.
     """
-    require_id("--worker", worker, WORKER_ID_HINT)
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         emit_worker_logs(ctx, server, worker, tail, file)
@@ -179,7 +179,9 @@ def logs(ctx: click.Context, worker: str, tail: int | None, file: str):
 @capability("operations", "write")
 @worker.command()
 @format_option
-@click.option("--worker", required=True, help="ID of the worker to recover.")
+@click.option(
+    "--worker", type=WORKER_ID, required=True, help="ID of the worker to recover."
+)
 @wait_option("the recovered transaction")
 @timeout_option()
 @click.pass_context
@@ -188,9 +190,7 @@ def recover(ctx: click.Context, worker: str, wait: bool, timeout: float | None):
     Recover the transaction a worker belongs to: the transaction's failed or
     on-hold function runs are re-scheduled.
     """
-    require_id("--worker", worker, WORKER_ID_HINT)
     require_wait(wait, timeout)
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         span_projects(server)

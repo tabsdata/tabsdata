@@ -22,6 +22,7 @@ from tabsdatak.cli._capability import (
     path_params,
     primary_option,
 )
+from tabsdatak.cli._command import TdkCommand, TdkGroup
 from tabsdatak.cli._credentials import (
     BEARER_ENV,
     SERVER_ENV,
@@ -38,6 +39,7 @@ from tabsdatak.cli._examples import (
     snippet_metadata,
 )
 from tabsdatak.cli._machine import Machine, running
+from tabsdatak.cli._prompted import pinned, prompted
 from tabsdatak.cli._registry import cli_command, cli_extension
 from tabsdatak.cli._unattended import (
     UNATTENDED_ENV,
@@ -101,6 +103,8 @@ __all__ = [
     "SNIPPET",
     "TOKEN_ENV",
     "TableView",
+    "TdkCommand",
+    "TdkGroup",
     "TdkError",
     "TdkException",
     "UNATTENDED_ENV",
@@ -108,6 +112,8 @@ __all__ = [
     "active_profile",
     "capability",
     "capability_of",
+    "pinned",
+    "prompted",
     "checks_view",
     "classify",
     "cli_command",

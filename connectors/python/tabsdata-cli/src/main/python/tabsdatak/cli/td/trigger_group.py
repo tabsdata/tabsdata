@@ -23,6 +23,8 @@ from typing import TYPE_CHECKING, NamedTuple
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkGroup
+from tabsdatak.cli._prompted import pinned, prompted
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     all_projects_option,
@@ -32,14 +34,12 @@ from tabsdatak.cli.cli_utils import (
     hint_common_solutions,
     list_options,
     list_params,
-    logical_prompt,
     max_result_option,
     present,
     proj_option,
     render_list,
     resolve_all_projects,
     take,
-    verify_login_or_prompt,
     view_options,
 )
 from tabsdatak.cli.td.execution_utils import (
@@ -99,14 +99,28 @@ def _coll_option(help: str):
     return click.option("--coll", "-c", help=help)
 
 
+def _target_name_option(help: str):
+    return prompted("--name", "-n", prompt="Name of the function", help=help)
+
+
+def _target_coll_option(help: str):
+    return prompted(
+        "--coll",
+        "-c",
+        prompt="Name of the collection to which the function belongs",
+        default=pinned("collection"),
+        help=help,
+    )
+
+
 @cli_command
-@click.group()
+@click.group(cls=TdkGroup)
 def cron():
     """Cron-triggered functions"""
 
 
 @cli_command
-@click.group()
+@click.group(cls=TdkGroup)
 def stream():
     """Stream-publisher functions"""
 
@@ -115,8 +129,8 @@ def stream():
 @cron.command()
 @proj_option
 @format_option
-@_name_option("Name of the cron-triggered function to enable.")
-@_coll_option("Name of the collection to which the function belongs.")
+@_target_name_option("Name of the cron-triggered function to enable.")
+@_target_coll_option("Name of the collection to which the function belongs.")
 @click.pass_context
 def enable(ctx: click.Context, name: str, coll: str):
     """Enable a cron-triggered function
@@ -131,8 +145,8 @@ def enable(ctx: click.Context, name: str, coll: str):
 @cron.command()
 @proj_option
 @format_option
-@_name_option("Name of the cron-triggered function to disable.")
-@_coll_option("Name of the collection to which the function belongs.")
+@_target_name_option("Name of the cron-triggered function to disable.")
+@_target_coll_option("Name of the collection to which the function belongs.")
 @click.pass_context
 def disable(ctx: click.Context, name: str, coll: str):
     """Disable a cron-triggered function
@@ -179,8 +193,8 @@ def list_cron_plans(ctx: click.Context, all_projects: bool, name: str, coll: str
 @stream.command("enable")
 @proj_option
 @format_option
-@_name_option("Name of the stream-publisher function to enable.")
-@_coll_option("Name of the collection to which the function belongs.")
+@_target_name_option("Name of the stream-publisher function to enable.")
+@_target_coll_option("Name of the collection to which the function belongs.")
 @click.pass_context
 def enable_stream(ctx: click.Context, name: str, coll: str):
     """Enable a stream-publisher function
@@ -195,8 +209,8 @@ def enable_stream(ctx: click.Context, name: str, coll: str):
 @stream.command("disable")
 @proj_option
 @format_option
-@_name_option("Name of the stream-publisher function to disable.")
-@_coll_option("Name of the collection to which the function belongs.")
+@_target_name_option("Name of the stream-publisher function to disable.")
+@_target_coll_option("Name of the collection to which the function belongs.")
 @click.pass_context
 def disable_stream(ctx: click.Context, name: str, coll: str):
     """Disable a stream-publisher function
@@ -251,15 +265,6 @@ def _triggers_of(
 def _enable_function(
     ctx: click.Context, kind: _Kind, name: str, coll: str, enabled: bool
 ):
-    verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the function", option="--name")
-    coll = (
-        coll
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(
-            ctx, "Name of the collection to which the function belongs", option="--coll"
-        )
-    )
     action = "enable" if enabled else "disable"
     server: TabsdataServer = ctx.obj["tabsdataserver"]
     try:
@@ -282,7 +287,6 @@ def _list_plans(
     name: str,
     coll: str,
 ):
-    verify_login_or_prompt(ctx)
     coll = coll or get_currently_pinned_object(ctx, "collection")
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
@@ -322,7 +326,6 @@ def _list_triggers(
     name: str,
     coll: str,
 ):
-    verify_login_or_prompt(ctx)
     # The pinned collection narrows the listing as it does everywhere else, but
     # is not prompted for: with no collection the listing spans the project.
     coll = coll or get_currently_pinned_object(ctx, "collection")

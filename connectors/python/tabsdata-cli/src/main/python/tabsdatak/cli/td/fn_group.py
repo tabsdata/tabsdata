@@ -13,8 +13,10 @@ from typing import TYPE_CHECKING
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkGroup
 from tabsdatak.cli._errors import TdkException
 from tabsdatak.cli._machine import machine
+from tabsdatak.cli._prompted import pinned, prompted
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     ancestry,
@@ -108,6 +110,34 @@ _path_option = click.option(
     type=click.Path(),
 )
 
+_required_path_option = prompted(
+    "--path",
+    prompt=(
+        "Path to the function file. Must be of the form "
+        "'/path/to/file.py::function_name'"
+    ),
+    help=(
+        "Path to the function file. Must be of the form "
+        "'/path/to/file.py::function_name'. Will be prompted "
+        "for it if not provided."
+    ),
+    type=click.Path(),
+)
+
+_COLL_PROMPT = "Name of the collection to which the function belongs"
+_COLL_HINT = (
+    "Pass --coll. 'tdk fn list --filter name:eq:<name>' shows the function's "
+    "collection."
+)
+_coll_option = prompted(
+    "--coll",
+    "-c",
+    prompt=_COLL_PROMPT,
+    default=pinned("collection"),
+    hint=_COLL_HINT,
+    help="Name of the collection to which the function belongs.",
+)
+
 _dry_run_option = click.option(
     "--dry-run",
     is_flag=True,
@@ -122,15 +152,7 @@ def _collection(ctx: click.Context, coll: str | None) -> str:
     return (
         coll
         or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(
-            ctx,
-            "Name of the collection to which the function belongs",
-            option="--coll",
-            hint=(
-                "Pass --coll. 'tdk fn list --filter name:eq:<name>' shows the "
-                "function's collection."
-            ),
-        )
+        or logical_prompt(ctx, _COLL_PROMPT, option="--coll", hint=_COLL_HINT)
     )
 
 
@@ -245,7 +267,7 @@ def _render_check(ctx: click.Context, result: dict, **would) -> None:
 
 
 @cli_command
-@click.group()
+@click.group(cls=TdkGroup)
 def fn():
     """Function management commands"""
 
@@ -254,16 +276,13 @@ def fn():
 @fn.command()
 @proj_option
 @format_option
-@click.option(
+@prompted(
     "--name",
     "-n",
+    prompt="Name of the function to be deleted",
     help="Name of the function to be deleted.",
 )
-@click.option(
-    "--coll",
-    "-c",
-    help="Name of the collection to which the function belongs.",
-)
+@_coll_option
 @click.option(
     "--confirm",
     help="Write 'delete' to confirm deletion. Will be prompted for it if not provided.",
@@ -271,11 +290,6 @@ def fn():
 @click.pass_context
 def delete(ctx: click.Context, name: str, coll: str, confirm: str):
     """Delete a function"""
-    verify_login_or_prompt(ctx)
-    name = name or logical_prompt(
-        ctx, "Name of the function to be deleted", option="--name"
-    )
-    coll = _collection(ctx, coll)
     progress(ctx, f"Deleting function '{name}' in collection '{coll}'")
     progress(ctx, "-" * 10)
     require_word(ctx, confirm, "delete", "Please type 'delete' to confirm deletion")
@@ -305,16 +319,13 @@ def delete(ctx: click.Context, name: str, coll: str, confirm: str):
 @proj_option
 @format_option
 @view_options()
-@click.option(
+@prompted(
     "--name",
     "-n",
+    prompt="Name of the function to be displayed",
     help="Name of the function to be displayed.",
 )
-@click.option(
-    "--coll",
-    "-c",
-    help="Name of the collection to which the function belongs.",
-)
+@_coll_option
 @click.option(
     "--show-history",
     is_flag=True,
@@ -323,11 +334,6 @@ def delete(ctx: click.Context, name: str, coll: str, confirm: str):
 @click.pass_context
 def get(ctx: click.Context, name: str, coll: str, show_history: bool):
     """Display a function"""
-    verify_login_or_prompt(ctx)
-    name = name or logical_prompt(
-        ctx, "Name of the function to be displayed", option="--name"
-    )
-    coll = _collection(ctx, coll)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         if show_history:
@@ -536,7 +542,6 @@ def bundle(
             f"'{extract}' is not empty.",
             hint="Extract into a new or empty directory, or pass '--force'.",
         )
-    verify_login_or_prompt(ctx)
     if name:
         coll = _collection(ctx, coll)
     else:
@@ -649,7 +654,6 @@ def list_functions(ctx: click.Context, coll: str):
     # noinspection PyProtectedMember
     from tabsdatak.sdk.tabsdata_server import _function_type_to_mapping
 
-    verify_login_or_prompt(ctx)
     coll = coll or get_currently_pinned_object(ctx, "collection")
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
@@ -713,10 +717,10 @@ def list_functions(ctx: click.Context, coll: str):
         "--local-pkg": "read",
     },
 )
-@fn.command()
+@fn.command(login=False)
 @proj_option
 @format_option
-@_path_option
+@_required_path_option
 @_dir_to_bundle_option
 @_environment_options
 @click.option(
@@ -755,7 +759,6 @@ def check(
     and flags calls such as eval, exec or subprocess. Nothing is uploaded.
     Exits 1 when a finding is an error; warnings do not fail.
     """
-    path = _function_path(ctx, path)
     if coll:
         verify_login_or_prompt(ctx)
     try:
@@ -780,13 +783,9 @@ def check(
 @fn.command()
 @proj_option
 @format_option
-@click.option(
-    "--coll",
-    "-c",
-    help="Name of the collection to which the function belongs.",
-)
+@_coll_option
 @click.option("--description", help="Description of the function.")
-@_path_option
+@_required_path_option
 @_dir_to_bundle_option
 @_environment_options
 @click.option(
@@ -858,12 +857,9 @@ def register(
     With ``--dry-run``, checks the function as 'tdk fn check --coll' does and
     reports what would be registered, uploading nothing.
     """
-    verify_login_or_prompt(ctx)
     description = description or ""
     progress(ctx, "Registering a function")
     progress(ctx, "-" * 10)
-    coll = _collection(ctx, coll)
-    path = _function_path(ctx, path)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         if dry_run:
@@ -937,16 +933,13 @@ def register(
 @fn.command()
 @proj_option
 @format_option
-@click.option(
+@prompted(
     "--name",
     "-n",
+    prompt="Name of the function to be triggered",
     help="Name of the function to be triggered.",
 )
-@click.option(
-    "--coll",
-    "-c",
-    help="Name of the collection to which the function belongs.",
-)
+@_coll_option
 @click.option(
     "--plan-name",
     help="Name to be given to the plan that will be generated by the trigger.",
@@ -989,11 +982,6 @@ def trigger(
     if wait is None:
         wait = trigger_waits(ctx)
     require_wait(wait, timeout)
-    verify_login_or_prompt(ctx)
-    name = name or logical_prompt(
-        ctx, "Name of the function to be triggered", option="--name"
-    )
-    coll = _collection(ctx, coll)
     progress(ctx, f"Triggering function '{name}' in collection '{coll}'")
     progress(ctx, "-" * 10)
     try:
@@ -1058,18 +1046,15 @@ def trigger(
 @fn.command()
 @proj_option
 @format_option
-@click.option(
+@prompted(
     "--name",
     "-n",
+    prompt="Name of the function to be updated",
     help="Name of the function to be updated.",
 )
-@click.option(
-    "--coll",
-    "-c",
-    help="Name of the collection to which the function belongs.",
-)
+@_coll_option
 @click.option("--description", help="Description of the function.")
-@_path_option
+@_required_path_option
 @_dir_to_bundle_option
 @_environment_options
 @click.option(
@@ -1147,12 +1132,6 @@ def update(
     not reach a stalled plan: to change the code such a run executes,
     patch its version with 'tdk fn patch'.
     """
-    verify_login_or_prompt(ctx)
-    name = name or logical_prompt(
-        ctx, "Name of the function to be updated", option="--name"
-    )
-    coll = _collection(ctx, coll)
-    path = _function_path(ctx, path)
     try:
         if dry_run:
             result = _checked(
@@ -1192,16 +1171,13 @@ def update(
 @fn.command()
 @proj_option
 @format_option
-@click.option(
+@prompted(
     "--name",
     "-n",
+    prompt="Name of the function to be updated",
     help="Name of the function to enable.",
 )
-@click.option(
-    "--coll",
-    "-c",
-    help="Name of the collection to which the function belongs.",
-)
+@_coll_option
 @click.pass_context
 def enable(
     ctx: click.Context,
@@ -1212,11 +1188,6 @@ def enable(
 
     Enabling an already-enabled function does nothing.
     """
-    verify_login_or_prompt(ctx)
-    name = name or logical_prompt(
-        ctx, "Name of the function to be updated", option="--name"
-    )
-    coll = _collection(ctx, coll)
     set_function_enabled(ctx, name, coll, True)
 
 
@@ -1224,16 +1195,13 @@ def enable(
 @fn.command()
 @proj_option
 @format_option
-@click.option(
+@prompted(
     "--name",
     "-n",
+    prompt="Name of the function to be updated",
     help="Name of the function to disable.",
 )
-@click.option(
-    "--coll",
-    "-c",
-    help="Name of the collection to which the function belongs.",
-)
+@_coll_option
 @click.pass_context
 def disable(
     ctx: click.Context,
@@ -1244,11 +1212,6 @@ def disable(
 
     Disabling an already-disabled function does nothing.
     """
-    verify_login_or_prompt(ctx)
-    name = name or logical_prompt(
-        ctx, "Name of the function to be updated", option="--name"
-    )
-    coll = _collection(ctx, coll)
     set_function_enabled(ctx, name, coll, False)
 
 
@@ -1310,23 +1273,19 @@ def set_function_enabled(ctx: click.Context, name: str, coll: str, enabled: bool
 @fn.command()
 @proj_option
 @format_option
-@click.option(
+@_coll_option
+@prompted(
     "--name",
     "-n",
+    prompt="Name of the function to patch",
     help="Name of the function to patch.",
 )
-@click.option(
-    "--coll",
-    "-c",
-    help="Name of the collection to which the function belongs.",
-)
-@click.option(
+@prompted(
     "--fn-version",
     "fn_version",
-    help=(
-        "Function-version id (fvid) this patch overrides. Use 'tdk fn get "
-        "--show-history' to find available fvids."
-    ),
+    prompt="Function-version id (fvid) this patch overrides",
+    help="Function-version id (fvid) this patch overrides. Use 'tdk fn get "
+    "--show-history' to find available fvids.",
 )
 @_path_option
 @click.option("--description", help="Description of the patch.")
@@ -1397,12 +1356,6 @@ def patch(
             "'--add-package' adds to the parent bundle's requirements, which "
             "'--requirements' replaces; pass one or the other."
         )
-    verify_login_or_prompt(ctx)
-    coll = _collection(ctx, coll)
-    name = name or logical_prompt(ctx, "Name of the function to patch", option="--name")
-    fn_version = fn_version or logical_prompt(
-        ctx, "Function-version id (fvid) this patch overrides", option="--fn-version"
-    )
     if not source:
         path = _function_path(ctx, path)
     try:
@@ -1517,26 +1470,18 @@ def _require_valid_source(path: str, source: str) -> None:
 @proj_option
 @format_option
 @view_options()
-@click.option(
+@_coll_option
+@prompted(
     "--name",
     "-n",
+    prompt="Name of the function whose patches will be listed",
     help="Name of the function whose patches will be listed.",
-)
-@click.option(
-    "--coll",
-    "-c",
-    help="Name of the collection to which the function belongs.",
 )
 @max_result_option
 @list_options
 @click.pass_context
 def list_patches(ctx: click.Context, name: str, coll: str):
     """List patch versions of a function (latest first)."""
-    verify_login_or_prompt(ctx)
-    coll = _collection(ctx, coll)
-    name = name or logical_prompt(
-        ctx, "Name of the function whose patches will be listed", option="--name"
-    )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         patches, truncated = take(

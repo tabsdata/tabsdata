@@ -9,14 +9,16 @@ from typing import TYPE_CHECKING, List
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkGroup
+from tabsdatak.cli._prompted import prompted
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
+    IdType,
     collection_label,
     format_option,
     hint_common_solutions,
     list_options,
     list_params,
-    logical_prompt,
     max_result_option,
     present,
     progress,
@@ -24,10 +26,8 @@ from tabsdatak.cli.cli_utils import (
     render_entity,
     render_list,
     render_status_done,
-    require_id,
     status_changed,
     take,
-    verify_login_or_prompt,
     view_options,
 )
 from tabsdatak.cli.td._wait import (
@@ -38,9 +38,9 @@ from tabsdatak.cli.td._wait import (
     wait_option,
 )
 from tabsdatak.cli.td.execution_utils import (
-    FNRUN_ID_HINT,
-    PLAN_ID_HINT,
-    TRX_ID_HINT,
+    FNRUN_ID,
+    PLAN_ID,
+    TRX_ID,
     all_workers_option,
     diagnose_options,
     emit_scope_logs,
@@ -63,9 +63,15 @@ if TYPE_CHECKING:
 
 
 @cli_command
-@click.group()
+@click.group(cls=TdkGroup)
 def fnrun():
     """Function run management commands"""
+
+
+ATTEMPT_ID = IdType(
+    "An attempt is a physical function run id, such as a replay's "
+    "'new_function_run_id'."
+)
 
 
 @capability("operations", "read")
@@ -85,7 +91,7 @@ def fnrun():
     type=str,
     help="Name of the function to which the function runs belong.",
 )
-@click.option("--plan", type=str, help="ID of the plan to filter function runs by.")
+@click.option("--plan", type=PLAN_ID, help="ID of the plan to filter function runs by.")
 @click.option(
     "--plan-name",
     help=(
@@ -95,7 +101,7 @@ def fnrun():
     ),
 )
 @click.option(
-    "--trx", type=str, help="ID of the transaction to filter function runs by."
+    "--trx", type=TRX_ID, help="ID of the transaction to filter function runs by."
 )
 @format_option
 @view_options()
@@ -114,9 +120,6 @@ def list_runs(
     trx: str,
 ):
     """List function runs across every project you can view."""
-    require_id("--plan", plan, PLAN_ID_HINT)
-    require_id("--trx", trx, TRX_ID_HINT)
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         span_projects(server)
@@ -153,10 +156,13 @@ def list_runs(
 
 @capability("operations", "read")
 @fnrun.command()
-@click.option("--fnrun", required=True, help="ID of the function run to display.")
+@click.option(
+    "--fnrun", type=FNRUN_ID, required=True, help="ID of the function run to display."
+)
 @wait_option("the function run")
 @click.option(
     "--attempt",
+    type=ATTEMPT_ID,
     help=(
         "With '--wait', wait for this attempt (a physical function run id, such "
         "as the 'new_function_run_id' of a replay) to end instead."
@@ -176,15 +182,7 @@ def get(
     """
     Display a function run: its details plus its workers.
     """
-    require_id("--fnrun", fnrun, FNRUN_ID_HINT)
-    require_id(
-        "--attempt",
-        attempt,
-        "An attempt is a physical function run id, such as a replay's "
-        "'new_function_run_id'.",
-    )
     require_wait(wait, timeout, attempt)
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         span_projects(server)
@@ -235,7 +233,10 @@ def get(
 @capability("operations", "read", paths={"--file": "write"})
 @fnrun.command()
 @click.option(
-    "--fnrun", required=True, help="ID of the function run whose logs to show."
+    "--fnrun",
+    type=FNRUN_ID,
+    required=True,
+    help="ID of the function run whose logs to show.",
 )
 @all_workers_option
 @tail_option
@@ -258,8 +259,6 @@ def logs(
     listing when several ran. Each worker that did not succeed carries the
     error signature of its log.
     """
-    require_id("--fnrun", fnrun, FNRUN_ID_HINT)
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         emit_scope_logs(
@@ -281,7 +280,12 @@ def logs(
 @capability("operations", "write")
 @fnrun.command()
 @format_option
-@click.option("--fnrun", help="ID of the function run to replay.")
+@prompted(
+    "--fnrun",
+    type=FNRUN_ID,
+    prompt="ID of the function run to replay",
+    help="ID of the function run to replay.",
+)
 @wait_option("the new attempt")
 @timeout_option()
 @click.pass_context
@@ -294,11 +298,6 @@ def replay(ctx: click.Context, fnrun: str, wait: bool, timeout: float | None):
     waits for the new attempt to end.
     """
     require_wait(wait, timeout)
-    verify_login_or_prompt(ctx)
-    fnrun = fnrun or logical_prompt(
-        ctx, "ID of the function run to replay", option="--fnrun"
-    )
-    require_id("--fnrun", fnrun, FNRUN_ID_HINT)
     progress(ctx, f"Replaying function run '{fnrun}'")
     progress(ctx, "-" * 10)
     try:
@@ -331,7 +330,9 @@ def replay(ctx: click.Context, fnrun: str, wait: bool, timeout: float | None):
 @capability("operations", "write")
 @fnrun.command()
 @format_option
-@click.option("--fnrun", required=True, help="ID of the function run to recover.")
+@click.option(
+    "--fnrun", type=FNRUN_ID, required=True, help="ID of the function run to recover."
+)
 @wait_option("the recovered transaction")
 @timeout_option()
 @click.pass_context
@@ -341,9 +342,7 @@ def recover(ctx: click.Context, fnrun: str, wait: bool, timeout: float | None):
     failed or on-hold function runs are re-scheduled, each re-running its
     pinned function version and that version's latest patch.
     """
-    require_id("--fnrun", fnrun, FNRUN_ID_HINT)
     require_wait(wait, timeout)
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         span_projects(server)
@@ -371,7 +370,9 @@ def recover(ctx: click.Context, fnrun: str, wait: bool, timeout: float | None):
 
 @capability("analytics", "read")
 @fnrun.command()
-@click.option("--fnrun", required=True, help="ID of the function run to diagnose.")
+@click.option(
+    "--fnrun", type=FNRUN_ID, required=True, help="ID of the function run to diagnose."
+)
 @diagnose_options
 @format_option
 @click.pass_context
@@ -382,8 +383,6 @@ def diagnose(ctx: click.Context, fnrun: str, log_lines: int, no_logs: bool):
     failed runs that block it. Exits 0 whenever the diagnosis is produced; a
     function run that is not found exits 5.
     """
-    require_id("--fnrun", fnrun, FNRUN_ID_HINT)
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         span_projects(server)

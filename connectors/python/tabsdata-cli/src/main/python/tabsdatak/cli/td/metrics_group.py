@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkGroup
 from tabsdatak.cli._errors import TdkException
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
@@ -21,7 +22,6 @@ from tabsdatak.cli.cli_utils import (
     render,
     resolve_all_projects,
     split_csv,
-    verify_login_or_prompt,
     view_options,
 )
 from tabsdatak.common._tabular import Column, Kind, TableView
@@ -153,7 +153,7 @@ def _summary_view(data: dict, scope: list, unit: str, spanning: bool) -> TableVi
 
 
 @cli_command
-@click.group()
+@click.group(cls=TdkGroup)
 def metrics():
     """Operational metrics over a window."""
 
@@ -249,7 +249,6 @@ def show(
     when any non-zero). Edges are dropped from the rendering — they
     belong in a flow visualization; use `-o json` for the raw shape.
     """
-    verify_login_or_prompt(ctx)
     try:
         spanning = resolve_all_projects(ctx, all_projects)
         server: TabsdataServer = ctx.obj["tabsdataserver"]
@@ -342,7 +341,6 @@ def inflight(
     """Point-in-time `/inflight` — non-terminal LFRs per
     (collection, group, status).
     """
-    verify_login_or_prompt(ctx)
     try:
         spanning = resolve_all_projects(ctx, all_projects)
         server: TabsdataServer = ctx.obj["tabsdataserver"]

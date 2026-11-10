@@ -17,6 +17,7 @@ from rich.table import Table
 from tabsdatak.cli._errors import TdkException
 from tabsdatak.cli._machine import machine
 from tabsdatak.cli.cli_utils import (
+    IdType,
     beautify_time,
     collection_label,
     is_valid_id,
@@ -63,6 +64,10 @@ PLAN_ID_HINT = "'tdk plan list' lists plan ids; 'tdk fn trigger' prints one."
 TRX_ID_HINT = "'tdk trx list' lists transaction ids."
 FNRUN_ID_HINT = "'tdk fnrun list' lists function run ids."
 WORKER_ID_HINT = "'tdk worker list' and 'tdk plan get --plan PLAN' list worker ids."
+PLAN_ID = IdType(PLAN_ID_HINT)
+TRX_ID = IdType(TRX_ID_HINT)
+FNRUN_ID = IdType(FNRUN_ID_HINT)
+WORKER_ID = IdType(WORKER_ID_HINT)
 
 
 _STATUSES = {

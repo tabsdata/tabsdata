@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkGroup
 from tabsdatak.cli._errors import TdkException
 from tabsdatak.cli._examples import (
     FUNCTION_KINDS,
@@ -67,7 +68,7 @@ def _open_new(path: str | Path, mode: str, **kwargs):
 
 
 @cli_command
-@click.group()
+@click.group(cls=TdkGroup)
 def examples():
     """Curated function examples and example projects"""
 
@@ -101,7 +102,7 @@ def _examples_view(rows: list[dict]) -> TableView:
 
 
 @capability("knowledge", "read")
-@examples.command("list")
+@examples.command("list", login=False)
 @click.option("--kind", type=click.Choice(KINDS), help="Only examples of this kind.")
 @click.option(
     "--connector",
@@ -135,7 +136,7 @@ def _echo_files(files: list[dict], banner: bool) -> None:
 
 
 @capability("knowledge", "read")
-@examples.command()
+@examples.command(login=False)
 @click.option(
     "--name",
     "-n",
@@ -156,7 +157,7 @@ def show(ctx: click.Context, name: str):
 
 
 @capability("knowledge", "read")
-@examples.command()
+@examples.command(login=False)
 @click.option(
     "--name",
     "-n",
@@ -284,7 +285,7 @@ def _extract_project(ctx: click.Context, example: Example, target: Path) -> None
 
 
 @capability("knowledge", "read", "write", paths={"--dir": "write"})
-@examples.command()
+@examples.command(login=False)
 @format_option
 @click.option(
     "--name",
@@ -315,7 +316,7 @@ def extract(ctx: click.Context, name: str, dir_: str):
 
 
 @capability("development", "read", paths={"--file": "write"})
-@examples.command()
+@examples.command(login=False)
 @format_option
 @view_options()
 @click.option(

@@ -12,7 +12,9 @@ from typing import TYPE_CHECKING
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkGroup
 from tabsdatak.cli._errors import ClassifiedException, TdkException, classify
+from tabsdatak.cli._prompted import pinned, prompted
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli._space import OUT_OF_SPACE, room
 from tabsdatak.cli.cli_utils import (
@@ -27,7 +29,6 @@ from tabsdatak.cli.cli_utils import (
     hint_common_solutions,
     list_options,
     list_params,
-    logical_prompt,
     max_result_option,
     present,
     progress,
@@ -36,16 +37,14 @@ from tabsdatak.cli.cli_utils import (
     render_deleted,
     render_done,
     render_list,
-    require_id,
     require_word,
     split_csv,
     tabular,
     take,
-    verify_login_or_prompt,
     view_options,
 )
-from tabsdatak.cli.td.execution_utils import TRX_ID_HINT
-from tabsdatak.cli.td.project_group import TOPOLOGY_VERSION_HINT, topology_options
+from tabsdatak.cli.td.execution_utils import TRX_ID
+from tabsdatak.cli.td.project_group import topology_options
 from tabsdatak.cli.td.tag_commands import tag_group
 from tabsdatak.common._tabular import Column, Kind, RecordView, TableView
 from tabsdatak.sdk.status_utils.groups import Entity, annotate
@@ -61,6 +60,13 @@ _TABLE_STATUS_LABELS = {"A": "Active", "F": "Frozen", "D": "Deleted"}
 
 TABLE_DATA_MAX_WIDTH = 128
 TABLE_DATA_PLACEHOLDER = "null"
+
+
+_TABLE_COLL_PROMPT = "Name of the collection to which the table belongs"
+_TABLE_COLL_HINT = (
+    "Pass --coll. 'tdk table list --filter name:eq:<name>' shows the table's "
+    "collection."
+)
 
 
 def _size_mb(data_bytes) -> str | None:
@@ -156,7 +162,7 @@ def table_data_view(
 
 
 @cli_command
-@click.group()
+@click.group(cls=TdkGroup)
 def table():
     """Table management commands"""
 
@@ -165,14 +171,15 @@ def table():
 @table.command()
 @proj_option
 @format_option
-@click.option(
-    "--name",
-    "-n",
-    help="Name of the table to be deleted.",
+@prompted(
+    "--name", "-n", prompt="Name of the table", help="Name of the table to be deleted."
 )
-@click.option(
+@prompted(
     "--coll",
     "-c",
+    prompt=_TABLE_COLL_PROMPT,
+    default=pinned("collection"),
+    hint=_TABLE_COLL_HINT,
     help="Name of the collection to which the table belongs.",
 )
 @click.option(
@@ -182,8 +189,6 @@ def table():
 @click.pass_context
 def delete(ctx: click.Context, name: str, coll: str, confirm: str):
     """Delete a table"""
-    verify_login_or_prompt(ctx)
-    coll, name = _resolve_table(ctx, coll, name)
     progress(ctx, f"Deleting table '{name}' in collection '{coll}'")
     progress(ctx, "-" * 10)
     require_word(ctx, confirm, "delete", "Please type 'delete' to confirm deletion")
@@ -206,26 +211,24 @@ def delete(ctx: click.Context, name: str, coll: str, confirm: str):
 @capability("analytics", "read", "write", paths={"--file": "write"})
 @table.command()
 @proj_option
-@click.option(
-    "--name",
-    "-n",
-    help="Name of the table.",
+@prompted(
+    "--file",
+    prompt="File in which the table will be stored",
+    help="File in which the table will be stored. Can be an absolute or a relative "
+    "path. Any directory that appears must already exist (it will not be created "
+    "as part of the download).",
+    type=click.Path(),
 )
-@click.option(
+@prompted("--name", "-n", prompt="Name of the table", help="Name of the table.")
+@prompted(
     "--coll",
     "-c",
+    prompt=_TABLE_COLL_PROMPT,
+    default=pinned("collection"),
+    hint=_TABLE_COLL_HINT,
     help="Name of the collection to which the table belongs.",
 )
 @format_option
-@click.option(
-    "--file",
-    help=(
-        "File in which the table will be stored. Can be an absolute or a relative "
-        "path. Any directory that appears must already exist (it will not be created "
-        "as part of the download)."
-    ),
-    type=click.Path(),
-)
 @click.option(
     "--at",
     help=(
@@ -249,7 +252,7 @@ def delete(ctx: click.Context, name: str, coll: str, confirm: str):
         "ID of a transaction. If provided, the table values at the end of the given "
         "transaction will be shown."
     ),
-    type=str,
+    type=TRX_ID,
     cls=MutuallyExclusiveOption,
     mutually_exclusive=["at", "version"],
 )
@@ -274,12 +277,6 @@ def download(
     version: str,
 ):
     """Download the table as a parquet file"""
-    require_id("--at-trx", at_trx, TRX_ID_HINT)
-    verify_login_or_prompt(ctx)
-    file = file or logical_prompt(
-        ctx, "File in which the table will be stored", option="--file"
-    )
-    coll, name = _resolve_table(ctx, coll, name)
     progress(ctx, f"Downloading table to file '{file}'")
     progress(ctx, "-" * 10)
     try:
@@ -363,7 +360,7 @@ def download(
         "ID of a transaction. If provided, the tables as they were at the end of "
         "the given transaction will be listed."
     ),
-    type=str,
+    type=TRX_ID,
     cls=MutuallyExclusiveOption,
     mutually_exclusive=["at"],
 )
@@ -380,8 +377,6 @@ def list_tables(
     at_trx: str,
 ):
     """List the tables of a collection, or of the whole project"""
-    require_id("--at-trx", at_trx, TRX_ID_HINT)
-    verify_login_or_prompt(ctx)
     coll = coll or get_currently_pinned_object(ctx, "collection")
     if coll is None and (at or at_trx):
         raise click.UsageError(
@@ -449,14 +444,13 @@ def list_tables(
 @capability("analytics", "read", paths={"--file": "write"})
 @table.command()
 @proj_option
-@click.option(
-    "--name",
-    "-n",
-    help="Name of the table.",
-)
-@click.option(
+@prompted("--name", "-n", prompt="Name of the table", help="Name of the table.")
+@prompted(
     "--coll",
     "-c",
+    prompt=_TABLE_COLL_PROMPT,
+    default=pinned("collection"),
+    hint=_TABLE_COLL_HINT,
     help="Name of the collection to which the table belongs.",
 )
 @click.option(
@@ -508,7 +502,7 @@ def list_tables(
         "ID of a transaction. If provided, the table values at the end of the given "
         "transaction will be shown."
     ),
-    type=str,
+    type=TRX_ID,
     cls=MutuallyExclusiveOption,
     mutually_exclusive=["at", "version"],
 )
@@ -568,9 +562,6 @@ def data(
         chosen = ctx.obj.setdefault(VIEW_OPTIONS, {})
         if chosen.get("max_width") is None:
             chosen["max_width"] = 0
-    require_id("--at-trx", at_trx, TRX_ID_HINT)
-    verify_login_or_prompt(ctx)
-    coll, name = _resolve_table(ctx, coll, name)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         table_data = server.sample_table(
@@ -624,14 +615,13 @@ def data(
 @capability("analytics", "read")
 @table.command()
 @proj_option
-@click.option(
-    "--name",
-    "-n",
-    help="Name of the table.",
-)
-@click.option(
+@prompted("--name", "-n", prompt="Name of the table", help="Name of the table.")
+@prompted(
     "--coll",
     "-c",
+    prompt=_TABLE_COLL_PROMPT,
+    default=pinned("collection"),
+    hint=_TABLE_COLL_HINT,
     help="Name of the collection to which the table belongs.",
 )
 @click.option(
@@ -657,7 +647,7 @@ def data(
         "ID of a transaction. If provided, the table values at the end of the given "
         "transaction will be shown."
     ),
-    type=str,
+    type=TRX_ID,
     cls=MutuallyExclusiveOption,
     mutually_exclusive=["at", "version"],
 )
@@ -693,9 +683,6 @@ def schema(
     extra_cols: str,
 ):
     """Show table schema"""
-    require_id("--at-trx", at_trx, TRX_ID_HINT)
-    verify_login_or_prompt(ctx)
-    coll, name = _resolve_table(ctx, coll, name)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         table_schema = server.get_table_schema(
@@ -731,15 +718,19 @@ def schema(
 @capability("analytics", "read")
 @table.command()
 @proj_option
-@click.option(
-    "--coll",
-    "-c",
-    help="Name of the collection to which the data belongs.",
-)
-@click.option(
+@prompted(
     "--name",
     "-n",
+    prompt="Name of the table",
     help="The name of the table to which the data belongs.",
+)
+@prompted(
+    "--coll",
+    "-c",
+    prompt=_TABLE_COLL_PROMPT,
+    default=pinned("collection"),
+    hint=_TABLE_COLL_HINT,
+    help="Name of the collection to which the data belongs.",
 )
 @format_option
 @view_options()
@@ -750,8 +741,6 @@ def versions(ctx: click.Context, coll: str, name: str):
     """
     List all versions of the data of a table.
     """
-    verify_login_or_prompt(ctx)
-    coll, name = _resolve_table(ctx, coll, name)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         # /data-versions returns all statuses; the CLI lists committed only.
@@ -836,6 +825,7 @@ def _pin_options(fn):
         ),
         click.option(
             "--at-trx",
+            type=TRX_ID,
             help=_AT_TRX_HELP,
             cls=MutuallyExclusiveOption,
             mutually_exclusive=["at", "version"],
@@ -853,33 +843,18 @@ def _pin_options(fn):
 
 def _table_options(fn):
     for option in (
-        click.option(
+        prompted(
             "--coll",
             "-c",
+            prompt=_TABLE_COLL_PROMPT,
+            default=pinned("collection"),
+            hint=_TABLE_COLL_HINT,
             help="Name of the collection to which the table belongs.",
         ),
-        click.option("--name", "-n", help="Name of the table."),
+        prompted("--name", "-n", prompt="Name of the table", help="Name of the table."),
     ):
         fn = option(fn)
     return fn
-
-
-def _resolve_table(ctx: click.Context, coll: str | None, name: str | None):
-    name = name or logical_prompt(ctx, "Name of the table", option="--name")
-    coll = (
-        coll
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(
-            ctx,
-            "Name of the collection to which the table belongs",
-            option="--coll",
-            hint=(
-                "Pass --coll. 'tdk table list --filter name:eq:<name>' shows the "
-                "table's collection."
-            ),
-        )
-    )
-    return coll, name
 
 
 def _sdk_table(ctx: click.Context, coll: str, name: str):
@@ -916,9 +891,6 @@ def stats(
     version: str,
 ):
     """Show the size and schema of a table"""
-    require_id("--at-trx", at_trx, TRX_ID_HINT)
-    verify_login_or_prompt(ctx)
-    coll, name = _resolve_table(ctx, coll, name)
     try:
         document = _sdk_table(ctx, coll, name).stats(
             version=version, at=at, at_trx=at_trx
@@ -1001,9 +973,6 @@ def profile(
     Exact by default: the server aggregates the whole data version. When the
     version is too large or the query times out, or with '--approx', the stats
     come from random windows and 'approximate' says so"""
-    require_id("--at-trx", at_trx, TRX_ID_HINT)
-    verify_login_or_prompt(ctx)
-    coll, name = _resolve_table(ctx, coll, name)
     selected = split_csv(columns) if columns else None
     from tabsdatak.sdk._tables import UnknownColumn
 
@@ -1100,9 +1069,6 @@ def flow(
     include_system: bool,
 ):
     """Show the functions and tables upstream and downstream of a table"""
-    require_id("--topology-version", topology_version, TOPOLOGY_VERSION_HINT)
-    verify_login_or_prompt(ctx)
-    coll, name = _resolve_table(ctx, coll, name)
     try:
         document = _sdk_table(ctx, coll, name).flow(
             direction=direction,
@@ -1212,12 +1178,10 @@ def diff(
 
     With no '--from' or '--against', lists the schema changes over the
     committed data versions, newest first"""
-    verify_login_or_prompt(ctx)
     if to_version and not from_version:
         raise click.UsageError("'--to' needs '--from'.")
     if version and not against:
         raise click.UsageError("'--version' needs '--against'.")
-    coll, name = _resolve_table(ctx, coll, name)
     try:
         subject = _sdk_table(ctx, coll, name)
         if against:

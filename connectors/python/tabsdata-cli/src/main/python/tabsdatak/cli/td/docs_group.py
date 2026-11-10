@@ -8,6 +8,7 @@ introspected from the live objects (no server call)."""
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkGroup
 from tabsdatak.cli._docs._catalog import (
     CATEGORIES,
     AmbiguousSymbol,
@@ -16,10 +17,10 @@ from tabsdatak.cli._docs._catalog import (
 )
 from tabsdatak.cli._docs._render import markdown
 from tabsdatak.cli._errors import TdkException
+from tabsdatak.cli._prompted import prompted
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     format_option,
-    logical_prompt,
     max_result_option,
     output_format,
     render,
@@ -37,7 +38,7 @@ _category_option = click.option(
 
 
 @cli_command
-@click.group()
+@click.group(cls=TdkGroup)
 def docs():
     """SDK reference: show a symbol's page, list and search the symbols"""
 
@@ -65,22 +66,20 @@ def _brief_view(context, entries) -> TableView:
 
 
 @capability("knowledge", "read")
-@docs.command()
-@click.option(
+@docs.command(login=False)
+@prompted(
     "--name",
     "-n",
     "symbol",
-    help=(
-        "Symbol whose page to show: a qualified or bare name, a 'Class.member', "
-        "or a connection type id. Will be prompted for it if not provided."
-    ),
+    prompt="Symbol to show",
+    help="Symbol whose page to show: a qualified or bare name, a 'Class.member', "
+    "or a connection type id. Will be prompted for it if not provided.",
 )
 @_category_option
 @format_option
 @click.pass_context
 def show(ctx: click.Context, symbol: str | None, category: str | None):
     """Show the reference page of a symbol"""
-    symbol = symbol or logical_prompt(ctx, "Symbol to show", option="--name")
     try:
         entry = _catalog(category).resolve(symbol)
     except AmbiguousSymbol as error:
@@ -118,6 +117,7 @@ def _render_entries(ctx: click.Context, context, entries) -> None:
 
 @capability("knowledge", "read")
 @docs.command("list")
+@docs.command("list", login=False)
 @_category_option
 @max_result_option
 @format_option
@@ -130,14 +130,13 @@ def list_(ctx: click.Context, category: str | None):
 
 
 @capability("knowledge", "read")
-@docs.command()
-@click.option(
+@docs.command(login=False)
+@prompted(
     "--query",
     "-q",
-    help=(
-        "Words to find in symbol names, qualified names and summaries. Will be "
-        "prompted for it if not provided."
-    ),
+    prompt="Words to search for",
+    help="Words to find in symbol names, qualified names and summaries. Will be "
+    "prompted for it if not provided.",
 )
 @_category_option
 @max_result_option
@@ -146,6 +145,5 @@ def list_(ctx: click.Context, category: str | None):
 @click.pass_context
 def search(ctx: click.Context, query: str | None, category: str | None):
     """Search symbol names, qualified names and summaries, best first"""
-    query = query or logical_prompt(ctx, "Words to search for", option="--query")
     context = [("Query", query)] + ([("Category", category)] if category else [])
     _render_entries(ctx, context, _catalog(category).search(query))

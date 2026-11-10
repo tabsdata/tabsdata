@@ -7,6 +7,7 @@
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkCommand
 from tabsdatak.cli._doctor import CHECKS, FAIL, Probe, run_checks
 from tabsdatak.cli._errors import TdkException
 from tabsdatak.cli._registry import cli_command
@@ -40,7 +41,7 @@ def checks_view(results: list[dict]) -> TableView:
 
 @capability("development", "read")
 @cli_command
-@click.command()
+@click.command(cls=TdkCommand, login=False)
 @click.option(
     "--check",
     "checks",

@@ -122,11 +122,23 @@ def is_valid_id(possible_id: str) -> bool:
     return bool(id_pattern.match(possible_id))
 
 
-def require_id(option: str, value: str | None, hint: str) -> None:
-    """Fail as a usage error, before any request, when ``value`` is not an id;
-    ``hint`` says where the id comes from."""
-    if value is not None and not is_valid_id(value):
-        raise TdkException("usage", f"'{option} {value}' is not an id.", hint=hint)
+class IdType(click.ParamType):
+    """An id, checked as the option is read, so a malformed one is a usage
+    error before the command asks for or does anything; ``hint`` says where
+    ids come from."""
+
+    name = "text"
+
+    def __init__(self, hint: str):
+        self.hint = hint
+
+    def convert(self, value, param, ctx):
+        if not is_valid_id(value):
+            flag = max(param.opts, key=len) if param is not None else "value"
+            raise TdkException(
+                "usage", f"'{flag} {value}' is not an id.", hint=self.hint
+            )
+        return value
 
 
 def beautify_list(list_to_show) -> str:
@@ -1224,10 +1236,11 @@ def more_results_message(ctx: click.Context) -> str:
 
 
 def verify_login_or_prompt(ctx: click.Context):
-    """Settle what every command needs before it runs: a logged-in connection
-    and, for a project-scoped command, an active project. Commands call it as
-    their first statement, so the project is asked for ahead of the collection,
-    function or table it scopes."""
+    """Settle what a command runs against: a logged-in connection and, for a
+    project-scoped command, an active project. Every command declared with a
+    login settles it when it runs, before anything is asked
+    (:mod:`tabsdatak.cli._command`); one declared ``login=False`` calls it on
+    the paths that need the server."""
     if not ctx.obj["tabsdataserver"]:
         if ctx.obj.get("no_prompt"):
             raise TdkException(

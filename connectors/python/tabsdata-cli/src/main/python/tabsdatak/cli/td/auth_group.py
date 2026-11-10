@@ -10,11 +10,13 @@ from pathlib import Path
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkGroup
 from tabsdatak.cli._credentials import (
     SERVICE_TOKEN,
     credential_kind,
     ensure_stateful,
 )
+from tabsdatak.cli._prompted import prompted
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     deprecated_option,
@@ -25,7 +27,6 @@ from tabsdatak.cli.cli_utils import (
     render,
     render_done,
     render_list,
-    verify_login_or_prompt,
     view_options,
 )
 from tabsdatak.common._datetime import _convert_timestamp_to_string
@@ -33,17 +34,18 @@ from tabsdatak.common._tabular import Column, Kind, RecordView, TableView
 
 
 @cli_command
-@click.group()
+@click.group(cls=TdkGroup)
 def auth():
     """User session management commands"""
 
 
 @capability("session", "write", "read", paths={"--pem": "read"})
-@auth.command()
+@auth.command(login=False)
 @format_option
-@click.option("--server", "-s", help="Tabsdata Server URL")
-@click.option(
+@prompted("--server", "-s", prompt="Tabsdata Server URL", help="Tabsdata Server URL")
+@prompted(
     "--pem",
+    prompt="Path to the certificate PEM file",
     help="Path to the certificate PEM file, or '-' to read it from stdin.",
     type=click.Path(allow_dash=True),
 )
@@ -62,8 +64,6 @@ def add_cert(ctx: click.Context, server: str, pem: str):
         _obtain_certificate_file_path,
     )
 
-    server = server or logical_prompt(ctx, "Tabsdata Server URL", option="--server")
-    pem = pem or logical_prompt(ctx, "Path to the certificate PEM file", option="--pem")
     progress(ctx, "Adding certificate")
     progress(ctx, "-" * 10)
     try:
@@ -93,9 +93,9 @@ def add_cert(ctx: click.Context, server: str, pem: str):
 
 
 @capability("session", "write")
-@auth.command()
+@auth.command(login=False)
 @format_option
-@click.option("--server", "-s", help="Tabsdata Server URL")
+@prompted("--server", "-s", prompt="Tabsdata Server URL", help="Tabsdata Server URL")
 @click.pass_context
 def delete_cert(ctx: click.Context, server: str):
     """Delete a certificate for a Tabsdata Server"""
@@ -107,7 +107,6 @@ def delete_cert(ctx: click.Context, server: str):
         _obtain_certificate_file_path,
     )
 
-    server = server or logical_prompt(ctx, "Tabsdata Server URL", option="--server")
     progress(ctx, "Deleting certificate")
     progress(ctx, "-" * 10)
     try:
@@ -144,7 +143,6 @@ def delete_cert(ctx: click.Context, server: str):
 @click.pass_context
 def info(ctx: click.Context):
     """Display information of the currently authenticated user"""
-    verify_login_or_prompt(ctx)
     try:
         server = ctx.obj["tabsdataserver"]
         info = {
@@ -172,11 +170,12 @@ def info(ctx: click.Context):
 
 
 @capability("session", "write", credential="session", interactive=True)
-@auth.command()
+@auth.command(login=False)
 @click.argument("server-url")
-@click.option(
+@prompted(
     "--user",
     "-u",
+    prompt="Username for the Tabsdata Server",
     help="Username for the Tabsdata Server. Will be prompted for it if not provided.",
 )
 @click.option(
@@ -217,9 +216,6 @@ def password_change(
 ):
     """Change the password of a user in a Tabsdata Server"""
     new_password = new_password or new_password_short
-    user = user or logical_prompt(
-        ctx, "Username for the Tabsdata Server", option="--user"
-    )
     password = old_password or logical_prompt(
         ctx,
         "Old password",
@@ -295,7 +291,6 @@ def service_token_create(
     The token is shown once, here, and cannot be recovered afterwards: the
     server keeps only a SHA-256 digest of it.
     """
-    verify_login_or_prompt(ctx)
     slot = slot or _whole_number(ctx, "Slot to fill (1 or 2)", "--slot")
     if expires_in_days is None:
         expires_in_days = _whole_number(
@@ -339,7 +334,6 @@ def service_token_list(ctx: click.Context):
     `Last used` has a resolution of ten minutes, which is what the rotation
     runbook needs to tell a retired token from one still in production.
     """
-    verify_login_or_prompt(ctx)
     try:
         tokens = ctx.obj["tabsdataserver"].list_service_tokens()
 
@@ -384,7 +378,6 @@ def service_token_revoke(ctx: click.Context, slot: int):
     The slot becomes free for the next rotation, and the token stops working
     immediately.
     """
-    verify_login_or_prompt(ctx)
     slot = slot or _whole_number(ctx, "Slot to revoke (1 or 2)", "--slot")
     try:
         ctx.obj["tabsdataserver"].revoke_service_token(slot)

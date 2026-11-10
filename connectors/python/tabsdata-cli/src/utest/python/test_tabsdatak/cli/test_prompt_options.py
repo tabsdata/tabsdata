@@ -66,7 +66,7 @@ def _option(call: ast.Call) -> ast.expr | None:
 
 def test_the_walk_finds_the_prompts():
     modules = {module for module, _, _ in _prompts()}
-    assert {"cli_utils", "connection_group", "fn_group", "table_group"} <= modules
+    assert {"_prompted", "cli_utils", "connection_group", "fn_group"} <= modules
 
 
 def test_every_prompt_names_its_option():

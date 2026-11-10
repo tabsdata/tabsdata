@@ -55,12 +55,20 @@ def cli_command(command: "click.Command") -> "click.Command":
     decorated object is the built Click command::
 
         @cli_command
-        @click.group()
+        @click.group(cls=TdkGroup)
         def auth():
             ...
 
-    Returns the command unchanged so it stays usable directly.
+    Returns the command unchanged so it stays usable directly. It must be a
+    :class:`tabsdatak.cli._command.TdkCommand` or ``TdkGroup``, which settle
+    the login and project before anything is asked.
     """
+    from tabsdatak.cli._command import TdkCommand, TdkGroup
+
+    if not isinstance(command, (TdkCommand, TdkGroup)):
+        raise TypeError(
+            f"'{command.name}' must be built with cls=TdkCommand or cls=TdkGroup."
+        )
     _CLI_COMMAND_REGISTRY.append(command)
     return command
 

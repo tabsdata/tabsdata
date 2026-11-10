@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkGroup
+from tabsdatak.cli._prompted import prompted
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     ancestry,
@@ -16,7 +18,6 @@ from tabsdatak.cli.cli_utils import (
     hint_common_solutions,
     list_options,
     list_params,
-    logical_prompt,
     max_result_option,
     present,
     progress,
@@ -27,7 +28,6 @@ from tabsdatak.cli.cli_utils import (
     render_list,
     require_word,
     take,
-    verify_login_or_prompt,
     view_options,
 )
 from tabsdatak.cli.td.tag_commands import tag_group, tags_of, tags_text
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 
 
 @cli_command
-@click.group()
+@click.group(cls=TdkGroup)
 def group():
     """Group management commands"""
 
@@ -47,13 +47,16 @@ def group():
 @group.command()
 @proj_option
 @format_option
-@click.option("--name", "-n", help="Name of the group to create.")
+@prompted(
+    "--name",
+    "-n",
+    prompt="Name of the group to create",
+    help="Name of the group to create.",
+)
 @click.option("--description", help="Description of the group.")
 @click.pass_context
 def create(ctx: click.Context, name: str, description: str):
     """Create a new group"""
-    verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the group to create", option="--name")
     description = description or ""
     progress(ctx, "Creating a new group")
     progress(ctx, "-" * 10)
@@ -72,7 +75,12 @@ def create(ctx: click.Context, name: str, description: str):
 @group.command()
 @proj_option
 @format_option
-@click.option("--name", "-n", help="Name of the group to delete.")
+@prompted(
+    "--name",
+    "-n",
+    prompt="Name of the group to delete",
+    help="Name of the group to delete.",
+)
 @click.option(
     "--confirm",
     help="Write 'delete' to confirm deletion. Will be prompted for it if not provided.",
@@ -80,8 +88,6 @@ def create(ctx: click.Context, name: str, description: str):
 @click.pass_context
 def delete(ctx: click.Context, name: str, confirm: str):
     """Delete a group by name. System groups cannot be deleted."""
-    verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the group to delete", option="--name")
     progress(ctx, f"Deleting group: {name}")
     progress(ctx, "-" * 10)
     require_word(ctx, confirm, "delete", "Please type 'delete' to confirm deletion")
@@ -105,12 +111,15 @@ def delete(ctx: click.Context, name: str, confirm: str):
 @proj_option
 @format_option
 @view_options()
-@click.option("--name", "-n", help="Name of the group to display.")
+@prompted(
+    "--name",
+    "-n",
+    prompt="Name of the group to display",
+    help="Name of the group to display.",
+)
 @click.pass_context
 def get(ctx: click.Context, name: str):
     """Display a group by name"""
-    verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the group to display", option="--name")
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         grp = server.get_group(name)
@@ -151,7 +160,6 @@ def get(ctx: click.Context, name: str):
 @click.pass_context
 def list_groups(ctx: click.Context):
     """List all groups"""
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         list_of_groups, truncated = take(
@@ -195,7 +203,12 @@ def list_groups(ctx: click.Context):
 @group.command()
 @proj_option
 @format_option
-@click.option("--name", "-n", help="Name of the group to update.")
+@prompted(
+    "--name",
+    "-n",
+    prompt="Name of the group to update",
+    help="Name of the group to update.",
+)
 @click.option("--new-name", help="New name for the group.")
 @click.option("--description", help="New description for the group.")
 @click.pass_context
@@ -206,8 +219,6 @@ def update(
     description: str,
 ):
     """Update a group by name. System groups cannot be updated."""
-    verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the group to update", option="--name")
     progress(ctx, f"Updating group: {name}")
     progress(ctx, "-" * 10)
     try:

@@ -17,6 +17,7 @@ import pytest
 import rich_click as click
 
 from tabsdatak.cli import _registry
+from tabsdatak.cli._command import TdkGroup
 from tabsdatak.cli._registry import (
     _CLI_COMMAND_REGISTRY,
     cli_command,
@@ -54,7 +55,7 @@ def test_cli_command_registers_and_returns_unchanged():
     before = len(_CLI_COMMAND_REGISTRY)
 
     @cli_command
-    @click.group(name="probe")
+    @click.group(name="probe", cls=TdkGroup)
     def probe():
         """throwaway group used only to assert registration"""
 
@@ -69,7 +70,7 @@ def test_cli_command_registers_and_returns_unchanged():
 
 def test_collect_includes_registered_commands():
     @cli_command
-    @click.group(name="probe2")
+    @click.group(name="probe2", cls=TdkGroup)
     def probe2():
         """throwaway"""
 
@@ -77,6 +78,15 @@ def test_collect_includes_registered_commands():
         assert probe2 in collect_cli_commands()
     finally:
         _CLI_COMMAND_REGISTRY.remove(probe2)
+
+
+def test_cli_command_refuses_a_command_without_the_tdk_classes():
+    with pytest.raises(TypeError, match="cls=TdkCommand or cls=TdkGroup"):
+
+        @cli_command
+        @click.group(name="plain")
+        def plain():
+            """throwaway"""
 
 
 @pytest.mark.parametrize(

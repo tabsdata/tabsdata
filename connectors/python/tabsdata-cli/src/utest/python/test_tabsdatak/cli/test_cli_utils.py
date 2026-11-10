@@ -20,6 +20,7 @@ import sys
 import textwrap
 
 import pytest
+import rich_click as click
 
 from tabsdatak.cli import cli_utils
 
@@ -80,16 +81,18 @@ def test_is_valid_id_rejects_bad_inputs(bad):
     assert cli_utils.is_valid_id(bad) is False
 
 
-def test_require_id_passes_ids_and_absent_values():
-    cli_utils.require_id("--plan", "ep20260930-2", "hint")
-    cli_utils.require_id("--plan", None, "hint")
+def test_an_id_option_takes_ids():
+    assert cli_utils.IdType("hint").convert("ep20260930-2", None, None) == (
+        "ep20260930-2"
+    )
 
 
-def test_require_id_fails_as_usage_with_the_hint():
+def test_an_id_option_fails_as_usage_with_the_hint():
     from tabsdatak.cli._errors import ExitCode, TdkException
 
+    param = click.Option(["--worker"])
     with pytest.raises(TdkException) as raised:
-        cli_utils.require_id("--worker", "3", "'tdk worker list' lists them.")
+        cli_utils.IdType("'tdk worker list' lists them.").convert("3", param, None)
     assert raised.value.exit_code == ExitCode.USAGE
     assert raised.value.error.message == "'--worker 3' is not an id."
     assert raised.value.error.hint == "'tdk worker list' lists them."

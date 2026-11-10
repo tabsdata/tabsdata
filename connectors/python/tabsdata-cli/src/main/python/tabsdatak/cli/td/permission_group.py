@@ -9,17 +9,17 @@ from typing import TYPE_CHECKING
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkGroup
+from tabsdatak.cli._prompted import prompted
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     MutuallyExclusiveOption,
     format_option,
     hint_common_solutions,
-    logical_prompt,
     present,
     progress,
     render_done,
     render_list,
-    verify_login_or_prompt,
     view_options,
 )
 from tabsdatak.common._tabular import Column, Kind, TableView
@@ -68,7 +68,7 @@ def _validate_permission(perm: str, project: str) -> None:
 
 
 @cli_command
-@click.group()
+@click.group(cls=TdkGroup)
 def permission():
     """Permission management commands (Simple Security Mode)"""
 
@@ -76,21 +76,22 @@ def permission():
 @capability("admin", "write", credential="session")
 @permission.command()
 @format_option
-@click.option(
+@prompted(
     "--user",
     "-u",
+    prompt="User to grant the permission to",
     help="User to grant the permission to.",
 )
-@click.option(
+@prompted(
     "--permission",
-    help=(
-        "Permission to grant. Valid values are "
-        f"{', '.join(VALID_SIMPLE_PERMISSION_TYPES)}. The project-scoped "
-        "permissions ("
-        f"{', '.join(SIMPLE_PROJECT_PERMISSION_TYPES)}) require --proj; the "
-        "system-scoped ones ("
-        f"{', '.join(SIMPLE_SYSTEM_PERMISSION_TYPES)}) must not carry --proj."
-    ),
+    prompt="Permission to grant. Valid values are "
+    f"'{', '.join(VALID_SIMPLE_PERMISSION_TYPES)}'",
+    help="Permission to grant. Valid values are "
+    f"{', '.join(VALID_SIMPLE_PERMISSION_TYPES)}. The project-scoped "
+    "permissions ("
+    f"{', '.join(SIMPLE_PROJECT_PERMISSION_TYPES)}) require --proj; the "
+    "system-scoped ones ("
+    f"{', '.join(SIMPLE_SYSTEM_PERMISSION_TYPES)}) must not carry --proj.",
 )
 @click.option(
     "--proj",
@@ -104,16 +105,6 @@ def permission():
 @click.pass_context
 def grant(ctx: click.Context, user: str, permission: str, project: str):
     """Grant a permission to a user"""
-    verify_login_or_prompt(ctx)
-    user = user or logical_prompt(
-        ctx, "User to grant the permission to", option="--user"
-    )
-    permission = permission or logical_prompt(
-        ctx,
-        "Permission to grant. Valid values are "
-        f"'{', '.join(VALID_SIMPLE_PERMISSION_TYPES)}'",
-        option="--permission",
-    )
     _validate_permission(permission, project)
     try:
         if project:
@@ -143,21 +134,22 @@ def grant(ctx: click.Context, user: str, permission: str, project: str):
 @capability("admin", "destructive", credential="session")
 @permission.command()
 @format_option
-@click.option(
+@prompted(
     "--user",
     "-u",
+    prompt="User to revoke the permission from",
     help="User to revoke the permission from.",
 )
-@click.option(
+@prompted(
     "--permission",
-    help=(
-        "Permission to revoke. Valid values are "
-        f"{', '.join(VALID_SIMPLE_PERMISSION_TYPES)}. The project-scoped "
-        "permissions ("
-        f"{', '.join(SIMPLE_PROJECT_PERMISSION_TYPES)}) require --proj; the "
-        "system-scoped ones ("
-        f"{', '.join(SIMPLE_SYSTEM_PERMISSION_TYPES)}) must not carry --proj."
-    ),
+    prompt="Permission to revoke. Valid values are "
+    f"'{', '.join(VALID_SIMPLE_PERMISSION_TYPES)}'",
+    help="Permission to revoke. Valid values are "
+    f"{', '.join(VALID_SIMPLE_PERMISSION_TYPES)}. The project-scoped "
+    "permissions ("
+    f"{', '.join(SIMPLE_PROJECT_PERMISSION_TYPES)}) require --proj; the "
+    "system-scoped ones ("
+    f"{', '.join(SIMPLE_SYSTEM_PERMISSION_TYPES)}) must not carry --proj.",
 )
 @click.option(
     "--proj",
@@ -171,16 +163,6 @@ def grant(ctx: click.Context, user: str, permission: str, project: str):
 @click.pass_context
 def revoke(ctx: click.Context, user: str, permission: str, project: str):
     """Revoke a permission from a user"""
-    verify_login_or_prompt(ctx)
-    user = user or logical_prompt(
-        ctx, "User to revoke the permission from", option="--user"
-    )
-    permission = permission or logical_prompt(
-        ctx,
-        "Permission to revoke. Valid values are "
-        f"'{', '.join(VALID_SIMPLE_PERMISSION_TYPES)}'",
-        option="--permission",
-    )
     _validate_permission(permission, project)
     try:
         if project:
@@ -229,7 +211,6 @@ def revoke(ctx: click.Context, user: str, permission: str, project: str):
 @click.pass_context
 def list_permissions(ctx: click.Context, user: str, project: str):
     """List a user's permissions, or who has access to a project"""
-    verify_login_or_prompt(ctx)
     if not user and not project:
         raise click.ClickException(
             "Provide either --user (a user's effective permissions) or "

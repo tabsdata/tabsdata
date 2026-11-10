@@ -6,6 +6,8 @@
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkGroup
+from tabsdatak.cli._prompted import prompted
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     format_option,
@@ -22,14 +24,13 @@ from tabsdatak.cli.cli_utils import (
     render_list,
     require_word,
     take,
-    verify_login_or_prompt,
     view_options,
 )
 from tabsdatak.common._tabular import Column, Kind, RecordView, TableView
 
 
 @cli_command
-@click.group()
+@click.group(cls=TdkGroup)
 def user():
     """User management commands"""
 
@@ -37,7 +38,7 @@ def user():
 @capability("admin", "write", credential="session")
 @user.command()
 @format_option
-@click.option("--name", "-n", help="Name of the user to create.")
+@prompted("--name", "-n", prompt="Name of the user", help="Name of the user to create.")
 @click.option("--full-name", "-f", help="Full name of the user.")
 @click.option("--email", "-e", help="Email of the user.")
 @click.option(
@@ -56,10 +57,8 @@ def create(
     disabled: bool,
 ):
     """Create a new user"""
-    verify_login_or_prompt(ctx)
     progress(ctx, "Creating a new user")
     progress(ctx, "-" * 10)
-    name = name or logical_prompt(ctx, "Name of the user", option="--name")
     if password is None:
         password = logical_prompt(
             ctx, "Password for the user", hide_input=True, option="--password"
@@ -92,7 +91,12 @@ def create(
 @capability("admin", "destructive", credential="session")
 @user.command()
 @format_option
-@click.option("--name", "-n", help="Name of the user to delete.")
+@prompted(
+    "--name",
+    "-n",
+    prompt="Name of the user to delete",
+    help="Name of the user to delete.",
+)
 @click.option(
     "--confirm",
     help="Write 'delete' to confirm deletion. Will be prompted for it if not provided.",
@@ -100,8 +104,6 @@ def create(
 @click.pass_context
 def delete(ctx: click.Context, name: str, confirm: str):
     """Delete a user by name"""
-    verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the user to delete", option="--name")
     progress(ctx, f"Deleting user: {name}")
     progress(ctx, "-" * 10)
     require_word(ctx, confirm, "delete", "Please type 'delete' to confirm deletion")
@@ -117,12 +119,15 @@ def delete(ctx: click.Context, name: str, confirm: str):
 @user.command()
 @format_option
 @view_options()
-@click.option("--name", "-n", help="Name of the user to display.")
+@prompted(
+    "--name",
+    "-n",
+    prompt="Name of the user to display",
+    help="Name of the user to display.",
+)
 @click.pass_context
 def get(ctx: click.Context, name: str):
     """Display a user by name"""
-    verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the user to display", option="--name")
     try:
         user = ctx.obj["tabsdataserver"].get_user(name)
 
@@ -152,7 +157,6 @@ def get(ctx: click.Context, name: str):
 @click.pass_context
 def list_users(ctx: click.Context):
     """List all users"""
-    verify_login_or_prompt(ctx)
     try:
         list_of_users, truncated = take(
             ctx, ctx.obj["tabsdataserver"].list_users_generator(**list_params(ctx))
@@ -193,7 +197,12 @@ def list_users(ctx: click.Context):
 @capability("admin", "write", credential="session")
 @user.command()
 @format_option
-@click.option("--name", "-n", help="Name of the user to update.")
+@prompted(
+    "--name",
+    "-n",
+    prompt="Name of the user to update",
+    help="Name of the user to update.",
+)
 @click.option("--full-name", "-f", help="New full name of the user.")
 @click.option("--email", "-e", help="New email of the user.")
 @click.option("--password", "-p", help="New password for the user.")
@@ -213,8 +222,6 @@ def update(
     enabled: bool,
 ):
     """Update a user by name"""
-    verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the user to update", option="--name")
     progress(ctx, f"Updating user: {name}")
     progress(ctx, "-" * 10)
     try:

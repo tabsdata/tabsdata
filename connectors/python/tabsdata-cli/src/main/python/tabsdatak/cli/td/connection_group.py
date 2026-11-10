@@ -22,9 +22,12 @@ from typing import TYPE_CHECKING
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkGroup
 from tabsdatak.cli._errors import TdkException
+from tabsdatak.cli._prompted import pinned, prompted
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
+    IdType,
     all_projects_option,
     ancestry,
     command_failure,
@@ -40,7 +43,6 @@ from tabsdatak.cli.cli_utils import (
     proj_option,
     render,
     render_list,
-    require_id,
     resolve_all_projects,
     serialize,
     take,
@@ -60,13 +62,13 @@ if TYPE_CHECKING:
 
 
 @cli_command
-@click.group()
+@click.group(cls=TdkGroup)
 def connection():
     """Connection commands"""
 
 
 @capability("knowledge", "read")
-@connection.command()
+@connection.command(login=False)
 @format_option
 @view_options()
 @click.pass_context
@@ -94,10 +96,11 @@ def types(ctx):
 
 
 def _type_option(fn):
-    return click.option(
+    return prompted(
         "--type",
         "-t",
         "type_",
+        prompt="Connector type (see 'tdk connection types')",
         help="Connector type, e.g. 'mysql-sql-in', 's3-file-out'. "
         "See 'tdk connection types'.",
     )(fn)
@@ -107,9 +110,6 @@ def _resolve(ctx, type_):
     # noinspection PyProtectedMember
     from tabsdatak.cli import template
 
-    type_ = type_ or logical_prompt(
-        ctx, "Connector type (see 'tdk connection types')", option="--type"
-    )
     try:
         # Types are globally unique, so the direction is always inferred.
         return template.resolve_conn(type_, None)
@@ -136,7 +136,7 @@ def _emit(ctx, type_, document, file):
 # Named "template" explicitly: the function can't be called ``template`` without
 # shadowing the imported engine module.
 @capability("knowledge", "read", paths={"--file": "write"})
-@connection.command("template")
+@connection.command("template", login=False)
 @_type_option
 # JSON can't carry the template's "# accepts:" comments: ``-o json`` wraps the
 # YAML text as ``{"type", "file", "template"}``.
@@ -160,7 +160,7 @@ def template_(ctx, type_, file):
 
 
 @capability("development", "read", "read", paths={"--file": "read"})
-@connection.command()
+@connection.command(login=False)
 @format_option
 @click.option(
     "--file",
@@ -204,14 +204,27 @@ MAX_SAMPLE_ROWS = 100
 LOCAL_ENTITIES_SHOWN = 20
 
 
+_COLLECTION_HELP = (
+    "Name of the source/destination collection whose connection to use. "
+    "Default: the pinned collection."
+)
+
+
+def _collection_option(fn):
+    return prompted(
+        "--name",
+        "-n",
+        prompt="Name of the source/destination collection",
+        default=pinned("collection"),
+        help=_COLLECTION_HELP,
+    )(fn)
+
+
 def _name_option(fn):
     return click.option(
         "--name",
         "-n",
-        help=(
-            "Name of the source/destination collection whose connection to use. "
-            "Default: the pinned collection."
-        ),
+        help=_COLLECTION_HELP,
     )(fn)
 
 
@@ -244,6 +257,7 @@ _PROBE_ID_HINT = (
     "'tdk connection check|refresh|sample --name NAME' starts a probe and prints "
     "its id; the collection NAME goes to those commands, not to '--probe'."
 )
+_PROBE_ID = IdType(_PROBE_ID_HINT)
 
 
 def _collection_name(ctx: click.Context, name: str | None) -> str:
@@ -331,7 +345,6 @@ def _run_probe(
     **params,
 ) -> dict:
     server: TabsdataServer = ctx.obj["tabsdataserver"]
-    name = _collection_name(ctx, name)
     probe = server.submit_connection_probe(name, kind, **params)
     progress(ctx, f"The {kind} probe of '{name}' is {probe.get('status')}.")
     if not wait:
@@ -360,7 +373,6 @@ def _run_probe(
 @click.pass_context
 def list_(ctx: click.Context, all_projects: bool, type_, mode, status):
     """List the connections of source and destination collections"""
-    verify_login_or_prompt(ctx)
     filters = []
     if type_:
         filters.append(f"kind:eq:{connector_kind(type_)}")
@@ -415,7 +427,7 @@ def list_(ctx: click.Context, all_projects: bool, type_, mode, status):
 @capability("analytics", "read", escalate={"--definition": {"credential": "session"}})
 @connection.command()
 @proj_option
-@_name_option
+@_collection_option
 @click.option(
     "--definition",
     is_flag=True,
@@ -432,8 +444,6 @@ def get(ctx: click.Context, name: str, definition: bool):
     fingerprint and the compatible local connectors"""
     from tabsdatak.cli.td.collection_group import _public_connection
 
-    verify_login_or_prompt(ctx)
-    name = _collection_name(ctx, name)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         catalog = server.get_connection_catalog(name)
@@ -552,7 +562,7 @@ def _sample_rows(entity, columns: list[str], rows: list, truncated: bool) -> dic
         "--len": {"fs": "read"},
     },
 )
-@connection.command()
+@connection.command(login=False)
 @proj_option
 @_name_option
 @_wait_options(default=True)
@@ -605,6 +615,7 @@ def check(ctx: click.Context, name, wait, timeout, conn_file, metadata, sample, 
             )
             return
         verify_login_or_prompt(ctx)
+        name = _collection_name(ctx, name)
         _render_probe(ctx, _run_probe(ctx, "check", name, wait, timeout))
     except Exception as e:
         raise command_failure(ctx, "check the connection", e)
@@ -613,7 +624,7 @@ def check(ctx: click.Context, name, wait, timeout, conn_file, metadata, sample, 
 @capability("operations", "write")
 @connection.command()
 @proj_option
-@_name_option
+@_collection_option
 @_wait_options(default=True)
 @format_option
 @view_options()
@@ -622,7 +633,6 @@ def refresh(ctx: click.Context, name, wait, timeout):
     """Explore a collection's connection again, as a server-side probe, and
     replace its catalog of entities"""
     require_wait(wait, timeout)
-    verify_login_or_prompt(ctx)
     try:
         _render_probe(ctx, _run_probe(ctx, "metadata", name, wait, timeout))
     except Exception as e:
@@ -652,13 +662,13 @@ def _sample_document(probe: dict) -> dict:
 @capability("development", "read")
 @connection.command()
 @proj_option
-@_name_option
 @click.option(
     "--entity",
     required=True,
     metavar="FQN",
     help="Catalog entity to read rows of (see 'tdk connection entities').",
 )
+@_collection_option
 @click.option(
     "--len",
     "limit",
@@ -675,7 +685,6 @@ def sample(ctx: click.Context, name, entity, limit, wait, timeout):
     """Read sample rows of a catalog entity, as a server-side probe. The rows
     are kept on the server for ten minutes and the read is audit-logged"""
     require_wait(wait, timeout)
-    verify_login_or_prompt(ctx)
     try:
         probe = _run_probe(
             ctx, "sample", name, wait, timeout, entity=entity, limit=limit
@@ -707,7 +716,7 @@ def sample(ctx: click.Context, name, entity, limit, wait, timeout):
 @capability("analytics", "read")
 @connection.command()
 @proj_option
-@_name_option
+@_collection_option
 @click.option("--fields", is_flag=True, help="Add each entity's document.")
 @format_option
 @view_options()
@@ -717,8 +726,6 @@ def sample(ctx: click.Context, name, entity, limit, wait, timeout):
 def entities(ctx: click.Context, name, fields):
     """List the entities the last refresh of a collection's connection found.
     Match names with '--filter fqn:lk:GLOB', where '*' matches any text"""
-    verify_login_or_prompt(ctx)
-    name = _collection_name(ctx, name)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         rows, truncated = take(
@@ -761,6 +768,7 @@ def entities(ctx: click.Context, name, fields):
 @click.option(
     "--probe",
     "probe_id",
+    type=_PROBE_ID,
     required=True,
     help=(
         "ID of the probe to display, as 'tdk connection check|refresh|sample' print it."
@@ -772,9 +780,7 @@ def entities(ctx: click.Context, name, fields):
 @click.pass_context
 def probe(ctx: click.Context, probe_id, wait, timeout):
     """Display a connection probe"""
-    require_id("--probe", probe_id, _PROBE_ID_HINT)
     require_wait(wait, timeout)
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         found = server.get_connection_probe(probe_id)

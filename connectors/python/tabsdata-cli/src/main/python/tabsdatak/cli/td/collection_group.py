@@ -11,17 +11,17 @@ from typing import TYPE_CHECKING
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkGroup
 from tabsdatak.cli._machine import machine
+from tabsdatak.cli._prompted import pinned, prompted
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     all_projects_option,
     ancestry,
     format_option,
-    get_currently_pinned_object,
     hint_common_solutions,
     list_options,
     list_params,
-    logical_prompt,
     max_result_option,
     present,
     progress,
@@ -34,7 +34,6 @@ from tabsdatak.cli.cli_utils import (
     resolve_all_projects,
     serialize,
     take,
-    verify_login_or_prompt,
     view_options,
     warn_deprecated,
 )
@@ -46,7 +45,7 @@ if TYPE_CHECKING:
 
 
 @cli_command
-@click.group()
+@click.group(cls=TdkGroup)
 def collection():
     """Collection management commands"""
 
@@ -60,7 +59,13 @@ def collection():
 @collection.command()
 @proj_option
 @format_option
-@click.option("--name", "-n", help="Name of the collection to create.")
+@prompted(
+    "--name",
+    "-n",
+    prompt="Name of the collection to create",
+    default=pinned("collection"),
+    help="Name of the collection to create.",
+)
 @click.option("--description", help="Description of the collection.")
 @click.option(
     "--group",
@@ -97,12 +102,6 @@ def create(
     conn_file: str,
 ):
     """Create a new collection"""
-    verify_login_or_prompt(ctx)
-    name = (
-        name
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to create", option="--name")
-    )
     description = description or ""
     connection = None
     secrets = None
@@ -253,7 +252,13 @@ def _load_connection_document(ctx, conn_file, group):
 @collection.command()
 @proj_option
 @format_option
-@click.option("--name", "-n", help="Name of the collection to delete.")
+@prompted(
+    "--name",
+    "-n",
+    prompt="Name of the collection to delete",
+    default=pinned("collection"),
+    help="Name of the collection to delete.",
+)
 @click.option(
     "--confirm",
     help="Write 'delete' to confirm deletion. Will be prompted for it if not provided.",
@@ -261,12 +266,6 @@ def _load_connection_document(ctx, conn_file, group):
 @click.pass_context
 def delete(ctx: click.Context, name: str, confirm: str):
     """Delete a collection by name"""
-    verify_login_or_prompt(ctx)
-    name = (
-        name
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to delete", option="--name")
-    )
     progress(ctx, f"Deleting collection: {name}")
     progress(ctx, "-" * 10)
     require_word(ctx, confirm, "delete", "Please type 'delete' to confirm deletion")
@@ -290,16 +289,16 @@ def delete(ctx: click.Context, name: str, confirm: str):
 @proj_option
 @format_option
 @view_options()
-@click.option("--name", "-n", help="Name of the collection to display.")
+@prompted(
+    "--name",
+    "-n",
+    prompt="Name of the collection to display",
+    default=pinned("collection"),
+    help="Name of the collection to display.",
+)
 @click.pass_context
 def get(ctx: click.Context, name: str):
     """Display a collection by name"""
-    verify_login_or_prompt(ctx)
-    name = (
-        name
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to display", option="--name")
-    )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         collection = server.get_collection(name)
@@ -353,9 +352,11 @@ def get(ctx: click.Context, name: str):
     show_default=True,
     help="Output format.",
 )
-@click.option(
+@prompted(
     "--name",
     "-n",
+    prompt="Name of the collection whose connection to display",
+    default=pinned("collection"),
     help="Name of the source/destination collection whose connection to display.",
 )
 @click.pass_context
@@ -364,14 +365,6 @@ def connection_document(ctx: click.Context, fmt: str, name: str):
     secret and var names are never shown. Deprecated: 'tdk connection get
     --definition' carries the same document."""
     warn_deprecated("tdk collection connection", "'tdk connection get --definition'")
-    verify_login_or_prompt(ctx)
-    name = (
-        name
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(
-            ctx, "Name of the collection whose connection to display", option="--name"
-        )
-    )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         conn_read = _public_connection(server.get_collection_connection(name))
@@ -396,7 +389,6 @@ def connection_document(ctx: click.Context, fmt: str, name: str):
 @click.pass_context
 def list_collections(ctx: click.Context, all_projects: bool):
     """List all collections"""
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         spanning = resolve_all_projects(ctx, all_projects)
@@ -447,7 +439,13 @@ def list_collections(ctx: click.Context, all_projects: bool):
 @collection.command()
 @proj_option
 @format_option
-@click.option("--name", "-n", help="Name of the collection to update.")
+@prompted(
+    "--name",
+    "-n",
+    prompt="Name of the collection to update",
+    default=pinned("collection"),
+    help="Name of the collection to update.",
+)
 @click.option("--new-name", help="New name for the collection.")
 @click.option("--description", help="New description for the collection.")
 @click.option(
@@ -477,12 +475,6 @@ def update(
     conn_file: str,
 ):
     """Update a collection by name"""
-    verify_login_or_prompt(ctx)
-    name = (
-        name
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(ctx, "Name of the collection to update", option="--name")
-    )
     progress(ctx, f"Updating collection: {name}")
     progress(ctx, "-" * 10)
     connection = None

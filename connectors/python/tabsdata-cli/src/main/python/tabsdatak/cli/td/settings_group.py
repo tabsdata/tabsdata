@@ -6,6 +6,7 @@
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkCommand
 from tabsdatak.cli._credentials import ensure_stateful
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
@@ -69,7 +70,7 @@ def _valid_profile(ctx: click.Context, param, value):
 
 @capability("session", "write")
 @cli_command
-@click.command("set")
+@click.command("set", cls=TdkCommand, login=False)
 @format_option
 @click.option(
     "--hints",
@@ -186,7 +187,7 @@ def set_setting(
 
 @capability("session", "write")
 @cli_command
-@click.command("unset")
+@click.command("unset", cls=TdkCommand, login=False)
 @format_option
 @click.option("--hints", is_flag=True, help="Restore the hints default (true). Global.")
 @click.option(
@@ -295,7 +296,7 @@ def unset_setting(
 
 @capability("session", "read")
 @cli_command
-@click.command("settings")
+@click.command("settings", cls=TdkCommand, login=False)
 @format_option
 @view_options()
 @click.pass_context

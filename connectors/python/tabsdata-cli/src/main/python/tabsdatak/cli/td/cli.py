@@ -11,6 +11,7 @@ import textwrap
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkCommand, TdkGroup
 from tabsdatak.cli._credentials import (
     TOKEN_ENV,
     ensure_stateful,
@@ -53,7 +54,6 @@ from tabsdatak.cli.cli_utils import (
     store_cli_options,
     utils_login,
     validate_profile_name,
-    verify_login_or_prompt,
 )
 
 # Built-in command groups, imported for their @cli_command side effects: each
@@ -263,6 +263,8 @@ class _RootGroup(click.RichGroup):
     ``invoke`` gives every failure its canonical exit code
     (:mod:`tabsdatak.cli._errors`)."""
 
+    command_class = TdkCommand
+    group_class = TdkGroup
     def main(self, *args, **kwargs):
         def run(argv: list, **overrides):
             return self._main(argv, {**kwargs, **overrides})
@@ -478,7 +480,7 @@ for _extension in cli_extensions():
 
 
 @capability("session", "read", interactive=True)
-@cli.command()
+@cli.command(login=False)
 @click.pass_context
 def shell(ctx: click.Context):
     """Start an interactive shell session"""
@@ -488,7 +490,7 @@ def shell(ctx: click.Context):
 
 
 @capability("knowledge", "read")
-@cli.command()
+@cli.command(login=False)
 @format_option
 @click.pass_context
 def about(ctx: click.Context):
@@ -582,7 +584,7 @@ def info():
 
 
 @capability("knowledge", "read")
-@info.command(name="third-party")
+@info.command(name="third-party", login=False)
 @format_option
 @click.option(
     "--wide",
@@ -597,7 +599,7 @@ def third_party(ctx: click.Context, wide: bool):
 
 
 @capability("knowledge", "read")
-@info.command(name="license")
+@info.command(name="license", login=False)
 @format_option
 @click.pass_context
 def license_(ctx: click.Context):
@@ -606,7 +608,7 @@ def license_(ctx: click.Context):
 
 
 @capability("knowledge", "read")
-@info.command(name="release-notes")
+@info.command(name="release-notes", login=False)
 @format_option
 @click.pass_context
 def release_notes(ctx: click.Context):
@@ -616,6 +618,7 @@ def release_notes(ctx: click.Context):
 
 @capability("session", "write")
 @cli.command()
+@cli.command(login=False)
 @format_option
 @click.option(
     "--server",
@@ -699,7 +702,7 @@ def login(ctx: click.Context, server: str, user: str, password: str, token: str)
 
 
 @capability("session", "write")
-@cli.command()
+@cli.command(login=False)
 @format_option
 @click.pass_context
 def logout(ctx: click.Context):
@@ -744,7 +747,6 @@ def logout(ctx: click.Context):
 @click.pass_context
 def status(ctx: click.Context):
     """Check the status of the server"""
-    verify_login_or_prompt(ctx)
     progress(ctx, "Obtaining server status")
     progress(ctx, "-" * 10)
     try:

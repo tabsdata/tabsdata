@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, List
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkGroup
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     collection_label,
@@ -23,10 +24,8 @@ from tabsdatak.cli.cli_utils import (
     render,
     render_list,
     render_status_done,
-    require_id,
     show_hint,
     status_changed,
-    verify_login_or_prompt,
     view_options,
 )
 from tabsdatak.cli.td._wait import (
@@ -38,8 +37,8 @@ from tabsdatak.cli.td._wait import (
     wait_transaction,
 )
 from tabsdatak.cli.td.execution_utils import (
-    PLAN_ID_HINT,
-    TRX_ID_HINT,
+    PLAN_ID,
+    TRX_ID,
     all_workers_option,
     confirm_cancel,
     emit_scope_logs,
@@ -74,7 +73,7 @@ AT_OPTION_HELP = (
 
 
 @cli_command
-@click.group()
+@click.group(cls=TdkGroup)
 def trx():
     """Transaction management commands"""
 
@@ -88,7 +87,7 @@ def trx():
 @click.option(
     "--coll", "-c", type=str, help="Name of the collection to filter transactions by."
 )
-@click.option("--plan", help="ID of the plan to filter transactions by.")
+@click.option("--plan", type=PLAN_ID, help="ID of the plan to filter transactions by.")
 @click.option(
     "--plan-name",
     help=(
@@ -133,10 +132,8 @@ def list_transactions(
     timeout: float | None,
 ):
     """List transactions across every project you can view."""
-    require_id("--plan", plan, PLAN_ID_HINT)
     if timeout is not None and not monitor:
         raise click.UsageError("'--timeout' applies only together with '--monitor'.")
-    verify_login_or_prompt(ctx)
     try:
         request_filter = obtain_list_trx_filters(
             status=status_codes(Entity.TRANSACTION, status, healths),
@@ -193,7 +190,9 @@ def list_transactions(
 
 @capability("operations", "read")
 @trx.command()
-@click.option("--trx", required=True, help="ID of the transaction to display.")
+@click.option(
+    "--trx", type=TRX_ID, required=True, help="ID of the transaction to display."
+)
 @wait_option("the transaction")
 @timeout_option()
 @format_option
@@ -203,9 +202,7 @@ def get(ctx: click.Context, trx: str, wait: bool, timeout: float | None):
     """
     Display a transaction: its details plus its function runs and workers.
     """
-    require_id("--trx", trx, TRX_ID_HINT)
     require_wait(wait, timeout)
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         span_projects(server)
@@ -259,7 +256,9 @@ def get(ctx: click.Context, trx: str, wait: bool, timeout: float | None):
 @capability("operations", "destructive")
 @trx.command()
 @format_option
-@click.option("--trx", required=True, help="ID of the transaction to cancel.")
+@click.option(
+    "--trx", type=TRX_ID, required=True, help="ID of the transaction to cancel."
+)
 @click.option(
     "--confirm",
     help="Write 'cancel' to confirm cancellation. Will be prompted for it if "
@@ -272,8 +271,6 @@ def cancel(ctx: click.Context, trx: str, confirm: str):
     non-committed transaction that read its output, in later plans too.
     Canceled runs cannot be recovered.
     """
-    require_id("--trx", trx, TRX_ID_HINT)
-    verify_login_or_prompt(ctx)
     progress(ctx, f"Canceling transaction with ID '{trx}'")
     progress(ctx, "-" * 10)
     confirm_cancel(ctx, confirm, f"transaction '{trx}'")
@@ -296,7 +293,9 @@ def cancel(ctx: click.Context, trx: str, confirm: str):
 @capability("operations", "write")
 @trx.command()
 @format_option
-@click.option("--trx", required=True, help="ID of the transaction to recover.")
+@click.option(
+    "--trx", type=TRX_ID, required=True, help="ID of the transaction to recover."
+)
 @wait_option("the recovered transaction")
 @timeout_option()
 @click.pass_context
@@ -306,9 +305,7 @@ def recover(ctx: click.Context, trx: str, wait: bool, timeout: float | None):
     re-scheduled, each re-running its pinned function version and that
     version's latest patch.
     """
-    require_id("--trx", trx, TRX_ID_HINT)
     require_wait(wait, timeout)
-    verify_login_or_prompt(ctx)
     progress(ctx, f"Recovering transaction with ID '{trx}'")
     progress(ctx, "-" * 10)
     try:
@@ -333,7 +330,9 @@ def recover(ctx: click.Context, trx: str, wait: bool, timeout: float | None):
 @capability("operations", "read")
 @trx.command()
 @format_option
-@click.option("--trx", required=True, help="ID of the transaction to monitor.")
+@click.option(
+    "--trx", type=TRX_ID, required=True, help="ID of the transaction to monitor."
+)
 @timeout_option()
 @click.pass_context
 def monitor(ctx: click.Context, trx: str, timeout: float | None):
@@ -341,8 +340,6 @@ def monitor(ctx: click.Context, trx: str, timeout: float | None):
     Monitor the execution of a transaction until it finishes. Exits 7 when
     '--timeout' runs out and 8 when a function run did not succeed.
     """
-    require_id("--trx", trx, TRX_ID_HINT)
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         render_waited_transaction(ctx, server, trx, timeout)
@@ -353,7 +350,12 @@ def monitor(ctx: click.Context, trx: str, timeout: float | None):
 
 @capability("operations", "read", paths={"--file": "write"})
 @trx.command()
-@click.option("--trx", required=True, help="ID of the transaction whose logs to show.")
+@click.option(
+    "--trx",
+    type=TRX_ID,
+    required=True,
+    help="ID of the transaction whose logs to show.",
+)
 @all_workers_option
 @tail_option
 @failed_only_option
@@ -380,8 +382,6 @@ def logs(
     newest first; else one worker's, picked from the listing when several ran.
     Each worker that did not succeed carries the error signature of its log.
     """
-    require_id("--trx", trx, TRX_ID_HINT)
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         emit_scope_logs(

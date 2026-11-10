@@ -9,18 +9,17 @@ from typing import TYPE_CHECKING, Callable
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkGroup
+from tabsdatak.cli._prompted import pinned, prompted
 from tabsdatak.cli.cli_utils import (
     ancestry,
     format_option,
-    get_currently_pinned_object,
     hint_common_solutions,
-    logical_prompt,
     present,
     proj_option,
     render_done,
     render_entity,
     render_list,
-    verify_login_or_prompt,
     view_options,
 )
 from tabsdatak.common._tabular import Column, Kind, TableView
@@ -57,14 +56,19 @@ def _target_options(entity: str) -> Callable:
 
     def decorate(command):
         if in_collection:
-            command = click.option(
+            command = prompted(
                 "--coll",
                 "-c",
+                prompt=f"Name of the collection to which the {label} belongs",
+                default=pinned("collection"),
                 help=f"Name of the collection to which the {label} belongs.",
             )(command)
         if entity != "project":
-            command = click.option(
-                "--name", "-n", help=f"Name of the {label} whose tags to use."
+            command = prompted(
+                "--name",
+                "-n",
+                prompt=f"Name of the {label}",
+                help=f"Name of the {label} whose tags to use.",
             )(command)
         return proj_option(command)
 
@@ -72,23 +76,12 @@ def _target_options(entity: str) -> Callable:
 
 
 def _target(ctx: click.Context, entity: str, name: str, coll: str) -> dict:
-    label, in_collection = _ENTITIES[entity]
     if entity == "project":
         return {}
-    name = name or logical_prompt(ctx, f"Name of the {label}", option="--name")
     if entity == "group":
         return {"group": name}
     if entity == "collection":
         return {"collection": name}
-    coll = (
-        coll
-        or get_currently_pinned_object(ctx, "collection")
-        or logical_prompt(
-            ctx,
-            f"Name of the collection to which the {label} belongs",
-            option="--coll",
-        )
-    )
     return {"collection": coll, entity: name}
 
 
@@ -108,7 +101,7 @@ def tag_group(entity: str) -> click.Group:
     """The ``tag`` subcommands of an entity's command group."""
     label, _ = _ENTITIES[entity]
 
-    @click.group()
+    @click.group(cls=TdkGroup)
     def tag():
         pass
 
@@ -132,7 +125,6 @@ def tag_group(entity: str) -> click.Group:
     @click.pass_context
     def list_tags(ctx: click.Context, name: str = None, coll: str = None):
         """List the tags, system and user"""
-        verify_login_or_prompt(ctx)
         target = _target(ctx, entity, name, coll)
         try:
             server: TabsdataServer = ctx.obj["tabsdataserver"]
@@ -180,16 +172,14 @@ def tag_group(entity: str) -> click.Group:
     @tag.command("set")
     @_target_options(entity)
     @format_option
-    @click.option("--key", "-k", help="Key of the tag.")
+    @prompted("--key", "-k", prompt="Key of the tag", help="Key of the tag.")
     @click.option("--value", "-v", default="", help="Value of the tag.")
     @click.pass_context
     def set_tag(
         ctx: click.Context, key: str, value: str, name: str = None, coll: str = None
     ):
         """Set a user tag, replacing its value if the key is set"""
-        verify_login_or_prompt(ctx)
         target = _target(ctx, entity, name, coll)
-        key = key or logical_prompt(ctx, "Key of the tag", option="--key")
         try:
             server: TabsdataServer = ctx.obj["tabsdataserver"]
             render_entity(
@@ -205,13 +195,11 @@ def tag_group(entity: str) -> click.Group:
     @tag.command("delete")
     @_target_options(entity)
     @format_option
-    @click.option("--key", "-k", help="Key of the tag.")
+    @prompted("--key", "-k", prompt="Key of the tag", help="Key of the tag.")
     @click.pass_context
     def delete_tag(ctx: click.Context, key: str, name: str = None, coll: str = None):
         """Remove a user tag"""
-        verify_login_or_prompt(ctx)
         target = _target(ctx, entity, name, coll)
-        key = key or logical_prompt(ctx, "Key of the tag", option="--key")
         try:
             server: TabsdataServer = ctx.obj["tabsdataserver"]
             server.delete_tag(key, **target)
@@ -254,7 +242,6 @@ def _add_facets(tag: click.Group) -> None:
     @click.pass_context
     def tag_keys(ctx: click.Context):
         """List the tag keys open on the project's entities"""
-        verify_login_or_prompt(ctx)
         try:
             server: TabsdataServer = ctx.obj["tabsdataserver"]
             keys = server.list_tag_keys(len=_FACET_LEN)
@@ -273,12 +260,15 @@ def _add_facets(tag: click.Group) -> None:
     @proj_option
     @format_option
     @view_options()
-    @click.option("--key", "-k", help="Key of the tag whose values to list.")
+    @prompted(
+        "--key",
+        "-k",
+        prompt="Key of the tag",
+        help="Key of the tag whose values to list.",
+    )
     @click.pass_context
     def tag_values(ctx: click.Context, key: str):
         """List the values a tag key is open with on the project's entities"""
-        verify_login_or_prompt(ctx)
-        key = key or logical_prompt(ctx, "Key of the tag", option="--key")
         try:
             server: TabsdataServer = ctx.obj["tabsdataserver"]
             values = server.list_tag_values(key, len=_FACET_LEN)

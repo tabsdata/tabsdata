@@ -5,6 +5,7 @@
 
 import rich_click as click
 
+from tabsdatak.cli._command import TdkGroup
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     MutuallyExclusiveOption,
@@ -20,7 +21,6 @@ from tabsdatak.cli.cli_utils import (
     set_pin,
     store_cli_options,
     take,
-    verify_login_or_prompt,
     view_options,
 )
 from tabsdatak.common._tabular import Column, Kind, RecordView, TableView
@@ -35,7 +35,7 @@ ALL_ENTITIES_REPRESENTATION = "<ALL>"
 
 
 @cli_command
-@click.group()
+@click.group(cls=TdkGroup)
 def role():
     """Role management commands"""
 
@@ -68,7 +68,6 @@ def role():
 @click.pass_context
 def add_perm(ctx: click.Context, name: str, perm: str, project: str):
     """Add a permission to a role"""
-    verify_login_or_prompt(ctx)
     name = (
         name
         or get_currently_pinned_object(ctx, "role")
@@ -134,7 +133,6 @@ def add_perm(ctx: click.Context, name: str, perm: str, project: str):
 @click.pass_context
 def add_user(ctx: click.Context, name: str, user: str):
     """Add a user to a role"""
-    verify_login_or_prompt(ctx)
     name = (
         name
         or get_currently_pinned_object(ctx, "role")
@@ -166,7 +164,6 @@ def create(
     description: str,
 ):
     """Create a new role"""
-    verify_login_or_prompt(ctx)
     name = (
         name
         or get_currently_pinned_object(ctx, "role")
@@ -193,7 +190,6 @@ def create(
 @click.pass_context
 def delete(ctx: click.Context, name: str, confirm: str):
     """Delete a role by name"""
-    verify_login_or_prompt(ctx)
     name = (
         name
         or get_currently_pinned_object(ctx, "role")
@@ -246,7 +242,6 @@ def delete(ctx: click.Context, name: str, confirm: str):
 @click.pass_context
 def delete_perm(ctx: click.Context, name: str, id: str, perm: str, project: str):
     """Delete a permission from a role"""
-    verify_login_or_prompt(ctx)
     name = (
         name
         or get_currently_pinned_object(ctx, "role")
@@ -373,7 +368,6 @@ def _delete_permission_by_type_and_entity(
 @click.pass_context
 def delete_user(ctx: click.Context, name: str, user: str):
     """Delete a user from a role"""
-    verify_login_or_prompt(ctx)
     name = (
         name
         or get_currently_pinned_object(ctx, "role")
@@ -410,7 +404,6 @@ def delete_user(ctx: click.Context, name: str, user: str):
 @click.pass_context
 def info(ctx: click.Context, name: str):
     """Display a role by name"""
-    verify_login_or_prompt(ctx)
     name = (
         name
         or get_currently_pinned_object(ctx, "role")
@@ -445,7 +438,6 @@ def info(ctx: click.Context, name: str):
 @click.pass_context
 def list_roles(ctx: click.Context):
     """List all roles"""
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         list_of_roles, truncated = take(ctx, server.list_roles_generator())
@@ -492,7 +484,6 @@ def list_roles(ctx: click.Context):
 @click.pass_context
 def list_perm(ctx: click.Context, name: str):
     """List all permissions of a role"""
-    verify_login_or_prompt(ctx)
     name = (
         name
         or get_currently_pinned_object(ctx, "role")
@@ -554,7 +545,6 @@ def list_perm(ctx: click.Context, name: str):
 @click.pass_context
 def list_user(ctx: click.Context, name: str):
     """List all users of a role"""
-    verify_login_or_prompt(ctx)
     name = (
         name
         or get_currently_pinned_object(ctx, "role")
@@ -651,7 +641,6 @@ def update(
     description: str,
 ):
     """Update a role by name"""
-    verify_login_or_prompt(ctx)
     name = (
         name
         or get_currently_pinned_object(ctx, "role")

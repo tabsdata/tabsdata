@@ -12,15 +12,17 @@ from typing import TYPE_CHECKING
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkGroup
+from tabsdatak.cli._prompted import prompted
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
+    IdType,
     MutuallyExclusiveOption,
     ancestry,
     format_option,
     hint_common_solutions,
     list_options,
     list_params,
-    logical_prompt,
     max_result_option,
     present,
     progress,
@@ -29,10 +31,8 @@ from tabsdatak.cli.cli_utils import (
     render_deleted,
     render_entity,
     render_list,
-    require_id,
     require_word,
     take,
-    verify_login_or_prompt,
     view_options,
 )
 from tabsdatak.cli.td.tag_commands import tag_group
@@ -49,6 +49,7 @@ SECRETS_FILE_HELP = (
 )
 NULL_TAG = "tag:yaml.org,2002:null"
 TOPOLOGY_VERSION_HINT = "'tdk project topology list' lists topology version ids."
+TOPOLOGY_VERSION_ID = IdType(TOPOLOGY_VERSION_HINT)
 _TOPOLOGY_VERSION_HELP = (
     "Read the graph at this topology version, as 'tdk project topology list' "
     "lists them."
@@ -60,7 +61,7 @@ _GRAPH_AT_HELP = (
 
 
 @cli_command
-@click.group()
+@click.group(cls=TdkGroup)
 def project():
     """Project management commands"""
 
@@ -141,7 +142,12 @@ def _secret_value(name: str, key: str, node, variables: set[str]) -> str | None:
 )
 @project.command()
 @format_option
-@click.option("--name", "-n", help="Name of the project to create.")
+@prompted(
+    "--name",
+    "-n",
+    prompt="Name of the project to create",
+    help="Name of the project to create.",
+)
 @click.option("--description", help="Description of the project.")
 @click.option(
     "--secrets-file",
@@ -151,8 +157,6 @@ def _secret_value(name: str, key: str, node, variables: set[str]) -> str | None:
 @click.pass_context
 def create(ctx: click.Context, name: str, description: str, secrets_file: str):
     """Create a new project"""
-    verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the project to create", option="--name")
     description = description or ""
     secrets = None if secrets_file is None else _load_secrets_file(ctx, secrets_file)
     progress(ctx, "Creating a new project")
@@ -171,7 +175,12 @@ def create(ctx: click.Context, name: str, description: str, secrets_file: str):
 @capability("admin", "destructive", credential="session")
 @project.command()
 @format_option
-@click.option("--name", "-n", help="Name of the project to delete.")
+@prompted(
+    "--name",
+    "-n",
+    prompt="Name of the project to delete",
+    help="Name of the project to delete.",
+)
 @click.option(
     "--confirm",
     help="Write 'delete' to confirm deletion. Will be prompted for it if not provided.",
@@ -179,8 +188,6 @@ def create(ctx: click.Context, name: str, description: str, secrets_file: str):
 @click.pass_context
 def delete(ctx: click.Context, name: str, confirm: str):
     """Delete a project by name."""
-    verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the project to delete", option="--name")
     progress(ctx, f"Deleting project: {name}")
     progress(ctx, "-" * 10)
     require_word(ctx, confirm, "delete", "Please type 'delete' to confirm deletion")
@@ -199,14 +206,15 @@ def delete(ctx: click.Context, name: str, confirm: str):
 @project.command()
 @format_option
 @view_options()
-@click.option("--name", "-n", help="Name of the project to display.")
+@prompted(
+    "--name",
+    "-n",
+    prompt="Name of the project to display",
+    help="Name of the project to display.",
+)
 @click.pass_context
 def get(ctx: click.Context, name: str):
     """Display a project by name"""
-    verify_login_or_prompt(ctx)
-    name = name or logical_prompt(
-        ctx, "Name of the project to display", option="--name"
-    )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         prj = server.get_project(name)
@@ -237,7 +245,6 @@ def get(ctx: click.Context, name: str):
 @click.pass_context
 def list_projects(ctx: click.Context):
     """List all projects"""
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         list_of_projects, truncated = take(
@@ -280,14 +287,15 @@ def list_projects(ctx: click.Context):
 @project.command()
 @format_option
 @view_options()
-@click.option("--name", "-n", help="Name of the project whose secrets to list.")
+@prompted(
+    "--name",
+    "-n",
+    prompt="Name of the project whose secrets to list",
+    help="Name of the project whose secrets to list.",
+)
 @click.pass_context
 def secrets(ctx: click.Context, name: str):
     """List the secrets of a project, with their keys (never their values)"""
-    verify_login_or_prompt(ctx)
-    name = name or logical_prompt(
-        ctx, "Name of the project whose secrets to list", option="--name"
-    )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         project_secrets = server.get_project_secrets(name)
@@ -315,7 +323,12 @@ def secrets(ctx: click.Context, name: str):
 )
 @project.command()
 @format_option
-@click.option("--name", "-n", help="Name of the project to update.")
+@prompted(
+    "--name",
+    "-n",
+    prompt="Name of the project to update",
+    help="Name of the project to update.",
+)
 @click.option("--new-name", help="New name for the project.")
 @click.option("--description", help="New description for the project.")
 @click.option(
@@ -332,8 +345,6 @@ def update(
     secrets_file: str,
 ):
     """Update a project by name"""
-    verify_login_or_prompt(ctx)
-    name = name or logical_prompt(ctx, "Name of the project to update", option="--name")
     secrets = None if secrets_file is None else _load_secrets_file(ctx, secrets_file)
     progress(ctx, f"Updating project: {name}")
     progress(ctx, "-" * 10)
@@ -367,6 +378,7 @@ def topology_options(fn):
         click.option(
             "--topology-version",
             "topology_version",
+            type=TOPOLOGY_VERSION_ID,
             help=_TOPOLOGY_VERSION_HELP,
             cls=MutuallyExclusiveOption,
             mutually_exclusive=["at"],
@@ -463,8 +475,6 @@ def _graph_views(ctx: click.Context, document: dict) -> list[TableView]:
 @click.pass_context
 def graph(ctx: click.Context, topology_version: str, at: str):
     """Show the project's functions and tables and the edges between them"""
-    require_id("--topology-version", topology_version, TOPOLOGY_VERSION_HINT)
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         document = server.project_graph(topology_version=topology_version, at=at)
@@ -489,7 +499,6 @@ def topology():
 @click.pass_context
 def list_topology_versions(ctx: click.Context):
     """List the project's topology versions, each with when it was current"""
-    verify_login_or_prompt(ctx)
     try:
         from tabsdatak.common._datetime import _convert_timestamp_to_string
 

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, List
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
+from tabsdatak.cli._command import TdkGroup
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     collection_label,
@@ -23,10 +24,8 @@ from tabsdatak.cli.cli_utils import (
     render,
     render_list,
     render_status_done,
-    require_id,
     show_hint,
     status_changed,
-    verify_login_or_prompt,
     view_options,
 )
 from tabsdatak.cli.td._wait import (
@@ -38,7 +37,7 @@ from tabsdatak.cli.td._wait import (
     wait_option,
 )
 from tabsdatak.cli.td.execution_utils import (
-    PLAN_ID_HINT,
+    PLAN_ID,
     all_workers_option,
     confirm_cancel,
     diagnose_options,
@@ -75,7 +74,7 @@ AT_OPTION_HELP = (
 
 
 @cli_command
-@click.group()
+@click.group(cls=TdkGroup)
 def plan():
     """Plan (execution) management commands"""
 
@@ -135,7 +134,6 @@ def list_plans(
     """List plans across every project you can view."""
     if timeout is not None and not monitor:
         raise click.UsageError("'--timeout' applies only together with '--monitor'.")
-    verify_login_or_prompt(ctx)
     request_filter = obtain_list_exec_filters(
         status=status_codes(Entity.EXECUTION, status, healths),
         exe_name=name,
@@ -189,7 +187,7 @@ def list_plans(
 
 @capability("operations", "read")
 @plan.command()
-@click.option("--plan", required=True, help="ID of the plan to display.")
+@click.option("--plan", type=PLAN_ID, required=True, help="ID of the plan to display.")
 @wait_option("the plan")
 @timeout_option()
 @format_option
@@ -199,9 +197,7 @@ def get(ctx: click.Context, plan: str, wait: bool, timeout: float | None):
     """
     Display a plan: its details plus its function runs and workers.
     """
-    require_id("--plan", plan, PLAN_ID_HINT)
     require_wait(wait, timeout)
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         span_projects(server)
@@ -256,7 +252,7 @@ def get(ctx: click.Context, plan: str, wait: bool, timeout: float | None):
 @capability("operations", "destructive")
 @plan.command()
 @format_option
-@click.option("--plan", required=True, help="ID of the plan to cancel.")
+@click.option("--plan", type=PLAN_ID, required=True, help="ID of the plan to cancel.")
 @click.option(
     "--confirm",
     help="Write 'cancel' to confirm cancellation. Will be prompted for it if "
@@ -269,8 +265,6 @@ def cancel(ctx: click.Context, plan: str, confirm: str):
     is every non-committed transaction that read its output, in later plans
     too. Canceled runs cannot be recovered.
     """
-    require_id("--plan", plan, PLAN_ID_HINT)
-    verify_login_or_prompt(ctx)
     progress(ctx, f"Canceling plan with ID '{plan}'")
     progress(ctx, "-" * 10)
     confirm_cancel(ctx, confirm, f"plan '{plan}'")
@@ -293,7 +287,7 @@ def cancel(ctx: click.Context, plan: str, confirm: str):
 @capability("operations", "write")
 @plan.command()
 @format_option
-@click.option("--plan", required=True, help="ID of the plan to recover.")
+@click.option("--plan", type=PLAN_ID, required=True, help="ID of the plan to recover.")
 @wait_option("the recovered plan")
 @timeout_option()
 @click.pass_context
@@ -303,9 +297,7 @@ def recover(ctx: click.Context, plan: str, wait: bool, timeout: float | None):
     each re-running its pinned function version and that version's latest
     patch.
     """
-    require_id("--plan", plan, PLAN_ID_HINT)
     require_wait(wait, timeout)
-    verify_login_or_prompt(ctx)
     progress(ctx, f"Recovering plan with ID '{plan}'")
     progress(ctx, "-" * 10)
     try:
@@ -330,7 +322,7 @@ def recover(ctx: click.Context, plan: str, wait: bool, timeout: float | None):
 @capability("operations", "read")
 @plan.command()
 @format_option
-@click.option("--plan", required=True, help="ID of the plan to monitor.")
+@click.option("--plan", type=PLAN_ID, required=True, help="ID of the plan to monitor.")
 @timeout_option()
 @click.pass_context
 def monitor(ctx: click.Context, plan: str, timeout: float | None):
@@ -338,8 +330,6 @@ def monitor(ctx: click.Context, plan: str, timeout: float | None):
     Monitor the execution of a plan until it finishes. Exits 7 when
     '--timeout' runs out and 8 when a function run did not succeed.
     """
-    require_id("--plan", plan, PLAN_ID_HINT)
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         render_waited_execution(ctx, server, plan, timeout)
@@ -350,7 +340,9 @@ def monitor(ctx: click.Context, plan: str, timeout: float | None):
 
 @capability("operations", "read", paths={"--file": "write"})
 @plan.command()
-@click.option("--plan", required=True, help="ID of the plan whose logs to show.")
+@click.option(
+    "--plan", type=PLAN_ID, required=True, help="ID of the plan whose logs to show."
+)
 @all_workers_option
 @tail_option
 @failed_only_option
@@ -377,8 +369,6 @@ def logs(
     first; else one worker's, picked from the listing when several ran. Each
     worker that did not succeed carries the error signature of its log.
     """
-    require_id("--plan", plan, PLAN_ID_HINT)
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         emit_scope_logs(
@@ -400,7 +390,7 @@ def logs(
 
 @capability("analytics", "read")
 @plan.command()
-@click.option("--plan", required=True, help="ID of the plan to diagnose.")
+@click.option("--plan", type=PLAN_ID, required=True, help="ID of the plan to diagnose.")
 @click.option(
     "--max-runs",
     type=click.IntRange(min=0),
@@ -424,8 +414,6 @@ def diagnose(
     category. Exits 0 whenever the diagnosis is produced; the verdict is the
     plan's 'health'. A plan that is not found exits 5.
     """
-    require_id("--plan", plan, PLAN_ID_HINT)
-    verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         span_projects(server)
