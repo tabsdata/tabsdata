@@ -249,7 +249,6 @@ CASES: tuple[MutCase, ...] = (
         "Function triggered",
         envelope={
             "id": "ep20260930-1",
-            "status": "S",
             "status_name": "Scheduled",
             "health": "running",
             "final": False,
@@ -971,6 +970,69 @@ def test_a_cancel_or_recover_that_changes_nothing_says_so(tmp_path):
     client.get_transaction.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "argv, method, kind, id",
+    [
+        (
+            ["plan", "cancel", "--plan", "ep20260930-1"],
+            "cancel_execution",
+            "plan",
+            "ep20260930-1",
+        ),
+        (
+            ["trx", "cancel", "--trx", "tx20260930-1"],
+            "cancel_transaction",
+            "transaction",
+            "tx20260930-1",
+        ),
+    ],
+)
+def test_a_cancel_lists_every_run_it_canceled(argv, method, kind, id, tmp_path):
+    client = _client()
+    getattr(client, method).return_value.json.return_value = {
+        "data": {
+            "canceled": [
+                {
+                    "execution_id": "ep20260930-1",
+                    "transaction_id": "tx20260930-1",
+                    "function_run_id": "fr20260930-1",
+                    "reason": "requested",
+                },
+                {
+                    "execution_id": "ep20260930-2",
+                    "transaction_id": "tx20260930-2",
+                    "function_run_id": "fr20260930-2",
+                    "reason": "same_function",
+                },
+            ]
+        }
+    }
+    document = _machine([*argv, "--confirm", "cancel"], client, tmp_path)
+    assert document == _done(
+        "cancel",
+        kind,
+        id,
+        changed=True,
+        canceled=[
+            {
+                "plan": "ep20260930-1",
+                "transaction": "tx20260930-1",
+                "function_run": "fr20260930-1",
+                "reason": "requested",
+            },
+            {
+                "plan": "ep20260930-2",
+                "transaction": "tx20260930-2",
+                "function_run": "fr20260930-2",
+                "reason": "same_function",
+            },
+        ],
+    )
+    human = _invoke([*argv, "--confirm", "cancel"], client=client, tmp_path=tmp_path)
+    assert human.exit_code == 0, human.output
+    assert "2 function run(s) canceled in 2 plan(s)" in human.output
+
+
 def test_cert_add_and_delete_emit_done(tmp_path):
     cert = tmp_path / "server.pem"
     source = tmp_path / "src.pem"
@@ -1111,3 +1173,30 @@ def test_fn_patch_emits_the_patch_record(tmp_path):
     assert "Patch registered successfully\nPatch id: PV1\nPatches:  fv1\n" in (
         human.stdout
     )
+
+
+
+def test_an_ack_keeps_the_key_fields_unless_asked_for_more():
+    import rich_click as click
+    from click.testing import CliRunner
+
+    from tabsdatak.cli.cli_utils import ack_options, render_entity
+
+    record = {"id": "fv1", "name": "f1", "status": "A", "snippet": "def f(): ..."}
+
+    @click.command()
+    @ack_options
+    @click.pass_context
+    def made(ctx):
+        ctx.obj["output_format"] = "jsonb"
+        render_entity(ctx, data=record, message="made", ack=("id", "name", "status"))
+
+    def run(*argv):
+        result = CliRunner().invoke(made, list(argv), obj={})
+        assert result.exit_code == 0, result.output
+        return json.loads(result.stdout)
+
+    assert run() == {"id": "fv1", "name": "f1", "status": "A"}
+    assert run("--verbose") == record
+    assert run("--fields", "snippet") == {"snippet": "def f(): ..."}
+    assert run("--fields", "?") == {"fields": list(record)}

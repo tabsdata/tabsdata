@@ -38,9 +38,11 @@ from tabsdatak.cli.cli_utils import (
     logical_prompt,
     max_result_option,
     output_format,
+    paged_options,
     present,
     progress,
     proj_option,
+    record_fields_option,
     render,
     render_list,
     resolve_all_projects,
@@ -67,17 +69,41 @@ def connection():
     """Connection commands"""
 
 
+_TYPE_MODES = {"in": "Source", "out": "Destination", "cdc": "Stream Source"}
+
+
 @capability("knowledge", "read")
 @connection.command(login=False)
+@click.option(
+    "--system",
+    help=(
+        "Only the types of systems whose name contains this text "
+        "(case-insensitive), e.g. 'mysql' or 'storage'."
+    ),
+)
+@click.option(
+    "--mode",
+    type=click.Choice(list(_TYPE_MODES), case_sensitive=False),
+    help="Only sources ('in'), destinations ('out') or stream sources ('cdc').",
+)
 @format_option
 @view_options()
+@max_result_option
+@paged_options
 @click.pass_context
-def types(ctx):
+def types(ctx, system: str | None, mode: str | None):
     """List the connection types available from installed connectors"""
     # noinspection PyProtectedMember
     from tabsdatak.cli import template
 
-    rows = template.list_connectors()
+    wanted = None if mode is None else _TYPE_MODES[mode.lower()]
+    rows = [
+        row
+        for row in template.list_connectors()
+        if (wanted is None or row.mode == wanted)
+        and (system is None or system.lower() in row.system.lower())
+    ]
+    rows, truncated = take(ctx, rows)
 
     def _view():
         return TableView(
@@ -90,7 +116,7 @@ def types(ctx):
     render_list(
         ctx,
         items=[{"type": r.type, "mode": r.mode, "system": r.system} for r in rows],
-        truncated=False,
+        truncated=truncated,
         view=_view,
     )
 
@@ -438,6 +464,7 @@ def list_(ctx: click.Context, all_projects: bool, type_, mode, status):
 )
 @format_option
 @view_options()
+@record_fields_option
 @click.pass_context
 def get(ctx: click.Context, name: str, definition: bool):
     """Display the catalog of a collection's connection: probe status, schema

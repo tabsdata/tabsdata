@@ -17,6 +17,7 @@ from tabsdatak.cli._prompted import pinned, prompted
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     DOCUMENT_FORMAT,
+    ack_options,
     all_projects_option,
     ancestry,
     format_option,
@@ -28,6 +29,7 @@ from tabsdatak.cli.cli_utils import (
     present,
     progress,
     proj_option,
+    record_fields_option,
     render,
     render_deleted,
     render_entity,
@@ -94,6 +96,7 @@ def collection():
     ),
     type=click.Path(allow_dash=True),
 )
+@ack_options
 @click.pass_context
 def create(
     ctx: click.Context,
@@ -126,7 +129,10 @@ def create(
             secrets=secrets,
         )
         render_entity(
-            ctx, data=lambda: created._data, message="Collection created successfully"
+            ctx,
+            data=lambda: created._data,
+            message="Collection created successfully",
+            ack=("id", "collection_id", "name", "project", "group", "collection_type"),
         )
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -298,6 +304,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
     default=pinned("collection"),
     help="Name of the collection to display.",
 )
+@record_fields_option
 @click.pass_context
 def get(ctx: click.Context, name: str):
     """Display a collection by name"""

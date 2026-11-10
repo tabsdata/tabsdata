@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import os
+import re
 from itertools import islice
 from typing import TYPE_CHECKING, List
 
@@ -21,6 +22,7 @@ from tabsdatak.cli.cli_utils import (
     beautify_time,
     collection_label,
     is_valid_id,
+    json_size,
     list_params,
     logical_prompt,
     make_console,
@@ -33,7 +35,12 @@ from tabsdatak.cli.cli_utils import (
     take,
 )
 from tabsdatak.common._tabular import Column, Kind, TableView, show
-from tabsdatak.sdk._diagnose import attempts, needs_attention, scope_filter
+from tabsdatak.sdk._diagnose import (
+    attempts,
+    cut_ranges,
+    needs_attention,
+    scope_filter,
+)
 from tabsdatak.sdk.status_utils.execution import (
     EXECUTION_STATUS_MAPPING,
     EXECUTION_VALID_USER_PROVIDED_STATUSES,
@@ -520,13 +527,64 @@ def worker_status_label(worker) -> str:
 LOGS_MAX_WORKERS = 20
 
 
+def _apply_grep(ctx: click.Context, param, value):
+    if value is not None:
+        try:
+            re.compile(value)
+        except re.error as error:
+            raise click.BadParameter(
+                f"'{value}' is not a regular expression: {error}.",
+                ctx=ctx,
+                param=param,
+            ) from None
+    ctx.ensure_object(dict)
+    ctx.obj["log_grep"] = value
+    return value
+
+
+def _apply_from_error(ctx: click.Context, param, value):
+    ctx.ensure_object(dict)
+    ctx.obj["log_from_error"] = value
+    return value
+
+
 def tail_option(fn):
+    """``--tail``, and the line filters it applies after: ``--from-error`` and
+    ``--grep``."""
+    fn = click.option(
+        "--from-error",
+        is_flag=True,
+        default=False,
+        expose_value=False,
+        callback=_apply_from_error,
+        help=(
+            "Start each log at its first traceback or ERROR line; the whole log "
+            "when it has none."
+        ),
+    )(fn)
+    fn = click.option(
+        "--grep",
+        metavar="PATTERN",
+        expose_value=False,
+        callback=_apply_grep,
+        help="Show only the lines matching this regular expression.",
+    )(fn)
     return click.option(
         "--tail",
         type=click.IntRange(min=0),
         default=None,
-        help="Show only the last N lines of each log.",
+        help=(
+            "Show only the last N lines of each log, after '--from-error' and '--grep'."
+        ),
     )(fn)
+
+
+def _line_filters(ctx: click.Context) -> dict:
+    obj = ctx.obj or {}
+    return {
+        "grep": obj.get("log_grep"),
+        "from_error": bool(obj.get("log_from_error")),
+    }
 
 
 def _apply_logs_max_result(ctx: click.Context, param, value):
@@ -602,41 +660,84 @@ def pick_worker(ctx: click.Context, workers: list, subject: str):
 
 
 LOGS_CUT_HINT = (
-    "Logs marked 'log_truncated' show only their end: '--tail N' picks their "
-    "last N lines, '--file PATH' writes every log whole to a local file."
+    "Logs marked 'log_truncated' leave out the lines in 'log_cut': "
+    "'--from-error' starts at the error, '--grep PATTERN' keeps the matching "
+    "lines and '--tail N' the last N; '--file PATH' writes every log whole to a "
+    "local file."
 )
 
 
+def _lines_size(lines: list) -> int:
+    return sum(json_size(line) + 1 for line in lines)
+
+
 def _capped(entries: list[dict]) -> list[dict]:
-    """In a machine run, each log's tail up to its ``log_cap_bytes``, within
-    its ``logs_budget_bytes`` over the whole document, shared evenly: a log
-    shorter than its share leaves the rest to the others."""
+    """In a machine run, each log's last lines up to its ``log_cap_bytes``,
+    within its ``logs_budget_bytes`` over the whole document, shared evenly: a
+    log shorter than its share leaves the rest to the others."""
     run = machine()
     if run is None or run.log_cap_bytes is None:
         return entries
-    encoded = {
-        index: entry["log"].encode()
+    sizes = {
+        index: _lines_size(entry["lines"])
         for index, entry in enumerate(entries)
-        if entry.get("log") is not None
+        if entry.get("lines") is not None
     }
     left = run.logs_budget_bytes or run.log_cap_bytes
     keeps = {}
-    for index in sorted(encoded, key=lambda i: len(encoded[i])):
-        share = left // (len(encoded) - len(keeps))
-        keeps[index] = min(len(encoded[index]), run.log_cap_bytes, share)
+    for index in sorted(sizes, key=lambda i: sizes[i]):
+        share = left // (len(sizes) - len(keeps))
+        keeps[index] = min(sizes[index], run.log_cap_bytes, share)
         left -= keeps[index]
     capped = []
     for index, entry in enumerate(entries):
-        if index not in encoded or keeps[index] == len(encoded[index]):
+        if index not in sizes or keeps[index] == sizes[index]:
             capped.append(entry)
             continue
-        tail = encoded[index][len(encoded[index]) - keeps[index] :]
+        kept: list = []
+        used = 0
+        for line in reversed(entry["lines"]):
+            used += json_size(line) + 1
+            if used > keeps[index]:
+                break
+            kept.insert(0, line)
+        if not kept and entry["lines"]:
+            number, text = entry["lines"][-1]
+            room = max(keeps[index] - json_size([number, ""]) - 1, 0)
+            kept = [[number, _tail_within(text, room)]]
         capped.append({
             **entry,
-            "log": tail.decode(errors="ignore"),
+            "lines": kept,
+            "log": "\n".join(text for _, text in kept),
             "log_truncated": True,
         })
     return capped
+
+
+def _tail_within(text: str, room: int) -> str:
+    """The end of ``text`` whose JSON form fits in ``room`` bytes."""
+    low, high = 0, len(text)
+    while low < high:
+        middle = (low + high) // 2
+        if json_size(text[middle:]) <= room:
+            high = middle
+        else:
+            low = middle + 1
+    return text[low:]
+
+
+def _numbered(entry: dict) -> dict:
+    """A log entry as the ``jsonb`` document gives it: its ``lines`` as
+    ``[number, text]`` and ``log_cut`` the ``[first, last]`` line ranges left
+    out, instead of the ``log`` text."""
+    if entry.get("lines") is None:
+        return {key: value for key, value in entry.items() if key != "log"}
+    shown = {key: value for key, value in entry.items() if key not in ("log", "lines")}
+    shown["lines"] = entry["lines"]
+    shown["log_cut"] = cut_ranges(
+        (number for number, _ in entry["lines"]), entry.get("lines_total") or 0
+    )
+    return shown
 
 
 def _entry_text(entry: dict) -> str:
@@ -696,7 +797,7 @@ def emit_logs(ctx: click.Context, entries: list[dict], truncated: bool, file: st
     capped = _capped(entries)
     render_list(
         ctx,
-        items=capped,
+        items=lambda: [_numbered(entry) for entry in capped],
         truncated=truncated,
         compat=lambda: _compat_logs(entries),
         cut_hint=lambda: (
@@ -714,7 +815,8 @@ def emit_worker_logs(
     tail: int | None,
     file: str,
 ) -> None:
-    emit_logs(ctx, [server.worker_log_entry(worker_id, tail=tail)], False, file)
+    entry = server.worker_log_entry(worker_id, tail=tail, **_line_filters(ctx))
+    emit_logs(ctx, [entry], False, file)
 
 
 def emit_scope_logs(
@@ -737,6 +839,7 @@ def emit_scope_logs(
             tail=tail,
             failed_only=failed_only,
             max_workers=max_result(ctx),
+            **_line_filters(ctx),
         )
         emit_logs(ctx, entries, truncated, file)
         return
@@ -752,7 +855,7 @@ def emit_scope_logs(
         )
     worker = pick_worker(ctx, candidates, subject)
     entry = server.worker_log_entry(
-        worker, tail=tail, attempt=attempts(workers)[worker.id]
+        worker, tail=tail, attempt=attempts(workers)[worker.id], **_line_filters(ctx)
     )
     emit_logs(ctx, [entry], False, file)
 
@@ -835,8 +938,12 @@ def _diagnosis_table(document: dict) -> None:
         table.add_column("Function")
         table.add_column("Blocked by")
         for run in held:
-            blocked = ", ".join(run.get("blocked_by") or []) or "-"
-            if run.get("blocked_by_outside_plan"):
+            outside = [
+                f"{b['function_run']} (plan {b['plan']})"
+                for b in run.get("blocked_by_outside") or ()
+            ]
+            blocked = ", ".join([*(run.get("blocked_by") or []), *outside]) or "-"
+            if run.get("blocked_by_outside_plan") and not outside:
                 blocked += " (and outside the plan)"
             table.add_row(
                 run["function_run_id"],

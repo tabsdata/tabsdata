@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import replace
@@ -14,11 +15,14 @@ import rich_click as click
 from tabsdatak.cli._capability import capability
 from tabsdatak.cli._command import TdkGroup
 from tabsdatak.cli._errors import ClassifiedException, TdkException, classify
+from tabsdatak.cli._machine import machine
 from tabsdatak.cli._prompted import pinned, prompted
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli._space import OUT_OF_SPACE, room
 from tabsdatak.cli.cli_utils import (
     DEFAULT_SAMPLE_LEN,
+    MACHINE_SAMPLE_LEN,
+    ROW_FORMATS,
     VIEW_OPTIONS,
     MutuallyExclusiveOption,
     ancestry,
@@ -48,6 +52,8 @@ from tabsdatak.cli.td.project_group import topology_options
 from tabsdatak.cli.td.tag_commands import tag_group
 from tabsdatak.common._tabular import Column, Kind, RecordView, TableView
 from tabsdatak.sdk.status_utils.groups import Entity, annotate
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     import polars as pl
@@ -457,8 +463,8 @@ def list_tables(
     "--len",
     type=int,
     help=(
-        "Maximum amount of rows to be shown. If not provided, the server default "
-        "of 100 rows applies. Cannot be greater than 1000."
+        "Maximum amount of rows to be shown. Defaults to 100 rows, and to 20 "
+        "when a program runs tdk. Cannot be greater than 1000."
     ),
 )
 @click.option(
@@ -535,6 +541,22 @@ def list_tables(
     ),
 )
 @click.option(
+    "--columns",
+    metavar="COLUMN,...",
+    help="Show only these columns, comma-separated, in this order.",
+)
+@click.option(
+    "--row-format",
+    type=click.Choice(ROW_FORMATS),
+    default=ROW_FORMATS[0],
+    show_default=True,
+    help=(
+        "For a program running tdk: each row an object keyed by column name, "
+        "or an array in the order of 'columns', which is smaller for large "
+        "reads."
+    ),
+)
+@click.option(
     "--wide",
     is_flag=True,
     hidden=True,
@@ -555,6 +577,8 @@ def data(
     at_trx: str,
     version: str,
     extra_cols: str,
+    columns: str,
+    row_format: str,
     wide: bool,
 ):
     """Show rows of data from the table"""
@@ -562,6 +586,9 @@ def data(
         chosen = ctx.obj.setdefault(VIEW_OPTIONS, {})
         if chosen.get("max_width") is None:
             chosen["max_width"] = 0
+    if len is None and machine() is not None:
+        len = MACHINE_SAMPLE_LEN
+    selected = split_csv(columns)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         table_data = server.sample_table(
@@ -579,6 +606,16 @@ def data(
 
         if table_data is None:
             raise no_data(coll, name, version, at, at_trx)
+        if selected:
+            missing = [column for column in selected if column not in table_data.schema]
+            if missing:
+                raise TdkException(
+                    "usage",
+                    f"'--columns' names columns the rows do not have: "
+                    f"{', '.join(missing)}. They have: "
+                    f"{', '.join(table_data.schema)}.",
+                )
+            table_data = table_data.select(selected)
 
         if file:
             # Diagnostics to stderr so json/yaml stdout stays parseable.
@@ -588,7 +625,15 @@ def data(
 
         render(
             ctx,
-            data=lambda: tabular(table_data, len or DEFAULT_SAMPLE_LEN),
+            data=lambda: tabular(
+                table_data,
+                len or DEFAULT_SAMPLE_LEN,
+                row_format=row_format,
+                offset=offset or 0,
+                total_rows=None
+                if sql
+                else _total_rows(ctx, coll, name, version, at, at_trx),
+            ),
             compat=table_data.to_dicts,
             view=lambda: table_data_view(
                 name, table_data, coll, server.connection.project
@@ -732,24 +777,40 @@ def schema(
     hint=_TABLE_COLL_HINT,
     help="Name of the collection to which the data belongs.",
 )
+@click.option(
+    "--latest",
+    is_flag=True,
+    help=(
+        "List only the newest committed version the filters keep. Not together "
+        "with '--order-by' or '--cursor'."
+    ),
+)
 @format_option
 @view_options()
 @max_result_option
 @list_options
 @click.pass_context
-def versions(ctx: click.Context, coll: str, name: str):
+def versions(ctx: click.Context, coll: str, name: str, latest: bool):
     """
-    List all versions of the data of a table.
+    List the committed versions of the data of a table, newest first; the
+    newest is marked 'latest'.
     """
+    obj = ctx.ensure_object(dict)
+    if latest and (obj.get("list_order_by") or obj.get("list_cursor")):
+        raise click.UsageError("'--latest' does not take '--order-by' or '--cursor'.")
+    if latest:
+        obj["max_result"] = 1
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         # /data-versions returns all statuses; the CLI lists committed only.
+        params = list_params(ctx, _COMMITTED, order_by=_NEWEST_FIRST)
         data_version_list, truncated = take(
-            ctx,
-            server.list_dataversions_generator(
-                coll, name, **list_params(ctx, "status:eq:C")
-            ),
+            ctx, server.list_dataversions_generator(coll, name, **params)
         )
+        if latest:
+            truncated = False
+            ctx.obj["list_next"] = None
+        newest = _newest_version(ctx, server, coll, name, data_version_list)
 
         def _view():
             rows = []
@@ -791,6 +852,13 @@ def versions(ctx: click.Context, coll: str, name: str):
         render_list(
             ctx,
             items=lambda: [
+                {
+                    **annotate(Entity.DATA_VERSION, dv._data),
+                    "latest": dv.id == newest,
+                }
+                for dv in data_version_list
+            ],
+            compat=lambda: [
                 annotate(Entity.DATA_VERSION, dv._data) for dv in data_version_list
             ],
             truncated=truncated,
@@ -800,6 +868,49 @@ def versions(ctx: click.Context, coll: str, name: str):
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list data versions: {e}")
+
+
+def _total_rows(
+    ctx: click.Context, coll: str, name: str, version, at, at_trx
+) -> int | None:
+    """The rows of the data version a read pins, ``None`` when it cannot be
+    told."""
+    from tabsdatak.sdk._tables import pin_ms, resolve_version
+
+    table = _sdk_table(ctx, coll, name)
+    try:
+        pinned = resolve_version(table, version, pin_ms(table.connection, at, at_trx))
+    except Exception as error:
+        logger.debug("The row count of the version could not be read: %s", error)
+        return None
+    count = (pinned._data or {}).get("row_count") if pinned is not None else None
+    return count if type(count) is int else None
+
+
+_COMMITTED = "status:eq:C"
+_NEWEST_FIRST = "id-"
+
+
+def _newest_version(
+    ctx: click.Context, server: TabsdataServer, coll: str, name: str, listed: list
+) -> str | None:
+    """The id of the table's newest committed version: the first listed when
+    the listing is the whole one newest first, else asked for."""
+    obj = ctx.obj
+    whole = not (
+        obj.get("list_filters") or obj.get("list_cursor") or obj.get("list_order_by")
+    )
+    if whole:
+        return listed[0].id if listed else None
+    first = next(
+        iter(
+            server.list_dataversions_generator(
+                coll, name, filter=_COMMITTED, order_by=_NEWEST_FIRST
+            )
+        ),
+        None,
+    )
+    return first.id if first is not None else None
 
 
 _AT_HELP = (

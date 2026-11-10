@@ -118,9 +118,12 @@ Applied where shown in each command. Every value option takes an argument.
                                   from the `next` cursor it returned; pass the
                                   same filters and order.
       --fields FIELD,...          Keep only these fields of each row of a paged
-                                  `list` (and `docs list|search`); not in the
-                                  table view. A field no row has is a usage
-                                  error naming the fields the rows have.
+                                  `list` (and `docs list|search`), or of the
+                                  record a `get`, `diagnose`, `fn trigger`,
+                                  `fn register|update|patch` or `collection
+                                  create` gives; not in the table view. A field
+                                  none has is a usage error naming those there
+                                  are; `--fields '?'` lists them instead.
       --confirm WORD              Confirm a destructive op without the prompt by
                                   giving its word: `delete`, or `cancel` for
                                   `plan|trx cancel`; another word is a usage
@@ -251,9 +254,12 @@ fn list                 [--proj PROJECT] [--coll COLLECTION] [-o]
                         #   --coll, else the pinned collection, else every collection of the project
                         #   cron-triggered / stream-publisher functions: see `tdk cron|stream list`
 fn trigger  --name NAME [--proj PROJECT] [--coll COLLECTION] [--plan-name N]
-            [--wait [--timeout S] | --no-wait]
+            [--wait [--timeout S] [--summary] [--count N] | --no-wait] [--fields F]
                         #   --wait waits for the plan (see Waiting), --no-wait returns it at once;
                         #   with neither, `tdk set --trigger-wait` decides (default: true, waits)
+                        #   --count N: N runs one after another, each once the one before
+                        #          succeeded, stopping at the first that does not; every run
+                        #          consumes source data; one --timeout covers them all
 fn enable   --name NAME [--proj PROJECT] [--coll COLLECTION]
 fn disable  --name NAME [--proj PROJECT] [--coll COLLECTION]
                         #   already in that state: reports it, changes nothing
@@ -307,13 +313,22 @@ table list                 [--proj PROJECT] [--coll COLLECTION] [--name PATTERN]
                             [--at TS|--at-trx TRX] [-o]
 table schema   --name NAME  [--proj PROJECT] [--coll COLLECTION] [--at TS|--at-trx TRX|--version V]
                             [--extra-cols none|meta|sys|all] [-o]
-table versions --name NAME  [--proj PROJECT] [--coll COLLECTION] [-o]
+table versions --name NAME  [--proj PROJECT] [--coll COLLECTION] [--latest] [-o]
+                            #   committed versions, newest first; each carries `latest`,
+                            #   true on the newest; --latest lists only that one
+                            #   `data_changed`: false when the run returned no data; the
+                            #   version then keeps the data of
+                            #   `with_data_table_data_version_id`. True means new data was
+                            #   written, not that it differs from the version before
 table data     --name NAME  [--proj PROJECT] [--coll COLLECTION] [--sql SQL] [--len N] [--offset N]
+                            [--columns C,...] [--row-format objects|arrays]
                             [--at TS|--at-trx TRX|--version V] [--extra-cols none|meta|sys|all]
                             [--file FILE] [--browse|--print] [--wrap] [--max-width N] [-o]
                             #   --sql: server-side SQL query over the table, which is the
                             #          only queryable relation and is named after itself
-                            #   --len: defaults to 100 rows, cannot exceed 1000
+                            #   --len: defaults to 100 rows (20 for a program running
+                            #          tdk), cannot exceed 1000
+                            #   --columns: only these columns, in this order
                             #   --extra-cols: non-user columns to add: 'meta' the '@td.'
                             #          connector metadata, 'sys' the '$td.' system ones,
                             #          'all' both; defaults to 'none'
@@ -442,9 +457,10 @@ plan list                 [--proj PROJECT] [--coll COLLECTION] [--fn FUNCTION] [
                           [--status S ... | --health H ...] [--last] [--at TS] [--monitor [--timeout S]] [-o]
 plan get     --plan PLAN   [--wait [--timeout S]] [-o]      # plan details + its function runs and workers
 plan cancel  --plan PLAN   [--confirm cancel]
-plan recover --plan PLAN   [--wait [--timeout S]]
+plan recover --plan PLAN   [--wait [--timeout S] [--summary]]
 plan monitor --plan PLAN   [--timeout S]
-plan logs    --plan PLAN   [--all [--max-result N]] [--tail N] [--failed-only] [--file FILE] [-o]
+plan logs    --plan PLAN   [--all [--max-result N]] [--tail N] [--grep PATTERN] [--from-error]
+                           [--failed-only] [--file FILE] [-o]
 plan diagnose --plan PLAN  [--max-runs N] [--log-lines N] [--no-logs] [-o]
 ```
 
@@ -457,7 +473,8 @@ trx get     --trx TRX   [--wait [--timeout S]] [-o]      # transaction details +
 trx cancel  --trx TRX   [--confirm cancel]
 trx recover --trx TRX   [--wait [--timeout S]]
 trx monitor --trx TRX   [--timeout S]
-trx logs    --trx TRX   [--all [--max-result N]] [--tail N] [--failed-only] [--file FILE] [-o]
+trx logs    --trx TRX   [--all [--max-result N]] [--tail N] [--grep PATTERN] [--from-error]
+                        [--failed-only] [--file FILE] [-o]
 ```
 
 ### `tdk fnrun` *(function runs)*
@@ -466,9 +483,10 @@ trx logs    --trx TRX   [--all [--max-result N]] [--tail N] [--failed-only] [--f
 fnrun list                  [--proj PROJECT] [--coll COLLECTION] [--status S ... | --health H ...] [--plan PLAN]
                             [--plan-name PATTERN] [--fn FUNCTION] [--trx TRX] [-o]
 fnrun get     --fnrun RUN  [--wait [--attempt ATTEMPT] [--timeout S]] [-o]      # run details + its workers (retries)
-fnrun logs    --fnrun RUN  [--all [--max-result N]] [--tail N] [--file FILE] [-o]
+fnrun logs    --fnrun RUN  [--all [--max-result N]] [--tail N] [--grep PATTERN] [--from-error]
+                           [--file FILE] [-o]
 fnrun diagnose --fnrun RUN [--log-lines N] [--no-logs] [-o]
-fnrun replay  --fnrun RUN  [--wait [--timeout S]]      # --wait waits for the new attempt
+fnrun replay  --fnrun RUN  [--wait [--timeout S] [--summary]]      # --wait waits for the new attempt
 fnrun recover --fnrun RUN  [--wait [--timeout S]]      # recovers the run's owning transaction
 ```
 
@@ -477,7 +495,7 @@ fnrun recover --fnrun RUN  [--wait [--timeout S]]      # recovers the run's owni
 ```
 worker list                  [--proj PROJECT] [--coll COLLECTION] [--status S ... | --health H ...] [--plan PLAN]
                              [--plan-name PATTERN] [--fn FUNCTION] [--fnrun RUN] [--trx TRX] [-o]
-worker logs    --worker WORKER  [--tail N] [--file FILE] [-o]
+worker logs    --worker WORKER  [--tail N] [--grep PATTERN] [--from-error] [--file FILE] [-o]
 worker recover --worker WORKER [--wait [--timeout S]]      # recovers the worker's owning transaction
 ```
 
@@ -486,6 +504,12 @@ the entity's own statuses and refuses any other value as a usage error that name
 `warning`, `running`, `ok`, repeatable, not together with `--status`) matches every status of that group, the
 `health` each listed row carries: what failed is `fnrun list --health error`, a plan that needs action
 `plan list --health warning` (Stalled) or `--health error` (Unexpected).
+
+A cancel also cancels every non-committed run that read the output of a run it
+cancels, and every queued run of the same function, in later plans too; its
+`done` lists them all in `canceled`, each `{"plan", "transaction",
+"function_run", "reason"}` with `reason` one of `requested`, `transaction`,
+`downstream` or `same_function`.
 
 `cancel` and `recover` report `{"done": {..., "changed": bool}}`: `changed` is false when no run was in a state the
 action applies to (a plan that already finished, nothing recoverable), and the message says so instead of
@@ -497,7 +521,9 @@ The `plan|trx|fnrun logs` commands show one worker's log, picked from the
 listing when several ran (with prompting off, they fail naming `--all`). `--all`
 shows every worker's, newest first, at most `--max-result` (default 20, 0 for
 all); `--failed-only` keeps the workers whose health is `warning` or `error`;
-`--tail N` keeps the last N lines of each log. A worker that did not succeed
+`--from-error` starts each log at its first traceback or `ERROR` line,
+`--grep PATTERN` keeps the lines matching that regular expression and
+`--tail N` the last N of what is left. A worker that did not succeed
 carries the error signature of its log (category, code, message and the
 user-code frame); a log you may not read (it takes `DevelopProject`) is
 reported in `log_unavailable` instead of failing the command.
@@ -511,9 +537,14 @@ handles (`function_version_id`, `ran_patch_id`, `physical_function_run_id`,
 `transaction_id`, `can_replay`, `can_recover`, and the `argv` to replay, recover
 and patch it; a retrying run gets none), its latest worker, `attempts`, the
 `signature` of that worker's log and a `log_excerpt` of its last `--log-lines`
-lines, headed by the traceback when it lies earlier. A held run names the failed
-runs upstream that block it in `blocked_by`, and `blocked_by_outside_plan` when
-the chain leaves the plan. The root cause is the earliest failure's signature,
+lines, headed by the traceback and the 20 lines before it when they lie
+earlier; over 4000 characters the lines before those go first, and `log_argv`
+reads the whole log from its error. A held run names
+the failed runs upstream that block it in `blocked_by`, and
+`blocked_by_outside_plan` when the chain leaves the plan; `blocked_by_outside`
+lists the earlier failed or held runs of its own function in other plans
+(`{"plan", "function_run", "status_name"}`), and the `on_hold` hint names the
+plan to recover or cancel. The root cause is the earliest failure's signature,
 its `category` (`missing_dependency`, `schema_mismatch`, `auth`, `connectivity`,
 `resource`, `user_code`, `platform` or `unknown`, else `on_hold`) and a `hint`.
 `--no-logs` diagnoses from statuses alone. They exit 0 whenever the diagnosis is
@@ -548,6 +579,9 @@ error: `'--timeout' applies only while waiting.`; on `plan|trx list` it needs
 
 A waited plan or transaction is rendered annotated, with its `runs` and the
 `waited_ms` it took; `get --wait` adds `waited_ms` to the `get` document.
+`--summary` (`fn trigger`, `plan recover`, `fnrun replay`) gives instead
+`{"plan" | "function_run", "status_name", "health", "function_runs_by_status",
+"failed_runs", "waited_ms"}`, the same summary a `run_failed` error carries.
 `fnrun replay --wait` and `fnrun get --wait --attempt ATTEMPT` wait for an
 attempt (a physical function run id, the replay's `new_function_run_id`) to
 end: Done, Error and Failed all end it, and Error or Failed exit 8. When a
@@ -593,7 +627,8 @@ at the day's end (a calendar window starts at the boundary holding `--from`, so 
 ## `tdk connection`
 
 ```
-connection types                            [-o]      # list available connector types (offline)
+connection types    [--system TEXT] [--mode in|out|cdc] [--max-result N] [--cursor C] [--fields F] [-o]
+                                                      # list available connector types (offline)
 connection template --type TYPE [--file FILE]         # print/write a fill-in template (offline)
 connection validate --file FILE                       # validate a connection document (offline)
 connection list     [--proj PROJECT | --all-projects] [--type TYPE] [--mode src|dest]

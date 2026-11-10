@@ -22,6 +22,7 @@ from tabsdatak.cli.cli_utils import (
     max_result_option,
     present,
     progress,
+    record_fields_option,
     render,
     render_entity,
     render_list,
@@ -33,6 +34,7 @@ from tabsdatak.cli.cli_utils import (
 from tabsdatak.cli.td._wait import (
     render_waited_transaction,
     require_wait,
+    summary_option,
     timeout_option,
     wait_function_run,
     wait_option,
@@ -171,6 +173,7 @@ def list_runs(
 @timeout_option()
 @format_option
 @view_options()
+@record_fields_option
 @click.pass_context
 def get(
     ctx: click.Context,
@@ -288,6 +291,7 @@ def logs(
 )
 @wait_option("the new attempt")
 @timeout_option()
+@summary_option("the function run")
 @click.pass_context
 def replay(ctx: click.Context, fnrun: str, wait: bool, timeout: float | None):
     """Re-execute a finished function run.
@@ -375,6 +379,7 @@ def recover(ctx: click.Context, fnrun: str, wait: bool, timeout: float | None):
 )
 @diagnose_options
 @format_option
+@record_fields_option
 @click.pass_context
 def diagnose(ctx: click.Context, fnrun: str, log_lines: int, no_logs: bool):
     """

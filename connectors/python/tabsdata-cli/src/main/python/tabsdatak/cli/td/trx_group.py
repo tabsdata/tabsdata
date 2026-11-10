@@ -21,7 +21,9 @@ from tabsdatak.cli.cli_utils import (
     output_format,
     present,
     progress,
+    record_fields_option,
     render,
+    render_cancel_done,
     render_list,
     render_status_done,
     show_hint,
@@ -197,6 +199,7 @@ def list_transactions(
 @timeout_option()
 @format_option
 @view_options()
+@record_fields_option
 @click.pass_context
 def get(ctx: click.Context, trx: str, wait: bool, timeout: float | None):
     """
@@ -267,20 +270,19 @@ def get(ctx: click.Context, trx: str, wait: bool, timeout: float | None):
 @click.pass_context
 def cancel(ctx: click.Context, trx: str, confirm: str):
     """
-    Cancel a transaction and its non-committed function runs, and every
-    non-committed transaction that read its output, in later plans too.
-    Canceled runs cannot be recovered.
+    Cancel a transaction and its non-committed function runs, every
+    non-committed transaction that read its output and every queued run of
+    the same functions, in later plans too. Canceled runs cannot be
+    recovered; the result lists every run canceled.
     """
     progress(ctx, f"Canceling transaction with ID '{trx}'")
     progress(ctx, "-" * 10)
     confirm_cancel(ctx, confirm, f"transaction '{trx}'")
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        changed = status_changed(server.cancel_transaction(trx))
-        render_status_done(
+        render_cancel_done(
             ctx,
-            changed=changed,
-            action="cancel",
+            response=server.cancel_transaction(trx),
             kind="transaction",
             id=trx,
             message="Transaction canceled successfully",

@@ -22,6 +22,7 @@ from tabsdatak.cli.cli_utils import (
     present,
     progress,
     proj_option,
+    record_fields_option,
     render,
     render_deleted,
     render_entity,
@@ -117,6 +118,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
     prompt="Name of the group to display",
     help="Name of the group to display.",
 )
+@record_fields_option
 @click.pass_context
 def get(ctx: click.Context, name: str):
     """Display a group by name"""

@@ -73,6 +73,72 @@ def wait_option(subject: str, failed: str = "a function run", default: bool = Fa
     )
 
 
+SUMMARY = "wait_summary"
+
+
+def _apply_summary(ctx: click.Context, param, value):
+    ctx.ensure_object(dict)
+    ctx.obj[SUMMARY] = value
+    return value
+
+
+def summary_option(subject: str):
+    """``--summary``: a wait returns only the summary of ``subject``."""
+    return click.option(
+        "--summary",
+        is_flag=True,
+        default=False,
+        expose_value=False,
+        callback=_apply_summary,
+        help=(
+            f"With the wait, return only {subject}'s status, its function runs "
+            "by status and the failed ones, instead of every run."
+        ),
+    )
+
+
+def _by_status(runs: list[dict]) -> dict:
+    counts: dict[str, int] = {}
+    for run in runs:
+        name = run.get("status_name") or run.get("status")
+        counts[name] = counts.get(name, 0) + 1
+    return counts
+
+
+def wait_summary(entity: Entity, document: dict) -> dict:
+    """What a waited plan, transaction or function run ended as: its id, its
+    status and health, its function runs by status and those that did not
+    succeed."""
+    if entity is Entity.FUNCTION_RUN:
+        failed = _failed(document.get("status"))
+        return {
+            "function_run": document.get("id"),
+            "plan": document.get("execution_id"),
+            "status_name": document.get("status_name"),
+            "health": document.get("health"),
+            "failed_runs": [document.get("id")] if failed else [],
+        }
+    runs = document.get("runs") or []
+    key = "plan" if entity is Entity.EXECUTION else "transaction"
+    return {
+        key: document.get("id"),
+        "status_name": document.get("status_name"),
+        "health": document.get("health"),
+        "function_runs_by_status": document.get("function_runs_by_status")
+        or _by_status(runs),
+        "failed_runs": [run["id"] for run in runs if _failed(run.get("status"))],
+    }
+
+
+def _summarized(ctx: click.Context, entity: Entity, document: dict) -> dict:
+    if not (ctx.obj or {}).get(SUMMARY):
+        return document
+    summary = wait_summary(entity, document)
+    if "waited_ms" in document:
+        summary["waited_ms"] = document["waited_ms"]
+    return summary
+
+
 class TimeoutOption(click.Option):
     """``--timeout``: its help names the default a person gets; a program
     running tdk sees its own, ``Machine.wait_seconds``."""
@@ -295,10 +361,10 @@ def _wait_with_runs(
             f"{subject} finished, but {len(failed)} function run(s) did not "
             f"succeed: {', '.join(failed)}.",
             hint=f"Diagnose it with 'tdk fnrun diagnose --fnrun {failed[0]}'.",
-            state=snapshot(),
+            state=wait_summary(entity, snapshot()),
         )
     progress(ctx, "All function runs were successful.")
-    return {**snapshot(), "waited_ms": _elapsed_ms(started)}
+    return _summarized(ctx, entity, {**snapshot(), "waited_ms": _elapsed_ms(started)})
 
 
 def wait_execution(
@@ -405,9 +471,22 @@ def wait_function_run(
             "run_failed",
             f"{subject} did not succeed.",
             hint=f"Diagnose it with 'tdk fnrun diagnose --fnrun {function_run.id}'.",
-            state=document,
+            state={
+                **wait_summary(Entity.FUNCTION_RUN, document),
+                "failed_runs": [function_run.id],
+                **(
+                    {}
+                    if attempt is None
+                    else {
+                        "attempt": attempt,
+                        "physical_status": document.get("physical_status"),
+                    }
+                ),
+            },
         )
-    return {**document, "waited_ms": _elapsed_ms(started)}
+    return _summarized(
+        ctx, Entity.FUNCTION_RUN, {**document, "waited_ms": _elapsed_ms(started)}
+    )
 
 
 def wait_listing(

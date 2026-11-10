@@ -63,3 +63,40 @@ def test_a_prompt_without_a_terminal_stays_off_stdout():
     assert result.exit_code == 0, result.output
     assert "Words to search for" not in result.stdout
     assert "items" in json.loads(result.stdout)
+
+
+def test_server_times_become_iso_and_table_rows_stay_as_they_are():
+    from tabsdatak.cli.cli_utils import Verbatim, jsonb_document
+
+    millis = 1750074554472
+    document = jsonb_document({
+        "created_at": millis,
+        "retry_at": millis,
+        "started_on": millis,
+        "count_at": "x",
+        "rows": Verbatim([{"created_at": millis, "seen_on": millis}]),
+    })
+    iso = "2025-06-16T11:49:14.472Z"
+    assert document["created_at"] == document["retry_at"] == iso
+    assert document["started_on"] == iso and document["count_at"] == "x"
+    assert document["rows"] == [{"created_at": millis, "seen_on": millis}]
+
+
+def test_a_listing_states_the_order_the_server_sorted_it_in():
+    from unittest.mock import MagicMock
+
+    import rich_click as click
+
+    from tabsdatak.cli.cli_utils import list_order, take
+
+    ctx = click.Context(click.Command("x"), obj={})
+    rows = MagicMock()
+    rows.__iter__.return_value = iter([])
+    rows.sorted_by = "name-"
+    take(ctx, rows)
+    assert list_order(ctx) == "name desc"
+    ctx.obj["list_sorted_by"] = None
+    ctx.obj["list_requested_order"] = "triggered_on"
+    assert list_order(ctx) == "triggered_on asc"
+    ctx.obj["list_requested_order"] = None
+    assert list_order(ctx) is None

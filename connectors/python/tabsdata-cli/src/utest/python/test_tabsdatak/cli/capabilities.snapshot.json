@@ -187,11 +187,13 @@
   "parameters": [
    "--conn-file",
    "--description",
+   "--fields",
    "--group",
    "--name",
    "--profile",
    "--proj",
    "--storage-path",
+   "--verbose",
    "-o"
   ]
  },
@@ -227,6 +229,7 @@
   },
   "parameters": [
    "--browse",
+   "--fields",
    "--max-width",
    "--name",
    "--profile",
@@ -433,6 +436,7 @@
   "parameters": [
    "--browse",
    "--definition",
+   "--fields",
    "--max-width",
    "--name",
    "--profile",
@@ -574,8 +578,13 @@
   },
   "parameters": [
    "--browse",
+   "--cursor",
+   "--fields",
+   "--max-result",
    "--max-width",
+   "--mode",
    "--profile",
+   "--system",
    "--wrap",
    "-o"
   ]
@@ -1010,6 +1019,7 @@
   "parameters": [
    "--browse",
    "--coll",
+   "--fields",
    "--max-width",
    "--name",
    "--profile",
@@ -1070,6 +1080,7 @@
    "--description",
    "--dir-to-bundle",
    "--dry-run",
+   "--fields",
    "--fn-version",
    "--local-pkg",
    "--name",
@@ -1078,6 +1089,7 @@
    "--proj",
    "--requirements",
    "--source",
+   "--verbose",
    "-o"
   ]
  },
@@ -1132,6 +1144,7 @@
    "--dir-to-bundle",
    "--dry-run",
    "--enabled",
+   "--fields",
    "--local-pkg",
    "--path",
    "--profile",
@@ -1140,6 +1153,7 @@
    "--reuse-tables",
    "--storage-path",
    "--update",
+   "--verbose",
    "-o"
   ]
  },
@@ -1219,11 +1233,14 @@
   },
   "parameters": [
    "--coll",
+   "--count",
    "--detach",
+   "--fields",
    "--name",
    "--plan-name",
    "--profile",
    "--proj",
+   "--summary",
    "--timeout",
    "--wait",
    "-o"
@@ -1260,6 +1277,7 @@
    "--dir-to-bundle",
    "--dry-run",
    "--enabled",
+   "--fields",
    "--local-pkg",
    "--name",
    "--path",
@@ -1270,6 +1288,7 @@
    "--reset-state",
    "--reuse-tables",
    "--storage-path",
+   "--verbose",
    "-o"
   ]
  },
@@ -1285,6 +1304,7 @@
    "paths": {}
   },
   "parameters": [
+   "--fields",
    "--fnrun",
    "--log-lines",
    "--no-logs",
@@ -1306,6 +1326,7 @@
   "parameters": [
    "--attempt",
    "--browse",
+   "--fields",
    "--fnrun",
    "--max-width",
    "--profile",
@@ -1364,6 +1385,8 @@
    "--all",
    "--file",
    "--fnrun",
+   "--from-error",
+   "--grep",
    "--max-result",
    "--profile",
    "--tail",
@@ -1403,6 +1426,7 @@
   "parameters": [
    "--fnrun",
    "--profile",
+   "--summary",
    "--timeout",
    "--wait",
    "-o"
@@ -1459,6 +1483,7 @@
   },
   "parameters": [
    "--browse",
+   "--fields",
    "--max-width",
    "--name",
    "--profile",
@@ -1803,6 +1828,7 @@
    "paths": {}
   },
   "parameters": [
+   "--fields",
    "--log-lines",
    "--max-runs",
    "--no-logs",
@@ -1824,6 +1850,7 @@
   },
   "parameters": [
    "--browse",
+   "--fields",
    "--max-width",
    "--plan",
    "--profile",
@@ -1884,6 +1911,8 @@
    "--all",
    "--failed-only",
    "--file",
+   "--from-error",
+   "--grep",
    "--max-result",
    "--plan",
    "--profile",
@@ -1923,6 +1952,7 @@
   "parameters": [
    "--plan",
    "--profile",
+   "--summary",
    "--timeout",
    "--wait",
    "-o"
@@ -1980,6 +2010,7 @@
   },
   "parameters": [
    "--browse",
+   "--fields",
    "--max-width",
    "--name",
    "--profile",
@@ -2382,6 +2413,7 @@
    "--at-trx",
    "--browse",
    "--coll",
+   "--columns",
    "--extra-cols",
    "--file",
    "--len",
@@ -2390,6 +2422,7 @@
    "--offset",
    "--profile",
    "--proj",
+   "--row-format",
    "--sql",
    "--version",
    "--wide",
@@ -2684,6 +2717,7 @@
    "--cursor",
    "--fields",
    "--filter",
+   "--latest",
    "--max-result",
    "--max-width",
    "--name",
@@ -2725,6 +2759,7 @@
   },
   "parameters": [
    "--browse",
+   "--fields",
    "--max-width",
    "--profile",
    "--timeout",
@@ -2785,6 +2820,8 @@
    "--all",
    "--failed-only",
    "--file",
+   "--from-error",
+   "--grep",
    "--max-result",
    "--profile",
    "--tail",
@@ -2904,6 +2941,7 @@
   },
   "parameters": [
    "--browse",
+   "--fields",
    "--max-width",
    "--name",
    "--profile",
@@ -3004,6 +3042,8 @@
   },
   "parameters": [
    "--file",
+   "--from-error",
+   "--grep",
    "--profile",
    "--tail",
    "--worker",

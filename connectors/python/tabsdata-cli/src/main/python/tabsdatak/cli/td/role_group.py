@@ -16,6 +16,7 @@ from tabsdatak.cli.cli_utils import (
     logical_prompt,
     max_result_option,
     present,
+    record_fields_option,
     render,
     require_word,
     set_pin,
@@ -401,6 +402,7 @@ def delete_user(ctx: click.Context, name: str, user: str):
 @format_option
 @view_options()
 @click.option("--name", "-n", help="Name of the role to display.")
+@record_fields_option
 @click.pass_context
 def info(ctx: click.Context, name: str):
     """Display a role by name"""

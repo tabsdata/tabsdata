@@ -512,3 +512,164 @@ def test_sql_naming_another_relation_names_the_table_in_its_hint(tmp_path):
     error = json.loads(result.stdout)["error"]
     assert error["status"] == 400 and error["code"] == "SampleError::0000"
     assert error["hint"].endswith("SELECT ... FROM orders")
+
+
+def _page(rows: list[dict]) -> MagicMock:
+    response = MagicMock()
+    response.json.return_value = {"data": {"data": rows}}
+    return response
+
+
+def _data(client: MagicMock, frame, row_count=None) -> None:
+    client.sample_table.return_value = frame
+    versions = (
+        []
+        if row_count is None
+        else [{"id": "dv-1", "collection": "s", "status": "C", "row_count": row_count}]
+    )
+    client.connection.dataversion_list.return_value = _page(versions)
+
+
+def test_data_rows_are_objects_with_the_total_and_the_next_offset(tmp_path):
+    import polars as pl
+
+    client = _client()
+    _data(client, pl.DataFrame({"n": [1, 2], "label": ["x", "y"]}), row_count=5)
+    argv = ["table", "data", "-c", "s", "-n", "t", "--offset", "1", "--machine"]
+    result = _invoke(argv, client, tmp_path)
+    assert result.exit_code == 0, result.output
+    document = json.loads(result.stdout)
+    assert document["rows"] == [{"n": 1, "label": "x"}, {"n": 2, "label": "y"}]
+    assert document["columns"] == [
+        {"name": "n", "dtype": "Int64"},
+        {"name": "label", "dtype": "String"},
+    ]
+    assert document["row_count"] == 2 and document["total_rows"] == 5
+    assert document["truncated"] is True
+    assert "'--offset 3'" in document["hint"]
+
+
+def test_data_reads_20_rows_for_a_program_and_100_for_a_person(tmp_path):
+    import polars as pl
+
+    client = _client()
+    _data(client, pl.DataFrame({"n": [1]}))
+    _invoke(["table", "data", "-c", "s", "-n", "t", "--machine"], client, tmp_path)
+    assert client.sample_table.call_args.kwargs["len"] == 20
+    _invoke(["table", "data", "-c", "s", "-n", "t", "-o", "json"], client, tmp_path)
+    assert client.sample_table.call_args.kwargs["len"] is None
+
+
+def test_data_selects_columns_and_gives_arrays_on_request(tmp_path):
+    import polars as pl
+
+    client = _client()
+    _data(client, pl.DataFrame({"a": [1], "b": ["x"], "c": [True]}), row_count=1)
+    argv = ["table", "data", "-c", "s", "-n", "t", "--columns", "c,a"]
+    result = _invoke([*argv, "--row-format", "arrays", "--machine"], client, tmp_path)
+    assert result.exit_code == 0, result.output
+    document = json.loads(result.stdout)
+    assert [column["name"] for column in document["columns"]] == ["c", "a"]
+    assert document["rows"] == [[True, 1]]
+    assert document["truncated"] is False and "hint" not in document
+
+
+def test_data_columns_it_does_not_have_are_a_usage_error(tmp_path):
+    import polars as pl
+
+    client = _client()
+    _data(client, pl.DataFrame({"a": [1]}))
+    argv = ["table", "data", "-c", "s", "-n", "t", "--columns", "a,zz", "--machine"]
+    result = _invoke(argv, client, tmp_path)
+    error = json.loads(result.stdout)["error"]
+    assert error["type"] == "usage"
+    assert "zz" in error["message"] and "They have: a" in error["message"]
+
+
+def test_data_keeps_time_named_columns_as_they_are(tmp_path):
+    import polars as pl
+
+    client = _client()
+    _data(client, pl.DataFrame({"created_at": [1750074554472], "seen_on": [1]}))
+    argv = ["table", "data", "-c", "s", "-n", "t", "--machine"]
+    document = json.loads(_invoke(argv, client, tmp_path).stdout)
+    assert document["rows"] == [{"created_at": 1750074554472, "seen_on": 1}]
+
+
+def test_data_keeps_the_rows_that_fit_and_resumes_after_them(
+    tmp_path, machine_settings
+):
+    import polars as pl
+
+    machine_settings["max_bytes"] = 2048
+    client = _client()
+    _data(client, pl.DataFrame({"text": ["x" * 400] * 10}), row_count=10)
+    argv = ["table", "data", "-c", "s", "-n", "t", "--machine"]
+    document = json.loads(_invoke(argv, client, tmp_path).stdout)
+    kept = document["row_count"]
+    assert 0 < kept < 10 and len(document["rows"]) == kept
+    assert document["truncated"] is True
+    assert f"'--offset {kept}'" in document["hint"]
+
+
+class _Version:
+    def __init__(self, id: str):
+        self.id = id
+        self.status = "C"
+        self.created_at_str = "2026-11-09"
+        self._data = {"id": id, "status": "C", "created_at": 1750074554472}
+        self.kwargs = self._data
+
+
+def _versions(client: MagicMock, *listings: list[str]) -> None:
+    client.list_dataversions_generator.side_effect = [
+        _Listing([_Version(id) for id in ids]) for ids in listings
+    ]
+
+
+def test_versions_list_newest_first_and_mark_the_latest(tmp_path):
+    client = _client()
+    _versions(client, ["dv-3", "dv-2", "dv-1"])
+    argv = ["table", "versions", "-c", "s", "-n", "t", "--machine"]
+    document = json.loads(_invoke(argv, client, tmp_path).stdout)
+    assert client.list_dataversions_generator.call_args.kwargs["order_by"] == "id-"
+    assert [row["latest"] for row in document["items"]] == [True, False, False]
+    assert document["order"] == "id desc"
+    assert document["items"][0]["created_at"] == "2025-06-16T11:49:14.472Z"
+    assert client.list_dataversions_generator.call_count == 1
+
+
+def test_versions_in_another_order_ask_for_the_latest(tmp_path):
+    client = _client()
+    _versions(client, ["dv-1", "dv-2"], ["dv-3"])
+    argv = ["table", "versions", "-c", "s", "-n", "t", "--order-by", "id+"]
+    document = json.loads(_invoke([*argv, "--machine"], client, tmp_path).stdout)
+    assert document["order"] == "id asc"
+    assert [row["latest"] for row in document["items"]] == [False, False]
+    newest = client.list_dataversions_generator.call_args
+    assert newest.kwargs == {"filter": "status:eq:C", "order_by": "id-"}
+
+
+def test_versions_latest_lists_only_the_newest(tmp_path):
+    client = _client()
+    _versions(client, ["dv-3", "dv-2"])
+    argv = ["table", "versions", "-c", "s", "-n", "t", "--latest", "--machine"]
+    document = json.loads(_invoke(argv, client, tmp_path).stdout)
+    assert [row["id"] for row in document["items"]] == ["dv-3"]
+    assert document["items"][0]["latest"] is True
+    assert document["truncated"] is False and document["next"] is None
+
+
+def test_versions_latest_takes_no_order(tmp_path):
+    client = _client()
+    argv = ["table", "versions", "-c", "s", "-n", "t", "--latest", "--order-by", "id+"]
+    result = _invoke([*argv, "--machine"], client, tmp_path)
+    assert json.loads(result.stdout)["error"]["type"] == "usage"
+
+
+def test_versions_json_keeps_the_2_2_shape(tmp_path):
+    client = _client()
+    _versions(client, ["dv-1"])
+    argv = ["table", "versions", "-c", "s", "-n", "t", "-o", "json"]
+    items = json.loads(_invoke(argv, client, tmp_path).stdout)
+    assert "latest" not in items[0] and items[0]["created_at"] == 1750074554472

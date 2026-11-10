@@ -37,7 +37,20 @@ def _entry(worker_id: str, **overrides) -> dict:
         "log": f"log of {worker_id}",
     }
     entry.update(overrides)
+    log = entry["log"]
+    entry.setdefault(
+        "lines",
+        None
+        if log is None
+        else [[n, row] for n, row in enumerate(log.splitlines(), 1)],
+    )
     return entry
+
+
+def _shown(entry: dict, log_cut: list) -> dict:
+    """``entry`` as the jsonb document gives it."""
+    shown = {k: v for k, v in entry.items() if k not in ("log", "status", "lines")}
+    return {**shown, "lines": entry["lines"], "log_cut": log_cut}
 
 
 def _worker(id: str, status: str, run: str = "fr20260930-1"):
@@ -75,7 +88,16 @@ def test_plan_logs_all_is_the_list_envelope(tmp_path):
     client = _client()
     client.scope_logs.return_value = ([_entry("W2"), _entry("W1")], True)
     result = _invoke(
-        ["plan", "logs", "--plan", "ep20260930-1", "--all", "--tail", "50", "--failed-only"]
+        [
+            "plan",
+            "logs",
+            "--plan",
+            "ep20260930-1",
+            "--all",
+            "--tail",
+            "50",
+            "--failed-only",
+        ]
         + ["-o", "jsonb"],
         client,
         tmp_path,
@@ -86,8 +108,30 @@ def test_plan_logs_all_is_the_list_envelope(tmp_path):
     assert document["truncated"] is True
     assert document["next"] is None
     client.scope_logs.assert_called_once_with(
-        plan="ep20260930-1", tail=50, failed_only=True, max_workers=20
+        plan="ep20260930-1",
+        tail=50,
+        failed_only=True,
+        max_workers=20,
+        grep=None,
+        from_error=False,
     )
+
+
+def test_logs_pass_their_line_filters(tmp_path):
+    client = _client()
+    client.scope_logs.return_value = ([], False)
+    argv = ["plan", "logs", "--plan", "ep20260930-1", "--all"]
+    argv += ["--grep", "Key.*", "--from-error", "-o", "jsonb"]
+    result = _invoke(argv, client, tmp_path)
+    assert result.exit_code == 0, result.output
+    kwargs = client.scope_logs.call_args.kwargs
+    assert kwargs["grep"] == "Key.*" and kwargs["from_error"] is True
+
+
+def test_logs_reject_a_grep_that_is_not_a_regular_expression(tmp_path):
+    argv = ["worker", "logs", "--worker", "wkr20260301-1", "--grep", "(", "--machine"]
+    result = _invoke(argv, _client(), tmp_path)
+    assert json.loads(result.stdout)["error"]["type"] == "usage"
 
 
 def test_max_result_bounds_the_workers(tmp_path):
@@ -183,8 +227,10 @@ def test_worker_logs_tail_and_not_found(tmp_path):
         tmp_path,
     )
     assert result.exit_code == 0, result.output
-    client.worker_log_entry.assert_called_once_with("wkr20260301-1", tail=5)
-    assert json.loads(result.stdout)["items"] == [_entry("W1")]
+    client.worker_log_entry.assert_called_once_with(
+        "wkr20260301-1", tail=5, grep=None, from_error=False
+    )
+    assert json.loads(result.stdout)["items"] == [_shown(_entry("W1"), [[2, 2]])]
 
     client.worker_log_entry.side_effect = NotFound("Worker with ID W9 not found.")
     result = _invoke(["worker", "logs", "--worker", "wkr20260301-9"], client, tmp_path)
@@ -212,20 +258,37 @@ def test_a_typed_worker_outside_the_listing_is_not_found(tmp_path):
     client.worker_log_entry.assert_not_called()
 
 
-def test_machine_logs_have_a_budget_over_the_whole_document(
-    tmp_path, machine_settings
-):
+def _long(char: str, lines: int) -> str:
+    return "\n".join(char * 99 for _ in range(lines))
+
+
+def _lines_bytes(item: dict) -> int:
+    return sum(
+        len(json.dumps(line, separators=(",", ":"))) + 1 for line in item["lines"]
+    )
+
+
+def test_machine_logs_have_a_budget_over_the_whole_document(tmp_path, machine_settings):
     machine_settings.update(log_cap_bytes=256 * 1024, logs_budget_bytes=2 * 1024 * 1024)
     client = _client()
-    entries = [_entry(f"W{i}", log="x" * (300 * 1024)) for i in range(10)]
+    entries = [
+        _entry(f"W{i}", log=_long("x", 3000), lines_total=3000) for i in range(10)
+    ]
     client.scope_logs.return_value = (entries, False)
-    result = _invoke(["plan", "logs", "--plan", "ep20260930-1", "--all", "--machine"], client, tmp_path)
+    result = _invoke(
+        ["plan", "logs", "--plan", "ep20260930-1", "--all", "--machine"],
+        client,
+        tmp_path,
+    )
     assert result.exit_code == 0, result.output
     items = json.loads(result.stdout)["items"]
-    sizes = [len(item["log"].encode()) for item in items]
-    assert sum(sizes) == 2 * 1024 * 1024
-    assert max(sizes) - min(sizes) <= 1
+    sizes = [_lines_bytes(item) for item in items]
+    assert sum(sizes) <= 2 * 1024 * 1024
+    assert max(sizes) - min(sizes) <= 120
     assert all(item["log_truncated"] for item in items)
+    first = items[0]["lines"][0][0]
+    assert items[0]["log_cut"] == [[1, first - 1]]
+    assert items[0]["lines"][-1][0] == 3000
 
 
 def test_machine_logs_share_the_budget_and_a_short_log_leaves_its_rest(
@@ -234,15 +297,20 @@ def test_machine_logs_share_the_budget_and_a_short_log_leaves_its_rest(
     machine_settings.update(log_cap_bytes=12 * 1024, logs_budget_bytes=12 * 1024)
     client = _client()
     entries = [
-        _entry("W1", log="a" * (20 * 1024)),
-        _entry("W2", log="b" * 1024),
-        _entry("W3", log="c" * (20 * 1024)),
+        _entry("W1", log=_long("a", 200), lines_total=200),
+        _entry("W2", log=_long("b", 5), lines_total=5),
+        _entry("W3", log=_long("c", 200), lines_total=200),
     ]
     client.scope_logs.return_value = (entries, False)
-    result = _invoke(["plan", "logs", "--plan", "ep20260930-1", "--all", "--machine"], client, tmp_path)
+    result = _invoke(
+        ["plan", "logs", "--plan", "ep20260930-1", "--all", "--machine"],
+        client,
+        tmp_path,
+    )
     assert result.exit_code == 0, result.output
     items = json.loads(result.stdout)["items"]
-    sizes = [len(item["log"].encode()) for item in items]
-    assert sizes == [5632, 1024, 5632]
     assert [item["log_truncated"] for item in items] == [True, False, True]
-    assert items[0]["log"].endswith("a")
+    assert len(items[1]["lines"]) == 5 and items[1]["log_cut"] == []
+    share = (12 * 1024 - _lines_bytes(items[1])) // 2
+    assert all(_lines_bytes(items[i]) <= share for i in (0, 2))
+    assert items[0]["lines"][-1] == [200, "a" * 99]

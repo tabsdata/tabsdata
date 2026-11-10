@@ -726,6 +726,7 @@ def render(
     already printed its human output."""
     fmt = output_format(ctx)
     if fmt == "table":
+        _no_record_fields(ctx)
         if view is None:
             if truncated:
                 click.echo(more_results_message(ctx))
@@ -741,10 +742,12 @@ def render(
         click.echo(more_results_message(ctx), err=True)
     run = machine()
     if run is not None:
-        run.emit(jsonb_document(data() if callable(data) else data))
+        run.emit(
+            jsonb_document(_record_fields(ctx, data() if callable(data) else data))
+        )
         return
     source = data if compat is _AS_DATA or fmt == DOCUMENT_FORMAT else compat
-    payload = source() if callable(source) else source
+    payload = _record_fields(ctx, source() if callable(source) else source)
     if fmt == DOCUMENT_FORMAT:
         payload = jsonb_document(payload)
     text = serialize(payload, fmt)
@@ -848,13 +851,100 @@ def display(ctx: click.Context):
     )
 
 
-def render_entity(ctx: click.Context, *, data, message: str) -> None:
+def render_entity(
+    ctx: click.Context, *, data, message: str, ack: tuple[str, ...] | None = None
+) -> None:
     """Render the object a mutation produced: ``message`` for humans, the DTO
-    itself in the machine formats."""
+    itself in the machine formats. With ``ack``, the ``jsonb`` document and a
+    machine run keep only those fields of it, unless ``--verbose`` or
+    ``--fields`` asks for more."""
     if output_format(ctx) == "table":
+        _no_record_fields(ctx)
         click.echo(message)
         return
+    obj = ctx.obj or {}
+    short = (
+        ack is not None
+        and not obj.get(VERBOSE)
+        and not obj.get(RECORD_FIELDS)
+        and (machine() is not None or output_format(ctx) == DOCUMENT_FORMAT)
+    )
+    if short:
+        full = data
+
+        def data():
+            record = full() if callable(full) else full
+            if not isinstance(record, dict):
+                return record
+            return {name: record[name] for name in ack if name in record}
+
     render(ctx, data=data)
+
+
+VERBOSE = "verbose"
+RECORD_FIELDS = "record_fields"
+FIELDS_HELP = (
+    "Keep only these fields, comma-separated; '?' lists the fields there are. "
+    "Not in the table view."
+)
+
+
+def _apply_record_fields(ctx: click.Context, param, value):
+    ctx.ensure_object(dict)
+    ctx.obj[RECORD_FIELDS] = split_csv(value) or None
+    return value
+
+
+def _apply_verbose(ctx: click.Context, param, value):
+    ctx.ensure_object(dict)
+    ctx.obj[VERBOSE] = value
+    return value
+
+
+def record_fields_option(fn):
+    """Decorator adding ``--fields`` to a command that returns one record."""
+    return click.option(
+        "--fields",
+        metavar="FIELD,...",
+        expose_value=False,
+        callback=_apply_record_fields,
+        help=FIELDS_HELP,
+    )(fn)
+
+
+def ack_options(fn):
+    """Decorator adding ``--fields`` and ``--verbose`` to a mutation whose
+    ``render_entity`` gives a short ack."""
+    fn = record_fields_option(fn)
+    return click.option(
+        "--verbose",
+        is_flag=True,
+        default=False,
+        expose_value=False,
+        callback=_apply_verbose,
+        help=(
+            "For a program running tdk, the whole record instead of its id, "
+            "name and status."
+        ),
+    )(fn)
+
+
+def _no_record_fields(ctx: click.Context) -> None:
+    if (ctx.obj or {}).get(RECORD_FIELDS):
+        raise click.UsageError("'--fields' needs '-o json' or '-o yaml'.")
+
+
+def _record_fields(ctx: click.Context, payload):
+    """``payload``, a record or a list of them, with only the fields
+    ``--fields`` names; ``--fields ?`` gives the names there are instead."""
+    fields = (ctx.obj or {}).get(RECORD_FIELDS)
+    if not fields or not isinstance(payload, (dict, list)):
+        return payload
+    rows = [payload] if isinstance(payload, dict) else payload
+    if fields == [FIELD_NAMES]:
+        return {"fields": field_names(rows)}
+    kept = only_fields(rows, fields)
+    return kept[0] if isinstance(payload, dict) else kept
 
 
 def render_deleted(
@@ -917,6 +1007,50 @@ def status_changed(response) -> bool:
     return not any(warning.get("code") == NO_STATUS_CHANGE for warning in warnings)
 
 
+def canceled_runs(response) -> list[dict] | None:
+    """Every run a cancel ended, with its plan and how the cancel reached it
+    (``requested``, ``transaction``, ``downstream`` or ``same_function``);
+    ``None`` from a server that does not say."""
+    try:
+        data = response.json().get("data")
+    except (AttributeError, ValueError):
+        return None
+    runs = data.get("canceled") if isinstance(data, dict) else None
+    if not isinstance(runs, list):
+        return None
+    return [
+        {
+            "plan": run.get("execution_id"),
+            "transaction": run.get("transaction_id"),
+            "function_run": run.get("function_run_id"),
+            "reason": run.get("reason"),
+        }
+        for run in runs
+        if isinstance(run, dict)
+    ]
+
+
+def render_cancel_done(
+    ctx: click.Context, *, response, kind: str, id: str, message: str
+) -> None:
+    """``render_status_done`` for a cancel, with ``canceled``, every run it
+    ended in any plan, when the server says."""
+    runs = canceled_runs(response)
+    details = {} if runs is None else {"canceled": runs}
+    if runs:
+        plans = {run["plan"] for run in runs}
+        message += f": {len(runs)} function run(s) canceled in {len(plans)} plan(s)"
+    render_status_done(
+        ctx,
+        changed=status_changed(response),
+        action="cancel",
+        kind=kind,
+        id=id,
+        message=message,
+        details=details,
+    )
+
+
 def render_status_done(
     ctx: click.Context,
     *,
@@ -950,9 +1084,11 @@ def render_list(
     "next": cursor}``, where ``next`` is the ``--cursor`` that continues a
     truncated listing, or null, and a truncated listing adds ``hint``, how to
     get the rest; in ``json`` and ``yaml`` the bare items, or ``compat`` when
-    given. Rows keep only the fields ``--fields`` names, and a machine run stops
-    them at its ``max_bytes``. ``cut_hint``, a callable, says how to get rows
-    the command shortened itself, or returns None when it shortened none."""
+    given; ``order``, when known, says how the items are sorted
+    (``"<field> asc|desc"``). Rows keep only the fields ``--fields`` names,
+    and a machine run stops them at its ``max_bytes``. ``cut_hint``, a
+    callable, says how to get rows the command shortened itself, or returns
+    None when it shortened none."""
     if (ctx.obj or {}).get("list_fields") and output_format(ctx) == "table":
         raise click.UsageError("'--fields' needs '-o json' or '-o yaml'.")
 
@@ -963,10 +1099,15 @@ def render_list(
         return _only_fields(ctx, compat() if callable(compat) else compat)
 
     def _envelope():
+        if (ctx.obj or {}).get("list_fields") == [FIELD_NAMES]:
+            return {"fields": field_names(items() if callable(items) else items)}
         rows = jsonb_document(_items())
         fitted = _fit(ctx, rows)
         cut = truncated or len(fitted) < len(rows)
         envelope = {"items": fitted, "truncated": cut, "next": list_next(ctx)}
+        order = list_order(ctx)
+        if order is not None:
+            envelope["order"] = order
         hints = [more_results_message(ctx)] if cut else []
         shortened = cut_hint() if cut_hint is not None else None
         if shortened:
@@ -984,18 +1125,37 @@ def render_list(
     )
 
 
+# Server times not named '*_on'.
+EPOCH_MS_FIELDS = frozenset({"created_at", "retry_at"})
+
+
+def _is_time_field(key: str) -> bool:
+    return key.endswith("_on") or key in EPOCH_MS_FIELDS
+
+
+class Verbatim(list):
+    """Items :func:`jsonb_document` keeps as they are: table rows, whose
+    columns are the user's."""
+
+
 def jsonb_document(value):
-    """``value`` as the ``jsonb`` document gives it: every ``*_on`` field
-    holding epoch milliseconds as an ISO-8601 UTC time, which ``--filter``
-    takes back."""
+    """``value`` as the ``jsonb`` document gives it: every ``*_on`` field,
+    and those of :data:`EPOCH_MS_FIELDS`, holding epoch milliseconds as an
+    ISO-8601 UTC time, which ``--filter`` takes back, and a ``status`` code
+    left out beside its ``status_name``; :class:`Verbatim` items are left
+    alone."""
+    if isinstance(value, Verbatim):
+        return value
     if isinstance(value, list):
         return [jsonb_document(item) for item in value]
     if isinstance(value, dict):
+        named = "status_name" in value
         return {
             key: _iso_time(item)
-            if key.endswith("_on") and type(item) is int
+            if _is_time_field(key) and type(item) is int
             else jsonb_document(item)
             for key, item in value.items()
+            if not (named and key == "status")
         }
     return value
 
@@ -1012,10 +1172,20 @@ def _only_fields(ctx: click.Context, rows):
     return only_fields(rows, (ctx.obj or {}).get("list_fields"))
 
 
+FIELD_NAMES = "?"
+
+
+def field_names(rows: list) -> list[str]:
+    """The fields of ``rows`` as the ``jsonb`` document gives them."""
+    shown = jsonb_document([row for row in rows if isinstance(row, dict)])
+    return list(dict.fromkeys(key for row in shown for key in row))
+
+
 def only_fields(rows, fields: list[str] | None):
     """Each of ``rows`` with only ``fields``; a field no row has is a usage
-    error naming the fields the rows have."""
-    if not fields or not isinstance(rows, list):
+    error naming the fields the rows have. ``?`` alone keeps every field:
+    the caller lists their names."""
+    if not fields or fields == [FIELD_NAMES] or not isinstance(rows, list):
         return rows
     records = [row for row in rows if isinstance(row, dict)]
     known = list(dict.fromkeys(key for row in records for key in row))
@@ -1101,6 +1271,8 @@ def version_skew(server) -> str | None:
 
 
 DEFAULT_SAMPLE_LEN = 100
+MACHINE_SAMPLE_LEN = 20
+ROW_FORMATS = ("objects", "arrays")
 
 
 def _json_value(value):
@@ -1119,18 +1291,66 @@ def _json_value(value):
     return value
 
 
-def tabular(frame, page_len: int) -> dict:
-    """The tabular-data shape: columns with their Polars dtype, then the rows
-    as arrays. ``truncated`` is true when the page is full, so more rows may
-    follow."""
-    return {
-        "columns": [
-            {"name": name, "dtype": str(dtype)} for name, dtype in frame.schema.items()
-        ],
-        "rows": [[_json_value(value) for value in row] for row in frame.rows()],
-        "row_count": frame.height,
-        "truncated": frame.height >= page_len,
+def tabular(
+    frame,
+    page_len: int,
+    *,
+    row_format: str = "objects",
+    offset: int = 0,
+    total_rows: int | None = None,
+) -> dict:
+    """The tabular-data shape: columns with their Polars dtype, then the rows,
+    each an object keyed by column name, or with ``row_format`` ``arrays``
+    an array in the order of ``columns``. ``row_count`` is the rows returned
+    and ``total_rows``, when known, the rows there are. ``truncated`` is true
+    when more rows follow (when ``total_rows`` is unknown, when the page is
+    full), and then ``hint`` names the ``--offset`` that reads them. A
+    machine run keeps the leading rows that fit its ``max_bytes``."""
+    names = list(frame.schema)
+    if row_format == "arrays":
+        rows = [[_json_value(value) for value in row] for row in frame.rows()]
+    else:
+        rows = [
+            {name: _json_value(value) for name, value in zip(names, row)}
+            for row in frame.rows()
+        ]
+    columns = [
+        {"name": name, "dtype": str(dtype)} for name, dtype in frame.schema.items()
+    ]
+    kept = _fit_rows(rows, json_size(columns))
+    shown = offset + kept
+    truncated = kept < len(rows) or (
+        frame.height >= page_len if total_rows is None else shown < total_rows
+    )
+    document = {
+        "columns": columns,
+        "rows": Verbatim(rows[:kept]),
+        "row_count": kept,
     }
+    if total_rows is not None:
+        document["total_rows"] = total_rows
+    document["truncated"] = truncated
+    if truncated:
+        document["hint"] = (
+            f"More rows: continue with '--offset {shown}', or narrow with "
+            "'--columns' and '--sql'."
+        )
+    return document
+
+
+def _fit_rows(rows: list, used: int) -> int:
+    """How many leading ``rows`` fit, after ``used`` bytes and the envelope,
+    in the machine run's ``max_bytes``: at least one."""
+    run = machine()
+    budget = run.max_bytes if run is not None else None
+    if not budget:
+        return len(rows)
+    used += ENVELOPE_BYTES
+    for index, row in enumerate(rows):
+        used += json_size(row) + 1
+        if used > budget and index:
+            return index
+    return len(rows)
 
 
 # ---------------------------------------------------------------------------
@@ -1259,7 +1479,8 @@ _FIELDS_OPTION = click.option(
     expose_value=False,
     callback=_apply_fields,
     help=(
-        "Keep only these fields of each row, comma-separated; not in the table view."
+        "Keep only these fields of each row, comma-separated; '?' lists the "
+        "fields the rows have. Not in the table view."
     ),
 )
 _CURSOR_OPTION = click.option(
@@ -1328,6 +1549,7 @@ def list_params(
     filters += obj.get("list_filters", [])
     order_by = obj.get("list_order_by") or order_by
     obj["list_key"] = _listing_key(ctx, filters, order_by)
+    obj["list_requested_order"] = order_by
     cursor = obj.get("list_cursor")
     if cursor is not None:
         from tabsdatak.sdk.tabsdata_server import ListCursor
@@ -1350,6 +1572,20 @@ def _listing_key(ctx: click.Context, filters: list[str], order_by: str | None) -
         ctx = ctx.parent
     document = json.dumps([names[::-1], params, sorted(filters), order_by], default=str)
     return hashlib.sha256(document.encode()).hexdigest()[:12]
+
+
+def list_order(ctx: click.Context) -> str | None:
+    """How the listing :func:`take` drained is sorted, ``"<field> asc"`` or
+    ``"<field> desc"``: as the server says, else as requested; ``None`` when
+    neither is known."""
+    obj = ctx.obj or {}
+    sorted_by = obj.get("list_sorted_by") or obj.get("list_requested_order")
+    if not sorted_by:
+        return None
+    field, direction = (
+        (sorted_by[:-1], sorted_by[-1]) if sorted_by[-1] in "+-" else (sorted_by, "+")
+    )
+    return f"{field} {'desc' if direction == '-' else 'asc'}"
 
 
 def list_next(ctx: click.Context) -> str | None:
@@ -1379,6 +1615,7 @@ def take(ctx: click.Context, rows: Iterable) -> tuple[list, bool]:
         taken.append(row)
     ctx.obj["list_taken"] = len(taken)
     ctx.obj["list_positions"] = positions
+    ctx.obj["list_sorted_by"] = getattr(rows, "sorted_by", None)
     truncated = len(positions) > len(taken)
     if truncated:
         ctx.obj["list_next"] = _cursor_at(ctx, len(taken))

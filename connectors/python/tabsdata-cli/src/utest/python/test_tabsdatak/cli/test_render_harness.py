@@ -242,14 +242,17 @@ _TABLE_DATA_TABULAR = {
         {"name": name, "dtype": str(dtype)}
         for name, dtype in _TABLE_DATA_DF.schema.items()
     ],
-    "rows": [list(row) for row in _TABLE_DATA_DF.rows()],
+    "rows": _TABLE_DATA_DF.to_dicts(),
     "row_count": _TABLE_DATA_DF.height,
     "truncated": False,
 }
 
 
-def _listing(items) -> dict:
-    return {"items": items, "truncated": False, "next": None}
+def _listing(items, order: str | None = None) -> dict:
+    listing = {"items": items, "truncated": False, "next": None}
+    if order is not None:
+        listing["order"] = order
+    return listing
 
 
 # ``metrics show`` aggregates ``nodes`` into a summary table, one row per
@@ -491,7 +494,10 @@ _LISTING_KEYS = {"items", "truncated", "next"}
 def _compat(case: RenderCase) -> Any:
     if case.compat is not None:
         return case.compat
-    if isinstance(case.payload, dict) and set(case.payload) == _LISTING_KEYS:
+    if (
+        isinstance(case.payload, dict)
+        and set(case.payload) - {"order"} == _LISTING_KEYS
+    ):
         return case.payload["items"]
     return case.payload
 
@@ -1050,7 +1056,7 @@ CASES: tuple[RenderCase, ...] = (
         "plan-list",
         ["plan", "list"],
         _set_plan_list,
-        _listing(_EXECUTIONS_OUT),
+        _listing(_EXECUTIONS_OUT, "triggered_on desc"),
         (
             "ep20260301-1",
             "plan-a",
@@ -1066,7 +1072,7 @@ CASES: tuple[RenderCase, ...] = (
         "trx-list",
         ["trx", "list"],
         _set_trx_list,
-        _listing(_TRANSACTIONS_OUT),
+        _listing(_TRANSACTIONS_OUT, "triggered_on desc"),
         (
             "tx20260301-1",
             "ep20260301-1",
@@ -1129,7 +1135,7 @@ CASES: tuple[RenderCase, ...] = (
         "cron-plans",
         ["cron", "plans"],
         _set_plan_list,
-        _listing(_EXECUTIONS_OUT),
+        _listing(_EXECUTIONS_OUT, "triggered_on desc"),
         (
             "ep20260301-1",
             "plan-a",
@@ -1145,7 +1151,7 @@ CASES: tuple[RenderCase, ...] = (
         "stream-plans",
         ["stream", "plans"],
         _set_plan_list,
-        _listing(_EXECUTIONS_OUT),
+        _listing(_EXECUTIONS_OUT, "triggered_on desc"),
         (
             "ep20260301-1",
             "plan-a",
@@ -1161,7 +1167,7 @@ CASES: tuple[RenderCase, ...] = (
         "table-versions",
         ["table", "versions", "-c", "coll-a", "--name", "tbl-a"],
         _set_table_versions,
-        _listing(_DATAVERSIONS_OUT),
+        _listing([{**_DATAVERSIONS_OUT[0], "latest": True}], "id desc"),
         (
             "DV_1",
             "fn-a",
@@ -1172,6 +1178,7 @@ CASES: tuple[RenderCase, ...] = (
             "42",
             "1.00",
         ),
+        _DATAVERSIONS_OUT,
     ),
     RenderCase(
         # payload is built from attributes; a None project is null (json) / "-" (table).
@@ -1323,6 +1330,7 @@ def _log_entry(worker_id: str, log: str) -> dict:
         "log_unavailable": None,
         "signature": None,
         "log": log,
+        "lines": [[n, row] for n, row in enumerate(log.splitlines(), 1)],
     }
 
 
@@ -1331,8 +1339,13 @@ def _set_worker_log(c: MagicMock) -> None:
 
 
 def test_worker_logs_carries_worker_log_in_every_format(tmp_path):
+    shown = {
+        key: value
+        for key, value in _log_entry("W1", "line-1\nline-2").items()
+        if key not in ("log", "status")
+    }
     envelope = {
-        "items": [_log_entry("W1", "line-1\nline-2")],
+        "items": [{**shown, "log_cut": []}],
         "truncated": False,
         "next": None,
     }
@@ -1662,7 +1675,7 @@ def test_table_data_warns_when_the_version_is_not_committed(tmp_path, rows, serv
     if rows is not None:
         assert json.loads(result.stdout) == {
             "columns": [{"name": "a", "dtype": "Int64"}],
-            "rows": [[1]],
+            "rows": [{"a": 1}],
             "row_count": 1,
             "truncated": False,
         }

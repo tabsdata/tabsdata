@@ -21,7 +21,9 @@ from tabsdatak.cli.cli_utils import (
     output_format,
     present,
     progress,
+    record_fields_option,
     render,
+    render_cancel_done,
     render_list,
     render_status_done,
     show_hint,
@@ -31,6 +33,7 @@ from tabsdatak.cli.cli_utils import (
 from tabsdatak.cli.td._wait import (
     render_waited_execution,
     require_wait,
+    summary_option,
     timeout_option,
     wait_execution,
     wait_listing,
@@ -192,6 +195,7 @@ def list_plans(
 @timeout_option()
 @format_option
 @view_options()
+@record_fields_option
 @click.pass_context
 def get(ctx: click.Context, plan: str, wait: bool, timeout: float | None):
     """
@@ -262,19 +266,18 @@ def get(ctx: click.Context, plan: str, wait: bool, timeout: float | None):
 def cancel(ctx: click.Context, plan: str, confirm: str):
     """
     Cancel a plan: every non-committed transaction in it is canceled, and so
-    is every non-committed transaction that read its output, in later plans
-    too. Canceled runs cannot be recovered.
+    is every non-committed transaction that read its output and every queued
+    run of the same functions, in later plans too. Canceled runs cannot be
+    recovered; the result lists every run canceled.
     """
     progress(ctx, f"Canceling plan with ID '{plan}'")
     progress(ctx, "-" * 10)
     confirm_cancel(ctx, confirm, f"plan '{plan}'")
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        changed = status_changed(server.cancel_execution(plan))
-        render_status_done(
+        render_cancel_done(
             ctx,
-            changed=changed,
-            action="cancel",
+            response=server.cancel_execution(plan),
             kind="plan",
             id=plan,
             message="Plan canceled successfully",
@@ -290,6 +293,7 @@ def cancel(ctx: click.Context, plan: str, confirm: str):
 @click.option("--plan", type=PLAN_ID, required=True, help="ID of the plan to recover.")
 @wait_option("the recovered plan")
 @timeout_option()
+@summary_option("the plan")
 @click.pass_context
 def recover(ctx: click.Context, plan: str, wait: bool, timeout: float | None):
     """
@@ -400,6 +404,7 @@ def logs(
 )
 @diagnose_options
 @format_option
+@record_fields_option
 @click.pass_context
 def diagnose(
     ctx: click.Context, plan: str, max_runs: int, log_lines: int, no_logs: bool

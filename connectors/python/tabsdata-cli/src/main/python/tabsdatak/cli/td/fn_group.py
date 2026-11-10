@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import tempfile
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -14,11 +15,12 @@ import rich_click as click
 
 from tabsdatak.cli._capability import capability
 from tabsdatak.cli._command import TdkGroup
-from tabsdatak.cli._errors import TdkException
+from tabsdatak.cli._errors import TdkException, classify
 from tabsdatak.cli._machine import machine
 from tabsdatak.cli._prompted import pinned, prompted
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
+    ack_options,
     ancestry,
     bundle_confinement,
     command_failure,
@@ -35,6 +37,7 @@ from tabsdatak.cli.cli_utils import (
     present,
     progress,
     proj_option,
+    record_fields_option,
     render,
     render_deleted,
     render_done,
@@ -48,9 +51,12 @@ from tabsdatak.cli.cli_utils import (
     view_options,
 )
 from tabsdatak.cli.td._wait import (
+    budget,
     require_wait,
+    summary_option,
     timeout_option,
     wait_execution,
+    wait_summary,
 )
 from tabsdatak.cli.td.tag_commands import PARENT_TAG, tag_group, tags_of, tags_text
 from tabsdatak.common._datetime import _convert_timestamp_to_string
@@ -62,6 +68,15 @@ if TYPE_CHECKING:
 
 
 _FUNCTION_STATUS_LABELS = {"A": "Active", "F": "Frozen", "D": "Deleted"}
+FUNCTION_ACK = ("id", "function_id", "name", "collection", "status", "enabled")
+PATCH_ACK = (
+    "id",
+    "parent_function_version_id",
+    "function_id",
+    "name",
+    "collection",
+    "status",
+)
 
 
 def _environment_options(command):
@@ -331,6 +346,7 @@ def delete(ctx: click.Context, name: str, coll: str, confirm: str):
     is_flag=True,
     help="Show the history of the function, newest first.",
 )
+@record_fields_option
 @click.pass_context
 def get(ctx: click.Context, name: str, coll: str, show_history: bool):
     """Display a function"""
@@ -827,6 +843,7 @@ def check(
     ),
 )
 @_dry_run_option
+@ack_options
 @click.pass_context
 def register(
     ctx: click.Context,
@@ -924,6 +941,7 @@ def register(
                 if existing
                 else "Function registered successfully"
             ),
+            ack=FUNCTION_ACK,
         )
     except Exception as e:
         raise command_failure(ctx, "register function", e)
@@ -961,7 +979,21 @@ def register(
     hidden=True,
     callback=deprecated_option("--detach", "'--no-wait'"),
 )
+@click.option(
+    "--count",
+    type=click.IntRange(min=1),
+    default=1,
+    show_default=True,
+    help=(
+        "Trigger the function this many times, one after another, each once "
+        "the run before succeeded; stops at the first that does not. Every run "
+        "consumes source data. Needs the wait, and returns the summary of each "
+        "run; one '--timeout' covers them all."
+    ),
+)
 @timeout_option()
+@record_fields_option
+@summary_option("the plan")
 @click.pass_context
 def trigger(
     ctx: click.Context,
@@ -970,6 +1002,7 @@ def trigger(
     plan_name: str,
     wait: bool | None,
     detach: bool,
+    count: int,
     timeout: float | None,
 ):
     """Trigger a function execution. It waits for the execution to finish with
@@ -982,6 +1015,11 @@ def trigger(
     if wait is None:
         wait = trigger_waits(ctx)
     require_wait(wait, timeout)
+    if count > 1:
+        if not wait:
+            raise click.UsageError("'--count' needs the wait; drop '--no-wait'.")
+        _trigger_runs(ctx, name, coll, plan_name, count, timeout)
+        return
     progress(ctx, f"Triggering function '{name}' in collection '{coll}'")
     progress(ctx, "-" * 10)
     try:
@@ -1025,6 +1063,72 @@ def trigger(
             f"Resume with 'tdk plan monitor --plan {execution.id}'"
         )
     render(ctx, data=document)
+
+
+def _trigger_runs(
+    ctx: click.Context,
+    name: str,
+    coll: str,
+    plan_name: str | None,
+    count: int,
+    timeout: float | None,
+) -> None:
+    """``fn trigger --count``: one run after another, each waited for within
+    what is left of one budget; ``{"triggered": [summary, ...], "count": N}``.
+    A run that fails or outlasts the budget raises its error with the
+    summaries of the runs before it."""
+    server: TabsdataServer = ctx.obj["tabsdataserver"]
+    total = budget(ctx, timeout)
+    deadline = None if total.seconds is None else time.monotonic() + total.seconds
+    done: list[dict] = []
+    for index in range(count):
+        left = None if deadline is None else deadline - time.monotonic()
+        if left is not None and left <= 0:
+            render(
+                ctx,
+                data={
+                    "triggered": done,
+                    "count": count,
+                    "hint": (
+                        f"Stopped after {len(done)} of {count} runs: the wait ran "
+                        "out of time. Trigger again for the rest."
+                    ),
+                },
+            )
+            return
+        progress(ctx, f"Triggering function '{name}' ({index + 1} of {count})")
+        try:
+            execution = server.trigger_function(coll, name, execution_name=plan_name)
+        except Exception as e:
+            found = classify(e)
+            raise TdkException(
+                found.type,
+                f"Run {index + 1} of {count}: failed to trigger function: {e}",
+                hint=found.hint,
+                state={"triggered": done, "current": None},
+            ) from e
+        try:
+            document = wait_execution(ctx, execution, left)
+        except TdkException as e:
+            raise _after(e, index, count, done) from e
+        done.append(wait_summary(Entity.EXECUTION, document))
+    render(ctx, data={"triggered": done, "count": count})
+
+
+def _after(
+    error: TdkException, index: int, count: int, done: list[dict]
+) -> TdkException:
+    """``error``, of run ``index``, with the summaries of the runs before it."""
+    found = error.error
+    return TdkException(
+        found.type,
+        f"Run {index + 1} of {count}: {found.message}",
+        hint=found.hint,
+        **{
+            **found.extra,
+            "state": {"triggered": done, "current": found.extra.get("state")},
+        },
+    )
 
 
 @capability(
@@ -1103,6 +1207,7 @@ def trigger(
     ),
 )
 @_dry_run_option
+@ack_options
 @click.pass_context
 def update(
     ctx: click.Context,
@@ -1161,7 +1266,10 @@ def update(
                 reset_stage=reset_stage,
             )
         render_entity(
-            ctx, data=lambda: function._data, message="Function updated successfully"
+            ctx,
+            data=lambda: function._data,
+            message="Function updated successfully",
+            ack=FUNCTION_ACK,
         )
     except Exception as e:
         raise command_failure(ctx, "update function", e)
@@ -1311,6 +1419,7 @@ def set_function_enabled(ctx: click.Context, name: str, coll: str, enabled: bool
 )
 @_environment_options
 @_dry_run_option
+@ack_options
 @click.pass_context
 def patch(
     ctx: click.Context,
@@ -1405,6 +1514,7 @@ def patch(
         render_entity(
             ctx,
             data=record,
+            ack=PATCH_ACK,
             message=(
                 "Patch registered successfully\n"
                 f"Patch id: {record.get('id')}\n"

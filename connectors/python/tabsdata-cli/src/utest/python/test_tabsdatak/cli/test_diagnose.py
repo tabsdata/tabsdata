@@ -116,6 +116,24 @@ def test_plan_diagnose_table(tmp_path):
     assert "R2" in result.output
 
 
+def test_plan_diagnose_table_names_the_plans_outside_that_hold_runs(tmp_path):
+    held = {
+        **_DOCUMENT["held_runs"][0],
+        "blocked_by": [],
+        "blocked_by_outside_plan": True,
+        "blocked_by_outside": [
+            {"plan": "ep20260929-1", "function_run": "fr20260929-1", "status_name": "Failed"}
+        ],
+    }
+    client = _client()
+    client.diagnose_execution.return_value = SimpleNamespace(
+        to_dict=lambda: {**_DOCUMENT, "held_runs": [held]}
+    )
+    result = _invoke(["plan", "diagnose", "--plan", "ep20260930-1"], client, tmp_path)
+    assert result.exit_code == 0, result.output
+    assert "fr20260929-1 (plan ep20260929-1)" in result.output
+
+
 def test_unknown_plan_exits_not_found(tmp_path):
     client = _client()
     client.diagnose_execution.side_effect = NotFound("Execution with ID X not found.")

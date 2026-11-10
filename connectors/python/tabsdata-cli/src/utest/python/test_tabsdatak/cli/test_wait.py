@@ -111,7 +111,7 @@ def test_trigger_returns_the_plan_without_waiting(clock, tmp_path):
     client = _client(_connection(["S"], []))
     result = _invoke([*_TRIGGER, "--machine"], client, tmp_path)
     assert result.exit_code == ExitCode.OK, result.output
-    assert _document(result)["status"] == "S"
+    assert _document(result)["status_name"] == "Scheduled"
     assert clock.sleeps == []
 
 
@@ -123,7 +123,7 @@ def test_no_wait_overrides_the_default_trigger_wait(clock, tmp_path):
     client = _client(_connection(["S"], []))
     result = _invoke([*_TRIGGER, "--no-wait", "-o", "jsonb"], client, tmp_path)
     assert result.exit_code == ExitCode.OK, result.output
-    assert json.loads(result.stdout)["status"] == "S"
+    assert json.loads(result.stdout)["status_name"] == "Scheduled"
     assert "deprecated" not in result.stderr
     assert clock.sleeps == []
 
@@ -133,7 +133,7 @@ def test_detach_is_a_deprecated_no_wait(clock, tmp_path, detach):
     client = _client(_connection(["S"], []))
     result = _invoke([*_TRIGGER, detach, "-o", "jsonb"], client, tmp_path)
     assert result.exit_code == ExitCode.OK, result.output
-    assert json.loads(result.stdout)["status"] == "S"
+    assert json.loads(result.stdout)["status_name"] == "Scheduled"
     assert "Warning: '--detach' is deprecated" in result.stderr
     assert "'--no-wait'" in result.stderr
     assert clock.sleeps == []
@@ -158,7 +158,7 @@ def test_trigger_waits_by_default(clock, tmp_path):
     client = _client(_connection(["S", "R", "F"], [_run_row("fr20260930-1", "C")]))
     result = _invoke([*_TRIGGER, "-o", "jsonb"], client, tmp_path)
     assert result.exit_code == ExitCode.OK, result.output
-    assert json.loads(result.stdout)["status"] == "F"
+    assert json.loads(result.stdout)["status_name"] == "Finished"
     assert clock.sleeps == [1, 2]
 
 
@@ -167,7 +167,7 @@ def test_the_trigger_wait_setting_false_returns_at_once(clock, tmp_path):
     client = _client(_connection(["S"], []))
     result = _invoke([*_TRIGGER, "-o", "jsonb"], client, tmp_path)
     assert result.exit_code == ExitCode.OK, result.output
-    assert json.loads(result.stdout)["status"] == "S"
+    assert json.loads(result.stdout)["status_name"] == "Scheduled"
     assert clock.sleeps == []
 
 
@@ -176,7 +176,7 @@ def test_wait_overrides_the_trigger_wait_setting(clock, tmp_path):
     client = _client(_connection(["S", "R", "F"], [_run_row("fr20260930-1", "C")]))
     result = _invoke([*_TRIGGER, "--wait", "-o", "jsonb"], client, tmp_path)
     assert result.exit_code == ExitCode.OK, result.output
-    assert json.loads(result.stdout)["status"] == "F"
+    assert json.loads(result.stdout)["status_name"] == "Finished"
 
 
 def test_a_machine_run_ignores_the_trigger_wait_setting(clock, tmp_path):
@@ -184,7 +184,7 @@ def test_a_machine_run_ignores_the_trigger_wait_setting(clock, tmp_path):
     client = _client(_connection(["S"], []))
     result = _invoke([*_TRIGGER, "--machine"], client, tmp_path)
     assert result.exit_code == ExitCode.OK, result.output
-    assert _document(result)["status"] == "S"
+    assert _document(result)["status_name"] == "Scheduled"
     assert clock.sleeps == []
 
 
@@ -201,7 +201,7 @@ def test_trigger_wait_returns_the_finished_plan_with_its_runs(clock, tmp_path):
     result = _invoke([*_TRIGGER, "--wait", "--machine"], client, tmp_path)
     assert result.exit_code == ExitCode.OK, result.output
     document = _document(result)
-    assert document["status"] == "F"
+    assert document["status_name"] == "Finished"
     assert document["final"] is True
     assert [run["id"] for run in document["runs"]] == ["fr20260930-1"]
     assert document["waited_ms"] == 3000
@@ -217,12 +217,13 @@ def test_failed_runs_exit_8_with_the_plan_as_state(clock, tmp_path):
     assert error["type"] == "run_failed"
     assert "FR2, FR3" in error["message"]
     assert "tdk fnrun diagnose --fnrun FR2" in error["hint"]
-    assert error["state"]["id"] == "ep20260930-1"
-    assert [run["health"] for run in error["state"]["runs"]] == [
-        "ok",
-        "error",
-        "warning",
-    ]
+    assert error["state"] == {
+        "plan": "ep20260930-1",
+        "status_name": "Finished",
+        "health": "ok",
+        "function_runs_by_status": {"Committed": 1, "Failed": 1, "On Hold": 1},
+        "failed_runs": ["FR2", "FR3"],
+    }
 
 
 def test_wait_seconds_is_the_default_budget_then_exits_7(
@@ -235,7 +236,7 @@ def test_wait_seconds_is_the_default_budget_then_exits_7(
     error = _document(result)["error"]
     assert error["type"] == "wait_timeout"
     assert error["resume"] == ["tdk", "plan", "get", "--plan", "ep20260930-1", "--wait"]
-    assert error["state"]["status"] == "R"
+    assert error["state"]["status_name"] == "Running"
     assert sum(clock.sleeps) == 60
 
 
@@ -292,7 +293,7 @@ def test_json_monitor_keeps_progress_off_stdout(clock, tmp_path):
     argv = ["plan", "monitor", "--plan", "ep20260930-1", "-o", "json"]
     result = _invoke(argv, client, tmp_path)
     assert result.exit_code == ExitCode.OK, result.output
-    assert json.loads(result.stdout)["status"] == "F"
+    assert json.loads(result.stdout)["status_name"] == "Finished"
     assert "Waiting for the plan 'ep20260930-1' to finish" in result.stderr
 
 
@@ -302,7 +303,7 @@ def test_get_wait_adds_the_waited_time(clock, tmp_path):
     result = _invoke(argv, client, tmp_path)
     assert result.exit_code == ExitCode.OK, result.output
     document = _document(result)
-    assert document["plan"]["status"] == "F"
+    assert document["plan"]["status_name"] == "Finished"
     assert document["waited_ms"] == 1000
 
 
@@ -312,7 +313,7 @@ def test_recover_wait_waits_for_the_plan(clock, tmp_path):
     result = _invoke(argv, client, tmp_path)
     assert result.exit_code == ExitCode.OK, result.output
     assert client.recover_execution.call_count == 1
-    assert _document(result)["status"] == "F"
+    assert _document(result)["status_name"] == "Finished"
 
 
 def _function_run(rows: list[dict], monkeypatch) -> ts.FunctionRun:
@@ -362,6 +363,8 @@ def test_replay_wait_exits_8_when_the_attempt_fails(clock, tmp_path, monkeypatch
     assert result.exit_code == ExitCode.RUN_FAILED
     error = _document(result)["error"]
     assert error["state"]["physical_status"] == "E"
+    assert error["state"]["attempt"] == "A2"
+    assert error["state"]["failed_runs"] == [run.id]
     assert f"tdk fnrun diagnose --fnrun {run.id}" in error["hint"]
 
 
@@ -427,7 +430,7 @@ def test_list_monitor_emits_the_envelope_once_final(clock, tmp_path):
     argv = ["plan", "list", "--monitor", "--machine"]
     result = _invoke(argv, client, tmp_path)
     assert result.exit_code == ExitCode.OK, result.output
-    assert _document(result)["items"][0]["status"] == "F"
+    assert _document(result)["items"][0]["status_name"] == "Finished"
 
 
 def test_a_request_outlasting_the_budget_is_a_wait_timeout(clock, tmp_path):
@@ -450,7 +453,7 @@ def test_a_request_outlasting_the_budget_is_a_wait_timeout(clock, tmp_path):
     result = _invoke(argv, client, tmp_path)
     assert result.exit_code == ExitCode.WAIT_TIMEOUT, result.output
     state = _document(result)["error"]["state"]
-    assert (state["id"], state["status"]) == ("ep20260930-1", "R")
+    assert (state["id"], state["status_name"]) == ("ep20260930-1", "Running")
     assert read_timeouts[-1] == (5.0, 5.0)
     assert connection.timeout == (10, 60)
 
@@ -481,7 +484,7 @@ def test_transaction_waits_render_the_waited_transaction(
     result = _invoke([*argv, "--machine"], client, tmp_path)
     assert result.exit_code == ExitCode.OK, result.output
     document = _document(result)
-    assert document["status"] == "C"
+    assert document["status_name"] == "Committed"
     assert [run["id"] for run in document["runs"]] == ["fr20260930-1"]
     assert "waited_ms" in document
     assert client.connection.project is None
@@ -601,3 +604,61 @@ def test_an_unknown_run_status_is_not_a_failure(clock, tmp_path):
     result = _invoke([*_TRIGGER, "--wait", "--machine"], client, tmp_path)
     assert result.exit_code == ExitCode.OK, result.output
     assert [run["health"] for run in _document(result)["runs"]] == ["ok", None]
+
+
+def test_trigger_summary_is_the_plan_its_runs_by_status_and_the_failed(
+    clock, tmp_path
+):
+    runs = [_run_row("fr20260930-1", "C")]
+    client = _client(_connection(["S", "R", "F"], runs))
+    argv = [*_TRIGGER, "--wait", "--summary", "--machine"]
+    document = _document(_invoke(argv, client, tmp_path))
+    waited = document.pop("waited_ms")
+    assert isinstance(waited, int)
+    assert document == {
+        "plan": "ep20260930-1",
+        "status_name": "Finished",
+        "health": "ok",
+        "function_runs_by_status": {"Committed": 1},
+        "failed_runs": [],
+    }
+
+
+def test_trigger_count_runs_one_after_another(clock, tmp_path):
+    client = _client(_connection(["S", "R", "F"], [_run_row("fr20260930-1", "C")]))
+    argv = [*_TRIGGER, "--wait", "--count", "2", "--machine"]
+    document = _document(_invoke(argv, client, tmp_path))
+    assert document["count"] == 2
+    assert [run["status_name"] for run in document["triggered"]] == ["Finished"] * 2
+    assert client.trigger_function.call_count == 2
+
+
+def test_trigger_count_stops_at_the_first_failure(clock, tmp_path):
+    runs = [_run_row("FR2", "F")]
+    client = _client(_connection(["R", "F"], runs))
+    argv = [*_TRIGGER, "--wait", "--count", "3", "--machine"]
+    result = _invoke(argv, client, tmp_path)
+    assert result.exit_code == ExitCode.RUN_FAILED
+    error = _document(result)["error"]
+    assert error["message"].startswith("Run 1 of 3: ")
+    assert error["state"]["triggered"] == []
+    assert error["state"]["current"]["failed_runs"] == ["FR2"]
+    assert client.trigger_function.call_count == 1
+
+
+def test_trigger_count_needs_the_wait(clock, tmp_path):
+    argv = [*_TRIGGER, "--no-wait", "--count", "2", "--machine"]
+    result = _invoke(argv, _client(_connection(["S"], [])), tmp_path)
+    assert _document(result)["error"]["type"] == "usage"
+
+
+def test_jsonb_drops_the_status_code_and_json_keeps_it(clock, tmp_path):
+    client = _client(_connection(["S"], []))
+    document = json.loads(
+        _invoke([*_TRIGGER, "--no-wait", "-o", "jsonb"], client, tmp_path).stdout
+    )
+    assert "status" not in document and document["status_name"] == "Scheduled"
+    compat = json.loads(
+        _invoke([*_TRIGGER, "--no-wait", "-o", "json"], client, tmp_path).stdout
+    )
+    assert compat["status"] == "S"
