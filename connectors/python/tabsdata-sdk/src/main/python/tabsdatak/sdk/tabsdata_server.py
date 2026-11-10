@@ -201,7 +201,10 @@ class ListCursor:
 class Listing(Iterator[T]):
     """The items of a paged server listing, fetching each page as it is
     consumed. ``position`` is the :class:`ListCursor` of the item yielded
-    last: passing it as ``cursor`` lists again from that item on."""
+    last: passing it as ``cursor`` lists again from that item on.
+    ``sorted_by`` is the order the server returned the rows in,
+    ``<field>+`` or ``<field>-``, once a page is read; ``None`` from a server
+    that does not say."""
 
     def __init__(
         self,
@@ -219,6 +222,7 @@ class Listing(Iterator[T]):
         self._index = 0
         self._last_page = False
         self.position: ListCursor | None = None
+        self.sorted_by: str | None = None
 
     def __iter__(self) -> Listing[T]:
         return self
@@ -237,6 +241,8 @@ class Listing(Iterator[T]):
         self._request = self._pending
         data = self._fetch(*self._request).json().get("data") or {}
         self._page = data.get("data") or []
+        sorted_by = data.get("sorted_by")
+        self.sorted_by = sorted_by if isinstance(sorted_by, str) else None
         self._index, self._skip = self._skip, 0
         self._pending = (data.get("next_pagination_id"), data.get("next"))
         self._last_page = None in self._pending
@@ -6649,6 +6655,8 @@ class TabsdataServer:
         worker: str | Worker,
         tail: int | None = None,
         attempt: int | None = None,
+        grep: str | None = None,
+        from_error: bool = False,
     ) -> dict:
         """
         Get a worker's log with what it says went wrong.
@@ -6658,20 +6666,24 @@ class TabsdataServer:
             tail (int, optional): Keep only the last ``tail`` lines.
             attempt (int, optional): The worker's attempt number within its
                 function run, reported as given.
+            grep (str, optional): Keep only the lines matching this regular
+                expression.
+            from_error (bool): Start at the first traceback or ``ERROR`` line.
 
         Returns:
             dict: ``worker_id``, ``function_run_id``, ``collection``,
                 ``function``, the annotated ``status``, ``attempt``,
-                ``lines_total``, ``log_truncated``, ``log``, the error
-                ``signature`` of a worker that did not succeed and, instead
-                of the log, ``log_unavailable`` when reading it is forbidden.
+                ``lines_total``, ``log_truncated``, ``log``, ``lines`` (the
+                kept lines as ``[number, text]``), the error ``signature`` of a
+                worker that did not succeed and, instead of the log,
+                ``log_unavailable`` when reading it is forbidden.
 
         Raises:
             NotFound: If the worker is not found.
         """
         if isinstance(worker, str):
             worker = self.get_worker(worker)
-        return _diagnose.log_entry(self, worker, tail, attempt)
+        return _diagnose.log_entry(self, worker, tail, attempt, grep, from_error)
 
     def scope_logs(
         self,
@@ -6681,6 +6693,8 @@ class TabsdataServer:
         tail: int | None = None,
         failed_only: bool = False,
         max_workers: int | None = 20,
+        grep: str | None = None,
+        from_error: bool = False,
     ) -> tuple[List[dict], bool]:
         """
         Get the logs of every worker of a plan, a transaction or a function
@@ -6695,13 +6709,17 @@ class TabsdataServer:
                 ``warning`` or ``error``.
             max_workers (int, optional): At most this many workers; no
                 limit when 0 or ``None``.
+            grep (str, optional): Keep only the lines matching this regular
+                expression.
+            from_error (bool): Start each log at its first traceback or
+                ``ERROR`` line.
 
         Returns:
             tuple[list[dict], bool]: The entries, and whether ``max_workers``
                 cut them short.
         """
         return _diagnose.scope_logs(
-            self, plan, trx, fnrun, tail, failed_only, max_workers
+            self, plan, trx, fnrun, tail, failed_only, max_workers, grep, from_error
         )
 
     def get_worker(self, worker_id: str) -> Worker:

@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
 MESSAGE_CHARS = 300
 EXCERPT_CHARS = 4000
+EXCERPT_CONTEXT = 20
 REPEAT_LINES = 3
 _REPEAT_CANDIDATES = 16
 FORBIDDEN_LOG = "forbidden (DevelopProject required)"
@@ -252,15 +253,51 @@ def _chained(lines: list[str], starts: list[int], last: int) -> tuple[int, list[
     return following, found
 
 
-def tail_lines(text: str, lines: int | None) -> tuple[str, bool]:
-    """The last ``lines`` lines of a log, and whether any were left out."""
-    if lines is None:
-        return text, False
-    rows = text.splitlines()
-    kept = rows[-lines:] if lines > 0 else []
-    if len(kept) == len(rows):
-        return text, False
-    return "\n".join(kept), True
+_ERROR_START = re.compile(r"Traceback \(most recent call last\):|\bERROR\b")
+
+
+def select_lines(
+    text: str,
+    tail: int | None = None,
+    grep: str | None = None,
+    from_error: bool = False,
+) -> list[tuple[int, str]]:
+    """The lines of a log a reader asked for, each with its 1-based number:
+    with ``from_error``, from the first traceback or ``ERROR`` line on (all
+    of them when there is none); with ``grep``, those matching that regular
+    expression; with ``tail``, the last ``tail`` of those."""
+    numbered = list(enumerate(text.splitlines(), start=1))
+    if from_error:
+        start = next(
+            (
+                index
+                for index, (_, row) in enumerate(numbered)
+                if _ERROR_START.search(row)
+            ),
+            0,
+        )
+        numbered = numbered[start:]
+    if grep is not None:
+        pattern = re.compile(grep)
+        numbered = [(n, row) for n, row in numbered if pattern.search(row)]
+    if tail is not None:
+        numbered = numbered[-tail:] if tail > 0 else []
+    return numbered
+
+
+def cut_ranges(kept: Iterable[int], total: int) -> list[list[int]]:
+    """The ``[first, last]`` line ranges of a ``total``-line log not in
+    ``kept``."""
+    shown = set(kept)
+    ranges: list[list[int]] = []
+    for number in range(1, total + 1):
+        if number in shown:
+            continue
+        if ranges and ranges[-1][1] == number - 1:
+            ranges[-1][1] = number
+        else:
+            ranges.append([number, number])
+    return ranges
 
 
 def _chain_span(lines: list[str]) -> tuple[int, int] | None:
@@ -275,21 +312,32 @@ def _chain_span(lines: list[str]) -> tuple[int, int] | None:
 
 def excerpt(text: str, lines: int) -> tuple[str, bool]:
     """The last ``lines`` lines of a log, headed by the failing traceback
-    chain when it starts earlier, with each repeated run of lines kept once
-    and the whole bounded to ``EXCERPT_CHARS``; and whether anything was
-    left out."""
+    chain and the ``EXCERPT_CONTEXT`` lines before it when they start
+    earlier, with each repeated run of lines kept once and the whole bounded
+    to ``EXCERPT_CHARS``; and whether anything was left out. Over the bound,
+    the lines before that context (a pod's preamble) go first, then the
+    middle of what is left."""
     rows = text.splitlines()
     first = max(len(rows) - lines, 0)
     body = rows[first:]
     span = _chain_span(rows)
-    if span is not None and span[0] < first:
-        start, end = span
+    context = None if span is None else max(span[0] - EXCERPT_CONTEXT, 0)
+    if span is not None and context < first:
+        end = span[1]
         gap = ["..."] if end + 1 < first else []
-        body = rows[start : end + 1] + gap + rows[max(first, end + 1) :]
+        body = rows[context : end + 1] + gap + rows[max(first, end + 1) :]
+        context = first
     collapsed, repeated = _collapse_repeats(body)
     if first == 0 and not repeated and _size(collapsed) <= EXCERPT_CHARS:
         return text, False
-    return "\n".join(_middle_cut(collapsed, EXCERPT_CHARS)), True
+    if _size(collapsed) <= EXCERPT_CHARS or context is None:
+        return "\n".join(_middle_cut(collapsed, EXCERPT_CHARS)), True
+    preamble = context - first
+    rest, _ = _collapse_repeats(body[preamble:])
+    cut = [f"[... {preamble} lines cut]"] if preamble else []
+    if _size(cut + rest) <= EXCERPT_CHARS:
+        return "\n".join(cut + rest), True
+    return "\n".join(cut + _middle_cut(rest, EXCERPT_CHARS - _size(cut) - 1)), True
 
 
 def _collapse_repeats(rows: list[str]) -> tuple[list[str], bool]:
@@ -383,9 +431,13 @@ def log_entry(
     worker: Worker,
     tail: int | None = None,
     attempt: int | None = None,
+    grep: str | None = None,
+    from_error: bool = False,
 ) -> dict:
-    """One worker's log as the ``logs`` commands emit it. A log the caller
-    may not read is reported in ``log_unavailable`` instead of failing."""
+    """One worker's log as the ``logs`` commands emit it: ``log`` the lines
+    :func:`select_lines` keeps, and ``lines`` the same as ``[number, text]``
+    pairs. A log the caller may not read is reported in ``log_unavailable``
+    instead of failing."""
     kwargs = worker.kwargs
     code = kwargs.get("status")
     group = health(Entity.WORKER, code)
@@ -403,14 +455,18 @@ def log_entry(
         "log_unavailable": None,
         "signature": None,
         "log": None,
+        "lines": None,
     }
     text, entry["log_unavailable"] = _read_log(server, worker.id)
     if text is None:
         return entry
-    log, truncated = tail_lines(text, tail)
+    lines = select_lines(text, tail, grep, from_error)
     entry["lines_total"] = len(text.splitlines())
-    entry["log_truncated"] = truncated
-    entry["log"] = log
+    entry["log_truncated"] = len(lines) < entry["lines_total"]
+    entry["log"] = (
+        text if not entry["log_truncated"] else "\n".join(row for _, row in lines)
+    )
+    entry["lines"] = [[number, row] for number, row in lines]
     if needs_attention(code):
         entry["signature"] = signature_document(text)
     return entry
@@ -438,6 +494,8 @@ def scope_logs(
     tail: int | None = None,
     failed_only: bool = False,
     max_workers: int | None = 20,
+    grep: str | None = None,
+    from_error: bool = False,
 ) -> tuple[list[dict], bool]:
     """The logs of every worker of a plan, transaction or function run,
     newest first, and whether ``max_workers`` cut the list short."""
@@ -450,7 +508,9 @@ def scope_logs(
     truncated = bool(max_workers) and len(workers) > max_workers
     if truncated:
         workers = workers[:max_workers]
-    return [log_entry(server, w, tail, numbers.get(w.id)) for w in workers], truncated
+    return [
+        log_entry(server, w, tail, numbers.get(w.id), grep, from_error) for w in workers
+    ], truncated
 
 
 @dataclass(frozen=True)
@@ -634,6 +694,14 @@ def _failed_run(
     if text is not None:
         entry["signature"] = signature_document(text)
         entry["log_excerpt"], entry["log_truncated"] = excerpt(text, log_lines)
+        if entry["log_truncated"]:
+            entry["log_argv"] = [
+                "worker",
+                "logs",
+                "--worker",
+                worker.id,
+                "--from-error",
+            ]
     return entry
 
 
@@ -676,7 +744,7 @@ def _blockers(graph: dict, runs: list[dict], held: dict) -> tuple[list[str], boo
     return blockers, outside and not blockers
 
 
-def _earlier_runs_held_on(server: TabsdataServer, run: dict) -> list[str]:
+def _earlier_runs_held_on(server: TabsdataServer, run: dict) -> list[dict]:
     """The failed or held earlier runs of ``run``'s own function: each output
     version builds on the one before, so a later run of the function waits on
     them even when nothing in its plan feeds it."""
@@ -691,13 +759,25 @@ def _earlier_runs_held_on(server: TabsdataServer, run: dict) -> list[str]:
     except APIServerError:
         return []
     triggered = run.get("triggered_on") or 0
-    return [
-        entry["id"]
-        for entry in earlier
-        if entry["id"] != run["id"]
-        and (entry.get("triggered_on") or 0) < triggered
-        and (_run_health(entry) is Health.ERROR or entry.get("status") == "H")
-    ]
+    return sorted(
+        (
+            entry
+            for entry in earlier
+            if entry["id"] != run["id"]
+            and (entry.get("triggered_on") or 0) < triggered
+            and (_run_health(entry) is Health.ERROR or entry.get("status") == "H")
+        ),
+        key=lambda entry: entry.get("triggered_on") or 0,
+    )
+
+
+def _outside_blocker(run: dict) -> dict:
+    code = run.get("status")
+    return {
+        "plan": run.get("execution_id"),
+        "function_run": run["id"],
+        "status_name": status_name(Entity.FUNCTION_RUN, code) if code else None,
+    }
 
 
 def _held_runs(
@@ -712,16 +792,40 @@ def _held_runs(
     entries = []
     for run in held:
         blocked_by, outside = _blockers(graph, runs, run) if graph else (None, None)
-        if not blocked_by and not outside:
-            blocked_by = _earlier_runs_held_on(server, run) or blocked_by
+        elsewhere: list[dict] = []
+        if not blocked_by:
+            earlier = _earlier_runs_held_on(server, run)
+            here = [e["id"] for e in earlier if e.get("execution_id") == plan_id]
+            elsewhere = [
+                _outside_blocker(e) for e in earlier if e.get("execution_id") != plan_id
+            ]
+            blocked_by = here or blocked_by
+            outside = bool(elsewhere) or outside
         entries.append({
             "function_run_id": run["id"],
             "collection": run.get("collection"),
             "function": run.get("name"),
             "blocked_by": blocked_by,
             "blocked_by_outside_plan": outside,
+            "blocked_by_outside": elsewhere,
         })
     return entries
+
+
+def _on_hold_hint(outside: list[dict]) -> str:
+    """How to release held runs: repair the blockers in the plan, or recover or
+    cancel the plans outside it that hold them."""
+    plans = list(dict.fromkeys(b["plan"] for b in outside if b.get("plan")))
+    if not plans:
+        return HINTS[Category.ON_HOLD]
+    named = ", ".join(f"'{plan}'" for plan in plans)
+    first = plans[0]
+    return (
+        f"Held by earlier runs of the same function in plan {named}. Fix the "
+        f"cause and recover it ('tdk plan recover --plan {first}'), and the held "
+        f"runs resume; or cancel it ('tdk plan cancel --plan {first}'), which "
+        "also cancels the held runs, then trigger again."
+    )
 
 
 def _root_cause(first: dict | None, held: list[dict]) -> dict | None:
@@ -740,6 +844,13 @@ def _root_cause(first: dict | None, held: list[dict]) -> dict | None:
         }
     if held:
         blockers = sorted({b for run in held for b in (run["blocked_by"] or ())})
+        outside = list(
+            {
+                b["function_run"]: b
+                for run in held
+                for b in run.get("blocked_by_outside") or ()
+            }.values()
+        )
         return {
             "function_run_id": None,
             "collection": None,
@@ -749,7 +860,8 @@ def _root_cause(first: dict | None, held: list[dict]) -> dict | None:
             "message": f"{len(held)} function run(s) on hold.",
             "user_frame": None,
             "blocked_by": blockers,
-            "hint": HINTS[Category.ON_HOLD],
+            "blocked_by_outside": outside,
+            "hint": HINTS[Category.ON_HOLD] if blockers else _on_hold_hint(outside),
         }
     return None
 

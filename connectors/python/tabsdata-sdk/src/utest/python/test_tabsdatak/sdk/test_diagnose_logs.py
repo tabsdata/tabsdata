@@ -194,8 +194,24 @@ def test_excerpt_keeps_an_earlier_traceback():
     text = _log("polars_column_not_found") + "\n".join(f"noise {i}" for i in range(50))
     body, truncated = d.excerpt(text, 5)
     assert truncated
-    assert body.startswith("Traceback (most recent call last):")
+    head = text.splitlines()
+    start = next(i for i, row in enumerate(head) if row.startswith("Traceback"))
+    assert body.startswith(head[max(start - d.EXCERPT_CONTEXT, 0)])
+    assert "Traceback (most recent call last):" in body
     assert body.endswith("noise 49")
+
+
+def test_excerpt_drops_a_long_preamble_before_the_traceback_context():
+    preamble = "\n".join(f"pod env {i} " + "x" * 80 for i in range(80))
+    context = "\n".join(f"context {i}" for i in range(d.EXCERPT_CONTEXT))
+    text = f"{preamble}\n{context}\n" + _log("pandas_key_error")
+    body, truncated = d.excerpt(text, 400)
+    assert truncated and len(body) <= d.EXCERPT_CHARS
+    assert body.startswith("[... ") and "lines cut]\ncontext " in body
+    assert f"context {d.EXCERPT_CONTEXT - 1}" in body
+    assert "pod env" not in body
+    assert "Traceback (most recent call last):" in body
+    assert "KeyError: 'country'" in body
 
 
 def test_excerpt_of_a_short_log_is_the_log():
@@ -352,3 +368,24 @@ def test_worker_log_entry_reads_the_worker():
 def test_scope_logs_needs_a_scope():
     with pytest.raises(ValueError):
         _server(_WORKERS, _LOGS).scope_logs()
+
+
+_LINES = "start\npod env\nINFO load\nTraceback (most recent call last):\n  x\nKeyError: 'a'\nINFO done"
+
+
+def test_select_lines_numbers_the_lines_it_keeps():
+    assert d.select_lines(_LINES, tail=2) == [(6, "KeyError: 'a'"), (7, "INFO done")]
+    assert d.select_lines(_LINES, grep="INFO") == [(3, "INFO load"), (7, "INFO done")]
+    assert d.select_lines(_LINES, from_error=True)[0] == (
+        4,
+        "Traceback (most recent call last):",
+    )
+    assert d.select_lines(_LINES, tail=1, grep="INFO", from_error=True) == [
+        (7, "INFO done")
+    ]
+    assert len(d.select_lines("a\nb", from_error=True)) == 2
+
+
+def test_cut_ranges_are_the_lines_left_out():
+    assert d.cut_ranges([3, 7], 8) == [[1, 2], [4, 6], [8, 8]]
+    assert d.cut_ranges(range(1, 4), 3) == []

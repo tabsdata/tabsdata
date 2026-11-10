@@ -77,3 +77,23 @@ def test_generators_accept_a_cursor():
     users = server.list_users_generator(cursor=ts.ListCursor("f", "n2", 0))
     assert [user.name for user in users] == ["g"]
     assert requests == [("f", "n2")]
+
+
+def test_sorted_by_is_the_order_the_server_says():
+    def fetch(pagination_id, next_step):
+        response = MagicMock()
+        response.json.return_value = {
+            "data": {"data": [{"name": "a"}], "sorted_by": "name-", "next": None}
+        }
+        return response
+
+    listing = ts.Listing(fetch, dict)
+    assert listing.sorted_by is None
+    assert _names(listing) == ["a"]
+    assert listing.sorted_by == "name-"
+
+
+def test_sorted_by_is_none_from_a_server_that_does_not_say():
+    listing = ts.Listing(_fetch([]), dict)
+    list(listing)
+    assert listing.sorted_by is None

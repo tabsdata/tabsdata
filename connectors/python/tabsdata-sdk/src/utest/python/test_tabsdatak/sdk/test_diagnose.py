@@ -189,6 +189,7 @@ def test_held_runs_name_their_blockers_inside_the_plan():
             "function": "fn_fv2",
             "blocked_by": ["R1"],
             "blocked_by_outside_plan": False,
+            "blocked_by_outside": [],
         },
         {
             "function_run_id": "R3",
@@ -196,6 +197,7 @@ def test_held_runs_name_their_blockers_inside_the_plan():
             "function": "fn_fv3",
             "blocked_by": ["R1"],
             "blocked_by_outside_plan": False,
+            "blocked_by_outside": [],
         },
     ]
     assert document["summary"]["held"] == 2
@@ -227,6 +229,38 @@ def test_a_held_run_with_nothing_in_its_plan_names_its_functions_earlier_failure
     )
     (entry,) = server.diagnose_execution("P1").to_dict()["held_runs"]
     assert entry["blocked_by"] == ["R1"] and entry["blocked_by_outside_plan"] is False
+
+
+def test_a_held_run_names_the_earlier_plan_that_holds_it():
+    held = _run("R2", "H", "fv2", function_id="f2", triggered_on=20)
+    earlier = _run(
+        "R1",
+        "F",
+        "fv2",
+        function_id="f2",
+        triggered_on=10,
+        ended_on=1,
+        execution_id="P0",
+    )
+    server = _server([held], graph=_graph(("fv_elsewhere", "t1", "fv2")))
+    server.list_function_runs_generator = MagicMock(
+        side_effect=lambda filter: iter(
+            SimpleNamespace(kwargs=r)
+            for r in (
+                [held, earlier] if filter[0].startswith("function_id") else [held]
+            )
+        )
+    )
+    document = server.diagnose_execution("P1").to_dict()
+    (entry,) = document["held_runs"]
+    blocker = {"plan": "P0", "function_run": "R1", "status_name": "Failed"}
+    assert entry["blocked_by"] == [] and entry["blocked_by_outside_plan"] is True
+    assert entry["blocked_by_outside"] == [blocker]
+    root = document["root_cause"]
+    assert root["category"] == "on_hold" and root["blocked_by_outside"] == [blocker]
+    assert "'P0'" in root["hint"]
+    assert "tdk plan recover --plan P0" in root["hint"]
+    assert "tdk plan cancel --plan P0" in root["hint"]
 
 
 def test_a_failed_producer_in_the_plan_is_not_blocked_outside_it():
@@ -300,7 +334,8 @@ def test_function_run_diagnosis():
     (failed,) = document["failed_runs"]
     assert failed["argv"]["recover"] == ["fnrun", "recover", "--fnrun", "R1"]
     assert failed["log_truncated"] is True
-    assert failed["log_excerpt"].startswith("Traceback (most recent call last):")
+    assert "\nTraceback (most recent call last):" in failed["log_excerpt"]
+    assert failed["log_argv"] == ["worker", "logs", "--worker", "w1", "--from-error"]
     server.list_function_runs_generator.assert_not_called()
 
 
