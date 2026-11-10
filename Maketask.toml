@@ -923,23 +923,23 @@ run_task = [
     { name = [
         "__os__setup_test_py",
         "__os__start_test_py",
-        "__os__stop_test_py",
-        "__os__cleanup_test_py"
+        "__os__cleanup_test_py",
+        "__os__stop_test_py"
     ], condition = { env = { "TD_WITH_TESTS_RUN" = "false" } } },
     { name = [
         "__os__setup_test_py",
         "__os__start_test_py",
         "__os__check_hydrate_py",
         "utest_parallel_py",
-        "__os__stop_test_py",
-        "__os__cleanup_test_py"
+        "__os__cleanup_test_py",
+        "__os__stop_test_py"
     ], condition = { env = { "TD_TEST_PY_PARALLEL" = "true" } } },
     { name = [
         "__os__setup_test_py",
         "__os__start_test_py",
         "utest_serial_py",
-        "__os__stop_test_py",
-        "__os__cleanup_test_py"
+        "__os__cleanup_test_py",
+        "__os__stop_test_py"
     ] }
 ]
 
@@ -953,8 +953,8 @@ run_task = [
     { name = [
         "__os__setup_itest_py",
         "__os__start_test_py",
-        "__os__stop_test_py",
-        "__os__cleanup_itest_py"
+        "__os__cleanup_itest_py",
+        "__os__stop_test_py"
     ], condition = { env = { "TD_WITH_TESTS_RUN" = "false" } } },
     { name = [
         "__os__setup_itest_py",
@@ -962,8 +962,8 @@ run_task = [
         "__os__check_hydrate_py",
         "itest_parallel_py",
         "__km__itest_py",
-        "__os__stop_test_py",
-        "__os__cleanup_itest_py"
+        "__os__cleanup_itest_py",
+        "__os__stop_test_py"
     ] }
 ]
 
