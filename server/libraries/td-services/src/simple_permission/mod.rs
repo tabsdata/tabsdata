@@ -216,6 +216,7 @@ async fn project_names<S: DbScope, M: AccessMode>(
 fn list_response<T: Clone>(data: Vec<T>) -> Result<ListResponse<T>, TdError> {
     Ok(ListResponse {
         list_params: ListParams::default(),
+        sorted_by: None,
         len: data.len(),
         data,
         previous: None,

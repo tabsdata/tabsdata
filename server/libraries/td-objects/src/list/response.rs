@@ -7,7 +7,7 @@ use crate::list::params::{ListError, ListQueryParams};
 use crate::list::sort::Toward;
 use std::any::type_name;
 use std::collections::HashSet;
-use ta_objects::ListDto;
+use ta_objects::{ListDto, SortDir};
 use td_error::TdError;
 
 impl<D: ListDto> ListQueryParams<D> {
@@ -54,9 +54,20 @@ impl<D: ListDto> ListQueryParams<D> {
         };
         let (previous, previous_pagination_id) = cursor(first);
         let (next, next_pagination_id) = cursor(last);
+        let sorted_by = D::LIST_FIELDS
+            .iter()
+            .find(|field| field.column == primary)
+            .map(|field| {
+                let dir = match self.sort.dir {
+                    SortDir::Asc => '+',
+                    SortDir::Desc => '-',
+                };
+                format!("{}{dir}", field.name)
+            });
 
         Ok(ListResponse {
             list_params: self.request,
+            sorted_by,
             len: rows.len(),
             data: rows,
             previous,
@@ -241,6 +252,25 @@ mod tests {
             err.domain_err::<ListError>(),
             ListError::NonUniquePaginationKey(_, _)
         ));
+    }
+
+    #[test]
+    fn test_sorted_by_names_the_natural_order() {
+        let resp = respond(10, Request::Initial, make_items(2)).unwrap();
+        assert_eq!(resp.sorted_by.as_deref(), Some("a+"));
+    }
+
+    #[test]
+    fn test_sorted_by_names_the_requested_order() {
+        let params = ListParams {
+            order_by: Some("a-".to_string()),
+            ..ListParams::default()
+        };
+        let resp = ListQueryParams::<TestDto>::try_from(params)
+            .unwrap()
+            .respond(make_items(2))
+            .unwrap();
+        assert_eq!(resp.sorted_by.as_deref(), Some("a-"));
     }
 
     #[test]
