@@ -13,10 +13,12 @@ factory helpers."""
 from __future__ import annotations
 
 import http.server
+import socket
 import threading
 import time
 
 import pytest
+import requests
 
 # noinspection PyProtectedMember
 from tabsdatak.sdk import _apiserver as a
@@ -262,38 +264,53 @@ def test_a_request_rejected_after_another_process_refreshed_retries_with_its_ses
 
 
 def test_a_rejected_request_waits_for_a_refresh_still_in_flight(tmp_path, monkeypatch):
+    from tabsdatak.sdk import _credentials
+
     s = session(tmp_path)
-    monkeypatch.setattr(a, "AUTH_RETRY_FIRST_PAUSE", 0.01)
+    holding, rejected = threading.Event(), threading.Event()
+
+    def refresh_in_another_process():
+        with _credentials.locked(s.credentials_file, 5):
+            holding.set()
+            rejected.wait(5)
+            another_process_refreshes(s, "b1", "r1")
+
     attempts = []
 
     def request_once(method, path, content_type=None, **kwargs):
         attempts.append(s.bearer_token)
-        return Reply(401 if s.bearer_token == "b0" else 200)
+        if s.bearer_token == "b0":
+            rejected.set()
+            return Reply(401)
+        return Reply(200)
 
-    real_sleep = time.sleep
-    pauses = []
+    refresher = threading.Thread(target=refresh_in_another_process)
+    refresher.start()
+    holding.wait(5)
+    monkeypatch.setattr(s, "request_once", request_once)
+    try:
+        assert s.post("/x", json={}).status_code == 200
+    finally:
+        refresher.join()
+    assert attempts == ["b0", "b1"]
 
-    def sleep(seconds):
-        pauses.append(seconds)
-        if len(pauses) == 3:
-            another_process_refreshes(s, "b1", "r1")
-        real_sleep(0)
+
+def test_a_rejected_request_with_no_refresh_in_flight_fails_at_once(
+    tmp_path, monkeypatch
+):
+    s = session(tmp_path)
+    slept = []
+    monkeypatch.setattr(a.time, "sleep", slept.append)
+    calls = []
+
+    def request_once(*args, **kwargs):
+        calls.append(1)
+        return Reply(401)
 
     monkeypatch.setattr(s, "request_once", request_once)
-    monkeypatch.setattr(a.time, "sleep", sleep)
-    assert s.post("/x", json={}).status_code == 200
-    assert attempts == ["b0", "b1"]
-    assert pauses == [0.01, 0.02, 0.04]
-
-
-def test_a_rejected_request_gives_up_after_the_retry_window(tmp_path, monkeypatch):
-    s = session(tmp_path)
-    monkeypatch.setattr(a, "AUTH_RETRY_SECONDS", 0.2)
-    monkeypatch.setattr(a, "AUTH_RETRY_FIRST_PAUSE", 0.01)
-    monkeypatch.setattr(s, "request_once", lambda *args, **kwargs: Reply(401))
-    started = time.monotonic()
     assert s.delete("/x").status_code == 401
-    assert 0.2 <= time.monotonic() - started < 2
+    assert calls == [1]
+    assert slept == []
 
 
 def test_an_expired_session_fails_without_waiting(tmp_path, monkeypatch):
@@ -654,6 +671,25 @@ def test_configure_request_connection_pool_returns_two_sessions():
         assert "https://" in session.adapters
 
 
+def _refused_url() -> str:
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+    return f"http://127.0.0.1:{port}"
+
+
+@pytest.mark.parametrize("attempts", [0, 2])
+def test_connect_attempts_bound_the_retries_of_a_refused_connection(
+    monkeypatch, attempts
+):
+    slept = []
+    monkeypatch.setattr(a.time, "sleep", slept.append)
+    connection = a.APIServer(_refused_url(), connect_attempts=attempts)
+    with pytest.raises(requests.exceptions.ConnectionError):
+        connection.request_once("get", "/x")
+    assert len(slept) == attempts
+
+
 # ---------------------------------------------------------------------------
 # Module constants
 # ---------------------------------------------------------------------------
@@ -840,3 +876,20 @@ def test_requests_use_the_configured_timeout(monkeypatch):
 def test_default_timeout_is_unchanged():
     server = a.APIServer("http://localhost:2457")
     assert server.timeout == (a.CONNECTION_TIMEOUT, a.READ_TIMEOUT)
+
+
+def _retries(session) -> object:
+    return session.adapters["http://"].max_retries
+
+
+def test_capped_retries_stop_early_and_never_repeat_a_timed_out_read():
+    default_session, get_session = a.configure_request_connection_pool(0, 6)
+    busy, get = _retries(default_session), _retries(get_session)
+    assert (busy.status, busy.connect) == (6, 0)
+    assert (get.status, get.read, get.connect) == (6, 0, 0)
+
+
+def test_uncapped_retries_last_minutes():
+    default_session, get_session = a.configure_request_connection_pool()
+    assert _retries(default_session).status == 60
+    assert _retries(get_session).read == a.HTTP_ATTEMPTS

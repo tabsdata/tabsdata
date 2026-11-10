@@ -49,8 +49,6 @@ MIN_CONNECTIONS = 2
 MAX_CONNECTIONS = 8
 REFRESH_BUFFER_IN_SECONDS = 300  # 5 minutes
 AUTH_RETRY_SECONDS = 30.0
-AUTH_RETRY_FIRST_PAUSE = 0.1
-AUTH_RETRY_MAX_PAUSE = 2.0
 REFRESH_LOCK_SECONDS = 30.0
 
 
@@ -79,22 +77,41 @@ def _path_segment(value) -> str:
     return quote(str(value), safe="")
 
 
-def configure_request_connection_pool():
+HTTP_ATTEMPTS = 12
+
+
+def configure_request_connection_pool(
+    connect_attempts: int = HTTP_ATTEMPTS, retry_attempts: int | None = None
+):
+    """The sessions for requests: a refused connection is retried
+    ``connect_attempts`` times, and a busy or failing server ``retry_attempts``
+    times, without retrying a read that timed out; with no ``retry_attempts``,
+    for minutes, as many concurrent clients need."""
     http_retries_delay = 5
-    http_attempts = 12
+    http_attempts = HTTP_ATTEMPTS if retry_attempts is None else retry_attempts
+    read_attempts = HTTP_ATTEMPTS if retry_attempts is None else 0
     # A busy server stays busy while its writes keep conflicting, which under
     # many concurrent clients lasts minutes: five, at the same pace.
-    http_busy_attempts = 60
+    http_busy_attempts = 60 if retry_attempts is None else retry_attempts
+
+    honors_retry_after = retry_attempts is None
 
     class ConstantWaitRetry(Retry):
-        def sleep(self, _response=None):
-            time.sleep(http_retries_delay)
+        """Retries at a steady pace, or after the server's ``Retry-After``
+        when retries are not capped: a capped caller gets the ``Retry-After``
+        of the last answer in its error instead."""
+
+        def sleep(self, response=None):
+            after = None
+            if honors_retry_after and response is not None:
+                after = self.get_retry_after(response)
+            time.sleep(http_retries_delay if after is None else after)
 
     # A 503 means the server applied nothing: it was too busy to run the
     # request, so any request may be repeated after one.
     default_retry_strategy = ConstantWaitRetry(
-        total=http_busy_attempts,
-        connect=http_attempts,
+        total=max(http_busy_attempts, connect_attempts),
+        connect=connect_attempts,
         read=0,
         redirect=http_attempts,
         status=http_busy_attempts,
@@ -107,9 +124,9 @@ def configure_request_connection_pool():
     )
 
     get_retry_strategy = ConstantWaitRetry(
-        total=http_attempts,
-        connect=http_attempts,
-        read=http_attempts,
+        total=max(http_attempts, connect_attempts),
+        connect=connect_attempts,
+        read=read_attempts,
         redirect=http_attempts,
         status=http_attempts,
         other=http_attempts,
@@ -144,7 +161,14 @@ def configure_request_connection_pool():
     return default_session, get_session
 
 
-DEFAULT_HTTP_SESSION, GET_HTTP_SESSION = configure_request_connection_pool()
+@cache
+def _http_sessions(
+    connect_attempts: int, retry_attempts: int | None = None
+) -> tuple[requests.Session, requests.Session]:
+    return configure_request_connection_pool(connect_attempts, retry_attempts)
+
+
+DEFAULT_HTTP_SESSION, GET_HTTP_SESSION = _http_sessions(HTTP_ATTEMPTS, None)
 
 
 def _obtain_certificate_file_path(url: str) -> str:
@@ -230,8 +254,9 @@ class NoProjectSelectedError(Exception):
 
     def __init__(self):
         super().__init__(
-            "No project selected. Run 'tdk set --proj <name>' or pass "
-            "'--proj <name>' to the command."
+            "No project selected. Pass '--proj <name>' to the command, or pin "
+            "one with 'tdk set --proj <name>'; 'tdk project list' shows the "
+            "projects."
         )
 
 
@@ -256,10 +281,14 @@ class APIServer:
         url: str,
         credentials_file: str = None,
         timeout: tuple[float, float] = (CONNECTION_TIMEOUT, READ_TIMEOUT),
+        connect_attempts: int = HTTP_ATTEMPTS,
+        retry_attempts: int | None = None,
     ):
         url = process_url(url)
         self.url = url
         self.timeout = timeout
+        self.connect_attempts = connect_attempts
+        self.retry_attempts = retry_attempts
         self.bearer_token = None
         self.refresh_token = None
         self.token_type = None
@@ -406,21 +435,16 @@ class APIServer:
         return bool(self.credentials_file and self.refresh_token)
 
     def await_new_token(self, rejected: str | None, deadline: float) -> bool:
-        pause = AUTH_RETRY_FIRST_PAUSE
-        while True:
-            remaining = deadline - time.monotonic()
-            with _credentials.locked(self.credentials_file, max(remaining, 0)):
-                stored = self.stored_credentials()
-            if stored and stored.get("bearer_token") not in (None, rejected):
-                self.adopt(stored)
-                return True
-            if self.expired():
-                return False
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                return False
-            time.sleep(min(pause, remaining))
-            pause = min(pause * 2, AUTH_RETRY_MAX_PAUSE)
+        # A refresh holds the lock until it has stored the new session, so once
+        # the lock is ours a session still holding the rejected token means no
+        # refresh is coming.
+        remaining = max(deadline - time.monotonic(), 0)
+        with _credentials.locked(self.credentials_file, remaining):
+            stored = self.stored_credentials()
+        if stored and stored.get("bearer_token") not in (None, rejected):
+            self.adopt(stored)
+            return True
+        return False
 
     @property
     def authentication_header(self):
@@ -463,7 +487,10 @@ class APIServer:
             headers["User-Agent"] = f"tabsdata/{version}"
         if content_type:
             headers["Content-Type"] = content_type
-        session = GET_HTTP_SESSION if method == "get" else DEFAULT_HTTP_SESSION
+        default_session, get_session = _http_sessions(
+            self.connect_attempts, self.retry_attempts
+        )
+        session = get_session if method == "get" else default_session
         return getattr(session, method)(
             self.url + path,
             headers=headers,
@@ -2023,8 +2050,11 @@ def obtain_connection(
     password: str = None,
     credentials_file: str = None,
     token: str = None,
+    **limits,
 ) -> APIServer:
-    connection = APIServer(url, credentials_file=credentials_file)
+    """A logged-in connection; ``limits`` are :class:`APIServer`'s ``timeout``,
+    ``connect_attempts`` and ``retry_attempts``."""
+    connection = APIServer(url, credentials_file=credentials_file, **limits)
     if token:
         connection.authentication_service_token_login(token)
     elif name and password:
