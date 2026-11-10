@@ -3,9 +3,7 @@
 #
 
 """Oracle source columns typed from what oracledb describes; see
-:mod:`testi_tabsdatak.conn.common.sql.described`. Oracle describes an unquoted
-column name in upper case, which SQLAlchemy folds to lower case: the columns
-here are typed by that folded name."""
+:mod:`testi_tabsdatak.conn.common.sql.described`."""
 
 from __future__ import annotations
 

@@ -761,20 +761,26 @@ def test_the_query_parameters_reach_the_query(engine, registry):
     assert batch["id"].to_list() == [150]
 
 
-def test_a_column_is_typed_by_the_name_sqlalchemy_gives_it(engine, registry):
-    def by_upper_name(column):
-        return {"N": "SMALLINT"}.get(column.name.upper())
-
-    described.register("pysqlite", by_upper_name)
+def test_a_column_is_typed_by_the_name_its_driver_describes(engine, registry):
+    described.register("pysqlite", lambda column: {"N": "SMALLINT"}.get(column.name))
     [batch] = _read(engine, query='SELECT id, n AS "N" FROM t')
     assert batch.schema["N"] == pl.Int16
 
 
-def test_the_description_is_named_by_position():
-    description = [("ID", 20), ("NAME", 25)]
-    assert sar._named(["id", "name"], description) == [("id", 20), ("name", 25)]
+class _Result:
+    def __init__(self, description, keys):
+        self.cursor = type("Cursor", (), {"description": description})()
+        self._keys = keys
+
+    def keys(self):
+        return self._keys
 
 
-def test_a_description_that_does_not_match_the_columns_is_dropped():
-    assert sar._named(["id"], [("ID", 20), ("NAME", 25)]) is None
-    assert sar._named(["id"], None) is None
+def test_the_columns_are_named_as_the_driver_describes_them():
+    description = [("EMP_NO", 20), ("FIRST_NAME", 25)]
+    result = _Result(description, ["emp_no", "first_name"])
+    assert sar._columns(result) == (["EMP_NO", "FIRST_NAME"], description)
+
+
+def test_the_columns_fall_back_to_the_result_keys_without_a_description():
+    assert sar._columns(_Result(None, ["id"])) == (["id"], None)

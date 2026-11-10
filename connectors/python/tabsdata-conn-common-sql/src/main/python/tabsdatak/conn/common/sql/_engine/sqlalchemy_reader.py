@@ -183,16 +183,15 @@ class PandasReadEngine(SqlAlchemyReadEngine):
         return _pandas_read
 
 
-def _named(
-    columns: list[str], description: Sequence[Sequence[Any]] | None
-) -> list[tuple[Any, ...]] | None:
-    """``description`` with each entry named as SQLAlchemy names its column.
-    Oracle and Db2 describe an unquoted name in upper case, which SQLAlchemy
-    folds to lower case in the result's keys; the entries are in the same
-    order as the keys."""
-    if not description or len(description) != len(columns):
-        return None
-    return [(name, *entry[1:]) for name, entry in zip(columns, description)]
+def _columns(result: Any) -> tuple[list[str], Sequence[Sequence[Any]] | None]:
+    """The result's column names as its driver describes them, with the
+    description itself. Oracle and Db2 describe an unquoted name in upper case,
+    which SQLAlchemy's keys fold to lower case: the described name is the one a
+    query's readers -- and their ``schema_overrides`` -- have always seen."""
+    description = getattr(getattr(result, "cursor", None), "description", None)
+    if description:
+        return [entry[0] for entry in description], description
+    return list(result.keys()), None
 
 
 def _polars_read(
@@ -216,12 +215,8 @@ def _polars_read(
         text(query), dict(parameters) if parameters else {}
     )
     try:
-        columns = list(result.keys())
-        cursor = getattr(result, "cursor", None)
-        dtypes = described.dtypes(
-            connection.dialect.driver,
-            _named(columns, getattr(cursor, "description", None)),
-        )
+        columns, description = _columns(result)
+        dtypes = described.dtypes(connection.dialect.driver, description)
         dtypes.update(schema_overrides or {})
         casts = {name: dtype for name, dtype in dtypes.items() if name in columns}
         warned: set[str] = set()

@@ -98,7 +98,11 @@ def check(
 ) -> None:
     provision(engine, table, cases)
     try:
-        batches = list(read(f"SELECT * FROM {table} ORDER BY id", chunk_size))
+        # Oracle and Db2 describe the unquoted names in upper case.
+        batches = [
+            batch.rename(str.lower)
+            for batch in read(f"SELECT * FROM {table} ORDER BY id", chunk_size)
+        ]
         _check_batches(batches, cases, chunk_size)
         _check_values(pl.concat(batches), cases)
     finally:
