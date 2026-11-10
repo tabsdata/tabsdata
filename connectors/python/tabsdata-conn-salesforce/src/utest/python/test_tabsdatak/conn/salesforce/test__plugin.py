@@ -7,7 +7,8 @@ from __future__ import annotations
 import io
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -112,6 +113,9 @@ class _FakeSF:
         # tests can override these if they want to exercise it.
         self.session = MagicMock()
         self.headers = {}
+        # describe() of each sObject, by name; one missing fails to describe.
+        self.describes: dict[str, dict] = {}
+        self.described: list[str] = []
 
     def query_all_iter(self, query: str, include_deleted: bool = False):
         self.query_all_iter_calls.append((query, include_deleted))
@@ -123,6 +127,12 @@ class _FakeSF:
         return iter([])
 
     def restful(self, url, method=None, json=None):
+        if url.startswith("sobjects/") and url.endswith("/describe"):
+            sobject = url.split("/")[1]
+            self.described.append(sobject)
+            if sobject not in self.describes:
+                raise RuntimeError(f"INVALID_TYPE: {sobject}")
+            return self.describes[sobject]
         if not self.restful_returns:
             return {}
         return self.restful_returns.pop(0)
@@ -275,9 +285,183 @@ def test_src_plugin_types_each_field_over_the_whole_result(monkeypatch, work_dir
     )
     [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
     frame = _served(table)
-    assert frame.schema == pl.Schema(
-        {"Id": pl.String, "Amount": pl.Float64, "Active": pl.Boolean}
+    assert frame.schema == pl.Schema({
+        "Id": pl.String,
+        "Amount": pl.Float64,
+        "Active": pl.Boolean,
+    })
+
+
+def _field(name, kind, precision=0, scale=0):
+    return {"name": name, "type": kind, "precision": precision, "scale": scale}
+
+
+OPPORTUNITY = {
+    "fields": [
+        _field("Id", "id"),
+        _field("Name", "string"),
+        _field("Amount", "currency", 18, 2),
+        _field("Probability", "percent", 3, 0),
+        _field("ExpectedRevenue", "double", 18, 2),
+        _field("TotalOpportunityQuantity", "int", 9, 0),
+        _field("CloseDate", "date"),
+        _field("LastActivityDate", "date"),
+        _field("CreatedDate", "datetime"),
+        _field("IsWon", "boolean"),
+        _field("StageTime", "time"),
+        _field("BillingAddress", "address"),
+        _field("OwnerId", "reference"),
+    ]
+}
+USER = {"fields": [_field("Name", "string"), _field("IsActive", "boolean")]}
+
+
+def _opportunity(**fields):
+    return {"attributes": {"type": "Opportunity"}, **fields}
+
+
+def test_src_plugin_types_each_field_as_its_object_describes_it(monkeypatch, work_dir):
+    fake, _, src = _soql(
+        monkeypatch,
+        [
+            _opportunity(
+                Id="006",
+                Name="Deal",
+                Amount=1234.5,
+                Probability=90,
+                ExpectedRevenue=None,
+                TotalOpportunityQuantity=None,
+                CloseDate="2026-04-19",
+                LastActivityDate=None,
+                CreatedDate="2026-04-19T06:30:24.000+0000",
+                IsWon=None,
+                StageTime="06:30:24.000Z",
+                OwnerId=None,
+            )
+        ],
     )
+    fake.describes = {"Opportunity": OPPORTUNITY}
+    [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    frame = _served(table)
+    assert frame.schema == pl.Schema({
+        "Id": pl.String,
+        "Name": pl.String,
+        "Amount": pl.Decimal(18, 2),
+        "Probability": pl.Decimal(3, 0),
+        "ExpectedRevenue": pl.Float64,
+        "TotalOpportunityQuantity": pl.Int64,
+        "CloseDate": pl.Date,
+        "LastActivityDate": pl.Date,
+        "CreatedDate": pl.Datetime("ns", "UTC"),
+        "IsWon": pl.Boolean,
+        "StageTime": pl.String,
+        "OwnerId": pl.String,
+    })
+    assert frame.row(0) == (
+        "006",
+        "Deal",
+        Decimal("1234.50"),
+        Decimal("90"),
+        None,
+        None,
+        date(2026, 4, 19),
+        None,
+        datetime(2026, 4, 19, 6, 30, 24, tzinfo=timezone.utc),
+        None,
+        "06:30:24.000Z",
+        None,
+    )
+    assert fake.described == ["Opportunity"]
+
+
+def test_src_plugin_types_a_parents_fields_as_its_object_describes_them(
+    monkeypatch, work_dir
+):
+    fake, _, src = _soql(
+        monkeypatch,
+        [
+            _opportunity(Id="006", Owner=None),
+            _opportunity(
+                Id="007",
+                Owner={"attributes": {"type": "User"}, "Name": "Ada", "IsActive": None},
+            ),
+        ],
+    )
+    fake.describes = {"Opportunity": OPPORTUNITY, "User": USER}
+    [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    frame = _served(table)
+    assert frame.schema["Owner"] == pl.Struct({
+        "Name": pl.String,
+        "IsActive": pl.Boolean,
+    })
+    assert frame["Owner"].to_list() == [None, {"Name": "Ada", "IsActive": None}]
+
+
+def test_src_plugin_types_an_aggregate_from_its_values(monkeypatch, work_dir):
+    fake, _, src = _soql(
+        monkeypatch,
+        [{"attributes": {"type": "AggregateResult"}, "expr0": 3, "StageName": "Won"}],
+    )
+    [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    frame = _served(table)
+    assert frame.schema == pl.Schema({"expr0": pl.Int64, "StageName": pl.String})
+    assert fake.described == []
+
+
+def test_src_plugin_types_from_values_an_object_it_cannot_describe(
+    monkeypatch, work_dir, caplog
+):
+    fake, _, src = _soql(monkeypatch, [_opportunity(Id="006", Amount=1.5, IsWon=None)])
+    [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    frame = _served(table)
+    assert frame.schema == pl.Schema({
+        "Id": pl.String,
+        "Amount": pl.Float64,
+        "IsWon": pl.String,
+    })
+    assert any(
+        "Cannot describe the Salesforce object 'Opportunity'" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+def test_src_plugin_describes_each_object_once(monkeypatch, work_dir):
+    fake, _, src = _soql(monkeypatch, [_opportunity(Id="006"), _opportunity(Id="007")])
+    fake.describes = {"Opportunity": OPPORTUNITY}
+    [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    _served(table)
+    _metadata(table)
+    assert fake.described == ["Opportunity"]
+
+
+@pytest.mark.parametrize(
+    "field,dtype",
+    [
+        (_field("A", "boolean"), pl.Boolean),
+        (_field("A", "int", 9), pl.Int64),
+        (_field("A", "long", 18), pl.Int64),
+        (_field("A", "double", 18, 2), pl.Float64),
+        (_field("A", "currency", 18, 2), pl.Decimal(18, 2)),
+        (_field("A", "currency", 16, 0), pl.Decimal(16, 0)),
+        (_field("A", "percent", 5, 2), pl.Decimal(5, 2)),
+        (_field("A", "currency", 0, 0), pl.Float64),
+        (_field("A", "currency", 40, 2), pl.Float64),
+        (_field("A", "date"), pl.Date),
+        (_field("A", "datetime"), pl.Datetime("ns", "UTC")),
+        (_field("A", "time"), pl.String),
+        (_field("A", "id"), pl.String),
+        (_field("A", "reference"), pl.String),
+        (_field("A", "picklist"), pl.String),
+        (_field("A", "multipicklist"), pl.String),
+        (_field("A", "textarea"), pl.String),
+        (_field("A", "email"), pl.String),
+        (_field("A", "address"), None),
+        (_field("A", "location"), None),
+        (_field("A", "anyType"), None),
+    ],
+)
+def test_a_described_field_is_typed_as_its_value_decodes(field, dtype):
+    assert reader.field_dtype(field) == dtype
 
 
 def test_src_plugin_replaces_last_modified_token(monkeypatch, work_dir):
@@ -424,7 +608,8 @@ def _drained(out) -> list[list[LazyFrameInput]]:
 
 
 def test_report_plugin_raises_salesforce_13_when_lookup_misses(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     fake = _FakeSF()
     # Empty query result -- _lookup_report returns None and
@@ -442,12 +627,11 @@ def test_report_plugin_raises_salesforce_13_when_lookup_misses(
 
 
 def test_report_plugin_raises_salesforce_15_on_unsupported_format(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     fake = _FakeSF()
-    fake.query_returns = {
-        "records": [{"Id": "00O000000000001", "Format": "Matrix"}]
-    }
+    fake.query_returns = {"records": [{"Id": "00O000000000001", "Format": "Matrix"}]}
     _patch_login(monkeypatch, fake)
     src = SalesforceReportSrc(
         reports=["00O000000000001"],
@@ -493,7 +677,7 @@ class _Response:
                         for row in rows
                     ]
                 }
-            }
+            },
         }
         self.raw = io.BytesIO(json.dumps(body).encode("utf-8"))
         self.headers: dict = {}
@@ -643,19 +827,17 @@ COLUMNS = [
     ("p", "picklist"),
 ]
 
-SCHEMA = pl.Schema(
-    {
-        "s": pl.String,
-        "i": pl.Int64,
-        "n": pl.Int64,
-        "d": pl.Float64,
-        "b": pl.Boolean,
-        "day": pl.Datetime("ns", "UTC"),
-        "at": pl.Datetime("ns", "UTC"),
-        "t": pl.Datetime("ns", "UTC"),
-        "p": pl.String,
-    }
-)
+SCHEMA = pl.Schema({
+    "s": pl.String,
+    "i": pl.Int64,
+    "n": pl.Int64,
+    "d": pl.Float64,
+    "b": pl.Boolean,
+    "day": pl.Datetime("ns", "UTC"),
+    "at": pl.Datetime("ns", "UTC"),
+    "t": pl.Datetime("ns", "UTC"),
+    "p": pl.String,
+})
 
 
 def test_report_values_take_their_column_types(monkeypatch, work_dir):
@@ -742,18 +924,17 @@ def test_salesforce_report_src_cardinality_uses_reports_length():
 
 def test_resolve_src_cfg_returns_defaults_when_empty():
     import logging as _logging
+
     cfg = plugin._resolve_src_cfg(None)
     assert cfg.logging_level == _logging.ERROR
     assert cfg.drop_metadata is False
 
 
 def test_resolve_src_cfg_applies_overrides():
-    cfg = plugin._resolve_src_cfg(
-        {
-            "salesforce.logging_level": 20,
-            "tabsdata.src_metadata.drop": True,
-        }
-    )
+    cfg = plugin._resolve_src_cfg({
+        "salesforce.logging_level": 20,
+        "tabsdata.src_metadata.drop": True,
+    })
     assert cfg.logging_level == 20
     assert cfg.drop_metadata is True
 
@@ -914,4 +1095,7 @@ def test_report_result_is_fetched_with_a_timeout_and_checked(monkeypatch, failin
         reader._await_report_stream(
             sf=_PollingSF("Success"), report_id="r", instance_id="i"
         )
-    assert calls[0]["timeout"] == (reader._SFR_CONNECT_SECONDS, reader._SFR_READ_SECONDS)
+    assert calls[0]["timeout"] == (
+        reader._SFR_CONNECT_SECONDS,
+        reader._SFR_READ_SECONDS,
+    )

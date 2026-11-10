@@ -8,7 +8,7 @@ import gzip
 import json
 import logging
 import time
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any, Literal
@@ -99,6 +99,34 @@ _SFR_GREATER_THAN = "greaterThan"
 _SFR_ALL_DATA_KEY = "allData"
 _SFR_CONNECT_SECONDS = 30
 _SFR_READ_SECONDS = 300
+
+# What an aggregate SOQL query returns its rows as; it has no description.
+_SF_AGGREGATE_RESULT = "AggregateResult"
+_SF_MAX_DECIMAL_PRECISION = 38
+
+# A described field's dtype, by its Salesforce type, as its JSON value
+# decodes to it. Currency and percent are decimals of their own precision.
+_SF_FIELD_TYPES: dict[str, pl.DataType] = {
+    "boolean": pl.Boolean(),
+    "int": pl.Int64(),
+    "long": pl.Int64(),
+    "double": pl.Float64(),
+    "date": pl.Date(),
+    "datetime": pl.Datetime("ns", "UTC"),
+    "id": pl.String(),
+    "reference": pl.String(),
+    "string": pl.String(),
+    "textarea": pl.String(),
+    "picklist": pl.String(),
+    "multipicklist": pl.String(),
+    "combobox": pl.String(),
+    "email": pl.String(),
+    "phone": pl.String(),
+    "url": pl.String(),
+    "encryptedstring": pl.String(),
+    "base64": pl.String(),
+    "time": pl.String(),
+}
 
 
 # --- Salesforce client login ----------------------------------------------
@@ -209,6 +237,9 @@ def _soql_input(
     # noinspection PyProtectedMember
     from tabsdatak.conn.common.file._read._ndjson import AutoNdjson
 
+    sobjects = SObjects()
+    describe = Describer(client)
+
     def opened() -> RecordLines:
         logger.debug("Executing SOQL query %d: %s", index, query)
         sf = client()
@@ -219,7 +250,7 @@ def _soql_input(
                 cause=e,
                 query_index=index,
             )
-        return RecordLines(records, index)
+        return RecordLines(records, index, sobjects)
 
     lines = AutoNdjson().read(opened)
     assert callable(lines.metadata)
@@ -234,19 +265,126 @@ def _soql_input(
             ),
         }
     )
-    return LazyFrameInput(
-        lines.frame,
-        metadata=lambda: replace(folded(), columns=columns),
-    )
+
+    def metadata() -> FrameMetadata:
+        read = folded()
+        schema = described_schema(read.schema, sobjects, describe)
+        return replace(read, schema=schema, columns=columns)
+
+    return LazyFrameInput(lines.frame, metadata=metadata)
+
+
+class SObjects:
+    """The sObject at each path of a query's records, as the records name it
+    in their ``attributes`` -- the queried object at the top, a parent's under
+    its relationship field."""
+
+    def __init__(self) -> None:
+        self.by_path: dict[tuple[str, ...], str] = {}
+
+    def observe(self, record: dict, path: tuple[str, ...] = ()) -> None:
+        kind = (record.get("attributes") or {}).get("type")
+        if isinstance(kind, str):
+            self.by_path.setdefault(path, kind)
+        for key, value in record.items():
+            if isinstance(value, dict) and "attributes" in value:
+                self.observe(value, (*path, key))
+
+
+class Describer:
+    """The dtype of each field of an sObject, from its ``describe()``, once per
+    sObject. One that cannot be described has its fields typed from their
+    values, with a warning."""
+
+    def __init__(self, client: Client) -> None:
+        self.client = client
+        self.described: dict[str, dict[str, pl.DataType]] = {}
+
+    def __call__(self, sobject: str) -> dict[str, pl.DataType]:
+        if sobject not in self.described:
+            self.described[sobject] = self._describe(sobject)
+        return self.described[sobject]
+
+    def _describe(self, sobject: str) -> dict[str, pl.DataType]:
+        if sobject == _SF_AGGREGATE_RESULT:
+            return {}
+        try:
+            described = self.client().restful(f"sobjects/{sobject}/describe")
+        except Exception:  # noqa: BLE001 -- the values still type the fields
+            logger.warning(
+                "Cannot describe the Salesforce object %r; its fields are typed"
+                " from their values",
+                sobject,
+                exc_info=True,
+            )
+            return {}
+        dtypes = {}
+        for field in (described or {}).get("fields", []):
+            dtype = field_dtype(field)
+            if dtype is not None:
+                dtypes[field["name"]] = dtype
+        return dtypes
+
+
+def field_dtype(field: dict) -> pl.DataType | None:
+    """The dtype of a described field, as its JSON value decodes to it. A time
+    is left to its text, which Polars cannot decode as a time; a compound or
+    untyped field is left to its values."""
+    kind = field.get("type")
+    if kind in ("currency", "percent"):
+        precision, scale = field.get("precision"), field.get("scale")
+        if isinstance(precision, int) and isinstance(scale, int):
+            if 0 < precision <= _SF_MAX_DECIMAL_PRECISION and 0 <= scale <= precision:
+                return pl.Decimal(precision, scale)
+        return pl.Float64()
+    return _SF_FIELD_TYPES.get(kind)
+
+
+def described_schema(
+    schema: pl.Schema | None,
+    sobjects: SObjects,
+    describe: Callable[[str], dict[str, pl.DataType]],
+) -> pl.Schema | None:
+    """``schema`` with each field of a described sObject typed as described,
+    a parent's fields included, and every other field as its values typed
+    it."""
+    if schema is None or not sobjects.by_path:
+        return schema
+    return pl.Schema(_described_fields(dict(schema), (), sobjects, describe))
+
+
+def _described_fields(
+    fields: dict[str, pl.DataType],
+    path: tuple[str, ...],
+    sobjects: SObjects,
+    describe: Callable[[str], dict[str, pl.DataType]],
+) -> dict[str, pl.DataType]:
+    sobject = sobjects.by_path.get(path)
+    described = describe(sobject) if sobject else {}
+    typed = {}
+    for name, dtype in fields.items():
+        nested = (*path, name)
+        if isinstance(dtype, pl.Struct) and nested in sobjects.by_path:
+            inner = {field.name: field.dtype for field in dtype.fields}
+            typed[name] = pl.Struct(
+                _described_fields(inner, nested, sobjects, describe)
+            )
+        else:
+            typed[name] = described.get(name, dtype)
+    return typed
 
 
 class RecordLines:
     """The records of a SOQL query as UTF-8 JSON lines, one record per
-    line, fetched page by page as they are read."""
+    line, fetched page by page as they are read; the sObjects they hold are
+    noted in ``sobjects``."""
 
-    def __init__(self, records: Iterator[dict], index: int) -> None:
+    def __init__(
+        self, records: Iterator[dict], index: int, sobjects: SObjects | None = None
+    ) -> None:
         self.records = records
         self.index = index
+        self.sobjects = sobjects if sobjects is not None else SObjects()
         self.buffer = bytearray()
 
     def read(self, size: int = -1) -> bytes:
@@ -260,6 +398,7 @@ class RecordLines:
                 )
             if record is None:
                 break
+            self.sobjects.observe(record)
             self.buffer += json.dumps(
                 _without_attributes(record),
                 ensure_ascii=False,

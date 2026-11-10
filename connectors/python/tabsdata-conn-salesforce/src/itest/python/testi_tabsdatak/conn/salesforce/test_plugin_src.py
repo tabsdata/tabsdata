@@ -67,6 +67,37 @@ def test_src_plugin_read_in_returns_the_rows(
 
 
 @salesforce_domain("salesforce")
+def test_src_plugin_read_in_types_each_field_as_salesforce_describes_it(
+    domain_salesforce: SalesforceDomain, tmp_path: Path
+):
+    """Standard Account fields, typed by Account's and User's descriptions --
+    whatever an org's rows hold, a field null in each of them included."""
+    src = SalesforceSrc(
+        queries=[
+            "SELECT Id, Name, AnnualRevenue, NumberOfEmployees, IsDeleted,"
+            " LastActivityDate, CreatedDate, Owner.Name, Owner.IsActive"
+            f" FROM {ACCOUNT} ORDER BY Id LIMIT {LIMIT}"
+        ]
+    )
+    out = plugin._SalesforceSrcPlugin().read_in(
+        PluginSrcCtx(work_dir(tmp_path)), src_conn(domain_salesforce), src
+    )
+    [frame] = served(out, tmp_path / "served")
+    if frame.height == 0:
+        pytest.fail("the org holds no Account to type")
+    assert frame.schema == pl.Schema({
+        "Id": pl.String,
+        "Name": pl.String,
+        "AnnualRevenue": pl.Decimal(18, 0),
+        "NumberOfEmployees": pl.Int64,
+        "IsDeleted": pl.Boolean,
+        "LastActivityDate": pl.Date,
+        "CreatedDate": pl.Datetime("ns", "UTC"),
+        "Owner": pl.Struct({"Name": pl.String, "IsActive": pl.Boolean}),
+    })
+
+
+@salesforce_domain("salesforce")
 def test_src_plugin_read_in_matching_no_rows_lands_an_empty_table(
     domain_salesforce: SalesforceDomain, tmp_path: Path
 ):
