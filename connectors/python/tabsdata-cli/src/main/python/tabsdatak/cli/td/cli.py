@@ -27,6 +27,7 @@ from tabsdatak.cli._errors import (
     classify,
 )
 from tabsdatak.cli._help_pages import build_full_help, full_help_page
+from tabsdatak.cli._internal import SHOW_INTERNAL_FLAG, showing_internal
 from tabsdatak.cli._machine import machine
 from tabsdatak.cli._registry import cli_extensions, collect_cli_commands
 from tabsdatak.cli._unattended import unattended_cause
@@ -168,6 +169,17 @@ def _hoist_no_prompt(argv: list) -> list:
     return [NO_PROMPT_FLAG, *rest, *argv[len(head) :]]
 
 
+def _take_show_internal(argv: list) -> tuple[list, bool]:
+    """``argv`` without ``-x``, accepted in any position before ``--``, and
+    whether it was there. It goes with a help: a command that runs refuses
+    it."""
+    head = argv[: argv.index("--")] if "--" in argv else argv
+    if SHOW_INTERNAL_FLAG not in head:
+        return argv, False
+    rest = [arg for arg in head if arg != SHOW_INTERNAL_FLAG]
+    return [*rest, *argv[len(head) :]], True
+
+
 def _asks_for_document(argv: list) -> bool:
     """Whether ``argv`` asks for the ``jsonb`` document, whose failures are a
     document too."""
@@ -237,7 +249,9 @@ class _RootGroup(TdkGroup):
 
         for extension in reversed(cli_extensions()):
             run = self._wrapped(extension, run)
-        return run(_incoming_argv(args, kwargs))
+        argv, shown = _take_show_internal(_incoming_argv(args, kwargs))
+        with showing_internal(shown):
+            return run(argv)
 
     def _wrapped(self, extension, inner):
         def run(argv: list, **overrides):
@@ -402,6 +416,17 @@ def _defer_profile_option(group: click.Group):
         "With --help, print the full help for every command and subcommand, "
         "then exit. Optionally add '--format text|json' (default: text): "
         "'tdk --help [--full [--format FORMAT]]'."
+    ),
+)
+@click.option(
+    SHOW_INTERNAL_FLAG,
+    "show_internal",
+    is_flag=True,
+    expose_value=False,
+    help=(
+        "With a help, show the internal commands ('x:...') and options "
+        "('--x:...') too, in any position: 'tdk -x fn trigger --help'. They are "
+        "unsupported and may change in any release."
     ),
 )
 @click.pass_context

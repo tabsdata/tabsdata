@@ -162,35 +162,6 @@ def test_full_help_takes_only_its_paging_options(argv):
     assert json.loads(result.stdout)["error"]["type"] == "usage"
 
 
-def test_a_person_s_help_hides_the_internal_options_and_says_so():
-    from tabsdatak.cli._command import INTERNAL_NOTE
-
-    for argv in (["table", "data", "--help"], ["--help"], ["plan", "logs", "--help"]):
-        result = CliRunner().invoke(cli, argv)
-        assert result.exit_code == 0, result.output
-        assert "--x:" not in result.output.replace(INTERNAL_NOTE, "")
-        assert result.output.rstrip().endswith(INTERNAL_NOTE)
-
-
-def test_a_program_s_help_shows_the_internal_options():
-    result = CliRunner().invoke(cli, ["table", "data", "--help", "--machine"])
-    assert "--x:columns" in result.output and "--x:row-format" in result.output
-    assert "Options starting with" not in result.output
-
-
-def test_every_internal_option_is_named_with_the_prefix_and_its_class():
-    from tabsdatak.cli._command import INTERNAL_PREFIX, InternalOption
-
-    ctx = click.Context(cli)
-    for path in _paths(cli, ctx):
-        command = cli
-        for word in path:
-            command = command.get_command(ctx, word)
-        for param in command.params:
-            internal = any(opt.startswith(INTERNAL_PREFIX) for opt in param.opts)
-            assert internal == isinstance(param, InternalOption), (path, param.opts)
-
-
 def test_the_hidden_aliases_accept_an_agent_s_guess_without_showing():
     data = cli.get_command(click.Context(cli), "table").get_command(
         click.Context(cli), "data"

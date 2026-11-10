@@ -14,47 +14,32 @@ from __future__ import annotations
 import rich_click as click
 from click.core import ParameterSource
 
+from tabsdatak.cli._internal import (
+    SHOW_INTERNAL_FLAG,
+    Internal,
+    check_internal_options,
+    concealing_internal,
+    internal_asked,
+)
 from tabsdatak.cli._prompted import PromptedOption
 
-INTERNAL_PREFIX = "--x:"
-INTERNAL_NOTE = "Options starting with '--x:' are unsupported internal options."
 
-
-class InternalOption(click.Option):
-    """An ``--x:`` option, for a program running tdk: its help shows it, a
-    person's never does."""
-
-    @property
-    def hidden(self) -> bool:
-        from tabsdatak.cli._machine import machine
-
-        return machine() is None
-
-    @hidden.setter
-    def hidden(self, value: bool) -> None:
-        pass
-
-
-def internal_option(*decls: str, **attrs):
-    """``click.option`` for an :class:`InternalOption`; every name starts with
-    :data:`INTERNAL_PREFIX`."""
-    if not all(decl.startswith(INTERNAL_PREFIX) for decl in decls if decl[:1] == "-"):
-        raise ValueError(f"Internal options are named '{INTERNAL_PREFIX}...': {decls}")
-    return click.option(*decls, cls=InternalOption, **attrs)
-
-
-class TdkCommand(click.RichCommand):
+class TdkCommand(Internal, click.RichCommand):
     """A tdk command; ``login=False`` for one that runs without a login, or
     settles the login and project itself on the paths that need them. Its
-    help is plain text off a terminal (:mod:`tabsdatak.cli._plain_help`)."""
+    help is plain text off a terminal (:mod:`tabsdatak.cli._plain_help`). One
+    named ``x:...`` is internal (:mod:`tabsdatak.cli._internal`)."""
 
     def __init__(self, *args, login: bool = True, **kwargs):
         super().__init__(*args, **kwargs)
         self.login = login
+        check_internal_options(self)
 
     def invoke(self, ctx: click.Context):
         from tabsdatak.cli.cli_utils import verify_login_or_prompt
 
+        if internal_asked():
+            raise click.UsageError(f"'{SHOW_INTERNAL_FLAG}' goes with a help.")
         if self.login:
             verify_login_or_prompt(ctx)
         for param in self.get_params(ctx):
@@ -70,15 +55,28 @@ class TdkCommand(click.RichCommand):
 
         return help_shown(ctx, super().get_help)
 
+    def shell_complete(self, ctx: click.Context, incomplete: str):
+        with concealing_internal():
+            return super().shell_complete(ctx, incomplete)
 
-class TdkGroup(click.RichGroup):
+
+class TdkGroup(Internal, click.RichGroup):
     """A tdk group: its commands are :class:`TdkCommand` and its groups
-    :class:`TdkGroup`; its help is plain text off a terminal too."""
+    :class:`TdkGroup`; its help is plain text off a terminal too. One named
+    ``x:...`` is internal, with every command under it."""
 
     command_class = TdkCommand
     group_class = type
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        check_internal_options(self)
 
     def get_help(self, ctx: click.Context) -> str:
         from tabsdatak.cli._plain_help import help_shown
 
         return help_shown(ctx, super().get_help)
+
+    def shell_complete(self, ctx: click.Context, incomplete: str):
+        with concealing_internal():
+            return super().shell_complete(ctx, incomplete)

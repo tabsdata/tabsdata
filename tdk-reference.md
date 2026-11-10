@@ -72,6 +72,9 @@ Global options
       --full             With --help: print the full help for every command and
                          subcommand. Pair with --format text|json (default: text),
                          e.g. `tdk --help --full --format json`.
+  -x                     With a help: show the internal commands and options
+                         too, in any position, e.g. `tdk -x fn trigger --help`
+                         or `tdk -x fn`. A command that runs refuses it.
 ```
 
 Off a terminal (piped, or run by a program), `--help` prints plain text.
@@ -131,9 +134,13 @@ Applied where shown in each command. Every value option takes an argument.
 
 Required identifiers (`--name`, `--plan`, ...) are shown without brackets; `[...]` marks optional options.
 
-Options starting with `--x:` are unsupported internal options, for programs
-running tdk: the help hides them and says so at its end, and this reference
-leaves them out.
+Commands named `x:...`, with every command under them, and options named
+`--x:...` are internal: not part of tdk's public interface, unsupported, and
+free to change in any release. Only what ships with tdk relies on them, such
+as the skills and instructions an agent gets from the same release. A
+person's help and completion leave them out; `-x` with a help shows them, a
+program running tdk always sees them, and this reference leaves them out.
+They run either way.
 
 A listing the server refuses over a field it does not support (a `ListError`,
 exit 1, `invalid_request`) carries a hint to check the fields in `--filter`

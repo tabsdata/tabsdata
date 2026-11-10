@@ -22,8 +22,9 @@ from typing import TYPE_CHECKING
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
-from tabsdatak.cli._command import TdkGroup, internal_option
+from tabsdatak.cli._command import TdkGroup
 from tabsdatak.cli._errors import TdkException
+from tabsdatak.cli._internal import internal_option
 from tabsdatak.cli._prompted import pinned, prompted
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (

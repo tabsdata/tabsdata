@@ -84,7 +84,7 @@ def _apply_summary(ctx: click.Context, param, value):
 
 def summary_option(subject: str):
     """``--x:summary``: a wait returns only the summary of ``subject``."""
-    from tabsdatak.cli._command import internal_option
+    from tabsdatak.cli._internal import internal_option
 
     return internal_option(
         "--x:summary",

@@ -903,7 +903,7 @@ def _apply_verbose(ctx: click.Context, param, value):
 
 def record_fields_option(fn):
     """Decorator adding ``--x:fields`` to a command that returns one record."""
-    from tabsdatak.cli._command import internal_option
+    from tabsdatak.cli._internal import internal_option
 
     return internal_option(
         "--x:fields",
@@ -918,7 +918,7 @@ def record_fields_option(fn):
 def ack_options(fn):
     """Decorator adding ``--x:fields`` and ``--x:verbose`` to a mutation whose
     ``render_entity`` gives a short ack."""
-    from tabsdatak.cli._command import internal_option
+    from tabsdatak.cli._internal import internal_option
 
     fn = record_fields_option(fn)
     return internal_option(

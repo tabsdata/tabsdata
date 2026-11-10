@@ -59,6 +59,13 @@ exist in both repos, and after dependency changes here ee needs re-locking
   or renamed leaf needs their tests run too.
 - `tdk-reference.md` documents only what os ships; `test_reference_drift.py`
   checks every command and option it quotes against the click tree.
+- A tdk command or option that is not public API says so in its name:
+  `x:<name>` for a command (with everything under it), `--x:<name>` for an
+  option, declared with `internal_option` (`tabsdatak/cli/_internal.py`). It
+  is unsupported and may change in any release, so only what ships with tdk
+  (bundled skills, agent instructions) uses it; a person's help hides it
+  unless `-x`, a program's shows it, and `tdk-reference.md` leaves it out.
+  Its `hidden` stays false: `hidden` means a deprecated alias.
 
 ## Build / test
 

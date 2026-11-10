@@ -22,13 +22,7 @@ from tabsdatak.cli._capability import (
     path_params,
     primary_option,
 )
-from tabsdatak.cli._command import (
-    INTERNAL_PREFIX,
-    InternalOption,
-    TdkCommand,
-    TdkGroup,
-    internal_option,
-)
+from tabsdatak.cli._command import TdkCommand, TdkGroup
 from tabsdatak.cli._credentials import (
     BEARER_ENV,
     SERVER_ENV,
@@ -49,6 +43,11 @@ from tabsdatak.cli._examples import (
     examples_root,
     load_examples,
     snippet_metadata,
+)
+from tabsdatak.cli._internal import (
+    INTERNAL_PREFIX,
+    InternalOption,
+    internal_option,
 )
 from tabsdatak.cli._machine import Machine, running
 from tabsdatak.cli._prompted import pinned, prompted

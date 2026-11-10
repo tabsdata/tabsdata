@@ -192,6 +192,11 @@ def test_the_reference_quotes_only_real_commands_and_options():
     assert not problems, "\n".join(problems)
 
 
+def test_the_reference_names_no_internal_command_or_option():
+    text = REFERENCE.read_text(encoding="utf-8")
+    assert re.findall(r"(?<![\w-])(?:--)?x:[a-z][\w-]*", text) == []
+
+
 @pytest.mark.parametrize(
     ("quoted", "problem"),
     [

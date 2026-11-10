@@ -13,8 +13,8 @@ import json
 
 import rich_click as click
 
-from tabsdatak.cli._command import TdkCommand
 from tabsdatak.cli._errors import TdkException
+from tabsdatak.cli._internal import concealing_internal
 from tabsdatak.cli._machine import machine
 from tabsdatak.cli._plain_help import option_help
 from tabsdatak.cli._registry import cli_extensions
@@ -33,7 +33,7 @@ LESS_HINT = (
 )
 
 
-@click.command(cls=TdkCommand, login=False)
+@click.command()
 @click.argument("words", nargs=-1)
 @max_result_option
 @paged_options
@@ -52,7 +52,8 @@ def full_help(ctx: click.Context, words: tuple[str, ...]):
         if sub is None or sub.hidden:
             raise TdkException("usage", f"No command '{' '.join(words)}'.")
         group = click.Context(sub, info_name=word, parent=group)
-    tree = _full_help_node(group)
+    with concealing_internal():
+        tree = _full_help_node(group)
     page, truncated = take(ctx, list(_leaves(tree)))
 
     def less():
@@ -165,7 +166,8 @@ def build_full_help(root, output: str = "text") -> str:
     ``output`` is ``"text"`` (a flat, indented listing) or ``"json"`` (a nested
     tree of ``{name, path, help, options, arguments, commands}`` objects, to
     which each CLI extension adds)."""
-    tree = _full_help_node(_root_context(root))
+    with concealing_internal():
+        tree = _full_help_node(_root_context(root))
     if output == "json":
         commands = tree.pop("commands", [])
         for extension in cli_extensions():

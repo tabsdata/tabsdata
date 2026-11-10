@@ -14,24 +14,34 @@ import sys
 import rich_click as click
 from click.core import UNSET
 
-NOT_FOR_MACHINES = frozenset({"--browse", "--wrap", "--max-width", "--format"})
+NOT_FOR_MACHINES = frozenset({"--browse", "--wrap", "--max-width", "--format", "-x"})
 
 
 def help_shown(ctx: click.Context, rich) -> str:
     """The help of ``ctx.command``: ``rich``, the command's own rendering, at a
     terminal; :func:`plain_help` elsewhere, and in a machine run without the
-    options :data:`NOT_FOR_MACHINES` names. A person's help hides the ``--x:``
-    options and says at its end what they are."""
-    from tabsdatak.cli._command import INTERNAL_NOTE
+    options :data:`NOT_FOR_MACHINES` names. A person's help hides the internal
+    commands and options; with ``-x`` it shows them and ends saying what they
+    are (:mod:`tabsdatak.cli._internal`)."""
+    from tabsdatak.cli._internal import (
+        INTERNAL_NOTE,
+        concealing_internal,
+        internal_shown,
+    )
     from tabsdatak.cli._machine import machine
     from tabsdatak.cli.cli_utils import is_console
 
     run = machine()
-    if run is None and is_console(sys.stdout):
-        return f"{rich(ctx).rstrip()}\n\n {INTERNAL_NOTE}\n"
-    if run is None:
-        return f"{plain_help(ctx)}\n\n{INTERNAL_NOTE}"
-    return plain_help(ctx, NOT_FOR_MACHINES, run)
+    if run is not None:
+        return plain_help(ctx, NOT_FOR_MACHINES, run)
+    console = is_console(sys.stdout)
+    with concealing_internal():
+        text = rich(ctx) if console else plain_help(ctx)
+    if not internal_shown():
+        return text
+    if console:
+        return f"{text.rstrip()}\n\n {INTERNAL_NOTE}\n"
+    return f"{text}\n\n{INTERNAL_NOTE}"
 
 
 def option_help(param: click.Option, run=None) -> str:
