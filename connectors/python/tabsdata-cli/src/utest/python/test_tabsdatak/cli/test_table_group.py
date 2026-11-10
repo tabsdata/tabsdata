@@ -565,8 +565,8 @@ def test_data_selects_columns_and_gives_arrays_on_request(tmp_path):
 
     client = _client()
     _data(client, pl.DataFrame({"a": [1], "b": ["x"], "c": [True]}), row_count=1)
-    argv = ["table", "data", "-c", "s", "-n", "t", "--columns", "c,a"]
-    result = _invoke([*argv, "--row-format", "arrays", "--machine"], client, tmp_path)
+    argv = ["table", "data", "-c", "s", "-n", "t", "--x:columns", "c,a"]
+    result = _invoke([*argv, "--x:row-format", "arrays", "--machine"], client, tmp_path)
     assert result.exit_code == 0, result.output
     document = json.loads(result.stdout)
     assert [column["name"] for column in document["columns"]] == ["c", "a"]
@@ -579,11 +579,11 @@ def test_data_columns_it_does_not_have_are_a_usage_error(tmp_path):
 
     client = _client()
     _data(client, pl.DataFrame({"a": [1]}))
-    argv = ["table", "data", "-c", "s", "-n", "t", "--columns", "a,zz", "--machine"]
+    argv = ["table", "data", "-c", "s", "-n", "t", "--x:columns", "a,zz", "--machine"]
     result = _invoke(argv, client, tmp_path)
     error = json.loads(result.stdout)["error"]
     assert error["type"] == "usage"
-    assert "zz" in error["message"] and "They have: a" in error["message"]
+    assert "'--x:columns'" in error["message"] and "zz" in error["message"] and "They have: a" in error["message"]
 
 
 def test_data_keeps_time_named_columns_as_they_are(tmp_path):
@@ -653,7 +653,7 @@ def test_versions_in_another_order_ask_for_the_latest(tmp_path):
 def test_versions_latest_lists_only_the_newest(tmp_path):
     client = _client()
     _versions(client, ["dv-3", "dv-2"])
-    argv = ["table", "versions", "-c", "s", "-n", "t", "--latest", "--machine"]
+    argv = ["table", "versions", "-c", "s", "-n", "t", "--x:latest", "--machine"]
     document = json.loads(_invoke(argv, client, tmp_path).stdout)
     assert [row["id"] for row in document["items"]] == ["dv-3"]
     assert document["items"][0]["latest"] is True
@@ -662,7 +662,7 @@ def test_versions_latest_lists_only_the_newest(tmp_path):
 
 def test_versions_latest_takes_no_order(tmp_path):
     client = _client()
-    argv = ["table", "versions", "-c", "s", "-n", "t", "--latest", "--order-by", "id+"]
+    argv = ["table", "versions", "-c", "s", "-n", "t", "--x:latest", "--order-by", "id+"]
     result = _invoke([*argv, "--machine"], client, tmp_path)
     assert json.loads(result.stdout)["error"]["type"] == "usage"
 
@@ -725,7 +725,7 @@ def test_data_cut_by_the_budget_says_so(tmp_path, machine_settings):
     argv = ["table", "data", "-c", "s", "-n", "t", "--len", "10", "--machine"]
     document = json.loads(_invoke(argv, client, tmp_path).stdout)
     assert document["requested"] == 10 and document["capped_by"] == "byte_budget"
-    assert "'--row-format arrays'" in document["hint"]
+    assert "'--x:row-format arrays'" in document["hint"]
     assert "'--file PATH'" in document["hint"]
 
 
@@ -757,3 +757,32 @@ def test_data_takes_max_result_and_fields_as_its_own_options(tmp_path):
     )
     assert client.sample_table.call_args.kwargs["len"] == 3
     assert document["rows"] == [{"b": 2}]
+    assert document["hint"] == (
+        "Read '--max-result' as '--len' and '--fields' as '--x:columns'; "
+        "use those names."
+    )
+
+
+def test_data_by_its_own_options_carries_no_alias_hint(tmp_path):
+    import polars as pl
+
+    client = _client()
+    _data(client, pl.DataFrame({"a": [1], "b": [2]}), row_count=1)
+    argv = ["table", "data", "-c", "s", "-n", "t", "--len", "3", "--x:columns", "b"]
+    document = json.loads(_invoke([*argv, "--machine"], client, tmp_path).stdout)
+    assert "hint" not in document
+
+
+def test_profile_takes_fields_as_columns_and_names_it(tmp_path):
+    with patch.object(Table, "profile", return_value=_PROFILE) as profile:
+        result = _invoke(
+            ["table", "profile", "-c", "sales", "-n", "orders"]
+            + ["--fields", "amount", "--machine"],
+            _client(),
+            tmp_path,
+        )
+    assert result.exit_code == 0, result.output
+    assert profile.call_args.kwargs["columns"] == ["amount"]
+    assert json.loads(result.stdout)["hint"] == (
+        "Read '--fields' as '--columns'; use that name."
+    )

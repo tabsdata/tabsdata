@@ -1197,6 +1197,6 @@ def test_an_ack_keeps_the_key_fields_unless_asked_for_more():
         return json.loads(result.stdout)
 
     assert run() == {"id": "fv1", "name": "f1", "status": "A"}
-    assert run("--verbose") == record
-    assert run("--fields", "snippet") == {"snippet": "def f(): ..."}
-    assert run("--fields", "?") == {"fields": list(record)}
+    assert run("--x:verbose") == record
+    assert run("--x:fields", "snippet") == {"snippet": "def f(): ..."}
+    assert run("--x:fields", "?") == {"fields": list(record)}

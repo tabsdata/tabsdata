@@ -335,7 +335,7 @@ def test_function_run_diagnosis():
     assert failed["argv"]["recover"] == ["fnrun", "recover", "--fnrun", "R1"]
     assert failed["log_truncated"] is True
     assert "\nTraceback (most recent call last):" in failed["log_excerpt"]
-    assert failed["log_argv"] == ["worker", "logs", "--worker", "w1", "--from-error"]
+    assert failed["log_argv"] == ["worker", "logs", "--worker", "w1", "--x:from-error"]
     server.list_function_runs_generator.assert_not_called()
 
 

@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
-from tabsdatak.cli._command import TdkGroup
+from tabsdatak.cli._command import TdkGroup, internal_option
 from tabsdatak.cli._errors import TdkException
 from tabsdatak.cli._prompted import pinned, prompted
 from tabsdatak.cli._registry import cli_command
@@ -74,15 +74,17 @@ _TYPE_MODES = {"in": "Source", "out": "Destination", "cdc": "Stream Source"}
 
 @capability("knowledge", "read")
 @connection.command(login=False)
-@click.option(
-    "--system",
+@internal_option(
+    "--x:system",
+    "system",
     help=(
         "Only the types of systems whose name contains this text "
         "(case-insensitive), e.g. 'mysql' or 'storage'."
     ),
 )
-@click.option(
-    "--mode",
+@internal_option(
+    "--x:mode",
+    "mode",
     type=click.Choice(list(_TYPE_MODES), case_sensitive=False),
     help="Only sources ('in'), destinations ('out') or stream sources ('cdc').",
 )

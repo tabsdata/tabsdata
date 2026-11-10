@@ -611,7 +611,7 @@ def test_trigger_summary_is_the_plan_its_runs_by_status_and_the_failed(
 ):
     runs = [_run_row("fr20260930-1", "C")]
     client = _client(_connection(["S", "R", "F"], runs))
-    argv = [*_TRIGGER, "--wait", "--summary", "--machine"]
+    argv = [*_TRIGGER, "--wait", "--x:summary", "--machine"]
     document = _document(_invoke(argv, client, tmp_path))
     waited = document.pop("waited_ms")
     assert isinstance(waited, int)
@@ -626,7 +626,7 @@ def test_trigger_summary_is_the_plan_its_runs_by_status_and_the_failed(
 
 def test_trigger_count_runs_one_after_another(clock, tmp_path):
     client = _client(_connection(["S", "R", "F"], [_run_row("fr20260930-1", "C")]))
-    argv = [*_TRIGGER, "--wait", "--count", "2", "--machine"]
+    argv = [*_TRIGGER, "--wait", "--x:count", "2", "--machine"]
     document = _document(_invoke(argv, client, tmp_path))
     assert document["count"] == 2
     assert [run["status_name"] for run in document["triggered"]] == ["Finished"] * 2
@@ -636,7 +636,7 @@ def test_trigger_count_runs_one_after_another(clock, tmp_path):
 def test_trigger_count_stops_at_the_first_failure(clock, tmp_path):
     runs = [_run_row("FR2", "F")]
     client = _client(_connection(["R", "F"], runs))
-    argv = [*_TRIGGER, "--wait", "--count", "3", "--machine"]
+    argv = [*_TRIGGER, "--wait", "--x:count", "3", "--machine"]
     result = _invoke(argv, client, tmp_path)
     assert result.exit_code == ExitCode.RUN_FAILED
     error = _document(result)["error"]
@@ -647,7 +647,7 @@ def test_trigger_count_stops_at_the_first_failure(clock, tmp_path):
 
 
 def test_trigger_count_needs_the_wait(clock, tmp_path):
-    argv = [*_TRIGGER, "--no-wait", "--count", "2", "--machine"]
+    argv = [*_TRIGGER, "--no-wait", "--x:count", "2", "--machine"]
     result = _invoke(argv, _client(_connection(["S"], [])), tmp_path)
     assert _document(result)["error"]["type"] == "usage"
 

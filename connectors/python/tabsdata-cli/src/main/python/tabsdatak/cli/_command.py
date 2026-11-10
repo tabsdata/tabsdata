@@ -16,6 +16,32 @@ from click.core import ParameterSource
 
 from tabsdatak.cli._prompted import PromptedOption
 
+INTERNAL_PREFIX = "--x:"
+INTERNAL_NOTE = "Options starting with '--x:' are unsupported internal options."
+
+
+class InternalOption(click.Option):
+    """An ``--x:`` option, for a program running tdk: its help shows it, a
+    person's never does."""
+
+    @property
+    def hidden(self) -> bool:
+        from tabsdatak.cli._machine import machine
+
+        return machine() is None
+
+    @hidden.setter
+    def hidden(self, value: bool) -> None:
+        pass
+
+
+def internal_option(*decls: str, **attrs):
+    """``click.option`` for an :class:`InternalOption`; every name starts with
+    :data:`INTERNAL_PREFIX`."""
+    if not all(decl.startswith(INTERNAL_PREFIX) for decl in decls if decl[:1] == "-"):
+        raise ValueError(f"Internal options are named '{INTERNAL_PREFIX}...': {decls}")
+    return click.option(*decls, cls=InternalOption, **attrs)
+
 
 class TdkCommand(click.RichCommand):
     """A tdk command; ``login=False`` for one that runs without a login, or

@@ -20,15 +20,17 @@ NOT_FOR_MACHINES = frozenset({"--browse", "--wrap", "--max-width", "--format"})
 def help_shown(ctx: click.Context, rich) -> str:
     """The help of ``ctx.command``: ``rich``, the command's own rendering, at a
     terminal; :func:`plain_help` elsewhere, and in a machine run without the
-    options :data:`NOT_FOR_MACHINES` names."""
+    options :data:`NOT_FOR_MACHINES` names. A person's help hides the ``--x:``
+    options and says at its end what they are."""
+    from tabsdatak.cli._command import INTERNAL_NOTE
     from tabsdatak.cli._machine import machine
     from tabsdatak.cli.cli_utils import is_console
 
     run = machine()
     if run is None and is_console(sys.stdout):
-        return rich(ctx)
+        return f"{rich(ctx).rstrip()}\n\n {INTERNAL_NOTE}\n"
     if run is None:
-        return plain_help(ctx)
+        return f"{plain_help(ctx)}\n\n{INTERNAL_NOTE}"
     return plain_help(ctx, NOT_FOR_MACHINES, run)
 
 

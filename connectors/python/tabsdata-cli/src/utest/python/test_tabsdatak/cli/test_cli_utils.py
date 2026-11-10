@@ -781,3 +781,13 @@ def test_store_cli_options_failure_is_reported_on_stderr(tmp_path, capsys):
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "Failed to store CLI options" in captured.err
+
+
+def test_alias_hint_follows_the_document_hint():
+    from tabsdatak.cli.cli_utils import alias_hint
+
+    document = {"rows": [], "hint": "More rows."}
+    assert alias_hint(document, {}) is document
+    assert alias_hint(document, {"--fields": "--columns"})["hint"] == (
+        "More rows. Read '--fields' as '--columns'; use that name."
+    )

@@ -787,7 +787,7 @@ def _failed_run(
                 "logs",
                 "--worker",
                 worker.id,
-                "--from-error",
+                "--x:from-error",
             ]
     return entry
 

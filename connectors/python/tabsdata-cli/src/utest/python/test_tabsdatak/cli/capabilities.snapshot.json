@@ -187,13 +187,13 @@
   "parameters": [
    "--conn-file",
    "--description",
-   "--fields",
    "--group",
    "--name",
    "--profile",
    "--proj",
    "--storage-path",
-   "--verbose",
+   "--x:fields",
+   "--x:verbose",
    "-o"
   ]
  },
@@ -229,12 +229,12 @@
   },
   "parameters": [
    "--browse",
-   "--fields",
    "--max-width",
    "--name",
    "--profile",
    "--proj",
    "--wrap",
+   "--x:fields",
    "-o"
   ]
  },
@@ -436,12 +436,12 @@
   "parameters": [
    "--browse",
    "--definition",
-   "--fields",
    "--max-width",
    "--name",
    "--profile",
    "--proj",
    "--wrap",
+   "--x:fields",
    "-o"
   ]
  },
@@ -582,10 +582,10 @@
    "--fields",
    "--max-result",
    "--max-width",
-   "--mode",
    "--profile",
-   "--system",
    "--wrap",
+   "--x:mode",
+   "--x:system",
    "-o"
   ]
  },
@@ -1020,13 +1020,13 @@
   "parameters": [
    "--browse",
    "--coll",
-   "--fields",
    "--max-width",
    "--name",
    "--profile",
    "--proj",
    "--show-history",
    "--wrap",
+   "--x:fields",
    "-o"
   ]
  },
@@ -1081,7 +1081,6 @@
    "--description",
    "--dir-to-bundle",
    "--dry-run",
-   "--fields",
    "--fn-version",
    "--local-pkg",
    "--name",
@@ -1090,7 +1089,8 @@
    "--proj",
    "--requirements",
    "--source",
-   "--verbose",
+   "--x:fields",
+   "--x:verbose",
    "-o"
   ]
  },
@@ -1145,7 +1145,6 @@
    "--dir-to-bundle",
    "--dry-run",
    "--enabled",
-   "--fields",
    "--local-pkg",
    "--path",
    "--profile",
@@ -1154,7 +1153,8 @@
    "--reuse-tables",
    "--storage-path",
    "--update",
-   "--verbose",
+   "--x:fields",
+   "--x:verbose",
    "-o"
   ]
  },
@@ -1234,16 +1234,16 @@
   },
   "parameters": [
    "--coll",
-   "--count",
    "--detach",
-   "--fields",
    "--name",
    "--plan-name",
    "--profile",
    "--proj",
-   "--summary",
    "--timeout",
    "--wait",
+   "--x:count",
+   "--x:fields",
+   "--x:summary",
    "-o"
   ]
  },
@@ -1278,7 +1278,6 @@
    "--dir-to-bundle",
    "--dry-run",
    "--enabled",
-   "--fields",
    "--local-pkg",
    "--name",
    "--path",
@@ -1289,7 +1288,8 @@
    "--reset-state",
    "--reuse-tables",
    "--storage-path",
-   "--verbose",
+   "--x:fields",
+   "--x:verbose",
    "-o"
   ]
  },
@@ -1305,11 +1305,11 @@
    "paths": {}
   },
   "parameters": [
-   "--fields",
    "--fnrun",
    "--log-lines",
    "--no-logs",
    "--profile",
+   "--x:fields",
    "-o"
   ]
  },
@@ -1327,13 +1327,13 @@
   "parameters": [
    "--attempt",
    "--browse",
-   "--fields",
    "--fnrun",
    "--max-width",
    "--profile",
    "--timeout",
    "--wait",
    "--wrap",
+   "--x:fields",
    "-o"
   ]
  },
@@ -1386,13 +1386,13 @@
    "--all",
    "--file",
    "--fnrun",
-   "--from-error",
-   "--grep",
-   "--ignore-case",
-   "--level",
    "--max-result",
    "--profile",
    "--tail",
+   "--x:from-error",
+   "--x:grep",
+   "--x:ignore-case",
+   "--x:level",
    "-o"
   ]
  },
@@ -1429,9 +1429,9 @@
   "parameters": [
    "--fnrun",
    "--profile",
-   "--summary",
    "--timeout",
    "--wait",
+   "--x:summary",
    "-o"
   ]
  },
@@ -1486,12 +1486,12 @@
   },
   "parameters": [
    "--browse",
-   "--fields",
    "--max-width",
    "--name",
    "--profile",
    "--proj",
    "--wrap",
+   "--x:fields",
    "-o"
   ]
  },
@@ -1831,12 +1831,12 @@
    "paths": {}
   },
   "parameters": [
-   "--fields",
    "--log-lines",
    "--max-runs",
    "--no-logs",
    "--plan",
    "--profile",
+   "--x:fields",
    "-o"
   ]
  },
@@ -1853,13 +1853,13 @@
   },
   "parameters": [
    "--browse",
-   "--fields",
    "--max-width",
    "--plan",
    "--profile",
    "--timeout",
    "--wait",
    "--wrap",
+   "--x:fields",
    "-o"
   ]
  },
@@ -1914,14 +1914,14 @@
    "--all",
    "--failed-only",
    "--file",
-   "--from-error",
-   "--grep",
-   "--ignore-case",
-   "--level",
    "--max-result",
    "--plan",
    "--profile",
    "--tail",
+   "--x:from-error",
+   "--x:grep",
+   "--x:ignore-case",
+   "--x:level",
    "-o"
   ]
  },
@@ -1957,9 +1957,9 @@
   "parameters": [
    "--plan",
    "--profile",
-   "--summary",
    "--timeout",
    "--wait",
+   "--x:summary",
    "-o"
   ]
  },
@@ -2015,11 +2015,11 @@
   },
   "parameters": [
    "--browse",
-   "--fields",
    "--max-width",
    "--name",
    "--profile",
    "--wrap",
+   "--x:fields",
    "-o"
   ]
  },
@@ -2418,20 +2418,22 @@
    "--at-trx",
    "--browse",
    "--coll",
-   "--columns",
    "--extra-cols",
+   "--fields",
    "--file",
    "--len",
+   "--max-result",
    "--max-width",
    "--name",
    "--offset",
    "--profile",
    "--proj",
-   "--row-format",
    "--sql",
    "--version",
    "--wide",
    "--wrap",
+   "--x:columns",
+   "--x:row-format",
    "-o"
   ]
  },
@@ -2581,6 +2583,7 @@
    "--browse",
    "--coll",
    "--columns",
+   "--fields",
    "--max-width",
    "--name",
    "--profile",
@@ -2722,7 +2725,6 @@
    "--cursor",
    "--fields",
    "--filter",
-   "--latest",
    "--max-result",
    "--max-width",
    "--name",
@@ -2730,6 +2732,7 @@
    "--profile",
    "--proj",
    "--wrap",
+   "--x:latest",
    "-o"
   ]
  },
@@ -2764,13 +2767,13 @@
   },
   "parameters": [
    "--browse",
-   "--fields",
    "--max-width",
    "--profile",
    "--timeout",
    "--trx",
    "--wait",
    "--wrap",
+   "--x:fields",
    "-o"
   ]
  },
@@ -2825,14 +2828,14 @@
    "--all",
    "--failed-only",
    "--file",
-   "--from-error",
-   "--grep",
-   "--ignore-case",
-   "--level",
    "--max-result",
    "--profile",
    "--tail",
    "--trx",
+   "--x:from-error",
+   "--x:grep",
+   "--x:ignore-case",
+   "--x:level",
    "-o"
   ]
  },
@@ -2948,11 +2951,11 @@
   },
   "parameters": [
    "--browse",
-   "--fields",
    "--max-width",
    "--name",
    "--profile",
    "--wrap",
+   "--x:fields",
    "-o"
   ]
  },
@@ -3049,13 +3052,13 @@
   },
   "parameters": [
    "--file",
-   "--from-error",
-   "--grep",
-   "--ignore-case",
-   "--level",
    "--profile",
    "--tail",
    "--worker",
+   "--x:from-error",
+   "--x:grep",
+   "--x:ignore-case",
+   "--x:level",
    "-o"
   ]
  },

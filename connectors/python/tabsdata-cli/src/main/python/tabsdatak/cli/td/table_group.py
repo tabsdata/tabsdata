@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
-from tabsdatak.cli._command import TdkGroup
+from tabsdatak.cli._command import TdkGroup, internal_option
 from tabsdatak.cli._errors import ClassifiedException, TdkException, classify
 from tabsdatak.cli._machine import machine
 from tabsdatak.cli._prompted import pinned, prompted
@@ -25,6 +25,7 @@ from tabsdatak.cli.cli_utils import (
     ROW_FORMATS,
     VIEW_OPTIONS,
     MutuallyExclusiveOption,
+    alias_hint,
     ancestry,
     command_failure,
     deprecated_option,
@@ -497,14 +498,16 @@ def list_tables(
 )
 @click.option(
     "--len",
-    "--max-result",
-    "len",
     type=int,
     help=(
         "Maximum amount of rows to be shown. Defaults to 100 rows, and to 20 "
         "when a program runs tdk. Cannot be greater than 1000."
     ),
 )
+# Hidden alias of --len: an agent that learned --max-result from the listings
+# guesses it here; accepting it saves a failed call, and the result's hint
+# names the real option. Never shown in any help.
+@click.option("--max-result", "len_guess", type=int, hidden=True)
 @click.option(
     "--offset",
     type=int,
@@ -578,15 +581,19 @@ def list_tables(
         "both. Defaults to 'none'."
     ),
 )
-@click.option(
-    "--columns",
-    "--fields",
+@internal_option(
+    "--x:columns",
     "columns",
     metavar="COLUMN,...",
     help="Show only these columns, comma-separated, in this order.",
 )
-@click.option(
-    "--row-format",
+# Hidden alias of --x:columns: an agent that learned --fields from the listings
+# guesses it here; accepting it saves a failed call, and the result's hint
+# names the real option. Never shown in any help.
+@click.option("--fields", "columns_guess", metavar="COLUMN,...", hidden=True)
+@internal_option(
+    "--x:row-format",
+    "row_format",
     type=click.Choice(ROW_FORMATS),
     default=ROW_FORMATS[0],
     show_default=True,
@@ -617,11 +624,18 @@ def data(
     at_trx: str,
     version: str,
     extra_cols: str,
+    len_guess: int | None,
     columns: str,
+    columns_guess: str | None,
     row_format: str,
     wide: bool,
 ):
     """Show rows of data from the table"""
+    aliases = _aliases_given(
+        ("--max-result", "--len", len_guess), ("--fields", "--x:columns", columns_guess)
+    )
+    len = len if len is not None else len_guess
+    columns = columns or columns_guess
     if wide:
         chosen = ctx.obj.setdefault(VIEW_OPTIONS, {})
         if chosen.get("max_width") is None:
@@ -651,7 +665,7 @@ def data(
             if missing:
                 raise TdkException(
                     "usage",
-                    f"'--columns' names columns the rows do not have: "
+                    f"'--x:columns' names columns the rows do not have: "
                     f"{', '.join(missing)}. They have: "
                     f"{', '.join(table_data.schema)}.",
                 )
@@ -665,14 +679,17 @@ def data(
 
         render(
             ctx,
-            data=lambda: tabular(
-                table_data,
-                len or DEFAULT_SAMPLE_LEN,
-                row_format=row_format,
-                offset=offset or 0,
-                total_rows=None
-                if sql
-                else _total_rows(ctx, coll, name, version, at, at_trx),
+            data=lambda: alias_hint(
+                tabular(
+                    table_data,
+                    len or DEFAULT_SAMPLE_LEN,
+                    row_format=row_format,
+                    offset=offset or 0,
+                    total_rows=None
+                    if sql
+                    else _total_rows(ctx, coll, name, version, at, at_trx),
+                ),
+                aliases,
             ),
             compat=table_data.to_dicts,
             view=lambda: table_data_view(
@@ -706,6 +723,10 @@ def data(
                 )
             ) from e
         raise click.ClickException(message)
+
+
+def _aliases_given(*aliases: tuple[str, str, object]) -> dict[str, str]:
+    return {alias: option for alias, option, value in aliases if value is not None}
 
 
 def _read_failure_hint(ctx, coll, name, version, at, at_trx, found) -> str:
@@ -844,8 +865,9 @@ def schema(
     hint=_TABLE_COLL_HINT,
     help="Name of the collection to which the data belongs.",
 )
-@click.option(
-    "--latest",
+@internal_option(
+    "--x:latest",
+    "latest",
     is_flag=True,
     help=(
         "List only the newest committed version the filters keep. Not together "
@@ -864,7 +886,7 @@ def versions(ctx: click.Context, coll: str, name: str, latest: bool):
     """
     obj = ctx.ensure_object(dict)
     if latest and (obj.get("list_order_by") or obj.get("list_cursor")):
-        raise click.UsageError("'--latest' does not take '--order-by' or '--cursor'.")
+        raise click.UsageError("'--x:latest' does not take '--order-by' or '--cursor'.")
     if latest:
         obj["max_result"] = 1
     try:
@@ -1114,10 +1136,12 @@ def stats(
 @_pin_options
 @click.option(
     "--columns",
-    "--fields",
-    "columns",
     help="Comma-separated columns to profile. Defaults to every column.",
 )
+# Hidden alias of --columns: an agent that learned --fields from the listings
+# guesses it here; accepting it saves a failed call, and the result's hint
+# names the real option. Never shown in any help.
+@click.option("--fields", "columns_guess", hidden=True)
 @click.option(
     "--approx",
     is_flag=True,
@@ -1145,6 +1169,7 @@ def profile(
     at_trx: str,
     version: str,
     columns: str,
+    columns_guess: str | None,
     approx: bool,
     sample_rows: int,
 ):
@@ -1153,6 +1178,8 @@ def profile(
     Exact by default: the server aggregates the whole data version. When the
     version is too large or the query times out, or with '--approx', the stats
     come from random windows and 'approximate' says so"""
+    aliases = _aliases_given(("--fields", "--columns", columns_guess))
+    columns = columns or columns_guess
     selected = split_csv(columns) if columns else None
     from tabsdatak.sdk._tables import UnknownColumn
 
@@ -1204,7 +1231,7 @@ def profile(
                 notes=notes,
             )
 
-        render(ctx, data=document, view=_view)
+        render(ctx, data=alias_hint(document, aliases), view=_view)
     except Exception as e:
         raise command_failure(ctx, "profile table", e)
 

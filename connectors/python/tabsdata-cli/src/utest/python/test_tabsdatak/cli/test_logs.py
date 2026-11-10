@@ -130,7 +130,7 @@ def test_logs_pass_their_line_filters(tmp_path):
     client = _client()
     client.scope_logs.return_value = ([], False)
     argv = ["plan", "logs", "--plan", "ep20260930-1", "--all"]
-    argv += ["--grep", "Key.*", "--from-error", "-o", "jsonb"]
+    argv += ["--x:grep", "Key.*", "--x:from-error", "-o", "jsonb"]
     result = _invoke(argv, client, tmp_path)
     assert result.exit_code == 0, result.output
     kwargs = client.scope_logs.call_args.kwargs
@@ -138,7 +138,7 @@ def test_logs_pass_their_line_filters(tmp_path):
 
 
 def test_logs_reject_a_grep_that_is_not_a_regular_expression(tmp_path):
-    argv = ["worker", "logs", "--worker", "wkr20260301-1", "--grep", "(", "--machine"]
+    argv = ["worker", "logs", "--worker", "wkr20260301-1", "--x:grep", "(", "--machine"]
     result = _invoke(argv, _client(), tmp_path)
     assert json.loads(result.stdout)["error"]["type"] == "usage"
 
@@ -336,8 +336,8 @@ def test_logs_pass_level_and_case_and_say_which_view_they_show(tmp_path):
     entry = _entry("W1", log=log, lines_total=5)
     entry["lines"] = [[4, "line 4"], [5, "line 5"]]
     client.worker_log_entry.return_value = entry
-    argv = ["worker", "logs", "--worker", "wkr20260301-1", "--level", "warning"]
-    result = _invoke([*argv, "--grep", "LINE", "-i", "-o", "jsonb"], client, tmp_path)
+    argv = ["worker", "logs", "--worker", "wkr20260301-1", "--x:level", "warning"]
+    result = _invoke([*argv, "--x:grep", "LINE", "--x:ignore-case", "-o", "jsonb"], client, tmp_path)
     assert result.exit_code == 0, result.output
     kwargs = client.worker_log_entry.call_args.kwargs
     assert kwargs["level"] == "WARNING" and kwargs["ignore_case"] is True

@@ -22,7 +22,13 @@ from tabsdatak.cli._capability import (
     path_params,
     primary_option,
 )
-from tabsdatak.cli._command import TdkCommand, TdkGroup
+from tabsdatak.cli._command import (
+    INTERNAL_PREFIX,
+    InternalOption,
+    TdkCommand,
+    TdkGroup,
+    internal_option,
+)
 from tabsdatak.cli._credentials import (
     BEARER_ENV,
     SERVER_ENV,
@@ -100,6 +106,8 @@ __all__ = [
     "Effect",
     "ExitCode",
     "Fs",
+    "INTERNAL_PREFIX",
+    "InternalOption",
     "Kind",
     "Machine",
     "RecordView",
@@ -140,6 +148,7 @@ __all__ = [
     "format_option",
     "get_currently_pinned_object",
     "hint_common_solutions",
+    "internal_option",
     "load_examples",
     "logical_prompt",
     "login_server",

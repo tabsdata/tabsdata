@@ -856,8 +856,8 @@ def render_entity(
 ) -> None:
     """Render the object a mutation produced: ``message`` for humans, the DTO
     itself in the machine formats. With ``ack``, the ``jsonb`` document and a
-    machine run keep only those fields of it, unless ``--verbose`` or
-    ``--fields`` asks for more."""
+    machine run keep only those fields of it, unless ``--x:verbose`` or
+    ``--x:fields`` asks for more."""
     if output_format(ctx) == "table":
         _no_record_fields(ctx)
         click.echo(message)
@@ -902,9 +902,12 @@ def _apply_verbose(ctx: click.Context, param, value):
 
 
 def record_fields_option(fn):
-    """Decorator adding ``--fields`` to a command that returns one record."""
-    return click.option(
-        "--fields",
+    """Decorator adding ``--x:fields`` to a command that returns one record."""
+    from tabsdatak.cli._command import internal_option
+
+    return internal_option(
+        "--x:fields",
+        "record_fields",
         metavar="FIELD,...",
         expose_value=False,
         callback=_apply_record_fields,
@@ -913,11 +916,14 @@ def record_fields_option(fn):
 
 
 def ack_options(fn):
-    """Decorator adding ``--fields`` and ``--verbose`` to a mutation whose
+    """Decorator adding ``--x:fields`` and ``--x:verbose`` to a mutation whose
     ``render_entity`` gives a short ack."""
+    from tabsdatak.cli._command import internal_option
+
     fn = record_fields_option(fn)
-    return click.option(
-        "--verbose",
+    return internal_option(
+        "--x:verbose",
+        "verbose",
         is_flag=True,
         default=False,
         expose_value=False,
@@ -931,19 +937,19 @@ def ack_options(fn):
 
 def _no_record_fields(ctx: click.Context) -> None:
     if (ctx.obj or {}).get(RECORD_FIELDS):
-        raise click.UsageError("'--fields' needs '-o json' or '-o yaml'.")
+        raise click.UsageError("'--x:fields' needs '-o json' or '-o yaml'.")
 
 
 def _record_fields(ctx: click.Context, payload):
     """``payload``, a record or a list of them, with only the fields
-    ``--fields`` names; ``--fields ?`` gives the names there are instead."""
+    ``--x:fields`` names; ``--x:fields ?`` gives the names there are instead."""
     fields = (ctx.obj or {}).get(RECORD_FIELDS)
     if not fields or not isinstance(payload, (dict, list)):
         return payload
     rows = [payload] if isinstance(payload, dict) else payload
     if fields == [FIELD_NAMES]:
         return {"fields": field_names(rows)}
-    kept = only_fields(rows, fields)
+    kept = only_fields(rows, fields, "--x:fields")
     return kept[0] if isinstance(payload, dict) else kept
 
 
@@ -1243,7 +1249,7 @@ def field_names(rows: list) -> list[str]:
     return list(dict.fromkeys(key for row in shown for key in row))
 
 
-def only_fields(rows, fields: list[str] | None):
+def only_fields(rows, fields: list[str] | None, option: str = "--fields"):
     """Each of ``rows`` with only ``fields``; a field no row has is a usage
     error naming the fields the rows have. ``all`` alone keeps every field,
     and so does ``?``, whose caller lists their names."""
@@ -1258,7 +1264,7 @@ def only_fields(rows, fields: list[str] | None):
     unknown = [name for name in fields if name not in known]
     if records and unknown:
         raise click.UsageError(
-            f"'--fields' names fields the rows do not have: {', '.join(unknown)}. "
+            f"'{option}' names fields the rows do not have: {', '.join(unknown)}. "
             f"They have: {', '.join(known)}."
         )
     return [
@@ -1406,15 +1412,27 @@ def tabular(
         document["capped_by"] = "byte_budget"
         document["hint"] = (
             f"Only {kept} of the {len(rows)} rows read fit in the result. Fit more "
-            "with '--columns', '--sql' or '--row-format arrays', write them all "
+            "with '--x:columns', '--sql' or '--x:row-format arrays', write them all "
             f"with '--file PATH', or continue with '--offset {shown}'."
         )
     elif truncated:
         document["hint"] = (
             f"More rows: continue with '--offset {shown}', or narrow with "
-            "'--columns' and '--sql'."
+            "'--x:columns' and '--sql'."
         )
     return document
+
+
+def alias_hint(document: dict, aliases: dict[str, str]) -> dict:
+    """``document`` with its ``hint`` naming the option each hidden alias
+    given stands for (``aliases`` maps alias to option), so a program that
+    guessed an alias learns the name the help shows."""
+    if not aliases:
+        return document
+    read = " and ".join(f"'{alias}' as '{option}'" for alias, option in aliases.items())
+    note = f"Read {read}; use {'those names' if len(aliases) > 1 else 'that name'}."
+    hint = document.get("hint")
+    return {**document, "hint": f"{hint} {note}" if hint else note}
 
 
 def dtype_name(dtype) -> str:

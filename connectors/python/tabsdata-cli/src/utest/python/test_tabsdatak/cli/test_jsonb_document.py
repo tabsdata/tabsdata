@@ -114,7 +114,7 @@ def test_record_fields_on_a_listing_keep_the_fields_of_its_items():
         ctx.obj["output_format"] = "jsonb"
         render_list(ctx, items=[{"id": "fv1", "name": "f"}], truncated=False)
 
-    result = CliRunner().invoke(listed, ["--fields", "id"], obj={})
+    result = CliRunner().invoke(listed, ["--x:fields", "id"], obj={})
     assert result.exit_code == 0, result.output
     assert json.loads(result.stdout)["items"] == [{"id": "fv1"}]
 

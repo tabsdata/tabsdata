@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, List
 import rich_click as click
 from rich.table import Table
 
+from tabsdatak.cli._command import internal_option
 from tabsdatak.cli._errors import TdkException
 from tabsdatak.cli._machine import machine
 from tabsdatak.cli.cli_utils import (
@@ -559,19 +560,21 @@ def _apply_log_option(key: str):
 
 
 def tail_option(fn):
-    """``--tail``, and the line filters it applies after: ``--from-error``,
-    ``--level`` and ``--grep`` (with ``--ignore-case``)."""
-    fn = click.option(
-        "--ignore-case",
-        "-i",
+    """``--tail``, and the line filters it applies after, for a program
+    running tdk: ``--x:from-error``, ``--x:level`` and ``--x:grep`` (with
+    ``--x:ignore-case``)."""
+    fn = internal_option(
+        "--x:ignore-case",
+        "ignore_case",
         is_flag=True,
         default=False,
         expose_value=False,
         callback=_apply_log_option("log_ignore_case"),
-        help="Match '--grep' in any case.",
+        help="Match '--x:grep' in any case.",
     )(fn)
-    fn = click.option(
-        "--level",
+    fn = internal_option(
+        "--x:level",
+        "level",
         type=click.Choice(LOG_LEVELS, case_sensitive=False),
         expose_value=False,
         callback=_apply_log_option("log_level"),
@@ -580,8 +583,9 @@ def tail_option(fn):
             "that follow them, such as a traceback."
         ),
     )(fn)
-    fn = click.option(
-        "--from-error",
+    fn = internal_option(
+        "--x:from-error",
+        "from_error",
         is_flag=True,
         default=False,
         expose_value=False,
@@ -591,24 +595,22 @@ def tail_option(fn):
             "when it has none."
         ),
     )(fn)
-    fn = click.option(
-        "--grep",
+    fn = internal_option(
+        "--x:grep",
+        "grep",
         metavar="PATTERN",
         expose_value=False,
         callback=_apply_grep,
         help=(
             "Show only the lines matching this regular expression; with "
-            "'--ignore-case' (or '(?i)' in it) in any case."
+            "'--x:ignore-case' (or '(?i)' in it) in any case."
         ),
     )(fn)
     return click.option(
         "--tail",
         type=click.IntRange(min=0),
         default=None,
-        help=(
-            "Show only the last N lines of each log, after '--from-error', "
-            "'--level' and '--grep'."
-        ),
+        help="Show only the last N lines of each log.",
     )(fn)
 
 
@@ -697,7 +699,7 @@ def pick_worker(ctx: click.Context, workers: list, subject: str):
 
 LOGS_CUT_HINT = (
     "Logs marked 'log_truncated' leave out the lines in 'log_cut': "
-    "'--from-error' starts at the error, '--grep PATTERN' keeps the matching "
+    "'--x:from-error' starts at the error, '--x:grep PATTERN' keeps the matching "
     "lines and '--tail N' the last N; '--file PATH' writes every log whole to a "
     "local file."
 )

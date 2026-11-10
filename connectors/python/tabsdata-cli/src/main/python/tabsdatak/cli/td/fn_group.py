@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 import rich_click as click
 
 from tabsdatak.cli._capability import capability
-from tabsdatak.cli._command import TdkGroup
+from tabsdatak.cli._command import TdkGroup, internal_option
 from tabsdatak.cli._errors import TdkException, classify
 from tabsdatak.cli._machine import machine
 from tabsdatak.cli._prompted import pinned, prompted
@@ -979,8 +979,9 @@ def register(
     hidden=True,
     callback=deprecated_option("--detach", "'--no-wait'"),
 )
-@click.option(
-    "--count",
+@internal_option(
+    "--x:count",
+    "count",
     type=click.IntRange(min=1),
     default=1,
     show_default=True,
@@ -1017,7 +1018,7 @@ def trigger(
     require_wait(wait, timeout)
     if count > 1:
         if not wait:
-            raise click.UsageError("'--count' needs the wait; drop '--no-wait'.")
+            raise click.UsageError("'--x:count' needs the wait; drop '--no-wait'.")
         _trigger_runs(ctx, name, coll, plan_name, count, timeout)
         return
     progress(ctx, f"Triggering function '{name}' in collection '{coll}'")
@@ -1073,7 +1074,7 @@ def _trigger_runs(
     count: int,
     timeout: float | None,
 ) -> None:
-    """``fn trigger --count``: one run after another, each waited for within
+    """``fn trigger --x:count``: one run after another, each waited for within
     what is left of one budget; ``{"triggered": [summary, ...], "count": N}``.
     A run that fails or outlasts the budget raises its error with the
     summaries of the runs before it."""
