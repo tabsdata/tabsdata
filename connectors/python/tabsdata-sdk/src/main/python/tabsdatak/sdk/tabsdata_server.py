@@ -6657,6 +6657,8 @@ class TabsdataServer:
         attempt: int | None = None,
         grep: str | None = None,
         from_error: bool = False,
+        ignore_case: bool = False,
+        level: str | None = None,
     ) -> dict:
         """
         Get a worker's log with what it says went wrong.
@@ -6669,6 +6671,10 @@ class TabsdataServer:
             grep (str, optional): Keep only the lines matching this regular
                 expression.
             from_error (bool): Start at the first traceback or ``ERROR`` line.
+            ignore_case (bool): Match ``grep`` in any case.
+            level (str, optional): Keep only the lines logged at this level
+                (``DEBUG``, ``INFO``, ``WARNING``, ``ERROR``, ``CRITICAL``) or
+                above, with the unleveled lines that follow them.
 
         Returns:
             dict: ``worker_id``, ``function_run_id``, ``collection``,
@@ -6683,7 +6689,9 @@ class TabsdataServer:
         """
         if isinstance(worker, str):
             worker = self.get_worker(worker)
-        return _diagnose.log_entry(self, worker, tail, attempt, grep, from_error)
+        return _diagnose.log_entry(
+            self, worker, tail, attempt, grep, from_error, ignore_case, level
+        )
 
     def scope_logs(
         self,
@@ -6695,6 +6703,8 @@ class TabsdataServer:
         max_workers: int | None = 20,
         grep: str | None = None,
         from_error: bool = False,
+        ignore_case: bool = False,
+        level: str | None = None,
     ) -> tuple[List[dict], bool]:
         """
         Get the logs of every worker of a plan, a transaction or a function
@@ -6713,13 +6723,26 @@ class TabsdataServer:
                 expression.
             from_error (bool): Start each log at its first traceback or
                 ``ERROR`` line.
+            ignore_case (bool): Match ``grep`` in any case.
+            level (str, optional): Keep only the lines logged at this level
+                or above, as :meth:`worker_log_entry` does.
 
         Returns:
             tuple[list[dict], bool]: The entries, and whether ``max_workers``
                 cut them short.
         """
         return _diagnose.scope_logs(
-            self, plan, trx, fnrun, tail, failed_only, max_workers, grep, from_error
+            self,
+            plan,
+            trx,
+            fnrun,
+            tail,
+            failed_only,
+            max_workers,
+            grep,
+            from_error,
+            ignore_case,
+            level,
         )
 
     def get_worker(self, worker_id: str) -> Worker:

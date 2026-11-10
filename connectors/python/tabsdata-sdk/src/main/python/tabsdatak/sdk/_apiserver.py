@@ -190,6 +190,10 @@ def _obtain_certificate_file_path(url: str) -> str:
         )
 
 
+# The id the server logs a request under, the failure's cause included.
+REQUEST_ID_HEADER = "x-request-id"
+
+
 class APIServerError(Exception):
     def __init__(
         self,
@@ -197,6 +201,7 @@ class APIServerError(Exception):
         status: int | None = None,
         retry_after: float | None = None,
         server_version: str | None = None,
+        request_id: str | None = None,
     ):
         if not isinstance(dictionary, dict):
             dictionary = {"error_description": str(dictionary)}
@@ -206,6 +211,7 @@ class APIServerError(Exception):
         self.status = status
         self.retry_after = retry_after
         self.server_version = server_version
+        self.request_id = request_id
         super().__init__(
             self.error_description if self.error_description else "Unknown error"
         )
@@ -221,6 +227,7 @@ class APIServerError(Exception):
             status=response.status_code,
             retry_after=_retry_after_seconds(response.headers.get("Retry-After")),
             server_version=response.headers.get(VERSION_HEADER),
+            request_id=response.headers.get(REQUEST_ID_HEADER),
         )
 
 

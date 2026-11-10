@@ -893,3 +893,20 @@ def test_uncapped_retries_last_minutes():
     default_session, get_session = a.configure_request_connection_pool()
     assert _retries(default_session).status == 60
     assert _retries(get_session).read == a.HTTP_ATTEMPTS
+
+
+def test_an_error_keeps_the_id_the_server_logged_the_request_under():
+    from unittest.mock import MagicMock
+
+    from tabsdatak.sdk._apiserver import APIServerError
+
+    response = MagicMock(
+        status_code=500, headers={"x-request-id": "06gs63m7p5pef0fbrj8052q5dc"}
+    )
+    response.json.return_value = {
+        "code": "SampleError::5000",
+        "error_description": "An internal error occurred",
+    }
+    error = APIServerError.from_response(response)
+    assert error.request_id == "06gs63m7p5pef0fbrj8052q5dc"
+    assert error.status == 500

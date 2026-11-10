@@ -256,16 +256,37 @@ def _chained(lines: list[str], starts: list[int], last: int) -> tuple[int, list[
 _ERROR_START = re.compile(r"Traceback \(most recent call last\):|\bERROR\b")
 
 
+LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+_LEVEL = re.compile(rf"\b({'|'.join(LOG_LEVELS)})\b")
+
+
+def _at_level(numbered: list[tuple[int, str]], level: str) -> list[tuple[int, str]]:
+    """The lines logged at ``level`` or above, each with the lines that follow
+    it without a level of their own (a traceback, a wrapped message)."""
+    least = LOG_LEVELS.index(level)
+    kept, keeping = [], False
+    for number, row in numbered:
+        found = _LEVEL.search(row)
+        if found is not None:
+            keeping = LOG_LEVELS.index(found.group(1)) >= least
+        if keeping:
+            kept.append((number, row))
+    return kept
+
+
 def select_lines(
     text: str,
     tail: int | None = None,
     grep: str | None = None,
     from_error: bool = False,
+    ignore_case: bool = False,
+    level: str | None = None,
 ) -> list[tuple[int, str]]:
     """The lines of a log a reader asked for, each with its 1-based number:
     with ``from_error``, from the first traceback or ``ERROR`` line on (all
-    of them when there is none); with ``grep``, those matching that regular
-    expression; with ``tail``, the last ``tail`` of those."""
+    of them when there is none); with ``level``, those logged at that level
+    or above; with ``grep``, those matching that regular expression (any case
+    with ``ignore_case``); with ``tail``, the last ``tail`` of those."""
     numbered = list(enumerate(text.splitlines(), start=1))
     if from_error:
         start = next(
@@ -277,8 +298,10 @@ def select_lines(
             0,
         )
         numbered = numbered[start:]
+    if level is not None:
+        numbered = _at_level(numbered, level)
     if grep is not None:
-        pattern = re.compile(grep)
+        pattern = re.compile(grep, re.IGNORECASE if ignore_case else 0)
         numbered = [(n, row) for n, row in numbered if pattern.search(row)]
     if tail is not None:
         numbered = numbered[-tail:] if tail > 0 else []
@@ -433,6 +456,8 @@ def log_entry(
     attempt: int | None = None,
     grep: str | None = None,
     from_error: bool = False,
+    ignore_case: bool = False,
+    level: str | None = None,
 ) -> dict:
     """One worker's log as the ``logs`` commands emit it: ``log`` the lines
     :func:`select_lines` keeps, and ``lines`` the same as ``[number, text]``
@@ -460,7 +485,7 @@ def log_entry(
     text, entry["log_unavailable"] = _read_log(server, worker.id)
     if text is None:
         return entry
-    lines = select_lines(text, tail, grep, from_error)
+    lines = select_lines(text, tail, grep, from_error, ignore_case, level)
     entry["lines_total"] = len(text.splitlines())
     entry["log_truncated"] = len(lines) < entry["lines_total"]
     entry["log"] = (
@@ -496,6 +521,8 @@ def scope_logs(
     max_workers: int | None = 20,
     grep: str | None = None,
     from_error: bool = False,
+    ignore_case: bool = False,
+    level: str | None = None,
 ) -> tuple[list[dict], bool]:
     """The logs of every worker of a plan, transaction or function run,
     newest first, and whether ``max_workers`` cut the list short."""
@@ -509,7 +536,10 @@ def scope_logs(
     if truncated:
         workers = workers[:max_workers]
     return [
-        log_entry(server, w, tail, numbers.get(w.id), grep, from_error) for w in workers
+        log_entry(
+            server, w, tail, numbers.get(w.id), grep, from_error, ignore_case, level
+        )
+        for w in workers
     ], truncated
 
 
@@ -517,7 +547,7 @@ def scope_logs(
 class Diagnosis:
     """Why a plan or a function run did not succeed: its failed runs with
     their repair handles and log signatures, the held runs with what blocks
-    them, and the root cause."""
+    them, the root cause, and the warnings the runs that ran logged."""
 
     kind: str
     subject: dict
@@ -526,6 +556,7 @@ class Diagnosis:
     failed_runs: tuple[dict, ...]
     held_runs: tuple[dict, ...]
     failed_runs_total: int
+    warnings: tuple[dict, ...] = ()
 
     def to_dict(self) -> dict:
         return {
@@ -535,6 +566,7 @@ class Diagnosis:
             "root_cause": self.root_cause,
             "failed_runs": list(self.failed_runs),
             "held_runs": list(self.held_runs),
+            "warnings": list(self.warnings),
             "truncated": {
                 "failed_runs_shown": len(self.failed_runs),
                 "failed_runs_total": self.failed_runs_total,
@@ -628,6 +660,61 @@ def _summary(runs: list[dict]) -> dict:
 def _ended_order(run: dict):
     ended = run.get("ended_on")
     return (ended is None, ended or 0, run.get("id") or "")
+
+
+WARNINGS_PER_RUN = 10
+WARNING_RUNS = 20
+_LOGGED_WARNING = re.compile(r"^\S+\s+WARNING\s+([\w.]+):\s?(.*)$")
+
+
+def log_warnings(text: str) -> list[dict]:
+    """The WARNING lines a run's own code logged (``<time> WARNING <logger>:
+    <message>``; the pod runner's bare ``WARNING:`` notices are left out),
+    each once with how often it repeated and the line it first appears on,
+    at most ``WARNINGS_PER_RUN``."""
+    found: dict[tuple[str, str], dict] = {}
+    for number, row in enumerate(text.splitlines(), start=1):
+        logged = _LOGGED_WARNING.match(row)
+        if logged is None:
+            continue
+        logger, message = logged.groups()
+        entry = found.get((logger, message))
+        if entry is not None:
+            entry["count"] += 1
+            continue
+        found[(logger, message)] = {
+            "logger": logger,
+            "message": message[:MESSAGE_CHARS],
+            "line": number,
+            "count": 1,
+        }
+    return list(found.values())[:WARNINGS_PER_RUN]
+
+
+def run_warnings(server: TabsdataServer, run_id: str) -> list[dict]:
+    """The warnings the latest worker of a function run logged; none when it
+    has no worker or its log cannot be read."""
+    worker, _ = _latest_worker(server, run_id)
+    if worker is None:
+        return []
+    text, _ = _read_log(server, worker.id)
+    return log_warnings(text) if text is not None else []
+
+
+def _warnings(server: TabsdataServer, runs: list[dict]) -> list[dict]:
+    """The runs that ran and logged warnings, at most ``WARNING_RUNS`` read."""
+    ran = [run for run in runs if run.get("status") not in ("H", "S", "X")]
+    entries = []
+    for run in ran[:WARNING_RUNS]:
+        found = run_warnings(server, run["id"])
+        if found:
+            entries.append({
+                "function_run_id": run["id"],
+                "collection": run.get("collection"),
+                "function": run.get("name"),
+                "warnings": found,
+            })
+    return entries
 
 
 def _latest_worker(server: TabsdataServer, run_id: str):
@@ -914,4 +1001,5 @@ def _diagnose(
         failed_runs=tuple(failed_runs),
         held_runs=tuple(held_runs),
         failed_runs_total=len(failing),
+        warnings=tuple(_warnings(server, runs)) if logs else (),
     )

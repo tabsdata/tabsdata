@@ -346,3 +346,31 @@ def test_held_function_run_walks_its_plan():
     document = server.diagnose_function_run("R2").to_dict()
     assert document["held_runs"][0]["blocked_by"] == ["R1"]
     assert document["root_cause"]["blocked_by"] == ["R1"]
+
+
+def test_a_plan_diagnosis_lists_the_warnings_its_runs_logged():
+    log = (
+        "WARNING: volume 'pyenv' has been mounted as read-only\n"
+        "2026-11-10T00:35:22.335Z WARNING tabsdatak.conn.sql: no type for 'amount'\n"
+    )
+    runs = [_run("R1", "C", "fv1", ended_on=1), _run("R2", "H", "fv2")]
+    server = _server(
+        runs, plan_status="F", workers={"R1": [_worker("w1", "R1")]}, logs={"w1": log}
+    )
+    document = server.diagnose_execution("P1").to_dict()
+    assert document["warnings"] == [
+        {
+            "function_run_id": "R1",
+            "collection": "sales",
+            "function": "fn_fv1",
+            "warnings": [
+                {
+                    "logger": "tabsdatak.conn.sql",
+                    "message": "no type for 'amount'",
+                    "line": 2,
+                    "count": 1,
+                }
+            ],
+        }
+    ]
+    assert server.diagnose_execution("P1", logs=False).to_dict()["warnings"] == []

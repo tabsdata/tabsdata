@@ -389,3 +389,38 @@ def test_select_lines_numbers_the_lines_it_keeps():
 def test_cut_ranges_are_the_lines_left_out():
     assert d.cut_ranges([3, 7], 8) == [[1, 2], [4, 6], [8, 8]]
     assert d.cut_ranges(range(1, 4), 3) == []
+
+
+_LEVELED = "\n".join([
+    "2026-11-10T00:00:00.000Z INFO a.b: start",
+    "WARNING: volume 'pyenv' has been mounted as read-only",
+    "2026-11-10T00:00:01.000Z WARNING a.sql: no type for column 'amount'",
+    "2026-11-10T00:00:02.000Z ERROR a.run: failed",
+    "Traceback (most recent call last):",
+    "KeyError: 'x'",
+    "2026-11-10T00:00:03.000Z WARNING a.sql: no type for column 'amount'",
+])
+
+
+def test_select_lines_by_level_keeps_the_lines_after_each():
+    kept = [n for n, _ in d.select_lines(_LEVELED, level="ERROR")]
+    assert kept == [4, 5, 6]
+    assert [n for n, _ in d.select_lines(_LEVELED, level="WARNING")] == [2, 3, 4, 5, 6, 7]
+
+
+def test_select_lines_greps_in_any_case_on_request():
+    assert d.select_lines(_LEVELED, grep="keyerror") == []
+    assert d.select_lines(_LEVELED, grep="keyerror", ignore_case=True) == [
+        (6, "KeyError: 'x'")
+    ]
+
+
+def test_log_warnings_are_the_code_s_own_once_each():
+    assert d.log_warnings(_LEVELED) == [
+        {
+            "logger": "a.sql",
+            "message": "no type for column 'amount'",
+            "line": 3,
+            "count": 2,
+        }
+    ]
