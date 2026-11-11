@@ -43,6 +43,23 @@ IGNORED_EXTENSIONS = {
     ".parquet",
 }
 
+THIRD_PARTY_FILES = {
+    "go.sum",
+    "package-lock.json",
+    "requirements-third-party.txt",
+}
+
+THIRD_PARTY_FOLDERS = {
+    os.path.join("variant", "resources", "lock"),
+}
+
+
+def is_third_party(path: str) -> bool:
+    return os.path.basename(path) in THIRD_PARTY_FILES or any(
+        f"{os.sep}{folder}{os.sep}" in path for folder in THIRD_PARTY_FOLDERS
+    )
+
+
 PROJECTS = [
     "tabsdata",
     "kminus",
@@ -68,6 +85,8 @@ def scan_project(project_path: str, old_version: str) -> list[str]:
             if os.path.islink(path):
                 continue
             if any(path.endswith(ext) for ext in IGNORED_EXTENSIONS):
+                continue
+            if is_third_party(path):
                 continue
             try:
                 with open(path, "r", encoding="utf-8") as f:

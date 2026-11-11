@@ -52,6 +52,22 @@ IGNORED_EXTENSIONS = {
     "THIRD-PARTY",
 }
 
+THIRD_PARTY_FILES = {
+    "go.sum",
+    "package-lock.json",
+    "requirements-third-party.txt",
+}
+
+THIRD_PARTY_FOLDERS = {
+    os.path.join("variant", "resources", "lock"),
+}
+
+
+def is_third_party(path: str) -> bool:
+    return os.path.basename(path) in THIRD_PARTY_FILES or any(
+        f"{os.sep}{folder}{os.sep}" in path for folder in THIRD_PARTY_FOLDERS
+    )
+
 
 def get_old_version(root_folder) -> str:
     version_file = os.path.join(
@@ -132,6 +148,8 @@ def bump_version_in_file(path, old_version, new_version, bump_files, warnings):
             logger.error(f"❌ Error reading required file {path}: {e}")
     else:
         if any(path.endswith(extension) for extension in IGNORED_EXTENSIONS):
+            return
+        if is_third_party(path):
             return
         try:
             with open(path, "r", encoding="utf-8") as file:

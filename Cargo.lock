@@ -84,9 +84,9 @@ dependencies = [
 
 [[package]]
 name = "annotate-snippets"
-version = "0.12.17"
+version = "0.12.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2a5b0a5ab8561c603f16c3b78c24a386b1f70e7fc1b1b1e8c15738828e4a176"
+checksum = "0258346f92c78dbc5b336b9a5b27c64447aa10643bc64e651db2edb145361564"
 dependencies = [
  "anstyle",
  "memchr",
@@ -188,9 +188,9 @@ dependencies = [
 
 [[package]]
 name = "ar_archive_writer"
-version = "0.5.3"
+version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73cd58deff2140a0a8eae87e417bd01db68a33e148aa93d1e8cd837e55e312b6"
+checksum = "523e5e187fff36fcb8d1d19ccf0ca4ca43ec3d158316057f66dc6f72716bc5ec"
 dependencies = [
  "object",
 ]
@@ -705,9 +705,9 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "aws-config"
-version = "1.13.1"
+version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "515fb9175dcf49db2eaa95b7913326d95469172e4ef4bec8b7888b8304c6e655"
+checksum = "16ec023cac0d0c0432e606a2d14f04eb70d09c71a739a406141e7be6b923ab95"
 dependencies = [
  "aws-credential-types",
  "aws-runtime",
@@ -767,9 +767,9 @@ dependencies = [
 
 [[package]]
 name = "aws-runtime"
-version = "1.10.3"
+version = "1.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f78d86ab4bb091d41e9d045810a6a46149ee3af579d510a4c23031e8872a4654"
+checksum = "de8930c11353c72ae54aa24dc94d692df74d59814839cbaf8069d63dbcb4c519"
 dependencies = [
  "aws-credential-types",
  "aws-sigv4",
@@ -793,9 +793,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-cloudwatchlogs"
-version = "1.164.0"
+version = "1.165.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e75fd1150403565745a39e8710586cf6212854dd1525cc80e71d3e56ee7d28be"
+checksum = "581cf82c1682f1251b910a32af5b19f9f5faed98c9117825391c1fcdfde21855"
 dependencies = [
  "arc-swap",
  "aws-credential-types",
@@ -817,9 +817,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-sts"
-version = "1.125.0"
+version = "1.126.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89a20505b0fd7a2175475a00591df8ec7f6448b833cf7b2e1d2801b9ab69eb83"
+checksum = "c667da7839295125cfe23280f798c07ba694a9fed191af804edb4bda09ac7f10"
 dependencies = [
  "arc-swap",
  "aws-credential-types",
@@ -5929,9 +5929,9 @@ checksum = "3bd1574e617a9a6c1f8f8181bd7e841e1f20e4277607ef28945765188d6284d4"
 
 [[package]]
 name = "jiff"
-version = "0.2.42"
+version = "0.2.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fefca06093eeaed707a905795e68206da0edca4edef23d2a3997a3ddbee462aa"
+checksum = "26699905cc795a23e3949585cc7ba3ee8ade090872a27e4316304a777297894a"
 dependencies = [
  "jiff-core",
  "jiff-static",
@@ -5945,18 +5945,18 @@ dependencies = [
 
 [[package]]
 name = "jiff-core"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77a24020db0ee88d1c681d677681bd31f9f4ea189a455425223d52ce4f1508aa"
+checksum = "ffe6854081f5ac0a3046a9b223729ccd7a20b1e0e8277e44dc0660eedf67dfe2"
 dependencies = [
  "log",
 ]
 
 [[package]]
 name = "jiff-static"
-version = "0.2.42"
+version = "0.2.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41d3213549742662eea1a18e6c5af9be5dfbabeb7611ab71356a54928ec398f0"
+checksum = "4b4ff49b2887190c760b86207b55cdcaabbdecaf7a0660d68aa2ed6f652abf0a"
 dependencies = [
  "jiff-core",
  "proc-macro2",
@@ -8512,9 +8512,9 @@ dependencies = [
 
 [[package]]
 name = "prost"
-version = "0.14.4"
+version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "528ac67416ff8646872a3c02cad9cc4ee5dc9f9540c9b10771855c95cb2e5ae1"
+checksum = "c9f016da56b311cff4659f5e7335c4d5fda5ca86cae4f48b8ce1cf3335246a7d"
 dependencies = [
  "bytes",
  "prost-derive",
@@ -8522,12 +8522,12 @@ dependencies = [
 
 [[package]]
 name = "prost-derive"
-version = "0.14.4"
+version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b570b25f7617e43d59005d0990ccb79e950a423952cea19671b7a876da390adf"
+checksum = "c9a367f131d93b3395fc6207c11e67098493ab040def4ce3085adbf186687f7e"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
@@ -8535,9 +8535,9 @@ dependencies = [
 
 [[package]]
 name = "prost-types"
-version = "0.14.4"
+version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f94967dc7688f3054c7fac87473ffae4cc4c3904800e2d9f5b857246d8963b0a"
+checksum = "96e89651c132da91958fd6092a2f7262c2c36c08df4f68af0bb3591caacbbb45"
 dependencies = [
  "prost",
 ]
@@ -10539,7 +10539,7 @@ dependencies = [
 
 [[package]]
 name = "ta-apiserver"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "axum",
  "clap 4.6.7",
@@ -10562,7 +10562,7 @@ dependencies = [
 
 [[package]]
 name = "ta-edition"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "ta-apiserver",
  "td-database",
@@ -10570,7 +10570,7 @@ dependencies = [
 
 [[package]]
 name = "ta-execution"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "strum 0.28.0",
  "td-build",
@@ -10581,7 +10581,7 @@ dependencies = [
 
 [[package]]
 name = "ta-objects"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "chrono",
  "inventory",
@@ -10608,7 +10608,7 @@ dependencies = [
 
 [[package]]
 name = "ta-services"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "serde",
  "strum 0.28.0",
@@ -10623,7 +10623,7 @@ dependencies = [
 
 [[package]]
 name = "ta-system"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "ta-system",
  "td-build",
@@ -10631,7 +10631,7 @@ dependencies = [
 
 [[package]]
 name = "ta-tableframe"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "ta-tableframe",
  "td-build",
@@ -10666,7 +10666,7 @@ dependencies = [
 
 [[package]]
 name = "tabsdata"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "td-apiserver",
  "td-build",
@@ -10693,7 +10693,7 @@ checksum = "876fef147edbcbddc8ac5cbbba92c7b86519e314e86638596c09673b2ed01e7f"
 
 [[package]]
 name = "td-apiforge"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "darling 0.24.1",
  "proc-macro2",
@@ -10704,7 +10704,7 @@ dependencies = [
 
 [[package]]
 name = "td-apiserver"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -10767,7 +10767,7 @@ dependencies = [
 
 [[package]]
 name = "td-attach"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "darling 0.24.1",
  "proc-macro-crate",
@@ -10778,7 +10778,7 @@ dependencies = [
 
 [[package]]
 name = "td-authz"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "chrono",
  "strum 0.28.0",
@@ -10797,7 +10797,7 @@ dependencies = [
 
 [[package]]
 name = "td-bridge"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -10823,7 +10823,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -10842,7 +10842,7 @@ dependencies = [
 
 [[package]]
 name = "td-common"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -10900,7 +10900,7 @@ dependencies = [
 
 [[package]]
 name = "td-crontrigger"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -10927,7 +10927,7 @@ dependencies = [
 
 [[package]]
 name = "td-database"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "async-trait",
  "futures-util",
@@ -10956,7 +10956,7 @@ dependencies = [
 
 [[package]]
 name = "td-error"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "anyhow",
  "derive_builder",
@@ -10971,7 +10971,7 @@ dependencies = [
 
 [[package]]
 name = "td-execution"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "derive_builder",
  "futures",
@@ -10994,7 +10994,7 @@ dependencies = [
 
 [[package]]
 name = "td-kubernetes"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "arboard",
  "async-stream",
@@ -11066,7 +11066,7 @@ dependencies = [
 
 [[package]]
 name = "td-log-archive"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "async-stream",
  "aws-config",
@@ -11091,7 +11091,7 @@ dependencies = [
 
 [[package]]
 name = "td-objects"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "axum",
  "bytes",
@@ -11131,7 +11131,7 @@ dependencies = [
 
 [[package]]
 name = "td-process"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "clap 4.6.7",
  "clap_derive",
@@ -11163,7 +11163,7 @@ dependencies = [
 
 [[package]]
 name = "td-python"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "rand 0.10.3",
  "semver",
@@ -11180,7 +11180,7 @@ dependencies = [
 
 [[package]]
 name = "td-queries"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "chrono",
  "regex",
@@ -11208,7 +11208,7 @@ dependencies = [
 
 [[package]]
 name = "td-schema"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "sea-query",
  "strum 0.28.0",
@@ -11220,7 +11220,7 @@ dependencies = [
 
 [[package]]
 name = "td-security"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "argon2",
  "derive_builder",
@@ -11235,7 +11235,7 @@ dependencies = [
 
 [[package]]
 name = "td-server"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "clap 4.6.7",
  "path-slash",
@@ -11264,7 +11264,7 @@ dependencies = [
 
 [[package]]
 name = "td-services"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "argon2",
  "async-trait",
@@ -11312,7 +11312,7 @@ dependencies = [
 
 [[package]]
 name = "td-shuttle"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "arrow",
  "arrow-avro",
@@ -11367,7 +11367,7 @@ dependencies = [
 
 [[package]]
 name = "td-storage"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "bytes",
  "derive_builder",
@@ -11391,7 +11391,7 @@ dependencies = [
 
 [[package]]
 name = "td-supervisor"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "async-trait",
  "atomic_enum",
@@ -11448,7 +11448,7 @@ dependencies = [
 
 [[package]]
 name = "td-tableframe"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "polars",
  "ta-tableframe",
@@ -11461,7 +11461,7 @@ dependencies = [
 
 [[package]]
 name = "td-tdd"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "homedir",
  "serde",
@@ -11474,7 +11474,7 @@ dependencies = [
 
 [[package]]
 name = "td-test"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "object_store 0.14.2",
  "serde_json",
@@ -11494,7 +11494,7 @@ dependencies = [
 
 [[package]]
 name = "td-xtask"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "clap 4.6.7",
  "clap_derive",
@@ -11503,7 +11503,7 @@ dependencies = [
 
 [[package]]
 name = "te-apiserver"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "clap 4.6.7",
  "getset",
@@ -11517,7 +11517,7 @@ dependencies = [
 
 [[package]]
 name = "te-authz"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "strum 0.28.0",
  "td-authz",
@@ -11532,7 +11532,7 @@ dependencies = [
 
 [[package]]
 name = "te-database"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "td-build",
  "td-database",
@@ -11540,14 +11540,14 @@ dependencies = [
 
 [[package]]
 name = "te-edition"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "ta-edition",
 ]
 
 [[package]]
 name = "te-execution"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "serde",
  "strum 0.28.0",
@@ -11564,7 +11564,7 @@ dependencies = [
 
 [[package]]
 name = "te-services"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "td-build",
  "td-common",
@@ -11575,7 +11575,7 @@ dependencies = [
 
 [[package]]
 name = "te-system"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "ta-system",
  "td-build",
@@ -11584,7 +11584,7 @@ dependencies = [
 
 [[package]]
 name = "te-tableframe"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "ta-tableframe",
  "te-tableframe",
@@ -11847,7 +11847,7 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "tm-error"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "quote",
  "syn 3.0.10",
@@ -11855,7 +11855,7 @@ dependencies = [
 
 [[package]]
 name = "tm-objects"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "darling 0.24.1",
  "heck 0.5.0",
@@ -11867,7 +11867,7 @@ dependencies = [
 
 [[package]]
 name = "tm-services"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -11876,7 +11876,7 @@ dependencies = [
 
 [[package]]
 name = "tm-test"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "darling 0.24.1",
  "proc-macro2",
@@ -11886,7 +11886,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "quote",
  "rand 0.10.3",
@@ -12822,18 +12822,18 @@ dependencies = [
 
 [[package]]
 name = "webpki-root-certs"
-version = "1.0.11"
+version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e49d0e65abc00c142e8f9428da991da9f1a250c39be97459901eb12b9b49f62a"
+checksum = "293198dcebfb821155b5092ab94b5a82ff180eddd7241df3bd6e66a4ffd1a585"
 dependencies = [
  "rustls-pki-types",
 ]
 
 [[package]]
 name = "webpki-roots"
-version = "1.0.11"
+version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5f280bbb2b287bc8e7de7e3852945a0ff50d1bbcb5ed42b6c7a568c546df171"
+checksum = "7265c9301c16a8711c992c2d8da90ee77ef54b1ed51482d6dfeb00dc756b1297"
 dependencies = [
  "rustls-pki-types",
 ]
@@ -13657,9 +13657,9 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "9.5.0"
+version = "9.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0700e6c427aff64acdbf02e85fbfd946c2ee12319d1af013092f3a2178914ff8"
+checksum = "e3476fd497ac8af5b1ec7b51acab7bef380f7e8dd8e0487595bafd839417a302"
 dependencies = [
  "constant_time_eq 0.6.1",
  "crc32fast",

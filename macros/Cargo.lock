@@ -2553,9 +2553,9 @@ checksum = "3bd1574e617a9a6c1f8f8181bd7e841e1f20e4277607ef28945765188d6284d4"
 
 [[package]]
 name = "jiff"
-version = "0.2.42"
+version = "0.2.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fefca06093eeaed707a905795e68206da0edca4edef23d2a3997a3ddbee462aa"
+checksum = "26699905cc795a23e3949585cc7ba3ee8ade090872a27e4316304a777297894a"
 dependencies = [
  "jiff-core",
  "jiff-static",
@@ -2569,18 +2569,18 @@ dependencies = [
 
 [[package]]
 name = "jiff-core"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77a24020db0ee88d1c681d677681bd31f9f4ea189a455425223d52ce4f1508aa"
+checksum = "ffe6854081f5ac0a3046a9b223729ccd7a20b1e0e8277e44dc0660eedf67dfe2"
 dependencies = [
  "log",
 ]
 
 [[package]]
 name = "jiff-static"
-version = "0.2.42"
+version = "0.2.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41d3213549742662eea1a18e6c5af9be5dfbabeb7611ab71356a54928ec398f0"
+checksum = "4b4ff49b2887190c760b86207b55cdcaabbdecaf7a0660d68aa2ed6f652abf0a"
 dependencies = [
  "jiff-core",
  "proc-macro2",
@@ -3224,7 +3224,7 @@ dependencies = [
 
 [[package]]
 name = "td-apiforge"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -3235,7 +3235,7 @@ dependencies = [
 
 [[package]]
 name = "td-attach"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "darling",
  "proc-macro-crate",
@@ -3246,7 +3246,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3265,7 +3265,7 @@ dependencies = [
 
 [[package]]
 name = "td-macros"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "td-build",
 ]
@@ -3343,7 +3343,7 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "tm-error"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "quote",
  "syn 3.0.10",
@@ -3351,7 +3351,7 @@ dependencies = [
 
 [[package]]
 name = "tm-objects"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "darling",
  "heck",
@@ -3363,7 +3363,7 @@ dependencies = [
 
 [[package]]
 name = "tm-pyo3"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "quote",
  "syn 3.0.10",
@@ -3371,7 +3371,7 @@ dependencies = [
 
 [[package]]
 name = "tm-services"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3380,7 +3380,7 @@ dependencies = [
 
 [[package]]
 name = "tm-test"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -3390,7 +3390,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "quote",
  "rand",

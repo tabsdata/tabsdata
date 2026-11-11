@@ -39,8 +39,8 @@ pip install "tabsdata[all]"
 
 ## Tabsdata Binary Distribution Documentation
 
-* [User Guide](https://docs.tabsdata.com/2.3.0/guide)
-* [API Reference](https://docs.tabsdata.com/2.3.0/api)
+* [User Guide](https://docs.tabsdata.com/2.4.0/guide)
+* [API Reference](https://docs.tabsdata.com/2.4.0/api)
 
 # Contributing
 

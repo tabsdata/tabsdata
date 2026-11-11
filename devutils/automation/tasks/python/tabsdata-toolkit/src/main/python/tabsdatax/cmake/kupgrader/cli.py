@@ -9,6 +9,7 @@ import rich_click as click
 
 from tabsdatax.cmake.kupgrader.commands.build import build
 from tabsdatax.cmake.kupgrader.commands.check import check
+from tabsdatax.cmake.kupgrader.commands.noop import noop
 from tabsdatax.cmake.kupgrader.commands.templates import templates
 from tabsdatax.cmake.kupgrader.common.errors import KupgraderError
 from tabsdatax.cmake.kupgrader.common.group import OrderedGroup
@@ -48,6 +49,7 @@ def main() -> None:
 main.add_command(check)
 main.add_command(build)
 main.add_command(templates)
+main.add_command(noop)
 
 
 if __name__ == "__main__":

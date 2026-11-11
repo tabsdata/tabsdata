@@ -111,6 +111,17 @@ script = [
         exec --fail-on-error python ${BUMP_VERSION_SCRIPT} ${project} ${new_version}
     end
 
+    names = split "tabsdata-ee;tabsdata-os;tabsdata" ";"
+    for name in ${names}
+        project = set ${PROJECT_TABSDATA_BASE_FOLDER}/../${name}
+        project_exists = is_path_exists ${project}/variant/resources/kupgrade/upgrades.yaml
+        if ${project_exists}
+            cd ${project}/
+            info "🚀 tdx-kupgrader noop --root ${project}"
+            exec --fail-on-error tdx-kupgrader noop --root ${project}
+        end
+    end
+
     base_folder = set ${PROJECT_TABSDATA_BASE_FOLDER}/..
     info "🔍 python ${SCAN_VERSION_SCRIPT} ${base_folder} ${old_version} ${new_version}"
     exec --fail-on-error python ${SCAN_VERSION_SCRIPT} ${base_folder} ${old_version} ${new_version}

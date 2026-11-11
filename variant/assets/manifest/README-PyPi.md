@@ -23,8 +23,8 @@ Copyright 2026 Tabsdata Inc.
 
 <div align="center">
     <a href="https://tabsdata.com">Tabsdata</a> |
-    <a href="https://docs.tabsdata.com/2.3.0/guide">User Guide</a> |
-    <a href="https://docs.tabsdata.com/2.3.0/api">API Reference</a>
+    <a href="https://docs.tabsdata.com/2.4.0/guide">User Guide</a> |
+    <a href="https://docs.tabsdata.com/2.4.0/api">API Reference</a>
 </div>
 
 # License
