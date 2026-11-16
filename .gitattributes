@@ -3,3 +3,4 @@
 #
 
 variant/config/kupgrade/patches/*.patch -text
+*.pyi text eol=lf
