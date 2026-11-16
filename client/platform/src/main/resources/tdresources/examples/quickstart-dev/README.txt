@@ -6,7 +6,9 @@ Tabsdata Quickstart (developer)
 A small end-to-end dataflow over a CSV of people: publish it as a table,
 reshape it, and write the result out as JSON Lines. Three functions -- a
 publisher, a transformer, and a subscriber -- are wired across three
-collections so that triggering the publisher runs the whole flow.
+collections. In Tabsdata Enterprise, triggering the publisher runs the whole
+flow; the open-source edition runs only the function you trigger, so there you
+trigger each of the three in turn.
 
 You'll build a small end-to-end dataflow across your three collections and run
 it:
@@ -35,8 +37,8 @@ Run it
 ------
 
 Create the project, add the three collections, register one function in each,
-then trigger the publisher -- Tabsdata runs the transformer and subscriber
-automatically. Run these commands from the directory where this README file is.
+then trigger the publisher. Run these commands from the directory where this
+README file is.
 
   # Create the project and make it the default for the command line
 
@@ -61,5 +63,12 @@ automatically. Run these commands from the directory where this README file is.
   # Run it
 
   tdk fn trigger --coll input --name qs_pub
+
+
+  # Open-source edition only: run the transformer and the subscriber yourself
+  # (Tabsdata Enterprise runs them after the publisher automatically)
+
+  tdk fn trigger --coll dataprod --name qs_tfr
+  tdk fn trigger --coll output --name qs_sub
 
 When the flow finishes, the result is written to the output-data/ directory.
