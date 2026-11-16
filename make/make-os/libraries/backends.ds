@@ -189,6 +189,8 @@ fn create_domains
         else
             error ""
             error "🧨 Creating backend domains failed after ${attempts} attempts (exit code ${exit_code})."
+            error "🛟 The domains that failed and why are in the tdd output above."
+            error "🛟 For 'no system named ... in the store', create the systems first: cargo make systems_create"
             error ""
             assert false
         end
