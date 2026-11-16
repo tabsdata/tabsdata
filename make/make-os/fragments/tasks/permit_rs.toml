@@ -62,7 +62,7 @@ script = [
     pg_marker_dir = set "${PROJECT_TABSDATA_ROOT_FOLDER}target"
     mkdir ${pg_marker_dir}
     pg_version_marker = set "${pg_marker_dir}/.tdpostgresql.version"
-    exec python ${pg_script} ${pg_version_marker}
+    exec --fail-on-error python ${pg_script} ${pg_version_marker}
     pg_version_exists = is_file ${pg_version_marker}
     if ${pg_version_exists}
         pg_version_raw = readfile ${pg_version_marker}
