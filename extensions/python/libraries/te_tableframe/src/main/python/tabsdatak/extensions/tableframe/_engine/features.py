@@ -8,8 +8,8 @@
 generated frame class. The generated ``_load_registry`` calls it once, on first
 use, through the stable ``tabsdatak.extensions.tableframe._engine.features``
 path -- whichever edition's te_tableframe is installed decides what gets
-registered. The OS edition installs system-column guards, join system-column
-reassembly, and sink write progress.
+registered. The OS edition installs system-column guards, the system columns a
+``select`` keeps, join system-column reassembly, and sink write progress.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ def install(frame_cls) -> None:
     for op in ("select", "with_columns", "drop", "rename", "udf"):
         set_hook(frame_cls, op, columns.guard, phase="before")
 
+    set_hook(frame_cls, "select", _select_hook_during, phase="during")
     set_hook(frame_cls, "join", _join_hook_after, phase="after")
 
     set_sink_observer(frame_cls, progress.observe)
@@ -33,6 +34,18 @@ def aggregations(op) -> list:
     from tabsdatak.tableframe._engine.column.versions import latest_version
 
     return latest_version()
+
+
+# noinspection unused-parameter
+def _select_hook_during(call, lazyframes, op, views, params):
+    # A select of plain columns keeps each row's own system columns, so a stacked
+    # frame's rows keep their own version instead of the first input's.
+    from tabsdatak.extensions.tableframe._engine.column.registry import registry
+    from tabsdatak.tableframe._engine.column.selection import keep_system_columns
+
+    (lazyframe,) = lazyframes
+    selected, _ = keep_system_columns(call, lazyframe, params, registry())
+    return selected
 
 
 def _join_hook_after(lazyframe, op, views, params):
