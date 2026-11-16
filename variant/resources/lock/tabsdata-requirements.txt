@@ -44,6 +44,7 @@ cramjam==2.14.0
 cryptography==50.0.2
 databricks-sdk==0.158.0
 databricks-sql-connector==4.8.0
+databricks-sqlalchemy==2.0.10
 dnspython==2.9.2
 durationpy==0.11
 et-xmlfile==2.0.0
@@ -105,8 +106,6 @@ oauthlib==4.0.1
 obstore==0.12.1
 openpyxl==3.1.5
 opentelemetry-api==1.45.2
-opentelemetry-sdk==1.45.2
-opentelemetry-semantic-conventions==0.66b2
 orjson==3.13.0
 packaging==26.3
 pandas==3.1.0
@@ -131,6 +130,7 @@ pycountries==1.2.1
 pycparser==3.12 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
 pydantic==2.14.2
 pydantic-core==2.50.2
+pydruid==0.6.9
 pygments==2.21.0
 pyiceberg==0.12.0
 pyjwt==2.15.1
@@ -160,6 +160,7 @@ setuptools==84.2.1
 simple-salesforce==1.12.10
 six==1.17.0
 snowflake-connector-python==4.8.0
+snowflake-sqlalchemy==1.11.1
 sortedcontainers==2.4.0
 sqlalchemy==2.0.55
 sqlalchemy-bigquery==1.17.3
@@ -171,7 +172,6 @@ textual==8.2.8
 thrift==0.25.0
 tomlkit==0.15.2
 truststore==0.10.5 ; sys_platform != 'emscripten'
-types-pyyaml==6.0.12.20261030
 types-s3transfer==0.19.3
 typing-extensions==4.16.0
 typing-inspection==0.4.5
