@@ -38,7 +38,7 @@ Tabsdata is built from three repositories, checked out side by side:
 | Repository | Clone it into | What it holds |
 |---|---|---|
 | [tabsdata](https://github.com/tabsdata/tabsdata) | `tabsdata-os` | Execution components: server, connectors, client, API and SDK (`tdk` and `tdkserver`) |
-| [tabsdata-kubernetes](https://github.com/tabsdata/tabsdata-kubernetes) | `tabsdata-km` | Orchestration components: native-process pods (`km`) |
+| [tabsdata-kminus](https://github.com/tabsdata/tabsdata-kminus) | `tabsdata-km` | Orchestration components: native-process pods (`km`) |
 | [tabsdata-devtools](https://github.com/tabsdata/tabsdata-devtools) | `tabsdata-dt` | Developer tools: setup, build and test (`tdd`) |
 
 The folder names matter. The repositories contain symbolic links into each other, and the build
@@ -425,7 +425,7 @@ git clone https://github.com/tabsdata/tabsdata.git tabsdata-os
 ```
 
 ```bash
-git clone https://github.com/tabsdata/tabsdata-kubernetes.git tabsdata-km
+git clone https://github.com/tabsdata/tabsdata-kminus.git tabsdata-km
 ```
 
 ```bash
@@ -443,7 +443,7 @@ git clone https://github.com/tabsdata/tabsdata.git tabsdata-os
 ```
 
 ```powershell
-git clone https://github.com/tabsdata/tabsdata-kubernetes.git tabsdata-km
+git clone https://github.com/tabsdata/tabsdata-kminus.git tabsdata-km
 ```
 
 ```powershell

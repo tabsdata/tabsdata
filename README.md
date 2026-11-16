@@ -48,7 +48,7 @@ Tabsdata is built from three repositories checked out side by side:
 
 - this one, cloned into a folder named `tabsdata-os`: execution components, that is, server,
   connectors, client, API and SDK (`tdk` and `tdkserver`);
-- [tabsdata-kubernetes](https://github.com/tabsdata/tabsdata-kubernetes), cloned into
+- [tabsdata-kminus](https://github.com/tabsdata/tabsdata-kminus), cloned into
   `tabsdata-km`: orchestration components, that is, native-process pods (`km`);
 - [tabsdata-devtools](https://github.com/tabsdata/tabsdata-devtools), cloned into `tabsdata-dt`:
   developer tools, that is, setup, build and test (`tdd`).
