@@ -32,7 +32,6 @@ description = "Full build and verification"
 run_task = [
     { name = [
         "update",
-        "kminus",
         "lock",
         "make_rs",
         "make_go",
@@ -48,7 +47,6 @@ description = "Full verification, without building or testing"
 run_task = [
     { name = [
         "update",
-        "kminus",
         "lock",
         "assess_rs",
         "assess_go",
@@ -255,8 +253,7 @@ run_task = [
     { name = [
         "permit_py",
         "permit_rs",
-        "permit_go",
-        "kminus"
+        "permit_go"
     ] }
 ]
 
@@ -300,16 +297,6 @@ run_task = [
         "permit_py",
         "permit_rs",
         "permit_go"
-    ] }
-]
-
-[tasks.kminus]
-plugin = "td-task-tracker"
-category = "80 - Verify"
-description = "Assemble the kminus binaries from the sibling checkout when they are out of date"
-run_task = [
-    { name = [
-        "__os__kminus_km"
     ] }
 ]
 
@@ -505,9 +492,11 @@ description = "Task 'build' for Rust projects"
 run_task = [
     { name = [
         "__os__build_all_rs",
-        "__os__build_none_rs"], condition = { env = { "TD_BUILD_ALL" = "true" } } },
+        "__os__build_none_rs",
+        "__km__build"], condition = { env = { "TD_BUILD_ALL" = "true" } } },
     { name = [
-        "__os__build_none_rs"
+        "__os__build_none_rs",
+        "__km__build"
     ] }
 ]
 
@@ -2582,7 +2571,8 @@ category = "10 - Bundle"
 description = "Task 'assembly' for Rust projects"
 run_task = [
     { name = [
-        "__os__assembly_rs"
+        "__os__assembly_rs",
+        "__km__build"
     ] }
 ]
 

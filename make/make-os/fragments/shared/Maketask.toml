@@ -23,8 +23,6 @@ extend = [
     { path = "./make/make-os/fragments/tasks/permit_py.toml", relative = "git" },
     { path = "./make/make-km/fragments/tasks/permit_go.toml", relative = "git" },
 
-    { path = "./make/make-os/fragments/tasks/kminus_km.toml", relative = "git" },
-
     { path = "./make/make-os/fragments/tasks/setup_rs.toml", relative = "git" },
     { path = "./make/make-os/fragments/tasks/setup_py.toml", relative = "git" },
 
@@ -42,6 +40,7 @@ extend = [
 
     { path = "./make/make-os/fragments/tasks/build_rs.toml", relative = "git" },
     { path = "./make/make-os/fragments/tasks/build_py.toml", relative = "git" },
+    { path = "./make/make-km/fragments/tasks/build.toml", relative = "git" },
 
     { path = "./make/make-os/fragments/tasks/hydrate_rs.toml", relative = "git" },
     { path = "./make/make-os/fragments/tasks/hydrate_py.toml", relative = "git" },
