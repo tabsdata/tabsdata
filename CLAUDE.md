@@ -57,8 +57,11 @@ exist in both repos, and after dependency changes here ee needs re-locking
   os commands read only `tabsdatak/cli/_machine.py` for how a program-driven
   run differs. Sibling repos that extend tdk pin its leaf commands, so a new
   or renamed leaf needs their tests run too.
-- `tdk-reference.md` documents only what os ships; `test_reference_drift.py`
-  checks every command and option it quotes against the click tree.
+- `tdk-reference.md` documents only what os ships, and all of it;
+  `test_reference_drift.py` checks every command and option it quotes against
+  the click tree, and every public command and option of the tree against
+  it. ee documents its `tdk ai` group in tabsdata-agentkit's
+  `docs/agentkit-reference.md`.
 - A tdk command or option that is not public API says so in its name:
   `x:<name>` for a command (with everything under it), `--x:<name>` for an
   option, declared with `internal_option` (`tabsdatak/cli/_internal.py`). It

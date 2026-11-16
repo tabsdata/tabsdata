@@ -52,7 +52,6 @@ Ops & access
   set / unset            Persistent CLI settings (pins, server, hints, prompting,
                          default profile)
   settings               Show the persistent CLI settings
-  ai                     Tabsdata AI (present when the AI agent package is installed)
 
 Help & misc
   shell                  Interactive shell

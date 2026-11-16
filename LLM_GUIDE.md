@@ -335,6 +335,12 @@ trigger_by = CronTrigger(mask="0 */6 * * *")  # every 6 hours
 
 A bare list or `"*"` is rejected: `trigger_by` only takes these classes.
 
+Table triggers depend on the edition. The open-source edition runs only the
+function that is triggered, by hand or by its cron schedule; the functions
+that read its new table versions wait for a trigger of their own. The
+enterprise edition also runs, in the same execution plan, every function
+downstream of it that those new versions trigger.
+
 ## TableFrame
 
 `TableFrame` wraps a Polars LazyFrame. Expression helpers live in
