@@ -1,3 +1,8 @@
 #
 # Copyright 2026 Tabsdata Inc.
 #
+
+polars==2.1.0
+pydruid[sqlalchemy]==0.6.9
+requests==2.34.2
+sqlalchemy==2.0.55

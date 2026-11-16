@@ -1,3 +1,5 @@
 #
 # Copyright 2026 Tabsdata Inc.
 #
+
+boto3-stubs[glue]==1.43.123

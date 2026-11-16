@@ -2,8 +2,4 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-# Snowflake SQLAlchemy dialect. Test-only -- pinned to an exact version
-# so `snowflake_live` round-trips and the mocked plugin tests both load
-# the same dialect across the workspace. End-user installs of
-# `tabsdata-conn-snowflake` are NOT forced to take this dependency.
 snowflake-sqlalchemy==1.11.1

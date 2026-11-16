@@ -4,4 +4,5 @@
 
 tabsdata-api==2.4.0
 tabsdata-common==2.4.0
+tabsdata-conn-common==2.4.0
 tabsdata-sdk==2.4.0

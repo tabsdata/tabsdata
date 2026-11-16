@@ -2,4 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+polars==2.1.0
 pyodbc==5.3.0
+sqlalchemy==2.0.55

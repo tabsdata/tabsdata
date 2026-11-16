@@ -1,3 +1,5 @@
 #
 # Copyright 2026 Tabsdata Inc.
 #
+
+types-PyYAML==6.0.12.20261030

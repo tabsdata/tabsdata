@@ -2,5 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-pymysql==1.2.3
 mysql-replication==1.0.17
+polars==2.1.0
+pymysql==1.2.3
+sqlalchemy==2.0.55

@@ -1,3 +1,5 @@
 #
 # Copyright 2026 Tabsdata Inc.
 #
+
+obstore==0.12.1

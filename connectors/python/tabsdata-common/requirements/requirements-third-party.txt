@@ -1,3 +1,20 @@
 #
 # Copyright 2026 Tabsdata Inc.
 #
+
+colorama==0.4.6
+isodate==0.7.2
+obstore==0.12.1
+packaging==26.3
+pandas==3.1.0
+polars==2.1.0
+pyarrow==26.0.0
+pydantic==2.14.2
+pydantic-core==2.50.2
+pywin32==312; platform_system == "Windows"
+pyyaml==6.0.3
+rich==15.0.0
+textual==8.2.8
+uuid6==2025.0.1
+uv==0.13.6
+zstandard==0.25.0

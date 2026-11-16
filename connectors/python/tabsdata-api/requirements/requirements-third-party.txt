@@ -2,5 +2,9 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+pandas==3.1.0
+polars==2.1.0
+pyarrow==26.0.0
 pydantic==2.14.2
-ruamel.yaml==0.19.1
+pydantic-core==2.50.2
+typing-extensions==4.16.0

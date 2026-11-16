@@ -3,3 +3,6 @@
 #
 
 orjson==3.13.0
+polars==2.1.0
+pyarrow==26.0.0
+sqlalchemy==2.0.55

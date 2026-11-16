@@ -3,4 +3,8 @@
 #
 
 google-cloud-bigquery==3.47.0
+google-cloud-core==2.8.0
+polars==2.1.0
+pyarrow==26.0.0
+sqlalchemy==2.0.55
 sqlalchemy-bigquery==1.17.3
