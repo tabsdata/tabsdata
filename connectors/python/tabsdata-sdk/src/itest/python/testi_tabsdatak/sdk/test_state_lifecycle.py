@@ -6,9 +6,11 @@
 
 A publisher, a transformer downstream of it and a subscriber downstream of the
 transformer each count their runs in their own state and write the count into
-the data they produce. The publisher is triggered three times, which runs the
-other two in the same executions: a first run starts without state, and each
-later run must read the state the server committed for the run before it.
+the data they produce. Each runs three times: a first run starts without
+state, and each later run must read the state the server committed for the run
+before it. The enterprise edition runs the other two in the publisher's
+executions; the open-source edition runs only the function triggered, so each
+is triggered in turn.
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ from tabsdatax.itest.fixture.monikers import moniker
 
 from tabsdatak.conn.dev import DataGenSrcConn
 from tabsdatak.conn.localfile import LocalFileDestConn
+from tabsdatak.extensions.variant.edition import ENTERPRISE
 from tabsdatak.sdk.status_utils.groups import Entity, Health, health
 from testi_tabsdatak.conn.common.function_project import function_module
 
@@ -62,14 +65,21 @@ def test_every_kind_of_function_reads_the_state_its_last_run_left(
     publisher = source.register_function(
         info=stateful.publish, project_root=str(FUNCTIONS)
     )
-    factory.register_function(info=stateful.transform, project_root=str(FUNCTIONS))
-    destination.register_function(info=stateful.deliver, project_root=str(FUNCTIONS))
+    transformer = factory.register_function(
+        info=stateful.transform, project_root=str(FUNCTIONS)
+    )
+    subscriber = destination.register_function(
+        info=stateful.deliver, project_root=str(FUNCTIONS)
+    )
+    triggered = [publisher] if ENTERPRISE else [publisher, transformer, subscriber]
 
     for run in range(1, RUNS + 1):
-        status = wait_for_completion(publisher.trigger())
-        assert health(Entity.EXECUTION, status) is Health.OK, (
-            f"run {run} finished with non-success status {status!r}"
-        )
+        for function in triggered:
+            status = wait_for_completion(function.trigger())
+            assert health(Entity.EXECUTION, status) is Health.OK, (
+                f"run {run} of {function.name} finished with non-success status "
+                f"{status!r}"
+            )
         assert runs(table_frame(source, stateful.PUBLISHED_TABLE)) == [run]
         assert runs(table_frame(factory, stateful.TRANSFORMED_TABLE)) == [run]
         assert runs(pl.read_parquet(folder / stateful.DELIVERED_FILE)) == [run]
