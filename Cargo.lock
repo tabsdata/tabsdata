@@ -10555,9 +10555,9 @@ dependencies = [
 
 [[package]]
 name = "sysinfo"
-version = "0.40.3"
+version = "0.40.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a86bac2f7d06e6384984118ad727f5694110f0ec44d924d05c8fdec3d030bee6"
+checksum = "3e80749408e2d8bec0ffa303012cf4e1b3b355f4a09087b4fdf7473680f6a2de"
 dependencies = [
  "libc",
  "memchr",
@@ -10885,7 +10885,7 @@ dependencies = [
  "iana-time-zone",
  "serde",
  "serde_yaml 0.9.34+deprecated",
- "sysinfo 0.40.3",
+ "sysinfo 0.40.4",
  "tinyvec",
  "tm-workspace",
  "toml 1.2.1+spec-1.1.0",
@@ -10925,7 +10925,7 @@ dependencies = [
  "sqlx",
  "strum 0.28.0",
  "supports-color",
- "sysinfo 0.40.3",
+ "sysinfo 0.40.4",
  "td-attach",
  "td-build",
  "td-common",
@@ -11088,7 +11088,7 @@ dependencies = [
  "shlex 2.0.1",
  "strum 0.28.0",
  "supports-color",
- "sysinfo 0.40.3",
+ "sysinfo 0.40.4",
  "tar",
  "td-bridge",
  "td-build",
@@ -11197,7 +11197,7 @@ dependencies = [
  "serde",
  "serde_yaml 0.9.34+deprecated",
  "strum 0.28.0",
- "sysinfo 0.40.3",
+ "sysinfo 0.40.4",
  "td-bridge",
  "td-build",
  "td-common",
@@ -11474,7 +11474,7 @@ dependencies = [
  "serde_yaml 0.9.34+deprecated",
  "strum 0.28.0",
  "supports-color",
- "sysinfo 0.40.3",
+ "sysinfo 0.40.4",
  "tabled",
  "td-apiserver",
  "td-bridge",

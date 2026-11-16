@@ -12,7 +12,7 @@ anyio==4.16.0
 archspec==0.2.7
 asn1crypto==1.5.1
 attrs==26.1.0
-authlib==1.9.6
+authlib==1.9.8
 avro==1.12.2
 azure-common==1.1.28
 azure-core==1.41.0
@@ -71,8 +71,8 @@ grpcio==1.85.1
 grpcio-status==1.85.1
 grpcio-tools==1.85.1
 h11==0.16.0 ; sys_platform != 'emscripten'
-httpcore2==2.16.0 ; sys_platform != 'emscripten'
-httpx2==2.16.0
+httpcore2==2.16.2 ; sys_platform != 'emscripten'
+httpx2==2.16.2
 httpx2-jsfetch==1.0 ; sys_platform == 'emscripten'
 humanize==4.16.0
 hvac==2.4.0
