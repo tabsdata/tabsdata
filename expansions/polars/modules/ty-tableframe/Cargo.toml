@@ -47,6 +47,8 @@ ignored = ["td-build", "td-error", "ta-tableframe", "te-tableframe", "toml", "po
 
 [build-dependencies]
 
+pyo3-build-config = { workspace = true }
+
 # Internal dependencies
 
 [dependencies]

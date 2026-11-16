@@ -49,6 +49,8 @@ ignored = ["liblzma-sys", "td-build", "td-error", "td-common", "toml"]
 
 [build-dependencies]
 
+pyo3-build-config = { workspace = true }
+
 # Internal dependencies
 
 [dependencies]
