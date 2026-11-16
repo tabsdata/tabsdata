@@ -320,7 +320,9 @@ with global_spinner("Building package 'tabsdata' (Tabsdata)..."):
             ).replace(os.sep, "/"),
         ),
         python_requires=python_version_spec,
-        install_requires=read_requirements("requirements.txt"),
+        install_requires=read_requirements(
+            "requirements.txt", ignore_tabsdata_packages=False
+        ),
         extras_require=build_extras_require(os.getcwd(), TABSDATA_VERSION),
         cmdclass={
             "build": create_custom_build_class(create_main_custom_build_hook(ROOT)),
