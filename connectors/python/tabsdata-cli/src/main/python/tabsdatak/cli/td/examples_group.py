@@ -292,8 +292,8 @@ def _extract_project(ctx: click.Context, example: Example, target: Path) -> None
     )
     show_hint(
         ctx,
-        "Remember that in order to run the example, tdserver must be running in "
-        "the same host as the CLI.",
+        "Remember that in order to run the example, a Tabsdata server "
+        "(tdkserver) must be running on the same host as the CLI.",
     )
 
 
