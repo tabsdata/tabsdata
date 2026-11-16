@@ -70,6 +70,8 @@ script = [
         exit 0
     end
 
+    cm_run_task __os__check_test_py_crypto
+
     set_env TD_INHERIT_TABSDATA_PACKAGES "true"
     set_env TD_OVERRIDE_BUILD_TIMESTAMP "true"
     set_env TD_BUILD_TIMESTAMP "0"
@@ -160,6 +162,8 @@ script = [
         debug "🛟 Help requested; skipping setup."
         exit 0
     end
+
+    cm_run_task __os__check_test_py_crypto
 
     set_env TD_INHERIT_TABSDATA_PACKAGES "true"
     set_env TD_OVERRIDE_BUILD_TIMESTAMP "true"
