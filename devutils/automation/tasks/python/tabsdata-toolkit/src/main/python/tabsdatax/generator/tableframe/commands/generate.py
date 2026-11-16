@@ -84,7 +84,7 @@ def perform_generate(
     from tabsdatax.generator.tableframe.engine.generate import perform
     from tabsdatax.generator.tableframe.model.model import Report
 
-    report = Report.from_json(manifest_file.read_text())
+    report = Report.from_json(manifest_file.read_text(encoding="utf-8"))
     result = perform(report, module, str(main_root_of(package_folder)), str(utest))
     render_generate(result)
 

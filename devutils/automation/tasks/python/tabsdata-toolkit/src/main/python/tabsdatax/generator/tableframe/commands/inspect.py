@@ -41,7 +41,7 @@ def perform_inspect(manifest: Path | None, module: str, auto_accept: bool) -> No
     report, skipped = perform(module)
 
     folder.mkdir(parents=True, exist_ok=True)
-    polars_manifest.write_text(report.to_json())
+    polars_manifest.write_text(report.to_json(), encoding="utf-8", newline="\n")
     render_inspect(report, skipped=skipped)
     log.info(f"Wrote {polars_manifest}")
 

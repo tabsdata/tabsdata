@@ -209,7 +209,11 @@ def perform(
         is_root = module_name == module
         filename = "__init__" if is_root else module_name[len(module) + 1 :]
         py_path = base / f"{filename}.py"
-        py_path.write_text(_render_py(symbols, module, is_root, hookable, submodules))
+        py_path.write_text(
+            _render_py(symbols, module, is_root, hookable, submodules),
+            encoding="utf-8",
+            newline="\n",
+        )
         written.append(py_path)
 
         # Regenerate the .pyi, preserving handwritten docstrings: rename any
@@ -220,7 +224,7 @@ def perform(
             ori_path = base / f"{filename}.pyi-ori"
             pyi_path.replace(ori_path)
             try:
-                previous = parse_pyi(ori_path.read_text())
+                previous = parse_pyi(ori_path.read_text(encoding="utf-8"))
             except SyntaxError:
                 previous = None  # a corrupt prior stub shouldn't block regeneration
             finally:
@@ -228,7 +232,7 @@ def perform(
         text, aliases = _render_pyi(
             symbols, previous, annotation_rewriter, module_name, module, engine_members
         )
-        pyi_path.write_text(text)
+        pyi_path.write_text(text, encoding="utf-8", newline="\n")
         written.append(pyi_path)
         all_aliases |= aliases
         if previous is not None:
@@ -251,12 +255,18 @@ def perform(
         result.symbol_count += len(symbols)
 
     typing_pyi = base / "_typing.pyi"
-    typing_doc = parse_pyi(typing_pyi.read_text()) if typing_pyi.exists() else None
+    typing_doc = (
+        parse_pyi(typing_pyi.read_text(encoding="utf-8"))
+        if typing_pyi.exists()
+        else None
+    )
     typing_head = _pyi_head(typing_doc, engine_base=False, root=module)[:-2]
     typing_pyi.write_text(
         "\n".join(typing_head)
         + "\n\n"
-        + annotation_rewriter.render_typing_pyi(all_aliases)
+        + annotation_rewriter.render_typing_pyi(all_aliases),
+        encoding="utf-8",
+        newline="\n",
     )
     written.append(typing_pyi)
 
@@ -282,7 +292,7 @@ def _engine_frame_members(base: Path) -> set[str]:
     path = base / _ENGINE_FRAME_FILE
     if not path.is_file():
         return set()
-    for node in ast.parse(path.read_text()).body:
+    for node in ast.parse(path.read_text(encoding="utf-8")).body:
         if isinstance(node, ast.ClassDef) and node.name == _ENGINE_FRAME_CLASS:
             return {
                 member.name
@@ -310,12 +320,12 @@ def _write_core(base: Path, module: str, hook_types: str) -> list[Path]:
     for name in _CORE_MODULES:
         text = (
             (templates / f"{name}.py.tmpl")
-            .read_text()
+            .read_text(encoding="utf-8")
             .replace("__ROOT_MODULE__", module)
             .replace("__HOOK_TYPES__", hook_types)
         )
         path = core_dir / f"{name}.py"
-        path.write_text(_py_header() + "\n" + text)
+        path.write_text(_py_header() + "\n" + text, encoding="utf-8", newline="\n")
         written.append(path)
     return written
 
@@ -417,7 +427,7 @@ def _write_datatypes(base: Path, module: str, names: list[str]) -> Path:
         "register_type_validator(_valid_type)",
     ]
     path = base / "datatypes.py"
-    path.write_text("\n".join(lines) + "\n")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     return path
 
 
@@ -463,7 +473,7 @@ def _format(paths: list[Path]) -> None:
 def _write_test_namespace_inits(base: Path) -> list[Path]:
     template = Path(__file__).parent / "templates" / "namespace_init.py.tmpl"
     copyright_text = _copyright().removeprefix("# ")
-    text = template.read_text().replace("__COPYRIGHT__", copyright_text)
+    text = template.read_text(encoding="utf-8").replace("__COPYRIGHT__", copyright_text)
     parts = base.parts
     # Namespace inits belong only to the importable test package, i.e. the
     # folders below the source root (the `.../src/utest/python` segment). Start
@@ -479,7 +489,7 @@ def _write_test_namespace_inits(base: Path) -> list[Path]:
         folder = folder / part
         init = folder / "__init__.py"
         if not init.exists():
-            init.write_text(text)
+            init.write_text(text, encoding="utf-8", newline="\n")
             written.append(init)
     return written
 
@@ -505,7 +515,7 @@ def _generate_tests(
         filename = f"test_{stem}"
         path = base / f"{filename}.py"
         text = _render_test_module(symbols, module, is_root)
-        path.write_text(text, encoding="utf-8")
+        path.write_text(text, encoding="utf-8", newline="\n")
         names.append(filename)
         paths.append(path)
     _remove_stale_tests(base, {path.name for path in paths})

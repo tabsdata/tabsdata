@@ -153,10 +153,10 @@ def _parameter(argument: ast.arg, default: ast.expr | None) -> str:
 
 def perform(old: Path, new: Path, output: Path) -> tuple[Diff, str]:
     diff = compute_diff(
-        Report.from_json(old.read_text()),
-        Report.from_json(new.read_text()),
+        Report.from_json(old.read_text(encoding="utf-8")),
+        Report.from_json(new.read_text(encoding="utf-8")),
     )
     content = diff.to_json()
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(content)
+    output.write_text(content, encoding="utf-8", newline="\n")
     return diff, content
