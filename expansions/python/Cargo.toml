@@ -168,6 +168,9 @@ features = ["abi3-py312", "anyhow", "macros", "multiple-pymethods", "num-bigint"
 [workspace.dependencies.pyo3-log]
 version = "0.13.5"
 
+[workspace.dependencies.pyo3-build-config]
+version = "0.30.1"
+
 [workspace.dependencies.pyo3-stub-gen]
 version = "0.23.2"
 
