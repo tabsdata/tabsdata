@@ -6,8 +6,9 @@ Tabsdata Quickstart (AI)
 The same end-to-end dataflow as the `quickstart-dev` example, with the Python
 left out. You get the input data and the two filesystem connections; an AI
 agent writes the three functions -- a publisher, a transformer, and a
-subscriber -- and wires them across three collections so that triggering the
-publisher runs the whole flow.
+subscriber -- and wires them across three collections. In Tabsdata Enterprise,
+triggering the publisher runs the whole flow; the open-source edition runs only
+the function you trigger, so there you trigger each of the three in turn.
 
 
 What you get
