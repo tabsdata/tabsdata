@@ -2,6 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+import errno
 import json
 import os
 import socket
@@ -11,8 +12,6 @@ from pathlib import Path
 import psutil
 import rich_click as click
 from filelock import FileLock, Timeout
-
-LOCALHOST = "127.0.0.1"
 
 
 def claims_file(lock_file: Path) -> Path:
@@ -37,17 +36,42 @@ def save_claims(registry_file: Path, claims: list[dict]):
         json.dump(claims, handle, indent=2)
 
 
-def port_free(value: int) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+PROBED_ADDRESSES = (
+    (socket.AF_INET, "127.0.0.1"),
+    (socket.AF_INET, "0.0.0.0"),
+    (socket.AF_INET6, "::1"),
+    (socket.AF_INET6, "::"),
+)
+
+
+def address_free(family: socket.AddressFamily, address: str, value: int) -> bool:
+    try:
+        probe = socket.socket(family, socket.SOCK_STREAM)
+    except OSError:
+        return family == socket.AF_INET6
+    with probe:
         if os.name == "nt":
             exclusive = getattr(socket, "SO_EXCLUSIVEADDRUSE", None)
             if exclusive is not None:
                 probe.setsockopt(socket.SOL_SOCKET, exclusive, 1)
         try:
-            probe.bind((LOCALHOST, value))
-        except OSError:
-            return False
+            probe.bind((address, value))
+        except OSError as error:
+            return family == socket.AF_INET6 and error.errno != errno.EADDRINUSE
     return True
+
+
+def port_free(value: int) -> bool:
+    """Whether tdkserver's own check (``port_available``) would accept the port.
+
+    Docker Desktop on Windows publishes container ports on IPv6 only, so a
+    port can look free on every IPv4 address while ``::1`` is taken. As in
+    tdkserver, an IPv6 address counts as busy only when it is in use, so hosts
+    without IPv6 still get ports.
+    """
+    return all(
+        address_free(family, address, value) for family, address in PROBED_ADDRESSES
+    )
 
 
 def window_free(base: int, count: int) -> bool:
