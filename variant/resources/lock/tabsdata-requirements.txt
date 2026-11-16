@@ -12,7 +12,7 @@ anyio==4.16.0
 archspec==0.2.7
 asn1crypto==1.5.1
 attrs==26.1.0
-authlib==1.9.5
+authlib==1.9.6
 avro==1.12.2
 azure-common==1.1.28
 azure-core==1.41.0
