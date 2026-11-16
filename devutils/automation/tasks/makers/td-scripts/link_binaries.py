@@ -15,7 +15,7 @@ KEY_INSTALL_DEST = "install_dest"
 KEY_KM_SUBPATH = "km_subpath"
 KEY_SOURCE = "source"
 
-KM_PROJECT_NAMES = ("tabsdata-km", "kminus")
+KM_PROJECT_NAMES = ("tabsdata-km", "tabsdata-kminus")
 
 
 def setup_toml_files(root: Path) -> list[Path]:

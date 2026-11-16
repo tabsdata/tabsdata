@@ -119,7 +119,7 @@ def get_target_release_folder() -> str:
 
 
 KM_PROJECT_PRIMARY_NAME = "tabsdata-km"
-KM_PROJECT_ALTERNATE_NAME = "kminus"
+KM_PROJECT_ALTERNATE_NAME = "tabsdata-kminus"
 
 
 def resolve_km_project_relative(root: str = "") -> str | None:
