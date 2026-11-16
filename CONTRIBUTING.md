@@ -3,13 +3,15 @@ Copyright 2025 Tabsdata Inc.
 -->
 
 <div align="center">
-    <img src="../images/tabsdata-logo-for-light-theme.svg#gh-light-mode-only" alt="Tabsdata" width="500">
-    <img src="../images/tabsdata-logo-for-dark-theme.svg#gh-dark-mode-only" alt="Tabsdata" width="500">
+    <img src="assets/images/tabsdata-logo-for-light-theme.svg#gh-light-mode-only" alt="Tabsdata" width="500">
+    <img src="assets/images/tabsdata-logo-for-dark-theme.svg#gh-dark-mode-only" alt="Tabsdata" width="500">
 </div>
 
 # Contributing to the project
 
 **Thanks for contributing to Tabsdata!**
+
+Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Bug Reports and Feature Requests
 
@@ -19,6 +21,9 @@ To report bugs and to request new features please use
 Before creating a bug report or a feature request, please check
 if the issue has already been reported. If it has, please add a comment
 to the original issue.
+
+To report a security vulnerability, don't open an issue: follow the
+[Security Policy](SECURITY.md).
 
 ## Contributing Connectors
 
@@ -30,5 +35,5 @@ Please contact us at info@tabsdata.com for more information.
 
 ## Building the Project from Source
 
-To build the project from source follow the [BUILDING](BUILDING.md) guide.
+To build the project from source, follow [Developing Tabsdata](DEVELOPING.md).
 
