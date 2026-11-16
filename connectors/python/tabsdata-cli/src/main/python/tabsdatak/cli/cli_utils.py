@@ -339,7 +339,7 @@ def utils_login(
                 "Please ensure that the URL is correct and the server is "
                 "running and reachable.\n If started locally, the status can be "
                 "checked by "
-                "executing 'tdserver status'.",
+                "executing 'tdkserver status'.",
             )
         elif isinstance(e, APIServerError) and e.status != HTTPStatus.UPGRADE_REQUIRED:
             show_hint(
@@ -2144,7 +2144,7 @@ def hint_common_solutions(ctx: click.Context, e: Exception):
                 "Please ensure that the URL is correct and the server is "
                 "running and reachable.\n If started locally, the status can be "
                 "checked by "
-                "executing 'tdserver status'.",
+                "executing 'tdkserver status'.",
             )
 
 
