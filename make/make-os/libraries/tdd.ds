@@ -35,6 +35,7 @@ fn tdd_fetch
     if not eq ${tdd_fetch_result.code} "0"
         error "🚫 Tool tdd could not fetch ${tdd_fetch_selection} from 1Password (exit code ${tdd_fetch_result.code})."
         error "\n${tdd_fetch_result.stderr}"
+        error "🛟 Without 1Password, set the variables yourself before running the task: _TDD_CRYPTO_KEY and the backend credentials."
         assert_fail
     end
     tdd_fetch_count = set 0
