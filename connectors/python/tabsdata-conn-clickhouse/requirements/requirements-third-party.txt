@@ -2,8 +2,11 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-# Required at runtime by ``_id.new_upload_id`` (UUIDv7 backing for
-# the time-ordered per-load namespace). S3 and Azure staging go
-# through obstore; ``google-cloud-storage`` is intentionally NOT listed:
-# only the GCS cleanup sweep pulls it in, on demand.
+clickhouse-connect==1.11.0
+google-auth==2.62.2
+google-cloud-storage==3.17.1
+google-cloud-storage-control==1.17.0
+obstore==0.12.1
+polars==2.1.0
+pyarrow==26.0.0
 uuid6==2025.0.1

@@ -3,6 +3,6 @@
 #
 
 tabsdata-api==2.3.0
-tabsdata-conn-common==2.3.0
+tabsdata-common==2.3.0
 tabsdata-conn-common-file==2.3.0
-tabsdata-conn-common-sql==2.3.0
+tabsdata-conn-common==2.3.0

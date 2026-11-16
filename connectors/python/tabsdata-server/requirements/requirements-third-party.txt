@@ -1,3 +1,19 @@
 #
 # Copyright 2026 Tabsdata Inc.
 #
+
+azure-storage-blob==12.31.1
+boto3==1.43.123
+google-auth==2.62.2
+google-cloud-storage==3.17.1
+kubernetes==37.0.1
+obstore==0.12.1
+pg8000==1.31.6
+polars==2.1.0
+psutil==7.2.2
+pyarrow==26.0.0
+pydantic==2.14.2
+pyyaml==6.0.3
+rich==15.0.0
+tenacity==9.2.1
+zstandard==0.25.0

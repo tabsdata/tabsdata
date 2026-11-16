@@ -1,3 +1,8 @@
 #
 # Copyright 2026 Tabsdata Inc.
 #
+
+pandas==3.1.0
+polars==2.1.0
+pydantic==2.14.2
+pydantic-core==2.50.2

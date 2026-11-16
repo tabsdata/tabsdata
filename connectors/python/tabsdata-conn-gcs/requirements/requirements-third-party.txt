@@ -1,3 +1,9 @@
 #
 # Copyright 2026 Tabsdata Inc.
 #
+
+fastavro==1.13.1
+google-auth==2.62.2
+google-cloud-storage==3.17.1
+polars==2.1.0
+pyarrow==26.0.0

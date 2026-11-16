@@ -2,4 +2,8 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+ijson==3.6.0
+polars==2.1.0
+pydantic==2.14.2
+requests==2.34.2
 simple-salesforce==1.12.10

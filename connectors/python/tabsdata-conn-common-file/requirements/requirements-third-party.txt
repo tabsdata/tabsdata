@@ -2,5 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-PyYAML==6.0.3
-types-PyYAML==6.0.12.20261030
+fastavro==1.13.1
+obstore==0.12.1
+polars==2.1.0
+pyarrow==26.0.0
