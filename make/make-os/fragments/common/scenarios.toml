@@ -316,43 +316,23 @@ script = [
 
     if eq ${td_wheels_flavour} "devpi"
 
+        profile = get_env td-profile
+        cross_target = get_env TD_CROSS_TARGET
+        cross_target = trim ${cross_target}
+        archive = set "./target/wheels/tabsdata-${profile}-devpi.tar.gz"
+        if not is_empty ${cross_target}
+            archive = set "./target/wheels/tabsdata-${profile}-devpi-${cross_target}.tar.gz"
+        end
+
         lines = array
         array_push ${lines} ""
         array_push ${lines} ""
-        array_push ${lines} "❗ The generated wheels are intended for use via a PyPI-compliant repository."
-        array_push ${lines} "❗ Installing them directly using 'pip install <wheel>' will result in an incomplete or incorrect setup."
-        array_push ${lines} "❗ Upload them using the standard 'twine upload <wheel>'."
-        array_push ${lines} "❗ If you are using our devpi setup (http://localhost:3141/tabsdata/td), set the environment variables below before installing."
-        array_push ${lines} "❗ These variables must be set in every terminal where you will run the tabsdata cli or the tabsdata server."
+        array_push ${lines} "❗ The wheels are in ${archive}."
+        array_push ${lines} "❗ Publish them to a local Python index, such as devpi, and install 'tabsdata' from it,"
+        array_push ${lines} "❗ or install them all by path into a fresh, activated virtual environment:"
         array_push ${lines} ""
-        array_push ${lines} "export PIP_INDEX_URL=http://localhost:3141/tabsdata/td/"
-        array_push ${lines} "export UV_DEFAULT_INDEX=http://localhost:3141/tabsdata/td/"
-        array_push ${lines} ""
-        array_push ${lines} "❗ Install the packages using the standard 'pip install <package>' command."
-        array_push ${lines} "❗ If you are using multiple environments, remember to install the packages in each of them separately."
-        array_push ${lines} ""
-        array_push ${lines} "❗ Before starting any tabsdata instance or using the cli, you must set the following environment variables."
-        array_push ${lines} "❗ These variables must be set in every terminal where you will run the tabsdata cli or the tabsdata server."
-        array_push ${lines} ""
-        array_push ${lines} "export PIP_INDEX_URL=http://localhost:3141/tabsdata/td/"
-        array_push ${lines} "export UV_DEFAULT_INDEX=http://localhost:3141/tabsdata/td/"
-        array_push ${lines} "unset PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES"
-        array_push ${lines} "unset REQUIRE_SERVER_BINARIES"
-        array_push ${lines} "unset REQUIRE_THIRD_PARTY"
-        array_push ${lines} "unset TD_CLI_SHOW"
-        array_push ${lines} "unset TD_IGNORE_CONNECTOR_REQUIREMENTS"
-        array_push ${lines} "unset TD_INHERIT_TABSDATA_PACKAGES"
-        array_push ${lines} "unset TD_PYTHON_LINKED_TO_REPOSITORY"
-        array_push ${lines} "unset TD_SKIP_NON_EXISTING_ASSETS"
-        array_push ${lines} "unset TD_SETUP_GENERATE_LOCKS"
-        array_push ${lines} ""
-        array_push ${lines} "❗ The following commands will install your local wheels on a 'td4repo' conda environment using a local devpi:"
-        array_push ${lines} "❗ (Note: The finer details are left to you. The commands below assume you generated the wheels with the 'wheels --devpi' task.)"
-        array_push ${lines} ""
-        array_push ${lines} "conda env remove --name td4repo --yes; conda create -y --name td4repo python=3.12; conda activate td4repo"
-        array_push ${lines} "python -m pip install --upgrade pip"
-        array_push ${lines} "cd ./target/wheels"
-        array_push ${lines} "../../../tabsdata-ee/docker/devpi/install.sh"
+        array_push ${lines} "mkdir -p ./target/wheels/devpi && tar -xzf ${archive} -C ./target/wheels/devpi"
+        array_push ${lines} "uv pip install ./target/wheels/devpi/*.whl ./devutils/automation/tasks/python/tabsdata-toolkit"
         array_push ${lines} ""
         message = array_join ${lines} "\n"
         info ${message}
