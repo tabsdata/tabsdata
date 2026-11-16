@@ -403,6 +403,9 @@ script = [
 
     manifest = default_domains_manifest py
 
+    python_path = get_env PYTHONPATH
+    unset_env PYTHONPATH
+
     cm_run_task __os__set_venv_env
     cm_run_task __os__set_crypto
     cm_run_task __os__set_secrets
@@ -411,6 +414,10 @@ script = [
     info "🛠️ Creating backend domains..."
     tdd = tdd_exe
     create_domains ${tdd} ${manifest}
+
+    if not is_empty ${python_path}
+        set_env PYTHONPATH ${python_path}
+    end
     export_test_manifests py
 
     cm_run_task __os__reset_venv_env
