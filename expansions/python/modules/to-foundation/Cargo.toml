@@ -43,7 +43,7 @@ dummy = []
 extension-module = ["pyo3/extension-module"]
 
 [package.metadata.cargo-machete]
-ignored = ["liblzma-sys", "td-build", "td-error", "td-common", "toml"]
+ignored = ["liblzma-sys", "pyo3-build-config", "td-build", "td-error", "toml"]
 
 # Build dependencies
 

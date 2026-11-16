@@ -41,7 +41,7 @@ dummy = []
 extension-module = ["pyo3/extension-module"]
 
 [package.metadata.cargo-machete]
-ignored = ["td-build", "td-common", "td-error", "ta-tableframe", "te-tableframe", "toml", "polars", "polars-arrow", "polars-expr", "polars-mem-engine", "polars-plan", "rayon", "tracing"]
+ignored = ["td-build", "td-common", "td-error", "ta-tableframe", "te-tableframe", "toml", "polars", "polars-arrow", "polars-expr", "polars-mem-engine", "polars-plan", "pyo3-build-config", "rayon", "tracing"]
 
 # Build dependencies
 
