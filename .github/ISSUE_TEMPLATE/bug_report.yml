@@ -1,0 +1,40 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+name: Bug report
+description: Report something that does not work as described.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The commands or code that show the problem.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The version, or the commit, you found the problem in.
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      multiple: true
+      options:
+        - macOS
+        - Linux
+        - Windows
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Any relevant output. Remove secrets and personal data first.
+      render: shell

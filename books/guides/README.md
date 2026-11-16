@@ -88,58 +88,11 @@ The test tree IS sprinkled with `pkgutil.extend_path` `__init__.py`
 files at every level — that's the forward-compat hook for the
 eventual `tabsdatak` → `tabsdata` merge.
 
-## Prerequisites
+## Setting up
 
-- Python 3.12+
-- Working tabsdata-os checkout (`../tabsdata-os/` relative to this
-  repo)
-
-## Installing into a conda environment
-
-Create the conda env, then install each package editable with
-`--no-deps` so pip does not try to resolve sibling packages from
-PyPI. Third-party deps (pydantic, pytest, …) are installed
-separately. Order matters only for readability — `--no-deps` skips
-resolution — but the layering is:
-`api` → `conn-common` / `conn-common-sql` / `conn-common-file` → connectors.
-
-```bash
-conda create -n tabsdatak python=3.12.13 -y
-conda activate tabsdatak
-pip install --upgrade pip
-
-pip install pytest pydantic
-
-# From the tabsdata-os repo root:
-pip install \
-    -e connectors/python/tabsdata-api \
-    -e connectors/python/tabsdata-conn-common \
-    -e connectors/python/tabsdata-conn-common-sql \
-    -e connectors/python/tabsdata-conn-common-file \
-    -e connectors/python/tabsdata-conn-mysql \
-    -e connectors/python/tabsdata-conn-postgres \
-    -e connectors/python/tabsdata-conn-mssql \
-    -e connectors/python/tabsdata-conn-oracle \
-    -e connectors/python/tabsdata-conn-db2 \
-    -e connectors/python/tabsdata-conn-clickhouse \
-    -e connectors/python/tabsdata-conn-starrocks \
-    -e connectors/python/tabsdata-conn-druid \
-    -e connectors/python/tabsdata-conn-snowflake \
-    -e connectors/python/tabsdata-conn-bigquery \
-    -e connectors/python/tabsdata-conn-databricks \
-    -e connectors/python/tabsdata-conn-mongodb \
-    -e connectors/python/tabsdata-conn-salesforce \
-    -e connectors/python/tabsdata-conn-localfile \
-    -e connectors/python/tabsdata-conn-s3 \
-    -e connectors/python/tabsdata-conn-gcs \
-    -e connectors/python/tabsdata-conn-azureblob \
-    -e connectors/python/tabsdata-scratchpad
-```
-
-Or use `cargo make` from the tabsdata-os repo root — that's the
-build path CI takes. Per-connector requirements files
-(`requirements.txt` / `requirements-dev.txt`) are wired into the
-top-level tabsdata-os `requirements-dev.txt` aggregator.
+Set up the build environment as [Developing Tabsdata](../../DEVELOPING.md) describes. The
+hydrate task, `cargo make hydrate`, installs every package of this tree, editable, into the
+virtual environment. To run one package's tests, use `cargo make utest_py --packages=<name>`.
 
 ## Tree at a glance
 
@@ -165,8 +118,7 @@ connectors/python/
 ├── tabsdata-conn-localfile/
 ├── tabsdata-conn-s3/
 ├── tabsdata-conn-gcs/
-├── tabsdata-conn-azureblob/
-└── tabsdata-scratchpad/
+└── tabsdata-conn-azureblob/
 ```
 
 Pytest markers are managed centrally — the source of truth is

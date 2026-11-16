@@ -33,8 +33,8 @@ macOS and Windows.
 
 To install and run the binary distribution use the following command:
 
-```
-pip install "tabsdata[all]"
+```bash
+pip install tabsdata
 ```
 
 ## Tabsdata Binary Distribution Documentation
@@ -42,9 +42,24 @@ pip install "tabsdata[all]"
 * [User Guide](https://docs.tabsdata.com/2.3.0/guide)
 * [API Reference](https://docs.tabsdata.com/2.3.0/api)
 
+# Building tabsdata from Source
+
+Tabsdata is built from three repositories checked out side by side:
+
+- this one, cloned into a folder named `tabsdata-os`: execution components, that is, server,
+  connectors, client, API and SDK (`tdk` and `tdkserver`);
+- [tabsdata-kubernetes](https://github.com/tabsdata/tabsdata-kubernetes), cloned into
+  `tabsdata-km`: orchestration components, that is, native-process pods (`km`);
+- [tabsdata-devtools](https://github.com/tabsdata/tabsdata-devtools), cloned into `tabsdata-dt`:
+  developer tools, that is, setup, build and test (`tdd`).
+
+[Developing Tabsdata](DEVELOPING.md) walks you through it on macOS, Linux and Windows: the software to
+install, the build environment, building, running a local instance, testing, packaging, and setting
+up your IDE.
+
 # Contributing
 
-Contributions are welcome! Please refer to the [Contributing Guide](assets/docs/CONTRIBUTING.md) for more information.
+Contributions are welcome! Please refer to the [Contributing Guide](CONTRIBUTING.md) for more information.
 
 # How Does Tabsdata Work?
 
@@ -57,7 +72,7 @@ collection a function is registered in. Functions declare only what they read an
 
 A connection to a MySQL database, `conn-mysql.yaml`:
 
-```
+```yaml
 kind: connectionDef
 apiVersion: '1.0'
 type: tabsdatak.conn.mysql:MySQLSrcConn
@@ -74,7 +89,7 @@ spec:
 
 A connection to an S3 bucket, `conn-s3.yaml`:
 
-```
+```yaml
 kind: connectionDef
 apiVersion: '1.0'
 type: tabsdatak.conn.s3:S3DestConn
@@ -91,12 +106,12 @@ spec:
 ```
 
 A `$secret:<ENV_VAR>` value is read from that environment variable when the collection is created,
-and is stored as a secret. `tdk connection template --type <type>` prints a fill-in template for any
-connector, and `tdk connection types` lists them.
+and is stored as a secret. To get a fill-in template for any connector, run
+`tdk connection template --type <type>`; to list the connectors, run `tdk connection types`.
 
 ## Publishing data from a MySQL Database
 
-```
+```python
 from tabsdatak.api import TableFrameSpec, publisher
 from tabsdatak.conn.mysql import MySQLSrc
 
@@ -109,9 +124,9 @@ def pub(customers: TableFrameSpec) -> TableFrameSpec:
     return customers
 ```
 
-## Subscribing, transforming and publishing data within Tabsdata
+## Transforming data within Tabsdata
 
-```
+```python
 from tabsdatak.api import TableFrameSpec, transformer
 from tabsdatak.tableframe.functions import col
 
@@ -128,7 +143,7 @@ def tfr(customers: TableFrameSpec) -> TableFrameSpec:
 
 ## Subscribing to data in an S3 Bucket
 
-```
+```python
 from tabsdatak.api import TableFrameSpec, subscriber
 from tabsdatak.conn.s3 import S3Dest
 
@@ -144,10 +159,9 @@ def sub(spanish: TableFrameSpec) -> TableFrameSpec:
 ## Registering and Executing the Functions
 
 Log in, create a project, create one collection per function (the source and destination ones with
-their connections), register each function in its collection, and trigger the publisher to run the
-rest:
+their connections), register each function in its collection, and trigger the functions:
 
-```
+```bash
 $ tdk login
 
 $ tdk project create --name example
@@ -162,7 +176,10 @@ $ tdk fn register --coll dataprod --path transform.py::tfr
 $ tdk fn register --coll output --path output.py::sub
 
 $ tdk fn trigger --coll input --name pub
+$ tdk fn trigger --coll dataprod --name tfr
+$ tdk fn trigger --coll output --name sub
 ```
 
-Every time the `pub` publisher is executed, the `tfr` transformer and the `sub` subscriber will also
-be executed.
+The open-source edition runs only the function you trigger, so you trigger the three in turn. In
+the enterprise edition, triggering the `pub` publisher also runs the `tfr` transformer and the `sub`
+subscriber that depend on it.
