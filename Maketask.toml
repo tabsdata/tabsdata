@@ -940,6 +940,9 @@ env = { TD_TEST_INSTANCES_ARENA = "tdtest" }
 dependencies = ["__os__set_mode_test_py"]
 run_task = [
     { name = [
+        "itest_parallel_py"
+    ], condition = { env = { "TD_WITH_HELP" = "true" } } },
+    { name = [
         "__os__setup_itest_py",
         "__os__start_test_py",
         "__os__cleanup_itest_py",
