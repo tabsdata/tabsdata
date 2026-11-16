@@ -360,6 +360,30 @@ script = [
     cm_run_task __os__reset_venv_env
     ''']
 
+[tasks.__os__check_test_py_crypto]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    with_server_start = get_env TD_WITH_SERVER_START
+    with_domains = get_env TD_WITH_DOMAINS
+    if not eq ${with_server_start} "true"
+        exit 0
+    end
+    if eq ${with_domains} "false"
+        exit 0
+    end
+
+    debug "🔑 Checking the tdd crypto key..."
+    cm_run_task __os__set_venv_env
+    cm_run_task __os__set_crypto
+    cm_run_task __os__reset_venv_env
+    ''']
+
 [tasks.__os__setup_test_py_backends]
 plugin = "td-task-tracker"
 category = "12 - Backends"
