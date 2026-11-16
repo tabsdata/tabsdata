@@ -2,16 +2,23 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-from simple_salesforce import Salesforce
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import tabsdatak._api as _api
 from tabsdatak.conn.common._explorer import ReportingEntity
 from tabsdatak.conn.salesforce import SalesforceSrcConn
 from tabsdatak.conn.salesforce.error import SalesforceErrorCode
 
+if TYPE_CHECKING:
+    from simple_salesforce import Salesforce
+
 
 def connect(conn: SalesforceSrcConn) -> Salesforce:
     """Create a Salesforce client from a SalesforceConn object."""
+    from simple_salesforce import Salesforce
+
     return Salesforce(
         username=conn.credentials.username.value(),
         password=conn.credentials.password.value(),
