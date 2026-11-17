@@ -825,7 +825,9 @@ always match the SDK in the current environment. Categories: `api` (decorators,
 classes and per-connector `*Spec` aliases), `tableframe` (`TableFrame`, its
 methods, `col`/`lit`/`concat`), `types`, `errors` (every `*ErrorCode`, such as
 `COMMON_11`, and its exception class), `statuses` (per entity, with health and
-finality) and `credentials`.
+finality), `credentials` and `practices` (bundled pages on how to design
+functions, such as `function-granularity`, linked from the decorators they
+apply to).
 
 `SYMBOL` resolves, in order: a qualified name (`tabsdatak.api.publisher`), a
 bare name or alias (`PostgresSrc`, `fnrun`), a connection type id

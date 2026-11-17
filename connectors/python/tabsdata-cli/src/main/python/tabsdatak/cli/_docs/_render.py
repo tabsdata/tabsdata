@@ -19,7 +19,8 @@ def _cell(value) -> str:
 def _heading(entry: DocEntry) -> str:
     module = entry.qualified_name.rpartition(".")[0]
     role = entry.extra.get("role", "").replace("_", " ")
-    parts = [entry.category, *([role] if role else [entry.kind]), module]
+    parts = [entry.category, *([role] if role else [entry.kind])]
+    parts += [module] if module != entry.category else []
     return f"# {entry.symbol}  ({' · '.join(parts)})"
 
 

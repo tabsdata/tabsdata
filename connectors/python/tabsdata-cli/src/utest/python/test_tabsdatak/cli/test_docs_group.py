@@ -56,6 +56,7 @@ def test_every_category_has_entries(catalog):
         "errors",
         "statuses",
         "credentials",
+        "practices",
     }
 
 

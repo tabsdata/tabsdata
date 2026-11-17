@@ -450,6 +450,26 @@ def _errors() -> list[DocEntry]:
     return sorted(entries, key=lambda e: (e.symbol, e.qualified_name))
 
 
+def _practices() -> list[DocEntry]:
+    from tabsdatak.cli._docs._practices import load_practices
+
+    return [
+        DocEntry(
+            symbol=practice.slug,
+            qualified_name=f"practices.{practice.slug}",
+            category="practices",
+            kind="practice",
+            summary=practice.summary,
+            description=f"**{practice.title}**\n\n{practice.body}",
+            see_also=[
+                *(f"tdk docs show --name {symbol}" for symbol in practice.applies_to),
+                *(f"tdk examples show --name {name}" for name in practice.examples),
+            ],
+        )
+        for practice in load_practices()
+    ]
+
+
 _BUILDERS = {
     "api": _api,
     "triggers": _triggers,
@@ -459,6 +479,7 @@ _BUILDERS = {
     "errors": _errors,
     "statuses": _statuses,
     "credentials": _credentials,
+    "practices": _practices,
 }
 CATEGORIES = tuple(_BUILDERS)
 
@@ -563,6 +584,24 @@ def _score(entry: DocEntry, needle: str) -> int | None:
     return None
 
 
+def _link_practices(entries: list[DocEntry]) -> list[DocEntry]:
+    from tabsdatak.cli._docs._practices import load_practices
+
+    by_symbol: dict[str, list[str]] = {}
+    for practice in load_practices():
+        for symbol in practice.applies_to:
+            by_symbol.setdefault(symbol, []).append(practice.slug)
+    for entry in entries:
+        if entry.category == "practices":
+            continue
+        entry.see_also += [
+            f"tdk docs show --name {slug}" for slug in by_symbol.get(entry.symbol, ())
+        ]
+    return entries
+
+
 def build_catalog(categories: Iterable[str] | None = None) -> Catalog:
     selected = list(categories) if categories else CATEGORIES
-    return Catalog(entry for name in selected for entry in _BUILDERS[name]())
+    return Catalog(
+        _link_practices([entry for name in selected for entry in _BUILDERS[name]()])
+    )
