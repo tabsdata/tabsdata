@@ -193,7 +193,16 @@ pub enum Commands {
     Status(InstanceNameArguments),
     #[command(about = "Show the configuration and state of a tabsdata instance")]
     Inspect(InstanceNameArguments),
-    #[command(about = "Trash a local kminus tabsdata instance")]
+    #[command(
+        about = "Trash a local kminus tabsdata instance",
+        long_about = "Trash a local kminus tabsdata instance, moving its folder to the trash. \
+                      A running instance is stopped first. An instance created by another \
+                      tabsdata version, or whose settings cannot be read, only gets a \
+                      best-effort stop of its kminus cluster, after a confirmation. If the \
+                      stop fails, trashing it needs another confirmation, as processes and \
+                      stale files may be left behind; on Windows, files they hold open can \
+                      make the trash fail. Pass -y to confirm every prompt."
+    )]
     Trash(TrashArguments),
     // #[command(about = "Register an existing tabsdata instance")]
     // Register(RegisterArguments),

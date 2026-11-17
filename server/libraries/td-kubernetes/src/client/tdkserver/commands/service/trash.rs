@@ -13,10 +13,11 @@ use td_error::TdError;
 use tracing::info;
 
 use crate::base::error::cli::CliError;
+use crate::base::error::manifest::ManifestError;
 use crate::base::reporter::InteractiveReporter;
 use crate::client::registry::{InstanceSettings, instance_folder, trash_root};
 use crate::client::session::settings::SettingsContext;
-use crate::client::tdkserver::arguments::GlobalArguments;
+use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::commands::service::{
     resolved_details, resolved_instance, resolved_yes,
 };
@@ -25,11 +26,19 @@ use crate::client::tdkserver::render::preview;
 use crate::core::system::exit::{CommandError, CommandResult, render_error};
 use crate::cwarn;
 use crate::runtime::instance::verify_instance_version;
-use crate::runtime::provider::provider_for_instance_any_state;
+use crate::runtime::provider::kminus::KminusProvider;
+use crate::runtime::provider::{
+    ClusterProvider, Provider, provider_for_instance_mutating_any_state,
+};
 
 const TRASH_TIMESTAMP_FORMAT: &str = "%Y.%m.%d.%H.%M.%S%.3f";
 const COMPACT_TRASH_TIMESTAMP_FORMAT: &str = "%Y%m%d%H%M%S%3f";
 const COMPACT_ENV: &str = "TD_KMINUS_COMPACT";
+
+const TRASH_ANYWAY_PROMPT: &str = "Trash the instance anyway?";
+const STOP_FAILED_WARNING: &str = "A failed stop can leave processes running and stale files \
+     behind (pid files, an orphaned database server, bound ports). On Windows, files still held \
+     open by those processes can make the trash fail.";
 
 const TRASH_RENAME_BACKOFF: Duration = Duration::from_millis(250);
 #[cfg(not(windows))]
@@ -73,20 +82,138 @@ pub struct TrashArguments {
     pub yes: Option<bool>,
 }
 
-async fn assert_trashable(name: &str, verbose: bool) -> CommandResult {
-    let Ok(settings) = InstanceSettings::load(name) else {
-        return Ok(());
-    };
-    if verify_instance_version(&settings.name, &settings.version).is_ok() {
-        return Ok(());
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Lineage {
+    Matching,
+    Mismatched {
+        found: String,
+        running: String,
+        provider: ClusterProvider,
+    },
+    Unreadable {
+        reason: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StopPlan {
+    Full,
+    BestEffort,
+    Unsupported(ClusterProvider),
+}
+
+impl Lineage {
+    fn of(name: &str, verbose: bool) -> Self {
+        let settings = match InstanceSettings::load(name) {
+            Ok(settings) => settings,
+            Err(error) => {
+                return Self::Unreadable {
+                    reason: render(&error, verbose),
+                };
+            }
+        };
+        match verify_instance_version(&settings.name, &settings.version) {
+            Ok(()) => Self::Matching,
+            Err(ManifestError::InstanceVersionMismatch { found, running, .. }) => {
+                Self::Mismatched {
+                    found,
+                    running,
+                    provider: settings.provider,
+                }
+            }
+            Err(error) => Self::Unreadable {
+                reason: error.to_string(),
+            },
+        }
     }
-    let Ok(provider) = provider_for_instance_any_state(Some(name.to_owned()), verbose).await else {
-        return Ok(());
+
+    fn stop_plan(&self) -> StopPlan {
+        match self {
+            Self::Matching => StopPlan::Full,
+            Self::Mismatched {
+                provider: ClusterProvider::Kminus,
+                ..
+            }
+            | Self::Unreadable { .. } => StopPlan::BestEffort,
+            Self::Mismatched { provider, .. } => StopPlan::Unsupported(*provider),
+        }
+    }
+
+    fn warning(&self, name: &str) -> Option<String> {
+        match self {
+            Self::Matching => None,
+            Self::Mismatched { found, running, .. } => Some(format!(
+                "Instance '{name}' was created with tabsdata {found}, but this tdkserver is \
+                 {running}. It only gets a best-effort stop before it is trashed."
+            )),
+            Self::Unreadable { reason } => Some(format!(
+                "The tabsdata version of instance '{name}' is unknown, as its settings could \
+                 not be read ({reason}). It only gets a best-effort stop before it is trashed."
+            )),
+        }
+    }
+}
+
+pub(crate) async fn prepare_trash(
+    name: &str,
+    yes: bool,
+    verbose: bool,
+    prompt: Option<&str>,
+) -> CommandResult<bool> {
+    let lineage = Lineage::of(name, verbose);
+    let approved = match (lineage.warning(name), prompt) {
+        (Some(warning), _) => {
+            cwarn!("{warning}");
+            confirm(yes, TRASH_ANYWAY_PROMPT)?
+        }
+        (None, Some(prompt)) => confirm(yes, prompt)?,
+        (None, None) => true,
     };
+    if !approved {
+        return Ok(false);
+    }
+    let Err(reason) = stop_for_trash(name, &lineage, verbose).await else {
+        return Ok(true);
+    };
+    cwarn!("Could not stop instance '{name}': {reason}");
+    cwarn!("{STOP_FAILED_WARNING}");
+    confirm(yes, TRASH_ANYWAY_PROMPT)
+}
+
+async fn stop_for_trash(name: &str, lineage: &Lineage, verbose: bool) -> Result<(), String> {
+    let stopped = match lineage.stop_plan() {
+        StopPlan::Full => stop_fully(name, verbose).await,
+        StopPlan::BestEffort => stop_kminus_cluster(name, verbose).await,
+        StopPlan::Unsupported(provider) => {
+            return Err(format!(
+                "this tdkserver cannot stop a {} instance created by another tabsdata \
+                 version; its workload is left untouched",
+                provider.as_str()
+            ));
+        }
+    };
+    stopped.map_err(|error| render(&error, verbose))
+}
+
+async fn stop_fully(name: &str, verbose: bool) -> CommandResult {
+    let provider = provider_for_instance_mutating_any_state(Some(name.to_owned()), verbose).await?;
+    provider.ensure_stoppable_service().await?;
     if provider.service_dead().await {
         return Ok(());
     }
-    verify_instance_version(&settings.name, &settings.version)?;
+    provider.stop_service(&InteractiveReporter::new()).await?;
+    Ok(())
+}
+
+async fn stop_kminus_cluster(name: &str, verbose: bool) -> CommandResult {
+    let provider = KminusProvider::build(
+        ClusterArguments::new(Some(ClusterProvider::Kminus), None, None, false, None),
+        InstanceArguments::new(Some(name.to_owned())),
+        verbose,
+        None,
+        None,
+    )?;
+    provider.stop_cluster(&InteractiveReporter::new()).await?;
     Ok(())
 }
 
@@ -122,14 +249,17 @@ pub async fn command_trash(arguments: TrashArguments, globals: &GlobalArguments)
             &trash_root.display().to_string(),
         );
     }
-    assert_trashable(&name, verbose).await?;
-
-    if !confirm(yes.value, "Proceed with trashing the instance?")? {
+    if !prepare_trash(
+        &name,
+        yes.value,
+        verbose,
+        Some("Proceed with trashing the instance?"),
+    )
+    .await?
+    {
         info!("Operation cancelled.");
         return Ok(());
     }
-
-    stop_if_possible(&name, verbose).await;
 
     let destination = trash_instance_folder(&name, &folder)?;
     info!(
@@ -182,40 +312,6 @@ pub fn trash_instance_folder(name: &str, folder: &Path) -> CommandResult<PathBuf
         cause: last_error.to_string(),
     })
     .into())
-}
-
-pub(crate) async fn stop_if_possible(name: &str, verbose: bool) {
-    if let Err(error) = InstanceSettings::load(name) {
-        cwarn!(
-            "Skipping stop; could not read instance settings: {}",
-            render(&error, verbose)
-        );
-        return;
-    }
-
-    let provider = match provider_for_instance_any_state(Some(name.to_owned()), verbose).await {
-        Ok(provider) => provider,
-        Err(error) => {
-            cwarn!(
-                "Skipping stop; could not prepare the instance to stop it: {}",
-                render(&error, verbose)
-            );
-            return;
-        }
-    };
-
-    if provider.service_dead().await {
-        cwarn!("Instance '{name}' is already stopped; skipping stop.");
-        return;
-    }
-
-    let reporter = InteractiveReporter::new();
-    if let Err(error) = provider.stop_service(&reporter).await {
-        cwarn!(
-            "Could not stop instance before trashing it: {}",
-            render(&error, verbose)
-        );
-    }
 }
 
 fn render(error: &CommandError, verbose: bool) -> String {

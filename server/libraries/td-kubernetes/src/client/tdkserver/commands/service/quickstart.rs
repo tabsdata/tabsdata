@@ -35,7 +35,7 @@ use crate::client::tdkserver::commands::service::create::create_instance;
 use crate::client::tdkserver::commands::service::delete::delete_if_possible;
 use crate::client::tdkserver::commands::service::init::{InitArguments, init_instance};
 use crate::client::tdkserver::commands::service::start::{StartArguments, command_start};
-use crate::client::tdkserver::commands::service::trash::{stop_if_possible, trash_instance_folder};
+use crate::client::tdkserver::commands::service::trash::{prepare_trash, trash_instance_folder};
 use crate::client::tdkserver::commands::service::{
     resolved_cluster, resolved_details, resolved_instance, resolved_yes,
 };
@@ -342,6 +342,7 @@ pub async fn command_quickstart(
     }
 
     let settings = SettingsContext::settings();
+    let autoconfirm = resolved_yes(yes, &settings).value;
 
     let name = resolved_instance(instance.clone(), &settings)
         .value
@@ -404,7 +405,7 @@ pub async fn command_quickstart(
         });
         if !keyed
             && !confirm(
-                resolved_yes(yes, &settings).value,
+                autoconfirm,
                 "No Anthropic or OpenAI key provided. Proceed? The assistant starts but stays disabled until a key is added.",
             )?
         {
@@ -444,10 +445,29 @@ pub async fn command_quickstart(
     }
 
     if outcome.is_err() && !preexisting && folder.exists() {
-        if provider == ClusterProvider::Kminus {
-            stop_if_possible(&name, globals.verbose).await;
+        let approved = if provider == ClusterProvider::Kminus {
+            prepare_trash(&name, autoconfirm, globals.verbose, None).await
         } else {
             delete_if_possible(&name, globals.verbose).await;
+            Ok(true)
+        };
+        let approved = match approved {
+            Ok(approved) => approved,
+            Err(error) => {
+                let detail = match error.source() {
+                    Some(source) => render_error(source, globals.verbose),
+                    None => error.status().to_string(),
+                };
+                cwarn!("{detail}");
+                false
+            }
+        };
+        if !approved {
+            cwarn!(
+                "Command 'quickstart' failed; the partially created instance was left at {}.",
+                folder.display()
+            );
+            return outcome;
         }
         match trash_instance_folder(&name, &folder) {
             Ok(destination) => {
