@@ -124,7 +124,8 @@ class AwsAccessSecretKey(Credentials):
 
     :categories: credentials
 
-    Used by the S3 connector (`S3SrcConn` / `S3DestConn`).
+    Used by the S3 connector (`S3SrcConn` / `S3DestConn`) and the AWS
+    Glue connector (`AwsGlueDestConn`).
 
     Args:
         access_key_id: The AWS access key ID.
