@@ -14,6 +14,7 @@ from pathlib import PurePosixPath
 import pytest
 
 from tabsdatax.itest.fixture import backend as common
+from tabsdatax.itest.fixture.backends.awsglue import AwsGlueDomain, AwsGlueSystem
 from tabsdatax.itest.fixture.backends.azureblob import AzureblobDomain, AzureblobSystem
 from tabsdatax.itest.fixture.backends.gcs import GCSDomain, GCSSystem
 from tabsdatax.itest.fixture.backends.s3 import (
@@ -55,6 +56,31 @@ def test_cloud_domain(provision, slug, Sys, Dom):
     assert obj.model is None and obj.data is None
     assert obj.uri.startswith(SCHEMES[slug]) and obj.uri.endswith(obj.prefix)
     assert obj.storage_options == common.load("s", Sys).storage_options
+
+
+def test_awsglue_system(provision):
+    provision.system("awsglue", "s")
+    system = common.load("s", AwsGlueSystem)
+    assert system.system_type == "awsglue" and system.system_kind == "file"
+    assert system.location.startswith("s3://")
+    assert system.storage_options
+    assert not system.catalog_id
+    assert system.catalog_definition["type"] == "glue"
+    assert system.catalog_definition["client.region"] == "r"
+
+
+def test_awsglue_domain(provision):
+    provision.system("awsglue", "s")
+    provision.domain("s", "d")
+    system = common.load("s", AwsGlueSystem)
+    domain = common.load("d", AwsGlueDomain)
+    assert domain.system_type == "awsglue"
+    assert isinstance(domain.base_path, PurePosixPath)
+    assert domain.uri.startswith("s3://")
+    assert domain.table_location == domain.uri
+    assert domain.glue_database == domain.glue_database.lower() != ""
+    assert domain.storage_options == system.storage_options
+    assert domain.catalog_definition == system.catalog_definition
 
 
 @pytest.fixture
