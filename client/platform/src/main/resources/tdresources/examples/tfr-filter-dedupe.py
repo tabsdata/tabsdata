@@ -9,7 +9,7 @@ connectors: []
 tags: [tableframe, filter, unique, dedupe]
 summary: >-
   Drops cancelled and null-keyed events, then keeps the first row per event
-  id; unique(subset=...) dedupes on the key rather than on whole rows.
+  id; unique(subset=...) deduplicates on the key rather than on whole rows.
 """
 
 from tabsdatak.api import TableFrameSpec, transformer
