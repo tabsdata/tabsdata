@@ -421,6 +421,12 @@ def publisher(
     table (a lone output may be returned bare rather than as a 1-tuple).
     A slot may be `None` when an upstream batch is absent.
 
+    A publisher is one read of its source, and runs as one unit: its
+    outputs commit in the same transaction or not at all.
+
+    Several outputs are annotated as a fixed-length tuple, one element
+    per output; `tuple[TableFrameSpec, ...]` is refused at import.
+
     Args:
         source: The `Src` to pull from; its slot cardinality fixes
             the parameter count.
@@ -474,6 +480,12 @@ def stream_publisher(
     table. Unlike the other decorators it must **not** declare a
     `ctx` parameter -- it runs inside the runtime's stream loop, not
     per-trx, so no `TransactionCtx` exists at the call boundary.
+
+    Each batch is one unit: its outputs commit in the same transaction
+    or not at all, so the tables of one stream advance together.
+
+    Several outputs are annotated as a fixed-length tuple, one element
+    per output; `tuple[TableFrameSpec, ...]` is refused at import.
 
     The batch thresholds bound the batches the function receives, the
     same way for every stream source (see `BatchThresholds`): at least one
@@ -592,8 +604,16 @@ def transformer(
     Reads `input_tables` and emits `output_tables`. The function
     takes one parameter per input table (`TableFrameSpec` or
     `TableFramesSpec`) plus an *optional* trailing `ctx: TransactionCtx`,
-    and returns one `TableFrame` per output table. Any input slot may
-    be `None` when the upstream table produced no batch.
+    and returns one `TableFrame` per output table. An input slot is
+    `None` while its table has no version with data yet.
+
+    A transformer is one computation over the tables it lists, and runs
+    as one unit: a run computes all its outputs, they commit in the
+    same transaction or not at all, and `tdk table flow` shows every
+    input upstream of each output.
+
+    Several outputs are annotated as a fixed-length tuple, one element
+    per output; `tuple[TableFrameSpec, ...]` is refused at import.
 
     Args:
         input_tables: Non-empty list of `[collection/]table[@versions]`
@@ -644,8 +664,17 @@ def subscriber(
     Reads `input_tables` and writes to `destination`. The function
     takes one `TableFrameSpec` parameter per input table plus an
     *optional* trailing `ctx: TransactionCtx`, and returns one `TableFrame`
-    per destination slot -- that return value is what gets written;
-    return `None` for a slot to write nothing.
+    per destination slot -- that return value is what gets written.
+    Return `None` for every slot to write nothing; `None` in only some
+    slots fails the run (RDP_8).
+
+    A subscriber hands all its slots to the destination in one write;
+    a destination with a `transactional` option writes them in one
+    session, which is one commit where the database can roll back
+    what the write does (see the destination's page).
+
+    Several slots are annotated as a fixed-length tuple, one element
+    per slot; `tuple[TableFrameSpec, ...]` is refused at import.
 
     Args:
         destination: The `Dest` to write to; its slot cardinality

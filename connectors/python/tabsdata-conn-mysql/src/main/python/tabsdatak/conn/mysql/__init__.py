@@ -340,6 +340,8 @@ class MySQLSrc(Src):
         transactional: When `True` (default), run all queries inside
             one transactional session; `False` opens a fresh
             autocommit connection per query.
+            The connector sets no isolation level, so the database's
+            default decides whether the queries see one snapshot.
         schema_overrides: Optional per-query column dtype hints. When
             given it must have exactly one entry per query (same length
             and order as `queries`); each entry is a

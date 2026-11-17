@@ -192,6 +192,8 @@ class MSSQLSrc(Src):
         queries: SELECT statements, one output slot per entry.
         transactional: When `True` (the default), run all queries in
             one transactional session.
+            The connector sets no isolation level, so the database's
+            default decides whether the queries see one snapshot.
         schema_overrides: Optional per-query column dtype hints; when
             given, must have the same length as `queries`.
         initial_values: Optional `{bind_name: value}` seed dict. Each

@@ -240,6 +240,8 @@ class Db2Src(Src):
         queries: SELECT statements; one output slot per query, in order.
         transactional: When `True` (default), run all queries inside
             one transactional session.
+            The connector sets no isolation level, so the database's
+            default decides whether the queries see one snapshot.
         schema_overrides: Optional per-query column dtype hints. When
             given it must have exactly one entry per query (same length
             and order as `queries`); each entry is a

@@ -9,9 +9,9 @@ connectors: []
 tags: [multi-output, split, none-output]
 summary: >-
   Routes valid payments and rejected payments to separate tables, returning
-  one value per output table. An output returned as None publishes no new
-  version of that table this run, which is how the rejects table stays
-  untouched when nothing was rejected.
+  one value per output table. An output returned as None records a version
+  without data, so readers keep the table's last data: that is how the
+  rejects table stays untouched when nothing was rejected.
 """
 
 from tabsdatak.api import TableFrameSpec, transformer
