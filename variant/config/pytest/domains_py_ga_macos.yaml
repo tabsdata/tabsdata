@@ -2,6 +2,8 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+- name: awsglue
+  sys: awsglue
 - name: azureblob
   sys: azureblob
 - name: azureblob_world_xs

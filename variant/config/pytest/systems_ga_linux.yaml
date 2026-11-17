@@ -2,6 +2,13 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+- name: awsglue
+  type: awsglue
+  bucket$: AWSGLUE__BUCKET
+  region$: AWSGLUE__REGION
+  access-key$: AWSGLUE__ACCESS_KEY
+  secret-key$: AWSGLUE__SECRET_KEY
+  sys-path$: AWSGLUE__SYS_PATH
 - name: azureblob
   type: azureblob
   container$: AZ__CONTAINER
