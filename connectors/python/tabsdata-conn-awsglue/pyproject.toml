@@ -1,0 +1,79 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+[build-system]
+requires = []
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tabsdata-conn-awsglue"
+description = "AWS Glue connector: Iceberg tables in the AWS Glue Data Catalog."
+authors = [{name = "Tabsdata Inc."}]
+keywords = [
+    "tabsdata",
+    "tabsdatak",
+    "data",
+    "tables",
+    "pub/sub",
+    "publish/subscribe",
+    "glue",
+    "iceberg",
+    "athena",
+    "aws",
+    "cloud",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Programming Language :: JavaScript",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Rust",
+    "Operating System :: OS Independent",
+]
+dynamic = [
+    "version",
+    "license",
+    "readme",
+    "requires-python",
+    "dependencies",
+    "optional-dependencies",
+]
+
+[project.urls]
+Homepage = "https://tabsdata.com"
+Documentation = "https://docs.tabsdata.com"
+Source = "https://github.com/tabsdata/tabsdata"
+
+[tool.pytest.ini_options]
+log_level = "DEBUG"
+addopts = "--import-mode=importlib"
+consider_namespace_packages = true
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+    "ignore::pytest.PytestUnknownMarkWarning",
+    "ignore::authlib.deprecate.AuthlibDeprecationWarning",
+]
+
+[tool.coverage.html]
+directory = "coverage_html_report"
+
+[tool.coverage.report]
+exclude_also = [
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.licensecheck]
+using = "requirements:requirements.txt"
+
+[tool.ruff]
+extend = "../../../pyproject.toml"
+
+[tool.tabsdata]
+name = "tabsdata-conn-awsglue"
+display = "AWS Glue Connector"

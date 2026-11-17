@@ -1,0 +1,6 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+-r requirements/requirements-dev-first-party.txt
+-r requirements/requirements-dev-third-party.txt

@@ -1,0 +1,5 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+pyiceberg[glue]==0.12.0
