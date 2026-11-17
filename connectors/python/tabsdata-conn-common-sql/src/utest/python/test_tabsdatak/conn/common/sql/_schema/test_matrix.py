@@ -38,6 +38,10 @@ DESIGN = {
         d: ("native", "strict", "strict", "update/native", "INVALID", "INVALID")
         for d in ("append", "replace", "merge")
     },
+    "awsglue": {
+        "append": _WAREHOUSE["append"],
+        "replace": _WAREHOUSE["replace"],
+    },
     "clickhouse": _SQL,
     "starrocks": _SQL,
     "postgres": _SQL,
@@ -76,7 +80,7 @@ _CASES = [
 def test_the_matrix_covers_exactly_the_designed_destinations():
     assert set(matrix.MATRIX) == set(DESIGN)
     for destination, entry in matrix.MATRIX.items():
-        assert set(entry.rows) == set(matrix.DISPOSITIONS), destination
+        assert set(entry.rows) == set(DESIGN[destination]), destination
 
 
 @pytest.mark.parametrize("destination,disposition", _CASES)
@@ -185,6 +189,10 @@ def test_a_druid_merge_says_why_it_is_impossible():
     assert "Druid cannot merge: no keyed upsert" in _message("druid", "merge")
 
 
+def test_a_disposition_a_destination_leaves_out_is_refused():
+    assert "AWS Glue does not merge" in _message("awsglue", "merge")
+
+
 def test_an_unknown_disposition_is_refused():
     assert "no such disposition" in _message("postgres", "upsert")
 
@@ -243,7 +251,7 @@ def test_the_markdown_marks_the_notes_where_the_design_places_them():
     assert "planned · semantics to define ⁵" in lines[("ClickHouse", "merge")]
     assert "⁶" in lines[("StarRocks", "merge")]
     assert "impossible · no keyed upsert" in lines[("Druid", "merge")]
-    assert len(lines) == 3 * len(DESIGN)
+    assert len(lines) == len(_CASES)
 
 
 def test_every_mark_names_a_note_and_every_note_is_marked():

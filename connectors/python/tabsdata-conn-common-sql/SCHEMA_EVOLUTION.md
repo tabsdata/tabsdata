@@ -54,6 +54,8 @@ How to read the table:
 | Databricks | append | native | offered | strict | strict | update · native | INVALID | INVALID |
 | Databricks | replace | native | offered | strict | strict | update · native | INVALID | INVALID |
 | Databricks | merge | native | offered | strict | strict | update · native | INVALID | INVALID |
+| AWS Glue | append | native | offered | strict | strict | update · native | INVALID | INVALID |
+| AWS Glue | replace | native | offered | strict | strict | update · native | INVALID | INVALID |
 | ClickHouse | append | iceberg | offered | strict | strict | update · iceberg | INVALID | INVALID |
 | ClickHouse | replace | iceberg | offered | strict | strict | update · iceberg | INVALID | INVALID |
 | ClickHouse | merge | PLANNED | planned · semantics to define ⁵ | PLANNED | PLANNED | PLANNED | PLANNED | PLANNED |

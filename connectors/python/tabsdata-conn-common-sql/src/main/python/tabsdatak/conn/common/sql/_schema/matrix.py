@@ -129,6 +129,13 @@ MATRIX: dict[str, Destination] = {
         name="Databricks",
         rows={disposition: _offered("native") for disposition in DISPOSITIONS},
     ),
+    "awsglue": Destination(
+        name="AWS Glue",
+        rows={
+            "append": _offered("native"),
+            "replace": _offered("native"),
+        },
+    ),
     "clickhouse": Destination(
         name="ClickHouse",
         rows={
@@ -198,7 +205,12 @@ def resolve(
     entry = MATRIX[destination]
     row = entry.rows.get(disposition)  # type: ignore[arg-type]
     if row is None:
-        raise _refuse(entry, disposition, policy, engine, "no such disposition")
+        reason = (
+            f"{entry.name} does not {disposition}"
+            if disposition in DISPOSITIONS
+            else "no such disposition"
+        )
+        raise _refuse(entry, disposition, policy, engine, reason)
     if row.status == "planned":
         raise _refuse(
             entry,
@@ -321,11 +333,12 @@ def docstring_table(destination: str) -> str:
     """The ASCII table of ``destination``'s rows, one column per
     `if_table_exists`, and the notes that apply to it, for its docstring."""
     entry = MATRIX[destination]
-    rows = [entry.rows[d] for d in DISPOSITIONS]
+    dispositions = [d for d in DISPOSITIONS if d in entry.rows]
+    rows = [entry.rows[d] for d in dispositions]
     body = [["engine", *(_engine_cell(row) for row in rows)]]
     body += [[written, *(cell(row, written) for row in rows)] for written in WRITTEN]
-    lines = _grid(["", *DISPOSITIONS], body)
-    for disposition, row in zip(DISPOSITIONS, rows):
+    lines = _grid(["", *dispositions], body)
+    for disposition, row in zip(dispositions, rows):
         if row.status != "offered":
             lines.append("")
             lines += textwrap.wrap(
@@ -452,7 +465,9 @@ def markdown() -> str:
     ]
     for entry in MATRIX.values():
         for disposition in DISPOSITIONS:
-            row = entry.rows[disposition]
+            row = entry.rows.get(disposition)
+            if row is None:
+                continue
             engine = _engine_cell(row)
             if row.explicit:
                 engine = f"{engine} (explicit)"
