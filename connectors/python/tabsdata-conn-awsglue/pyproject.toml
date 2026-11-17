@@ -49,6 +49,9 @@ Homepage = "https://tabsdata.com"
 Documentation = "https://docs.tabsdata.com"
 Source = "https://github.com/tabsdata/tabsdata"
 
+[project.entry-points."tabsdatak.connectors"]
+dest_awsglue = "tabsdatak.conn.awsglue._plugin:AWSGLUE_DEST"
+
 [tool.pytest.ini_options]
 log_level = "DEBUG"
 addopts = "--import-mode=importlib"

@@ -216,14 +216,22 @@ class AwsGlueDest(Dest):
     Athena, and with any other engine that reads the catalog (Amazon
     Redshift Spectrum, Amazon EMR, AWS Glue jobs, Spark, Trino).
 
-    A write is one Iceberg snapshot per table: readers see either the
-    table as it was or the whole batch, never part of it. A table that
-    does not exist is created from the batch, under the connection's
-    `bucket` and `base_path`; its database must already exist.
+    A write is one Iceberg commit per table: readers see either the
+    table as it was or the whole batch, never part of it. The batch is
+    streamed to S3 as one Parquet file in the table's `data` folder and
+    then added to the table. A table that does not exist is created from
+    the batch, under the connection's `bucket` and `base_path`; its
+    database must already exist. Only unpartitioned tables are written.
 
     A write is idempotent. The snapshot it commits records the id of the
     trx it belongs to, and a rerun that finds a snapshot of that trx in
     the table writes nothing.
+
+    Columns are written in the types Iceberg has: 8- and 16-bit and
+    unsigned integers as the next wider signed integer, timestamps in
+    microseconds (a zoned one in UTC), and categorical and enum values
+    as strings. A time, duration or all-null (`Null`) column has no
+    Iceberg type and is refused; cast it in the function.
 
     Args:
         tables: Target table names, one write slot per entry. Each is
@@ -237,10 +245,11 @@ class AwsGlueDest(Dest):
             expired.
         schema_evolution: What a write does when the batch's columns differ from
             the table's, a replace included. `"strict"` (the default) refuses a
-            batch with a column the table lacks or a wider type, before a replace
-            empties the table; `"update"` adds the column and widens the type,
-            and refuses a change Iceberg cannot make. A column the batch lacks
-            is read NULL either way.
+            batch with a column the table lacks, and one with a wider type
+            unless its values fit the table's, before a replace empties the
+            table; `"update"` adds the column and widens the type, and refuses
+            a change Iceberg cannot make. A column the batch lacks is read NULL
+            either way.
         dest_cfg: Optional connector config; the only supported key is
             `awsglue.logging_level`.
 

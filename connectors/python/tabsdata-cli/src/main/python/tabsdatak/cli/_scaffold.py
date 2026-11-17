@@ -148,7 +148,10 @@ _SPECIAL = {"tabsdatak.conn.dev:Data": _datagen_data}
 
 # What the field types alone do not tell: a name format stricter than a bare
 # placeholder, or the value a required field should start from.
-_PLACEHOLDERS = {"tabsdatak.conn.bigquery:BigQueryDest": "`<value>`"}
+_PLACEHOLDERS = {
+    "tabsdatak.conn.awsglue:AwsGlueDest": "value",
+    "tabsdatak.conn.bigquery:BigQueryDest": "`<value>`",
+}
 _CDC_START = {"start_from": '"full"'}
 _VALUES = {
     "tabsdatak.conn.db2:Db2CdcStreamSrc": _CDC_START,
