@@ -6,6 +6,7 @@ tabsdata-api[deps]==2.4.0
 tabsdata-backend[deps]==2.4.0
 tabsdata-cli[deps]==2.4.0
 tabsdata-common[deps]==2.4.0
+tabsdata-conn-awsglue[deps]==2.4.0
 tabsdata-conn-azureblob[deps]==2.4.0
 tabsdata-conn-bigquery[deps]==2.4.0
 tabsdata-conn-clickhouse[deps]==2.4.0

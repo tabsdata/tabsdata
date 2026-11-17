@@ -7,6 +7,7 @@
 -r ../connectors/python/tabsdata-backend/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-cli/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-common/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-awsglue/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-conn-azureblob/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-conn-bigquery/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-conn-clickhouse/requirements/requirements-third-party.txt

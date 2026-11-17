@@ -61,6 +61,7 @@ TABSDATA_CONNECTORS_NAMES: tuple[str, ...] = (
     "tabsdata-backend",
     "tabsdata-cli",
     "tabsdata-common",
+    "tabsdata-conn-awsglue",
     "tabsdata-conn-azureblob",
     "tabsdata-conn-bigquery",
     "tabsdata-conn-clickhouse",
