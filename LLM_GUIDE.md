@@ -159,6 +159,7 @@ variable on the client.
 | Salesforce | `tabsdatak.conn.salesforce` | `SalesforceSrc`, `SalesforceReportSrc` | — | `queries` / `reports` | — |
 | BigQuery | `tabsdatak.conn.bigquery` | — | `BigQueryDest` | — | `tables` |
 | Snowflake | `tabsdatak.conn.snowflake` | — | `SnowflakeDest` | — | `tables` |
+| AWS Glue (Iceberg tables, queryable from Amazon Athena) | `tabsdatak.conn.awsglue` | — | `AwsGlueDest` | — | `tables` |
 | ClickHouse | `tabsdatak.conn.clickhouse` | — | `ClickHouseDest` | — | `tables` |
 | Druid | `tabsdatak.conn.druid` | — | `DruidDest` | — | `tables` |
 | StarRocks | `tabsdatak.conn.starrocks` | — | `StarRocksDest` | — | `tables` |
@@ -188,7 +189,7 @@ Credentials go in the connection, never in flow code. The types live in
 | Type | For |
 |------|-----|
 | `UserPassword` | SQL databases, MongoDB, Salesforce |
-| `AwsAccessSecretKey` | S3, and S3 staging locations |
+| `AwsAccessSecretKey` | S3, AWS Glue, and S3 staging locations |
 | `GCPJson`, `GCPHmac` | GCS, BigQuery |
 | `AzureAccountKey` | Azure Blob |
 

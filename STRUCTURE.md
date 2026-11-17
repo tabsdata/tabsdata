@@ -59,6 +59,7 @@ Warehouses and analytical stores:
 - `databricks` → `DatabricksSrc`, `DatabricksDest`
 - `bigquery` → `BigQueryDest`
 - `snowflake` → `SnowflakeDest`
+- `awsglue` → `AwsGlueDest` (Iceberg tables in the AWS Glue Data Catalog, queryable from Amazon Athena)
 - `clickhouse` → `ClickHouseDest`
 - `druid` → `DruidDest`
 - `starrocks` → `StarRocksDest`

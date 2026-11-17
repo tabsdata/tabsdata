@@ -33,6 +33,7 @@ the ones they need.
 | `tabsdata-conn-starrocks`    | `tabsdatak.conn.starrocks`          | `…-api`, `…-conn-common` |
 | `tabsdata-conn-druid`        | `tabsdatak.conn.druid`              | `…-api`, `…-conn-common` |
 | `tabsdata-conn-snowflake`    | `tabsdatak.conn.snowflake`          | `…-api`, `…-conn-common` |
+| `tabsdata-conn-awsglue`      | `tabsdatak.conn.awsglue`            | `…-api`, `…-conn-common`, `…-conn-common-file`, `…-conn-common-sql` |
 | `tabsdata-conn-bigquery`     | `tabsdatak.conn.bigquery`           | `…-api`, `…-conn-common` |
 | `tabsdata-conn-databricks`   | `tabsdatak.conn.databricks`         | `…-api`, `…-conn-common` |
 | `tabsdata-conn-mongodb`      | `tabsdatak.conn.mongodb`            | `…-api`, `…-conn-common` |
@@ -111,6 +112,7 @@ connectors/python/
 ├── tabsdata-conn-starrocks/
 ├── tabsdata-conn-druid/
 ├── tabsdata-conn-snowflake/
+├── tabsdata-conn-awsglue/
 ├── tabsdata-conn-bigquery/
 ├── tabsdata-conn-databricks/
 ├── tabsdata-conn-mongodb/

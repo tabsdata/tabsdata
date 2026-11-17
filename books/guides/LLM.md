@@ -93,6 +93,7 @@ LLM authoring traps #12" below for the full asymmetry rundown.
 | IBM Db2 | `tabsdatak.conn.db2` | src + dest | `queries: list[str]` | `tables: list[str]` |
 | BigQuery | `tabsdatak.conn.bigquery` | dest only | — | `tables: list[str]` |
 | Snowflake | `tabsdatak.conn.snowflake` | dest only | — | `tables: list[str]` |
+| AWS Glue | `tabsdatak.conn.awsglue` | dest only | — | `tables: list[str]` |
 | Databricks | `tabsdatak.conn.databricks` | src + dest | `queries: list[str]` | `tables: list[str]` |
 | ClickHouse | `tabsdatak.conn.clickhouse` | dest only | — | `tables: list[str]` |
 | Druid | `tabsdatak.conn.druid` | dest only | — | `tables: list[str]` |
@@ -418,8 +419,8 @@ has no trailing `/` (`"/ch"`). A `GCSLocation` takes `bucket`,
 
 These connectors **do not have** a `<V>Src`:
 
-* `bigquery`, `snowflake`, `clickhouse`, `druid`, `starrocks`,
-  `mongodb` — dest-only.
+* `bigquery`, `snowflake`, `awsglue`, `clickhouse`, `druid`,
+  `starrocks`, `mongodb` — dest-only.
 
 These do not have a `<V>Dest`:
 
@@ -495,7 +496,7 @@ the same shorthand does **not** work everywhere:
 
 | Connector kind | Src field | Dest field |
 |---|---|---|
-| SQL / warehouse (MySQL, Postgres, Oracle, MSSQL, Db2, Databricks, ClickHouse, Druid, StarRocks, BigQuery, Snowflake) | `queries: list[str]` (SQL strings, src side) | `tables: list[str]` (target table names) |
+| SQL / warehouse (MySQL, Postgres, Oracle, MSSQL, Db2, Databricks, ClickHouse, Druid, StarRocks, BigQuery, Snowflake, AWS Glue) | `queries: list[str]` (SQL strings, src side) | `tables: list[str]` (target table names) |
 | File / object storage (LocalFile, S3, GCS, AzureBlob) | `paths: list[str]` (file / object / glob paths) | `paths: list[str]` (no trailing `/`) |
 | MongoDB | — (dest-only) | `collections_with_ids: list[tuple[str, str \| None]]` (collection name + id-column name; `None` to auto-generate) |
 | Salesforce | `SalesforceSrc.queries: list[str]` (SOQL, exactly 1 entry today) and `SalesforceReportSrc.reports: list[str]` (exactly 1 entry today) | — (src-only) |
