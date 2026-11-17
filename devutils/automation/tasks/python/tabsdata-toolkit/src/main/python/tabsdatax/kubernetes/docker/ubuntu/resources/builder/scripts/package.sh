@@ -45,7 +45,7 @@ rm -rf "${EXTRACT_FOLDER}"
 echo "Installing tabsdata from devpi into staging environment..."
 uv venv --seed --managed-python --python 3.12.13 "${STAGE_VENV}"
 PIP_INDEX_URL="${DEVPI_URL}" PIP_EXTRA_INDEX_URL="${DEVPI_URL}" UV_DEFAULT_INDEX="${DEVPI_URL}" UV_INDEX="${DEVPI_URL}" \
-    uv pip install --python "${STAGE_VENV}/bin/python" "tabsdata[all]"
+    uv pip install --python "${STAGE_VENV}/bin/python" tabsdata
 
 echo "Creating runtime venvs via tdkserver quickstart..."
 source "${STAGE_VENV}/bin/activate"

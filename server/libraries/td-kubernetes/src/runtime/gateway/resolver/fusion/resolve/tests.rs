@@ -895,7 +895,7 @@ fn system_null_renders_as_a_yaml_null() {
 
 #[test]
 fn tabsdata_version_splices_into_a_pinned_requirement() {
-    let template = "package: tabsdata[all]==${{system:tdk_tabsdata_version}}\n";
+    let template = "package: tabsdata==${{system:tdk_tabsdata_version}}\n";
     let system = SystemValues {
         tabsdata_version: Some("2.0.0".to_owned()),
         ..SystemValues::default()
@@ -913,7 +913,7 @@ fn tabsdata_version_splices_into_a_pinned_requirement() {
         None,
     )
     .expect("resolve version");
-    assert!(outcome.rendered.contains("tabsdata[all]==2.0.0"));
+    assert!(outcome.rendered.contains("tabsdata==2.0.0"));
 }
 fn resolve_pair(
     first: (&str, &str, &str),

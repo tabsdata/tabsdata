@@ -77,8 +77,8 @@ PACKAGE_PREFIX: str = "tabsdata"
 CACHE_CLEAN_TIMEOUT: int = 120
 INDEX_LINK_PATTERN: str = r">\s*(tabsdata[A-Za-z0-9._-]*)\s*<"
 
-PACKAGES_TD: list[str] = ["tabsdata[all]"]
-PACKAGES_FN: list[str] = ["tabsdata[all]"]
+PACKAGES_TD: list[str] = ["tabsdata"]
+PACKAGES_FN: list[str] = ["tabsdata"]
 APT_GET_EXECUTABLE: str = "apt-get"
 
 LIBEXEC_FOLDER: str = os.path.join("libexec", "tabsdata")

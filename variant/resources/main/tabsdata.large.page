@@ -57,11 +57,11 @@
 > Installing tabsdata on its own gives you only a part of it.[/]
 
 [text]  Install everything with[/]
-[text]      [/][link] pip install "tabsdata\[all]"[/]
-[text]    or[/][link] uv pip install "tabsdata\[all]"[/]
+[text]      [/][link] pip install tabsdata[/]
+[text]    or[/][link] uv pip install tabsdata[/]
 [text]  Or pin a version with[/]
-[text]      [/][link] pip install "tabsdata\[all]==$pin"[/]
-[text]    or[/][link] uv pip install "tabsdata\[all]==$pin"[/]
+[text]      [/][link] pip install "tabsdata==$pin"[/]
+[text]    or[/][link] uv pip install "tabsdata==$pin"[/]
 
 > [text]  If [term]tdk[/term], [term]tdkserver[/term] or any other component is missing, one of
 > those packages is not installed. Under pyenv a freshly installed command can stay

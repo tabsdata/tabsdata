@@ -108,7 +108,7 @@ Supported platforms:
 * Kubernetes (AWS EKS, Azure AKS & Google GKE - latest)
 
 ```
-pip install "tabsdata[all]"
+pip install tabsdata
 ```
 
 ### Running Tabsdata Locally

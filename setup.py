@@ -34,7 +34,6 @@ from tabsdatax.setup.common.platform import (
     get_target_release_folder,
     next_minor_version,
 )
-from tabsdatax.setup.common.requirements import read_requirements
 from tabsdatax.setup.tabsdata.assets import check_third_party
 from tabsdatax.setup.tabsdata.binaries import collect_group_datafiles
 from tabsdatax.setup.tabsdata.build import (
@@ -48,7 +47,10 @@ from tabsdatax.setup.tabsdata.editable import (
     create_editable_binary_symlinks,
     create_editable_libexec_links,
 )
-from tabsdatax.setup.tabsdata.requirements import build_extras_require
+from tabsdatax.setup.tabsdata.requirements import (
+    build_extras_require,
+    build_install_requires,
+)
 from tabsdatax.setup.tabsdata.scripts import load_console_scripts
 
 # noinspection DuplicatedCode
@@ -320,10 +322,8 @@ with global_spinner("Building package 'tabsdata' (Tabsdata)..."):
             ).replace(os.sep, "/"),
         ),
         python_requires=python_version_spec,
-        install_requires=read_requirements(
-            "requirements.txt", ignore_tabsdata_packages=False
-        ),
-        extras_require=build_extras_require(os.getcwd(), TABSDATA_VERSION),
+        install_requires=build_install_requires(os.getcwd(), TABSDATA_VERSION),
+        extras_require=build_extras_require(os.getcwd()),
         cmdclass={
             "build": create_custom_build_class(create_main_custom_build_hook(ROOT)),
             "bdist_egg": create_custom_bdist_egg_class(),

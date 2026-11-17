@@ -23,7 +23,7 @@ from tabsdatak.common._interpreter.python.venv import PythonEnvironment
 PYTHON_VERSION = "3.12.13"
 RELEASE_INDEX = "https://pypi.tabsdata.com/simple/"
 RELEASE_PACKAGES = (
-    "tabsdata[all]",
+    "tabsdata",
     "tabsdata-agent",
 )
 EXTRA_PACKAGES = ("kubernetes",)

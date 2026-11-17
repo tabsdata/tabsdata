@@ -79,7 +79,7 @@ VENV_Z="z"
 UV_INSTALLER="https://astral.sh/uv/install.sh"
 
 ZSTANDARD_PACKAGE="zstandard"
-TABSDATA_PACKAGE="tabsdata[all]"
+TABSDATA_PACKAGE="tabsdata"
 
 ARCHIVE_MODULE="tabsdatak.common._interpreter.python.archive"
 
