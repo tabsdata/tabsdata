@@ -3,3 +3,10 @@
 #
 
 schema: 1
+assets:
+  venvbuilder.py:
+    venvbuilder.py:
+      action: replace
+  venvbuilder.sh:
+    venvbuilder.sh:
+      action: replace
