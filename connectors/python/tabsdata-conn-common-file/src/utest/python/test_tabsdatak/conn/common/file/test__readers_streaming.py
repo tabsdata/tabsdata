@@ -38,6 +38,7 @@ GROWTH_BASE = 128 * MEBIBYTE
 GROWTH_PER_THREAD = 12 * MEBIBYTE
 ROUNDS = 2
 CHILD_SECONDS = 900
+UPLOAD_TIMEOUT = "600s"
 LAND = Path(__file__).parent / "children" / "land.py"
 
 ROWS_PER_BLOCK = 20000
@@ -131,7 +132,7 @@ def landed(domain, tmp_path: Path, file_format: str, size: int):
     rows = write(local, size)
     root = f"{domain.uri.rstrip('/')}/readers-{uuid.uuid4().hex}"
     options = dict(domain.storage_options)
-    store = FileStore(root, options)
+    store = FileStore(root, {**options, "timeout": UPLOAD_TIMEOUT})
     with open(local, "rb") as content:
         store.store().put(local.name, content)
     local.unlink()
@@ -162,7 +163,13 @@ def landed(domain, tmp_path: Path, file_format: str, size: int):
 
 
 @emulated
-@pytest.mark.parametrize("emulator", EMULATORS)
+@pytest.mark.parametrize(
+    "emulator",
+    [
+        pytest.param(emulator, marks=pytest.mark.xdist_group(f"readers-{emulator}"))
+        for emulator in EMULATORS
+    ],
+)
 @pytest.mark.parametrize("file_format", sorted(FORMATS))
 def test_a_large_file_lands_in_bounded_memory_that_does_not_grow_with_it(
     domain_azurebloblocal: AzureBlobLocalDomain,
