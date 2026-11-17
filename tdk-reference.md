@@ -69,8 +69,10 @@ Global options
                          Aborting a prompt (Ctrl+C, Esc, end of input) exits
                          with status 1.
       --full             With --help: print the full help for every command and
-                         subcommand. Pair with --format text|json (default: text),
-                         e.g. `tdk --help --full --format json`.
+                         subcommand, or, after a group's name, for those
+                         under it. Pair with --format text|json (default:
+                         text), e.g. `tdk --help --full --format json`. A help
+                         without --full ignores --format.
   -x                     With a help: show the internal commands and options
                          too, in any position, e.g. `tdk -x fn trigger --help`
                          or `tdk -x fn`. A command that runs refuses it.

@@ -26,7 +26,7 @@ from tabsdatak.cli._errors import (
     TdkException,
     classify,
 )
-from tabsdatak.cli._help_pages import build_full_help, full_help_page
+from tabsdatak.cli._help_pages import HELP_FLAGS, full_help_page, full_help_whole
 from tabsdatak.cli._internal import SHOW_INTERNAL_FLAG, showing_internal
 from tabsdatak.cli._machine import machine
 from tabsdatak.cli._registry import cli_extensions, collect_cli_commands
@@ -99,6 +99,7 @@ NO_UNDERLINE = "[underline]"
 
 HELP_WIDTH = 100
 NO_PROMPT_FLAG = "--no-prompt"
+_FORMAT_FLAGS = ("-o", "--format")
 
 _help_width = None if sys.stdout.isatty() else HELP_WIDTH
 click.rich_click.WIDTH = _help_width
@@ -185,7 +186,7 @@ def _asks_for_document(argv: list) -> bool:
     document too."""
     head = argv[: argv.index("--")] if "--" in argv else argv
     for index, arg in enumerate(head):
-        if arg in ("-o", "--format"):
+        if arg in _FORMAT_FLAGS:
             if index + 1 < len(head) and head[index + 1] == DOCUMENT_FORMAT:
                 return True
         elif arg in (f"--format={DOCUMENT_FORMAT}", f"-o{DOCUMENT_FORMAT}"):
@@ -214,17 +215,36 @@ def _echo(document) -> None:
     click.echo(serialize(document, DOCUMENT_FORMAT))
 
 
-def _full_output_format(argv: list) -> str:
-    fmt = "text"
-    for flag in ("--format", "-o"):
-        if flag in argv:
-            index = argv.index(flag)
-            if index + 1 < len(argv):
-                fmt = argv[index + 1]
-    if fmt not in ("text", "json"):
-        click.echo(f"Invalid --format '{fmt}'; expected 'text' or 'json'.", err=True)
-        raise SystemExit(2)
-    return fmt
+def _asks_for_help(argv: list) -> bool:
+    head = argv[: argv.index("--")] if "--" in argv else argv
+    return any(arg in HELP_FLAGS[:2] for arg in head)
+
+
+def _without_format(argv: list) -> list:
+    head = argv[: argv.index("--")] if "--" in argv else argv
+    kept, skip = [], False
+    for arg in head:
+        if skip:
+            skip = False
+        elif arg in _FORMAT_FLAGS:
+            skip = True
+        elif not arg.startswith(("--format=", "-o")):
+            kept.append(arg)
+    return [*kept, *argv[len(head) :]]
+
+
+def _full_help(root: click.Group, argv: list):
+    try:
+        click.echo(full_help_whole(root, argv))
+    except click.ClickException as error:
+        error.show()
+        raise SystemExit(error.exit_code) from None
+    except OSError as error:
+        if not _reader_gone(error):
+            raise
+        _drop_stdout()
+        raise SystemExit(1) from None
+    raise SystemExit(0)
 
 
 class _RootGroup(TdkGroup):
@@ -232,10 +252,11 @@ class _RootGroup(TdkGroup):
     CLI extensions (:func:`tabsdatak.cli._registry.cli_extension`), hoists
     ``--no-prompt`` and intercepts ``--help --full`` (before Click's own
     ``--help`` handling) to print the recursive full help for every command
-    and subcommand; a machine run, or a person's ``jsonb``, gets the commands
-    under the group its leading words name, paged (:func:`full_help_page`).
-    ``--full`` is only honored together with ``--help``, and ``--format`` only
-    together with ``--full``: ``tdk --help [--full [--format FORMAT]]``.
+    and subcommand under the group its leading words name; a machine run, or
+    a person's ``jsonb``, gets them paged (:func:`full_help_page`).
+    ``--full`` is only honored together with ``--help``, and a help takes
+    ``--format`` only together with ``--full``, ignoring it otherwise:
+    ``tdk [GROUP] --help [--full [--format FORMAT]]``.
 
     ``invoke`` gives every failure its canonical exit code
     (:mod:`tabsdatak.cli._errors`)."""
@@ -265,20 +286,15 @@ class _RootGroup(TdkGroup):
         run = machine()
         document = run is None and _asks_for_document(argv)
         if ("--help" in argv or "-h" in argv) and "--full" in argv:
+            asked = [arg for arg in argv if arg != NO_PROMPT_FLAG]
             if run is not None:
-                full_help_page(self, argv)
+                full_help_page(self, asked)
                 return 0
             if document:
-                return _documented(argv, lambda: full_help_page(self, argv))
-            output = _full_output_format(argv)
-            try:
-                click.echo(build_full_help(self, output))
-            except OSError as error:
-                if not _reader_gone(error):
-                    raise
-                _drop_stdout()
-                raise SystemExit(1) from None
-            raise SystemExit(0)
+                return _documented(argv, lambda: full_help_page(self, asked))
+            _full_help(self, asked)
+        if _asks_for_help(argv):
+            argv = _without_format(argv)
         args = {**kwargs, "args": _hoist_no_prompt(argv)}
         if document:
             main = super().main
@@ -414,8 +430,9 @@ def _defer_profile_option(group: click.Group):
     expose_value=False,
     help=(
         "With --help, print the full help for every command and subcommand, "
-        "then exit. Optionally add '--format text|json' (default: text): "
-        "'tdk --help [--full [--format FORMAT]]'."
+        "then exit; after a group's name, for the commands under it. "
+        "Optionally add '--format text|json' (default: text): "
+        "'tdk [GROUP] --help [--full [--format FORMAT]]'."
     ),
 )
 @click.option(

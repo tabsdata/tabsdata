@@ -190,6 +190,40 @@ def test_full_help_rejects_unknown_output():
     assert result.exit_code == 2
 
 
+@pytest.mark.parametrize("output", ["text", "json"])
+def test_full_help_after_a_group_is_that_groups(output):
+    result = CliRunner().invoke(cli, ["fn", "--help", "--full", "--format", output])
+    assert result.exit_code == 0, result.output
+    assert "tdk fn get" in result.output
+    assert "tdk collection get" not in result.output
+
+
+@pytest.mark.parametrize("fmt", [[], ["-o", "json"], ["-o", "jsonb"]])
+def test_full_help_takes_no_prompt_in_any_position(fmt):
+    plain = CliRunner().invoke(cli, ["fn", "--help", "--full", *fmt])
+    for argv in (["--no-prompt", "fn"], ["fn", "--no-prompt"]):
+        result = CliRunner().invoke(cli, [*argv, "--help", "--full", *fmt])
+        assert result.exit_code == 0, result.output
+        assert result.output == plain.output
+
+
+def test_full_help_of_an_unknown_group_is_a_usage_error():
+    result = CliRunner().invoke(cli, ["nope", "--help", "--full"])
+    assert result.exit_code == 2
+    assert "No command 'nope'" in result.output
+
+
+@pytest.mark.parametrize(
+    "fmt", [["--format", "jsonb"], ["-o", "json"], ["--format=yaml"], ["-ojson"]]
+)
+@pytest.mark.parametrize("command", [[], ["fn"], ["fn", "get"]])
+def test_a_plain_help_ignores_format(command, fmt):
+    plain = CliRunner().invoke(cli, [*command, "--help"])
+    result = CliRunner().invoke(cli, [*command, "--help", *fmt])
+    assert result.exit_code == 0, result.output
+    assert result.output == plain.output
+
+
 def test_full_help_marks_options_required_or_optional():
     # Text form tags every option; the tree carries the same as a boolean.
     text = CliRunner().invoke(cli, ["--help", "--full"]).output

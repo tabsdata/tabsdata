@@ -2,10 +2,11 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""``--help --full`` as the ``jsonb`` document, which a machine run always
-gives: the commands under the group its leading words name, as a listing tdk
-holds itself, paged like any other (``--max-result``, ``--cursor``,
-``--fields``, a machine run's ``max_bytes``)."""
+"""``--help --full``: the commands under the group its leading words name.
+As the ``jsonb`` document, which a machine run always gives, they are a
+listing tdk holds itself, paged like any other (``--max-result``,
+``--cursor``, ``--fields``, a machine run's ``max_bytes``); as ``text`` or
+``json`` they are that group's whole tree."""
 
 from __future__ import annotations
 
@@ -27,6 +28,7 @@ from tabsdatak.cli.cli_utils import (
 )
 
 HELP_FLAGS = ("--help", "-h", "--full")
+FULL_HELP_FORMATS = ("text", "json")
 LESS_HINT = (
     "Ask for less with '--fields path,help', a one-line index, or a group's "
     "commands with 'tdk <group> --help --full'."
@@ -41,17 +43,7 @@ LESS_HINT = (
 @click.pass_context
 def full_help(ctx: click.Context, words: tuple[str, ...]):
     """The commands under a group, each with its options and capability."""
-    group = _root_context(ctx.obj["root"])
-    for word in words:
-        command = group.command
-        sub = (
-            command.get_command(group, word)
-            if isinstance(command, click.Group)
-            else None
-        )
-        if sub is None or sub.hidden:
-            raise TdkException("usage", f"No command '{' '.join(words)}'.")
-        group = click.Context(sub, info_name=word, parent=group)
+    group = _named(ctx.obj["root"], words)
     with concealing_internal():
         tree = _full_help_node(group)
     page, truncated = take(ctx, list(_leaves(tree)))
@@ -64,16 +56,53 @@ def full_help(ctx: click.Context, words: tuple[str, ...]):
     render_list(ctx, items=page, truncated=truncated, cut_hint=less)
 
 
+@click.command(add_help_option=False)
+@click.argument("words", nargs=-1)
+@click.option(
+    "-o",
+    "--format",
+    "output",
+    type=click.Choice(FULL_HELP_FORMATS),
+    default=FULL_HELP_FORMATS[0],
+)
+@click.pass_context
+def full_help_tree(ctx: click.Context, words: tuple[str, ...], output: str):
+    return build_full_help(ctx.obj["root"], output, words)
+
+
 def full_help_page(root: click.Group, argv: list[str]) -> None:
     """Run :func:`full_help` for ``argv``, a ``--help --full`` invocation, on
     ``root``. Rendered as a machine run or a person's ``jsonb`` document
     renders a listing."""
-    full_help.main(
+    _run(full_help, root, argv)
+
+
+def full_help_whole(root: click.Group, argv: list[str]) -> str:
+    return _run(full_help_tree, root, argv)
+
+
+def _run(command: click.Command, root: click.Group, argv: list[str]):
+    return command.main(
         args=[arg for arg in argv if arg not in HELP_FLAGS],
         prog_name="tdk --help --full",
         standalone_mode=False,
         obj={"root": root},
     )
+
+
+def _named(root: click.Group, words: tuple[str, ...]) -> click.Context:
+    named = _root_context(root)
+    for word in words:
+        command = named.command
+        sub = (
+            command.get_command(named, word)
+            if isinstance(command, click.Group)
+            else None
+        )
+        if sub is None or sub.hidden:
+            raise TdkException("usage", f"No command '{' '.join(words)}'.")
+        named = click.Context(sub, info_name=word, parent=named)
+    return named
 
 
 def _leaves(node: dict):
@@ -157,21 +186,25 @@ def _full_help_text(node: dict, lines: list | None = None) -> str:
     return "\n".join(lines)
 
 
-def build_full_help(root, output: str = "text") -> str:
-    """Render the help for ``root`` and every command/subcommand under it.
+def build_full_help(root, output: str = "text", words: tuple[str, ...] = ()) -> str:
+    """Render the help for the command ``words`` name under ``root``, ``root``
+    itself by default, and every command/subcommand under it.
 
     Each option and argument is tagged ``(required)`` or ``(optional)`` in the
     text form, and carries a ``required`` boolean in the json form.
 
     ``output`` is ``"text"`` (a flat, indented listing) or ``"json"`` (a nested
     tree of ``{name, path, help, options, arguments, commands}`` objects, to
-    which each CLI extension adds)."""
+    which each CLI extension adds, what it says of the root only on the
+    root)."""
+    named = _named(root, words)
     with concealing_internal():
-        tree = _full_help_node(_root_context(root))
+        tree = _full_help_node(named)
     if output == "json":
-        commands = tree.pop("commands", [])
-        for extension in cli_extensions():
-            tree.update(extension.describe_root())
-        tree = {**tree, "commands": commands}
+        if not words:
+            commands = tree.pop("commands", [])
+            for extension in cli_extensions():
+                tree.update(extension.describe_root())
+            tree = {**tree, "commands": commands}
         return json.dumps(tree, indent=2, default=str)
     return _full_help_text(tree)
