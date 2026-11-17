@@ -60,6 +60,12 @@ def _log(name: str) -> str:
             ("parse.py", 14, "parse"),
         ),
         ("direct_cause", "storage_error", "platform", None),
+        (
+            "user_function_failed",
+            "user_function_failed_error",
+            "user_code",
+            ("check.py", 13, "check_people"),
+        ),
         ("platform_error", "runtime_error", "platform", None),
         (
             "schema_error",

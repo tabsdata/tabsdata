@@ -126,8 +126,10 @@ class UserFrame:
 class ErrorSignature:
     """What a log says went wrong: ``code`` is the snake-cased exception class
     (``error_log_line`` when only an ERROR line was found), ``traceback``
-    the last traceback block, when there is one, and ``raised`` the whole
-    exception lines of that traceback and of those chained into it."""
+    the last traceback block, when there is one, ``raised`` the whole
+    exception lines of that traceback and of those chained into it, and
+    ``user_frame`` the last frame of user code in any of them: the runner
+    wraps what a function raises, so its frame is in a chained traceback."""
 
     code: str | None
     message: str
@@ -153,13 +155,14 @@ def extract_error_signature(text: str | None) -> ErrorSignature | None:
             code = _snake_case(exception)
         else:
             message, code = line, None
-        frames = [_FRAME.search(row) for row in lines[start + 1 : end]]
+        chain_start, chained = _chained(lines, starts, len(starts) - 1)
+        frames = [_FRAME.search(row) for row in lines[chain_start + 1 : end]]
         return ErrorSignature(
             code=code,
             message=message[:MESSAGE_CHARS],
             user_frame=_user_frame(frame for frame in frames if frame),
             traceback="\n".join(lines[start : end + 1]),
-            raised=(*_chained(lines, starts, len(starts) - 1)[1], line),
+            raised=(*chained, line),
         )
     for line in reversed(lines):
         if _ERROR_LINE.search(line):

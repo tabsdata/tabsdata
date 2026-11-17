@@ -1,0 +1,39 @@
+2026-11-10T16:49:37.351Z ERROR tabsdatak.server._tdrunner.function._commons.run.command: Handled exception caught by command
+Traceback (most recent call last):
+  File "/opt/venv/lib/python3.12/site-packages/tabsdatak/server/_tdrunner/function/_handlers/function.py", line 166, in call
+    result = self.function(*arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/work/bundle/user_code/check.py", line 13, in check_people
+    raise ValueError("the people table has no 'country' column to check")
+ValueError: the people table has no 'country' column to check
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/venv/lib/python3.12/site-packages/tabsdatak/server/_tdrunner/function/commands/runners/function/runner.py", line 264, in call
+    return self.user_function.call(self.call_arguments, self.output_tables)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/tabsdatak/server/_tdrunner/function/_handlers/function.py", line 168, in call
+    raise FunctionFailedError(str(error)) from error
+tabsdatak.server._tdrunner.function._handlers.function.FunctionFailedError: the people table has no 'country' column to check
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/venv/lib/python3.12/site-packages/tabsdatak/server/_tdrunner/function/_commons/run/command.py", line 254, in main
+    result = body(arguments)
+             ^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/tabsdatak/server/_tdrunner/function/commands/runners/function/__init__.py", line 53, in main
+    return Function(arguments).run()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/tabsdatak/server/_tdrunner/function/commands/runners/function/runner.py", line 137, in run
+    self.invoke()
+  File "/opt/venv/lib/python3.12/site-packages/tabsdatak/server/_tdrunner/function/commands/runners/function/runner.py", line 249, in invoke
+    results = self.call()
+              ^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/tabsdatak/server/_tdrunner/function/commands/runners/function/runner.py", line 266, in call
+    raise RunFunctionErrorCode.RF_12.exception(
+tabsdatak.server._tdrunner.function.commands.runners.function.error.UserFunctionFailedError: RF_12: Cannot complete the user function: the people table has no 'country' column to check: the people table has no 'country' column to check
+2026-11-10T16:49:37.352Z INFO tabsdatak.server._tdrunner.function._commons.run.command: Reporting Failed: exit_status=17
+2026-11-10T16:49:37.356Z INFO tabsdatak.server._tdrunner.function._commons.run.command: Posting responder Failed: POST http://127.0.0.1:2458/api/v1/internal/function-runs/pfr20261110-0000000004/workers/wkr20261110-0000000004
+2026-11-10T16:49:37.370Z INFO tabsdatak.server._tdrunner.function._commons.run.command: Posted responder Failed: POST http://127.0.0.1:2458/api/v1/internal/function-runs/pfr20261110-0000000004/workers/wkr20261110-0000000004
