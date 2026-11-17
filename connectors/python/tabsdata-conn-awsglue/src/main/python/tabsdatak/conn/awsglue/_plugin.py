@@ -15,6 +15,7 @@ from tabsdatak.conn.awsglue import (
     DestCfgKey,
     DestCfgSpec,
 )
+from tabsdatak.conn.awsglue._explorer import AwsGlueConnectionExplorer
 from tabsdatak.conn.awsglue.error import AwsGlueErrorCode
 from tabsdatak.conn.common.error import ConnException
 from tabsdatak.spi import (
@@ -92,6 +93,6 @@ AWSGLUE_DEST = DestDef(
     dest=AwsGlueDest,
     cardinality=lambda dest: len(dest.tables),
     plugin=AwsGlueDestPlugin,
-    explorer=None,
+    explorer=AwsGlueConnectionExplorer,
     icon="conn/awsglue/resources/awsglue.svg",
 )

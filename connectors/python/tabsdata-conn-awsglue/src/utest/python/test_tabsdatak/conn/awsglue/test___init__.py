@@ -27,6 +27,7 @@ from tabsdatak.conn.common.types import (
     AwsRegionSpec,
     CfgSpec,
     CloudRelativePathSpec,
+    EntityWhitelistSpec,
     S3BucketSpec,
 )
 
@@ -86,6 +87,7 @@ def test_conn_fields_wire_expected_specs():
     assert _hint(AwsGlueDestConn, "base_path") == CloudRelativePathSpec
     assert _hint(AwsGlueDestConn, "database") == DatabaseSpec | None
     assert _hint(AwsGlueDestConn, "catalog_id") == CatalogIdSpec | None
+    assert _hint(AwsGlueDestConn, "entity_whitelist") == EntityWhitelistSpec | None
     assert _hint(AwsGlueDestConn, "conn_cfg") == CfgSpec | None
 
 
@@ -120,6 +122,12 @@ def test_conn_rejects_an_invalid_field(field, value, code):
         _conn(**{field: value})
     assert raised.value.api_error is AwsGlueErrorCode.AWSGLUE_1
     assert code in str(raised.value)
+
+
+def test_conn_rejects_an_entity_whitelist_entry_that_is_not_a_regex():
+    with pytest.raises(ConnInitException) as raised:
+        _conn(entity_whitelist=["orders_(.*"])
+    assert raised.value.api_error is AwsGlueErrorCode.AWSGLUE_1
 
 
 def test_conn_takes_a_secret_for_a_string_field():

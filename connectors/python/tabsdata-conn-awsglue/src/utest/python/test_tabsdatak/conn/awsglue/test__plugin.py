@@ -17,6 +17,7 @@ from tabsdatak.conn.awsglue import _impl as impl
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.awsglue import _plugin as plugin
+from tabsdatak.conn.awsglue._explorer import AwsGlueConnectionExplorer
 from tabsdatak.conn.awsglue.error import AwsGlueErrorCode, AwsGlueRuntimeException
 
 pytestmark = pytest.mark.conn_awsglue
@@ -44,6 +45,7 @@ def test_def_binds_the_destination_to_its_connection_and_plugin():
     assert definition.conn is AwsGlueDestConn
     assert definition.dest is AwsGlueDest
     assert definition.plugin is plugin.AwsGlueDestPlugin
+    assert definition.explorer is AwsGlueConnectionExplorer
 
 
 def test_def_counts_one_slot_per_table():

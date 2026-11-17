@@ -59,6 +59,7 @@ from tabsdatak.conn.common.types import (
     AwsRegionSpec,
     CfgSpec,
     CloudRelativePathSpec,
+    EntityWhitelistSpec,
     S3BucketSpec,
     _convert,
 )
@@ -144,6 +145,9 @@ class AwsGlueDestConn(Conn):
         catalog_id: Optional id of the Glue Data Catalog: the 12-digit
             id of the AWS account that owns it. Defaults to the catalog
             of the account the credentials belong to.
+        entity_whitelist: Optional list of regex patterns narrowing
+            which tables the connector considers; `None` (the default)
+            filters nothing.
         conn_cfg: Optional connector-config dict (see `CfgSpec`). A key
             prefixed `obstore.` is forwarded, without the prefix, to the
             object store client that writes the data files (e.g.
@@ -184,6 +188,7 @@ class AwsGlueDestConn(Conn):
     base_path: CloudRelativePathSpec = "/"
     database: DatabaseSpec | None = None
     catalog_id: CatalogIdSpec | None = None
+    entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
 
     def _region(self) -> str:
