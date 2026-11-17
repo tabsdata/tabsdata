@@ -11,7 +11,7 @@ use crate::types::basic::{
 };
 use crate::types::composed::TableVersions;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 use utoipa::ToSchema;
@@ -228,17 +228,17 @@ pub struct GraphGroup {
 /// deleted.
 #[ta_objects::Dto]
 pub struct GraphLabels {
-    pub collections: HashMap<CollectionId, GraphCollection>,
-    pub groups: HashMap<GroupId, GraphGroup>,
+    pub collections: BTreeMap<CollectionId, GraphCollection>,
+    pub groups: BTreeMap<GroupId, GraphGroup>,
 }
 
 /// A graph of functions and tables, keyed by version.
 #[ta_objects::Dto]
 pub struct GraphResponse {
-    pub all_functions: HashMap<FunctionVersionId, FunctionNodeResponse>,
-    pub all_tables: HashMap<TableVersionId, TableNodeResponse>,
-    pub system_tables: HashSet<TableVersionId>,
-    pub user_tables: HashSet<TableVersionId>,
+    pub all_functions: BTreeMap<FunctionVersionId, FunctionNodeResponse>,
+    pub all_tables: BTreeMap<TableVersionId, TableNodeResponse>,
+    pub system_tables: BTreeSet<TableVersionId>,
+    pub user_tables: BTreeSet<TableVersionId>,
     pub relations: Vec<GraphRelation<TableVersions>>,
     #[serde(flatten)]
     pub labels: GraphLabels,

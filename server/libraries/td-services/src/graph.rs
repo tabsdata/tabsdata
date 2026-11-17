@@ -3,7 +3,7 @@
 //
 
 use itertools::{Either, Itertools};
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use td_error::TdError;
 use td_execution::graph::TopologyGraph;
 use td_objects::dxo::execution::{FunctionNodeResponse, TableNodeResponse};
@@ -57,7 +57,7 @@ pub async fn graph_response(
         .iter()
         .map(|t| (t.table_version_id, (*t).clone()))
         .collect();
-    let (system_tables, user_tables): (HashSet<_>, HashSet<_>) =
+    let (system_tables, user_tables): (BTreeSet<_>, BTreeSet<_>) =
         all_tables_set.iter().partition_map(|t| {
             if *t.system {
                 Either::Left(t.table_version_id)

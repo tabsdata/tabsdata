@@ -7,7 +7,7 @@ use crate::topology::ProjectTopology;
 use crate::topology::walk::Admitted;
 use petgraph::Graph;
 use petgraph::prelude::NodeIndex;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ops::Deref;
 use td_error::{TdError, td_error};
 use td_objects::dxo::graph::{
@@ -122,8 +122,8 @@ impl ProjectTopology {
             .chain(graph.tables().into_iter().map(|t| t.collection_id))
             .collect();
         let mut labels = GraphLabels {
-            collections: HashMap::new(),
-            groups: HashMap::new(),
+            collections: BTreeMap::new(),
+            groups: BTreeMap::new(),
         };
         for id in collections {
             let group_id = self.group_of(&id)?;
