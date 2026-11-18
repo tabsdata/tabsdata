@@ -17,7 +17,12 @@ from testi_tabsdatak.conn.common.sql.employees_model import (
     emp_nos,
 )
 from testi_tabsdatak.conn.common.sql.plugin_ctx import WatermarkSrcCtx
-from testi_tabsdatak.conn.common.sql.plugin_io import entity_rows, slot_rows, work_dir
+from testi_tabsdatak.conn.common.sql.plugin_io import (
+    empty_table,
+    entity_rows,
+    slot_rows,
+    work_dir,
+)
 from testi_tabsdatak.conn.mysql.backend import src_conn
 
 # noinspection PyProtectedMember
@@ -87,12 +92,11 @@ def test_src_plugin_read_in_resumes_from_advanced_initial_values(
 
     # What a publisher does with the watermark it just consumed; the next run must
     # read from it rather than from the seed, so it sees nothing new. A query
-    # matching no rows yields no table, so its input comes back empty.
+    # matching no rows yields one empty table, typed as its rows are.
     ctx.set_attr("cursor", all_emp_nos[-1])
-    assert [
-        list(slot)
-        for slot in plugin.MySQLSrcPlugin().read_in(ctx, src_conn(domain), src)
-    ] == [[]]
+    empty = empty_table(plugin.MySQLSrcPlugin().read_in(ctx, src_conn(domain), src))
+    assert empty.metadata.known
+    assert empty.frame.collect_schema() == first.schema
 
     # A run whose ctx never stored the bind falls back to the seed.
     again = slot_rows(

@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Sequence
+from dataclasses import replace
 from typing import Any, Callable, Mapping
 
 import polars as pl
@@ -135,7 +136,9 @@ class Reading:
                 parameters=self.parameters,
             ):
                 chunks += 1
-                yield LazyFrameInput(batch.lazy(), metadata=metadata)
+                yield self.table(batch, metadata)
+            if chunks == 0:
+                yield self.unknown(metadata)
             logger.debug(
                 "sql-reader: query %d/%d produced %d chunk(s)",
                 index + 1,
@@ -155,6 +158,22 @@ class Reading:
             if not completed or index == total - 1:
                 self.close(completed)
 
+    def table(
+        self, batch: pl.DataFrame, metadata: FrameMetadata | None
+    ) -> LazyFrameInput:
+        if batch.height == 0 and any(
+            dtype == pl.Null for dtype in batch.schema.values()
+        ):
+            return self.unknown(metadata)
+        return LazyFrameInput(batch.lazy(), metadata=metadata)
+
+    @staticmethod
+    def unknown(metadata: FrameMetadata | None) -> LazyFrameInput:
+        return LazyFrameInput(
+            pl.LazyFrame(),
+            metadata=replace(metadata or FrameMetadata(), known=False),
+        )
+
 
 def _pandas_read(
     *,
@@ -167,15 +186,22 @@ def _pandas_read(
     import pandas as pd
     from sqlalchemy import text
 
+    overrides = dict(schema_overrides) if schema_overrides else {}
     for frame in pd.read_sql_query(
         text(query),
         con=connection.execution_options(stream_results=True),
         chunksize=chunk_size,
         params=dict(parameters) if parameters else None,
     ):
-        yield pl.from_pandas(
-            frame, schema_overrides=dict(schema_overrides) if schema_overrides else None
-        )
+        if frame.empty:
+            yield pl.DataFrame(
+                schema={
+                    str(name): _instance(overrides.get(name, pl.Null))
+                    for name in frame.columns
+                }
+            )
+            continue
+        yield pl.from_pandas(frame, schema_overrides=overrides or None)
 
 
 class PandasReadEngine(SqlAlchemyReadEngine):
@@ -227,8 +253,14 @@ def _polars_read(
             (name, _instance(dtype)) for name, dtype in (schema_overrides or {}).items()
         )
         warned: set[str] = set()
+        batches = 0
         for rows in result.partitions(chunk_size):
+            batches += 1
             yield _batch(columns, rows, dtypes, warned)
+        if batches == 0:
+            yield pl.DataFrame(
+                schema={name: dtypes.get(name, pl.Null) for name in columns}
+            )
     finally:
         result.close()
 

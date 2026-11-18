@@ -1018,8 +1018,11 @@ def test_a_value_the_described_dtype_cannot_hold_fails_the_read(engine, registry
         _read(engine)
 
 
-def test_an_empty_result_yields_no_batch(engine, registry):
-    assert _read(engine, query="SELECT * FROM t WHERE id < 0") == []
+def test_an_empty_result_yields_one_empty_batch_typed_as_described(engine, registry):
+    described.register("pysqlite", lambda column: {"N": "SMALLINT"}.get(column.name))
+    [batch] = _read(engine, query='SELECT id, n AS "N" FROM t WHERE id < 0')
+    assert batch.height == 0
+    assert batch.schema == pl.Schema({"id": pl.Null, "N": pl.Int16})
 
 
 def test_the_query_parameters_reach_the_query(engine, registry):

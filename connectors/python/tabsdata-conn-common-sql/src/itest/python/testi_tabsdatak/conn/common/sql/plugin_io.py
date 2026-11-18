@@ -36,10 +36,16 @@ def work_dir(tmp_path: Path, name: str = "work") -> Path:
 
 def slot_rows(out: list[Iterable[LazyFrameInput]], index: int = 0) -> pl.DataFrame:
     """The rows a ``read_in`` input holds, its tables concatenated. Inputs read
-    through one connection, so take them in order. A query that matched no rows
-    yields no table at all -- assert on ``list(out[index]) == []`` rather than
-    calling this."""
+    through one connection, so take them in order."""
     return pl.concat([table.frame.collect() for table in out[index]])
+
+
+def empty_table(out: list[Iterable[LazyFrameInput]], index: int = 0) -> LazyFrameInput:
+    """The one table a ``read_in`` input holds for a query that matched no
+    rows: empty, typed as its columns are when it matches some."""
+    [table] = list(out[index])
+    assert table.frame.collect().height == 0
+    return table
 
 
 def entity_rows(domain, entity: str) -> int:

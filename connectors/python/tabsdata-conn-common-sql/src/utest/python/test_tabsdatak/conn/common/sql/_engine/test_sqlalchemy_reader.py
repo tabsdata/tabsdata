@@ -235,12 +235,88 @@ def test_polars_empty_params_dict_is_treated_as_no_params(db_path):
     assert df["id"].to_list() == [1, 2, 3, 4]
 
 
-def test_a_query_without_rows_yields_no_rows(db_path):
-    [slot] = sar.PolarsReadEngine().read(
-        _cfg(db_path, queries=["SELECT id FROM users WHERE id > 100"]),
-        FAULTS,
+EMPTY_QUERY = "SELECT id, name FROM users WHERE id > 100"
+
+
+def _empty(engine: sar.SqlAlchemyReadEngine, db_path, **options) -> LazyFrameInput:
+    [slot] = engine.read(_cfg(db_path, queries=[EMPTY_QUERY], **options), FAULTS)
+    [table] = list(slot)
+    return table
+
+
+@pytest.mark.parametrize("engine", [sar.PolarsReadEngine, sar.PandasReadEngine])
+def test_a_query_without_rows_and_untyped_columns_yields_one_unknown_table(
+    db_path, engine
+):
+    table = _empty(engine(), db_path)
+    assert table.frame.collect().shape == (0, 0)
+    assert table.metadata == FrameMetadata(
+        columns=sql_metadata(EMPTY_QUERY, None), known=False
     )
-    assert sum(frame.height for frame in _frames(slot)) == 0
+
+
+@pytest.mark.parametrize("engine", [sar.PolarsReadEngine, sar.PandasReadEngine])
+def test_a_query_without_rows_and_typed_columns_yields_one_empty_typed_table(
+    db_path, engine
+):
+    table = _empty(
+        engine(),
+        db_path,
+        schema_overrides=[{"id": DataType.INT, "name": DataType.STRING}],
+    )
+    assert table.frame.collect().schema == pl.Schema({
+        "id": pl.Int64,
+        "name": pl.String,
+    })
+    assert table.frame.collect().height == 0
+    assert table.metadata.known
+
+
+@pytest.mark.parametrize("engine", [sar.PolarsReadEngine, sar.PandasReadEngine])
+def test_a_query_without_rows_and_one_untyped_column_yields_an_unknown_table(
+    db_path, engine
+):
+    table = _empty(engine(), db_path, schema_overrides=[{"id": DataType.INT}])
+    assert table.frame.collect().shape == (0, 0)
+    assert not table.metadata.known
+
+
+def test_polars_types_a_query_without_rows_as_its_description_says(
+    db_path, monkeypatch
+):
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._engine import described
+
+    monkeypatch.setattr(
+        described,
+        "dtypes",
+        lambda *_: {"id": pl.Int32(), "name": pl.String()},
+    )
+    table = _empty(sar.PolarsReadEngine(), db_path)
+    assert table.frame.collect_schema() == pl.Schema({
+        "id": pl.Int32,
+        "name": pl.String,
+    })
+    assert table.metadata.known
+
+
+def test_a_dropped_metadata_still_tells_a_table_is_unknown(db_path):
+    [slot] = sar.PolarsReadEngine().read(
+        _cfg(db_path, queries=[EMPTY_QUERY]), FAULTS, drop_metadata=True
+    )
+    assert [table.metadata for table in slot] == [FrameMetadata(known=False)]
+
+
+def test_a_loader_yielding_nothing_yields_one_unknown_table(db_path):
+    def nothing(**_) -> Iterator[pl.DataFrame]:
+        yield from ()
+
+    reading = sar.Reading(
+        _cfg(db_path, queries=[EMPTY_QUERY]), nothing, FAULTS, drop_metadata=True
+    )
+    [table] = list(reading.slot(0))
+    assert table.frame.collect().shape == (0, 0)
+    assert table.metadata == FrameMetadata(known=False)
 
 
 def test_pandas_single_query(db_path):
