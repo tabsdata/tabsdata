@@ -1603,10 +1603,12 @@ def callable_from_str(spec: str) -> Callable[..., Any]:
 # local parquet files.
 LegacyDestTablesWarning = deprecated_category(
     reason=(
-        "write_out takes list[TableFileSpec], so the plugin receives a local "
-        "parquet copy of every table"
+        "write_out takes list[TableFileSpec | None], so the plugin receives a "
+        "local parquet copy of every table"
     ),
-    replacement="declare list[pl.LazyFrame] as DestPlugin's third type argument",
+    replacement=(
+        "declare list[pl.LazyFrame | None] as DestPlugin's third type argument"
+    ),
     since="2.3.0",
 )
 
@@ -1614,7 +1616,8 @@ LegacyDestTablesWarning = deprecated_category(
 def warn_legacy_dest(plugin: type) -> str:
     message = (
         f"{plugin.__module__}.{plugin.__qualname__}.write_out takes the "
-        f"deprecated list[TableFileSpec]; declare list[pl.LazyFrame] instead"
+        f"deprecated list[TableFileSpec | None]; declare "
+        f"list[pl.LazyFrame | None] instead"
     )
     warnings.warn(message, category=LegacyDestTablesWarning, stacklevel=2)
     return message

@@ -171,13 +171,13 @@ class MSSQLSrcPlugin(SrcPlugin[MSSQLSrcConn, MSSQLSrc]):
         )
 
 
-class MSSQLDestPlugin(DestPlugin[MSSQLDestConn, MSSQLDest, list[pl.LazyFrame]]):
+class MSSQLDestPlugin(DestPlugin[MSSQLDestConn, MSSQLDest, list[pl.LazyFrame | None]]):
     def write_out(
         self,
         ctx: DestContext,
         conn: MSSQLDestConn,
         dest: MSSQLDest,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         from sqlalchemy.exc import OperationalError, SQLAlchemyError
 

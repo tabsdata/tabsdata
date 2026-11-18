@@ -262,14 +262,17 @@ runtime.
 The third type argument of `DestPlugin` decides how a destination
 plugin receives the subscriber's outputs:
 
-- `list[pl.LazyFrame]`: `write_out`'s `tables` (annotated with the same
-  type) holds one `pl.LazyFrame` per output, by position, scanning it
-  from storage: nothing is read until the plugin collects or sinks it.
+- `list[pl.LazyFrame | None]`: `write_out`'s `tables` (annotated with
+  the same type) holds one entry per output, by position: a
+  `pl.LazyFrame` scanning it from storage (nothing is read until the
+  plugin collects or sinks it), or `None` where the subscriber returned
+  `None`.
   The forms are a union of lists (`DestTablesSpec`), never a list of a
   union, so every table a plugin receives has the one type it declares.
   Import polars at module level, so the annotation resolves at runtime;
 - no third argument: the legacy form, `tables` is a
-  `list[TableFileSpec]`, one local parquet file per position.
+  `list[TableFileSpec | None]`, one local parquet file (or `None`) per
+  position.
   Deprecated since 2.3.0: registering such a plugin raises a
   `TabsdataDeprecatedWarning` (ignored by default like every Tabsdata
   deprecation), and each run logs a warning in the destination step.
@@ -279,15 +282,27 @@ import polars as pl
 
 from tabsdatak.spi import DestPlugin
 
-class _<Name>DestPlugin(DestPlugin[<Name>Conn, <Name>Dest, list[pl.LazyFrame]]):
-    def write_out(self, ctx, conn, dest, tables: list[pl.LazyFrame]) -> None:
+class _<Name>DestPlugin(
+    DestPlugin[<Name>Conn, <Name>Dest, list[pl.LazyFrame | None]],
+):
+    def write_out(
+        self, ctx, conn, dest, tables: list[pl.LazyFrame | None]
+    ) -> None:
         for position, frame in enumerate(tables):
+            if frame is None:
+                continue
             ...
 ```
 
+The runtime calls `write_out` on every run of the subscriber. A `None`
+entry means the subscriber returned `None` for that output: the plugin
+leaves its target as it is, and with every entry `None` it writes
+nothing.
+
 `DestDef` refuses, when the connector is imported, a third argument
-other than `list[pl.LazyFrame]`, a `tables` annotation that differs
-from it, and a legacy `write_out` taking frames.
+other than `list[pl.LazyFrame | None]` (`Optional[pl.LazyFrame]` is the
+same type), a `tables` annotation that differs from it, and a legacy
+`write_out` taking frames.
 
 ## `<name>/error.py` — error enum
 

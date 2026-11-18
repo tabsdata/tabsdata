@@ -13,6 +13,7 @@ import pytest
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.localfile._plugin as plugin
+from tabsdatak._handoff import DestinationContract
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import _plugin as _file_plugin
@@ -28,15 +29,6 @@ from tabsdatak.conn.localfile import (
 from tabsdatak.conn.localfile._explorer import LocalFileExplorer
 
 pytestmark = pytest.mark.localfile
-
-
-
-
-
-
-
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +82,37 @@ def test_dest_plugin_writes_each_table_under_the_base_path(tmp_path):
         ctx, conn, dest, [pl.LazyFrame({"a": [1, 2]})]
     )
     assert (tmp_path / "out" / "x.csv").read_text(encoding="utf-8") == "a\n1\n2\n"
+
+
+def _written(tmp_path: Path, tables: list[pl.LazyFrame | None]) -> None:
+    ctx = _dest_ctx(tmp_path)
+    ctx.triggered_on = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    ctx.execution_id = "exec"
+    ctx.transaction_id = "trx"
+    plugin.LocalFileDestPlugin().write_out(
+        ctx,
+        LocalFileDestConn(base_path=str(tmp_path)),
+        LocalFileDest(paths=["out/x.csv", "out/y.csv"]),
+        tables,
+    )
+
+
+def test_dest_plugin_takes_lazy_frames_or_none():
+    assert DestinationContract(plugin.LocalFileDestPlugin).frames()
+
+
+def test_dest_plugin_leaves_the_path_of_a_none_table_untouched(tmp_path):
+    folder = tmp_path / "out"
+    folder.mkdir()
+    (folder / "x.csv").write_text("kept\n", encoding="utf-8")
+    _written(tmp_path, [None, pl.LazyFrame({"a": [1]})])
+    assert (folder / "x.csv").read_text(encoding="utf-8") == "kept\n"
+    assert (folder / "y.csv").read_text(encoding="utf-8") == "a\n1\n"
+
+
+def test_dest_plugin_writes_nothing_when_every_table_is_none(tmp_path):
+    _written(tmp_path, [None, None])
+    assert not (tmp_path / "out").exists()
 
 
 # ---------------------------------------------------------------------------

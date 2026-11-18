@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import uuid
 from dataclasses import dataclass
@@ -19,6 +20,9 @@ from tabsdatak.conn.bigquery import (
 )
 from tabsdatak.conn.bigquery._explorer import BigQueryConnectionExplorer
 from tabsdatak.conn.bigquery.error import BigQueryErrorCode
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._dest import present
 from tabsdatak.conn.common.error import ConnException
 
 # noinspection PyProtectedMember
@@ -69,14 +73,14 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
 
 
 class _BigQueryDestPlugin(
-    DestPlugin[BigQueryDestConn, BigQueryDest, list[pl.LazyFrame]],
+    DestPlugin[BigQueryDestConn, BigQueryDest, list[pl.LazyFrame | None]],
 ):
     def write_out(
         self,
         ctx: DestContext,
         conn: BigQueryDestConn,
         dest: BigQueryDest,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         # noinspection PyProtectedMember
         from tabsdatak.conn.bigquery._evolution import (
@@ -127,6 +131,20 @@ class _BigQueryDestPlugin(
                 slots=len(tables),
             )
 
+        if write_cfg.merge_cfgs is None:
+            frames, target_tables = present(tables, write_cfg.target_tables)
+            merge_cfgs = None
+        else:
+            frames, target_tables, merge_cfgs = present(
+                tables, write_cfg.target_tables, write_cfg.merge_cfgs
+            )
+        if not frames:
+            logger.info("bigquery: no table to write; nothing to do")
+            return
+        write_cfg = dataclasses.replace(
+            write_cfg, target_tables=target_tables, merge_cfgs=merge_cfgs
+        )
+
         project_str = conn._project()
 
         logger.debug("bigquery: establishing BigQuery client (project=%r)", project_str)
@@ -148,7 +166,7 @@ class _BigQueryDestPlugin(
                 conn.staging._base_path(),
                 f"auxiliary_{index}_{uuid.uuid4().hex[:16]}.parquet",
             )
-            for index in range(len(tables))
+            for index in range(len(frames))
         ]
         staging_uris = [store.uri(key) for key in staging_keys]
         # URIs a rerun guard declined to stage, so the load loop skips them.
@@ -167,7 +185,7 @@ class _BigQueryDestPlugin(
                 # contributes to it lives in the dialect.
                 for i, (frame, key, table_fqn, merge_cfg) in enumerate(
                     zip(
-                        tables,
+                        frames,
                         staging_keys,
                         write_cfg.target_tables,
                         merge_cfgs,
@@ -226,7 +244,7 @@ class _BigQueryDestPlugin(
             # Phase 1: stage each table as parquet at its GCS URI.
             logger.info("bigquery: staging %d table(s) to GCS", total)
             for i, (frame, key, uri, table_fqn) in enumerate(
-                zip(tables, staging_keys, staging_uris, write_cfg.target_tables), 1
+                zip(frames, staging_keys, staging_uris, write_cfg.target_tables), 1
             ):
                 if watermark is not None and check_watermark_column(
                     bq_client, table_fqn, watermark, ctx.transaction_id

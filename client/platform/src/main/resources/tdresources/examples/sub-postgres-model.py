@@ -13,8 +13,8 @@ summary: >-
   transactional=True commits them together. It runs when any input changes and
   reads the latest version of each, so it rewrites the whole set with replace.
   Until every table has been built it returns None for every slot, and the
-  destination keeps its last complete set; None in only some slots fails the
-  run.
+  destination keeps its last complete set: a slot returned as None leaves its
+  table as it is.
 """
 
 from tabsdatak.api import TableFrameSpec, subscriber

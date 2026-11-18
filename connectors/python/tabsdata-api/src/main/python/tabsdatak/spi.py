@@ -726,10 +726,14 @@ class StreamSrcPlugin[C: Conn, SS: StreamSrc](ABC):
 
 
 # What `DestPlugin.write_out` receives after `ctx`, `conn` and `dest`, one
-# table per subscriber output: all `LazyFrame`s scanning them from storage,
-# or all the legacy local parquet files. A union of lists, not a list of a
-# union, so that a plugin declares one form for every table.
-type DestTablesSpec = Union[list["pl.LazyFrame"], list[TableFileSpec]]
+# entry per subscriber output: all `LazyFrame`s scanning them from storage,
+# or all the legacy local parquet files, with `None` for an output the
+# subscriber returned `None` for. A union of lists, not a list of a union,
+# so that a plugin declares one form for every table.
+type DestTablesSpec = Union[
+    list[Union["pl.LazyFrame", None]],
+    list[TableFileSpec | None],
+]
 
 
 class DestContext(TransactionCtx, PluginCtx, ABC):
@@ -742,7 +746,7 @@ class DestContext(TransactionCtx, PluginCtx, ABC):
 
 _C = TypeVar("_C", bound=Conn)
 _D = TypeVar("_D", bound=Dest)
-_T = TypeVar("_T", bound=DestTablesSpec, default=list[TableFileSpec])
+_T = TypeVar("_T", bound=DestTablesSpec, default=list[TableFileSpec | None])
 
 
 class DestPlugin(ABC, Generic[_C, _D, _T]):
@@ -751,13 +755,19 @@ class DestPlugin(ABC, Generic[_C, _D, _T]):
     :categories: spi
 
     The third type argument is the plugin's contract with the runtime:
-    `list[pl.LazyFrame]` (`DestPlugin[MyConn, MyDest, list[pl.LazyFrame]]`)
-    receives each of the subscriber's outputs as a `LazyFrame` scanning
-    it from storage, and `write_out`'s `tables` is annotated with the
-    same type. Without it, the legacy form, `tables` is a list of local
-    parquet files. `DestDef` refuses any other type, and a `tables`
-    annotation that differs. Import polars at module level, so the
-    annotation resolves at runtime.
+    `list[pl.LazyFrame | None]`
+    (`DestPlugin[MyConn, MyDest, list[pl.LazyFrame | None]]`) receives
+    each of the subscriber's outputs as a `LazyFrame` scanning it from
+    storage, and `write_out`'s `tables` is annotated with the same type.
+    Without it, the legacy form, `tables` is a list of local parquet
+    files. `DestDef` refuses any other type, and a `tables` annotation
+    that differs. Import polars at module level, so the annotation
+    resolves at runtime.
+
+    `write_out` is called on every run of the subscriber, and an output
+    the subscriber returned `None` for arrives as `None`: the plugin
+    leaves that target as it is. When every output is `None`, it writes
+    nothing.
     """
 
     # devguide-ref: destination handoff
@@ -776,10 +786,11 @@ class DestPlugin(ABC, Generic[_C, _D, _T]):
             ctx: The `DestContext` for this trx.
             conn: The resolved connection.
             dest: The `Dest` config declared on the flow.
-            tables: One table per target, by position, in the form the
-                plugin declares: `LazyFrame`s, or local parquet files.
-                The runtime guarantees as many tables as `dest`'s
-                declared target count.
+            tables: One entry per target, by position, in the form the
+                plugin declares: `LazyFrame`s, or local parquet files;
+                `None` where the subscriber returned `None`. The
+                runtime guarantees as many entries as `dest`'s declared
+                target count.
         """
 
 

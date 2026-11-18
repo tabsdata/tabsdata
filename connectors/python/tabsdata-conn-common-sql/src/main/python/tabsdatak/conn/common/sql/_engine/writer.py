@@ -34,5 +34,5 @@ class SqlWriteEngine(ABC):
     def write(
         self,
         cfg: SqlWriteCfg,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None: ...

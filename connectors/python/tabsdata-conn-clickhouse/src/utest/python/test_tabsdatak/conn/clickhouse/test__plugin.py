@@ -12,6 +12,24 @@ import polars as pl
 import pytest
 
 from tabsdatak.api import Secret
+
+# noinspection PyProtectedMember
+# noinspection PyProtectedMember
+from tabsdatak.conn.clickhouse import (
+    AzBlobLocation,
+    ClickHouseDest,
+    ClickHouseDestConn,
+    GCSLocation,
+    S3Location,
+    _impl as impl,
+    _plugin as plugin,
+)
+from tabsdatak.conn.clickhouse._explorer import ClickHouseConnectionExplorer
+from tabsdatak.conn.clickhouse.error import (
+    ClickHouseErrorCode,
+    ClickHouseRuntimeException,
+    ClickHouseValidateException,
+)
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
@@ -20,25 +38,6 @@ from tabsdatak.conn.common.types import (
     GCPJson,
     UserPassword,
 )
-from tabsdatak.conn.clickhouse import (
-    AzBlobLocation,
-    ClickHouseDestConn,
-    ClickHouseDest,
-    GCSLocation,
-    S3Location,
-)
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.clickhouse import _impl as impl
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.clickhouse import _plugin as plugin
-from tabsdatak.conn.clickhouse.error import (
-    ClickHouseErrorCode,
-    ClickHouseRuntimeException,
-    ClickHouseValidateException,
-)
-from tabsdatak.conn.clickhouse._explorer import ClickHouseConnectionExplorer
 
 pytestmark = pytest.mark.clickhouse
 
@@ -279,6 +278,46 @@ def test_dest_plugin_dispatches_to_bulk_loader(monkeypatch, work_dir):
     assert captured["cfg"].target_tables == ["users", "orders"]
     assert captured["cfg"].if_table_exists == "replace"
     assert captured["cfg"].schema_evolution == "update"
+
+
+def test_dest_plugin_leaves_the_table_of_a_none_slot_untouched(monkeypatch, work_dir):
+    captured: dict = {}
+
+    def stub(cfg, tables):
+        captured["cfg"] = cfg
+        captured["tables"] = tables
+
+    monkeypatch.setattr(impl, "write_via_bulk_loader", stub)
+
+    src1 = _make_parquet(work_dir / "u.parquet", [{"id": 1}])
+    src3 = _make_parquet(work_dir / "e.parquet", [{"id": 3}])
+    dest = ClickHouseDest(
+        tables=["users", "orders", "events"],
+        if_table_exists="replace",
+    )
+    plugin._ClickHouseDestPlugin().write_out(
+        _dest_ctx(work_dir),
+        _bare_conn(),
+        dest,
+        [src1, None, src3],
+    )
+    assert captured["tables"] == [src1, src3]
+    assert captured["cfg"].target_tables == ["users", "events"]
+
+
+def test_dest_plugin_writes_nothing_when_every_slot_is_none(monkeypatch, work_dir):
+    loader = MagicMock()
+    monkeypatch.setattr(impl, "write_via_bulk_loader", loader)
+    monkeypatch.setattr(
+        impl, "build_cloud_storage", MagicMock(side_effect=AssertionError)
+    )
+    plugin._ClickHouseDestPlugin().write_out(
+        _dest_ctx(work_dir),
+        _bare_conn(),
+        ClickHouseDest(tables=["users", "orders"], if_table_exists="replace"),
+        [None, None],
+    )
+    loader.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

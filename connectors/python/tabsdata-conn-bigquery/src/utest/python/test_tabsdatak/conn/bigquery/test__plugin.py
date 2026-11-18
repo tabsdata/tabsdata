@@ -1026,6 +1026,71 @@ def test_dest_plugin_happy_path_calls_load_table_from_uri_per_table(
     assert staging.objects() == []
 
 
+def test_dest_plugin_leaves_a_none_target_untouched(monkeypatch, work_dir, staging):
+    bq_client = MagicMock(name="bq")
+    monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
+
+    dest = BigQueryDest(
+        tables=[
+            "`my-project.analytics.users`",
+            "`my-project.analytics.orders`",
+        ],
+        if_table_exists="replace",
+    )
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 2}])
+    plugin._BigQueryDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), dest, [None, pl.scan_parquet(src)]
+    )
+
+    assert [rows for _, rows in staging.staged] == [[{"id": 2}]]
+    loaded = [c.args[1] for c in bq_client.load_table_from_uri.call_args_list]
+    assert loaded == ["my-project.analytics.orders"]
+    assert all("users" not in s for s in _statements(bq_client))
+
+
+def test_dest_plugin_merges_only_the_present_targets(monkeypatch, work_dir):
+    bq_client = _merge_ready_client()
+    monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
+
+    dest = BigQueryDest(
+        tables=["`p.ds.users`", "`p.ds.orders`"],
+        if_table_exists="merge",
+        merge_cfg=[
+            MergeCfg(on=["id"], op_column="op"),
+            MergeCfg(on=["other_id"], op_column="op"),
+        ],
+    )
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "other_id": 10, "op": "i"}])
+    plugin._BigQueryDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), dest, [None, pl.scan_parquet(src)]
+    )
+
+    (merge,) = _statements(bq_client, "MERGE INTO")
+    assert merge.startswith("MERGE INTO `p.ds.orders` AS target")
+    assert "ON target.`other_id` = source.`other_id`" in merge
+    assert all(
+        "users" not in c.args[1] for c in bq_client.load_table_from_uri.call_args_list
+    )
+
+
+def test_dest_plugin_writes_nothing_when_every_table_is_none(
+    monkeypatch, work_dir, staging
+):
+    build = MagicMock(name="build_bigquery_client")
+    monkeypatch.setattr(impl, "build_bigquery_client", build)
+
+    dest = BigQueryDest(
+        tables=["`my-project.analytics.users`", "`my-project.analytics.orders`"],
+    )
+    plugin._BigQueryDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), dest, [None, None]
+    )
+
+    build.assert_not_called()
+    assert staging.staged == []
+    assert staging.objects() == []
+
+
 def _merge_ready_client() -> MagicMock:
     """A ``bq_client`` stub the whole merge path can run against.
 

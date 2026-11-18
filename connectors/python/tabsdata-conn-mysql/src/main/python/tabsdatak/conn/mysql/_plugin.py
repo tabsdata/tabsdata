@@ -186,13 +186,13 @@ class MySQLSrcPlugin(SrcPlugin[MySQLSrcConn, MySQLSrc]):
         )
 
 
-class MySQLDestPlugin(DestPlugin[MySQLDestConn, MySQLDest, list[pl.LazyFrame]]):
+class MySQLDestPlugin(DestPlugin[MySQLDestConn, MySQLDest, list[pl.LazyFrame | None]]):
     def write_out(
         self,
         ctx: DestContext,
         conn: MySQLDestConn,
         dest: MySQLDest,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         from sqlalchemy.exc import OperationalError, SQLAlchemyError
 

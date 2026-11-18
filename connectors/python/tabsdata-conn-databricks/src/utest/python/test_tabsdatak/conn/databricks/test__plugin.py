@@ -33,6 +33,7 @@ from tabsdatak.conn.databricks import (
     DatabricksDestConn,
     DatabricksSrc,
     DatabricksSrcConn,
+    MergeCfg,
     _impl as impl,
     _plugin as plugin,
 )
@@ -123,11 +124,12 @@ def _src() -> DatabricksSrc:
 
 
 def _dest(
-    *, tables=("main.analytics.users",), if_table_exists="append"
+    *, tables=("main.analytics.users",), if_table_exists="append", merge_cfg=None
 ) -> DatabricksDest:
     return DatabricksDest(
         tables=list(tables),
         if_table_exists=if_table_exists,
+        merge_cfg=merge_cfg,
     )
 
 
@@ -461,6 +463,63 @@ def test_dest_plugin_dispatches_to_adapter(monkeypatch, work_dir):
         "main.analytics.orders",
     ]
     assert captured["cfg"].if_table_exists == "replace"
+
+
+def test_dest_plugin_hands_over_only_the_present_tables(monkeypatch, work_dir):
+    stub = MagicMock()
+    monkeypatch.setattr(impl, "write_all_tables", stub)
+
+    src = _parquet(work_dir, "o.parquet")
+    dest = _dest(
+        tables=("main.analytics.users", "main.analytics.orders"),
+        if_table_exists="replace",
+    )
+    plugin._DatabricksDestPlugin().write_out(
+        _ctx(work_dir), _dest_conn(), dest, [None, src]
+    )
+
+    ((cfg, frames), _) = stub.call_args
+    assert frames == [src]
+    assert cfg.target_tables == ["main.analytics.orders"]
+
+
+def test_dest_plugin_keeps_each_merge_cfg_with_its_present_table(monkeypatch, work_dir):
+    stub = MagicMock()
+    monkeypatch.setattr(impl, "write_all_tables", stub)
+
+    src = _parquet(work_dir, "o.parquet")
+    by_id = MergeCfg(on=["id"], op_column="op")
+    by_other = MergeCfg(on=["other_id"], op_column="op")
+    dest = _dest(
+        tables=("main.analytics.users", "main.analytics.orders"),
+        if_table_exists="merge",
+        merge_cfg=[by_id, by_other],
+    )
+    plugin._DatabricksDestPlugin().write_out(
+        _ctx(work_dir), _dest_conn(), dest, [None, src]
+    )
+
+    ((cfg, frames), _) = stub.call_args
+    assert frames == [src]
+    assert cfg.target_tables == ["main.analytics.orders"]
+    assert cfg.merge_cfgs == [by_other]
+
+
+def test_dest_plugin_writes_nothing_when_every_table_is_none(monkeypatch, work_dir):
+    stub = MagicMock()
+    monkeypatch.setattr(impl, "write_all_tables", stub)
+    build = MagicMock()
+    monkeypatch.setattr(impl, "_build_workspace_client", build)
+
+    plugin._DatabricksDestPlugin().write_out(
+        _ctx(work_dir),
+        _dest_conn(),
+        _dest(tables=("main.analytics.users", "main.analytics.orders")),
+        [None, None],
+    )
+
+    stub.assert_not_called()
+    build.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

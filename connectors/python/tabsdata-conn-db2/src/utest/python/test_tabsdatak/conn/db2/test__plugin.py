@@ -116,9 +116,7 @@ def test_src_plugin_restarts_on_operational_error_with_db2_5(monkeypatch, work_d
     fake.connect.side_effect = OperationalError("conn fail", {}, BaseException("c"))
     monkeypatch.setattr(impl, "build_db2_engine", lambda *a, **kw: fake)
     src = Db2Src(queries=["SELECT 1 FROM SYSIBM.SYSDUMMY1"])
-    [slot] = plugin.Db2SrcPlugin().read_in(
-        _src_ctx(work_dir), _bare_src_conn(), src
-    )
+    [slot] = plugin.Db2SrcPlugin().read_in(_src_ctx(work_dir), _bare_src_conn(), src)
     with pytest.raises(RestartRead) as ei:
         list(slot)
     assert isinstance(ei.value.cause, Db2RuntimeException)
@@ -134,9 +132,7 @@ def test_src_plugin_wraps_other_sqlalchemy_error_as_db2_6(
     fake.connect.side_effect = ProgrammingError("bad sql", {}, BaseException("p"))
     monkeypatch.setattr(impl, "build_db2_engine", lambda *a, **kw: fake)
     src = Db2Src(queries=["SELECT 1 FROM SYSIBM.SYSDUMMY1"])
-    [slot] = plugin.Db2SrcPlugin().read_in(
-        _src_ctx(work_dir), _bare_src_conn(), src
-    )
+    [slot] = plugin.Db2SrcPlugin().read_in(_src_ctx(work_dir), _bare_src_conn(), src)
     with pytest.raises(Db2RuntimeException) as ei:
         list(slot)
     assert ei.value.api_error is Db2ErrorCode.DB2_6
@@ -189,6 +185,40 @@ def test_dest_plugin_wraps_other_sqlalchemy_error_as_db2_9(
             _dest_ctx(work_dir), _bare_dest_conn(), dest, [src]
         )
     assert ei.value.api_error is Db2ErrorCode.DB2_9
+
+
+def test_dest_plugin_leaves_the_table_of_a_none_slot_untouched(monkeypatch, work_dir):
+    written: list[str] = []
+    monkeypatch.setattr(impl, "build_db2_engine", lambda *a, **kw: MagicMock())
+    monkeypatch.setattr(
+        saw_writer.PolarsWriteEngine,
+        "loader",
+        lambda self: lambda **options: written.append(options["table"]),
+    )
+    dest = Db2Dest(
+        tables=["users", "orders", "events"],
+        if_table_exists="replace",
+        transactional=False,
+    )
+    plugin.Db2DestPlugin().write_out(
+        _dest_ctx(work_dir),
+        _bare_dest_conn(),
+        dest,
+        [pl.LazyFrame([{"id": 1}]), None, pl.LazyFrame([{"id": 3}])],
+    )
+    assert written == ["users", "events"]
+
+
+def test_dest_plugin_writes_nothing_when_every_slot_is_none(monkeypatch, work_dir):
+    build = MagicMock()
+    monkeypatch.setattr(impl, "build_db2_engine", build)
+    plugin.Db2DestPlugin().write_out(
+        _dest_ctx(work_dir),
+        _bare_dest_conn(),
+        Db2Dest(tables=["users", "orders"], if_table_exists="replace"),
+        [None, None],
+    )
+    build.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

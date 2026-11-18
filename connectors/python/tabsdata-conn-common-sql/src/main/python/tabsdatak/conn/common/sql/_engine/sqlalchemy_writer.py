@@ -3,6 +3,7 @@
 #
 
 import contextlib
+import dataclasses
 import logging
 from abc import ABC, abstractmethod
 from datetime import date
@@ -26,6 +27,9 @@ import tabsdatak.conn.common.sql._engine.constants as const
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _config
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._dest import present
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.writer import SqlWriteCfg, SqlWriteEngine
@@ -62,15 +66,19 @@ class SqlAlchemyWriteEngine(SqlWriteEngine, ABC):
     def write(
         self,
         dest: SqlWriteCfg,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         write_loader = self.loader()
-        frames = list(tables)
-        if len(frames) != len(dest.target_tables):
+        if len(tables) != len(dest.target_tables):
             raise ValueError(
-                f"tables count {len(frames)} must equal target_tables "
+                f"tables count {len(tables)} must equal target_tables "
                 f"count {len(dest.target_tables)}"
             )
+        frames, target_tables = present(tables, dest.target_tables)
+        if not frames:
+            logger.info("sql-writer: no table to write, nothing to do")
+            return
+        dest = dataclasses.replace(dest, target_tables=target_tables)
 
         def _run() -> None:
             logger.debug("sql-writer: establishing engine")

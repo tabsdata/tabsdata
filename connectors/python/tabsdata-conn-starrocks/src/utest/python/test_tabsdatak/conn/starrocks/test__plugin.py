@@ -18,18 +18,21 @@ from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     UserPassword,
 )
-from tabsdatak.conn.starrocks import S3Location, StarRocksDestConn, StarRocksDest
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.starrocks import _impl as impl
-
 # noinspection PyProtectedMember
-from tabsdatak.conn.starrocks import _plugin as plugin
+from tabsdatak.conn.starrocks import (
+    S3Location,
+    StarRocksDest,
+    StarRocksDestConn,
+    _impl as impl,
+    _plugin as plugin,
+)
+from tabsdatak.conn.starrocks._explorer import StarRocksConnectionExplorer
 from tabsdatak.conn.starrocks.error import (
     StarRocksErrorCode,
     StarRocksRuntimeException,
 )
-from tabsdatak.conn.starrocks._explorer import StarRocksConnectionExplorer
 
 pytestmark = pytest.mark.starrocks
 
@@ -278,9 +281,9 @@ def test_dest_plugin_insert_names_only_the_columns_of_the_table(monkeypatch, wor
 
     # No `id` column -- mirrors the file-seeded `city` table whose target has an
     # AUTO_INCREMENT `id`.
-    table = pl.LazyFrame(
-        [{"name": "Kabul", "country_code": "AFG", "district": "Kabol", "population": 1}]
-    )
+    table = pl.LazyFrame([
+        {"name": "Kabul", "country_code": "AFG", "district": "Kabol", "population": 1}
+    ])
     dest = StarRocksDest(tables=["city"])
     plugin.StarRocksDestPlugin().write_out(
         _dest_ctx(work_dir), _bare_conn(), dest, [table]
@@ -292,6 +295,64 @@ def test_dest_plugin_insert_names_only_the_columns_of_the_table(monkeypatch, wor
         "(`name`, `country_code`, `district`, `population`) SELECT * FROM FILES("
     )
     assert "`id`" not in executed[0]
+
+
+def test_dest_plugin_leaves_the_table_of_a_none_slot_untouched(monkeypatch, work_dir):
+    calls: list[str] = []
+    _staged(monkeypatch, calls)
+
+    executed: list[str] = []
+
+    class _FakeConn:
+        def execute(self, stmt):
+            executed.append(str(stmt))
+
+    class _BeginCtx:
+        def __enter__(self):
+            return _FakeConn()
+
+        def __exit__(self, *a):
+            return False
+
+    fake_engine = MagicMock()
+    fake_engine.begin.side_effect = lambda: _BeginCtx()
+    monkeypatch.setattr(impl, "build_starrocks_engine", lambda **kw: fake_engine)
+
+    dest = StarRocksDest(
+        tables=["users", "orders", "events"],
+        if_table_exists="replace",
+    )
+    plugin.StarRocksDestPlugin().write_out(
+        _dest_ctx(work_dir),
+        _bare_conn(),
+        dest,
+        [pl.LazyFrame([{"id": 1}]), None, pl.LazyFrame([{"id": 3}])],
+    )
+
+    assert [rel.split("/")[1] for rel in calls] == ["users", "events"]
+    assert not any("orders" in statement for statement in executed)
+    assert [s for s in executed if s.startswith("TRUNCATE")] == [
+        "TRUNCATE TABLE `testdb`.`users`",
+        "TRUNCATE TABLE `testdb`.`events`",
+    ]
+
+
+def test_dest_plugin_writes_nothing_when_every_slot_is_none(monkeypatch, work_dir):
+    calls: list[str] = []
+    _staged(monkeypatch, calls)
+    build = MagicMock()
+    monkeypatch.setattr(impl, "build_starrocks_engine", build)
+    monkeypatch.setattr(impl, "staging_store", MagicMock(side_effect=AssertionError))
+
+    plugin.StarRocksDestPlugin().write_out(
+        _dest_ctx(work_dir),
+        _bare_conn(),
+        StarRocksDest(tables=["users", "orders"], if_table_exists="replace"),
+        [None, None],
+    )
+
+    build.assert_not_called()
+    assert calls == []
 
 
 # ---------------------------------------------------------------------------

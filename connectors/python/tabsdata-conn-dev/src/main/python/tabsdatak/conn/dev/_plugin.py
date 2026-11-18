@@ -68,31 +68,33 @@ class DevFrameSrcPlugin(SrcPlugin[DevFrameSrcConn, DevFrameSrc]):
 
 
 class TrashDestPlugin(
-    DestPlugin[TrashDestConn, TrashDest, list[pl.LazyFrame]],
+    DestPlugin[TrashDestConn, TrashDest, list[pl.LazyFrame | None]],
 ):
     def write_out(
         self,
         ctx: DestContext,
         conn: TrashDestConn,
         dest: TrashDest,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         pass
 
 
 class DevFrameDestPlugin(
-    DestPlugin[DevFrameDestConn, DevFrameDest, list[pl.LazyFrame]],
+    DestPlugin[DevFrameDestConn, DevFrameDest, list[pl.LazyFrame | None]],
 ):
     def write_out(
         self,
         ctx: DestContext,
         conn: DevFrameDestConn,
         dest: DevFrameDest,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         report = {
             "tables": [
-                {
+                None
+                if table is None
+                else {
                     "type": type(table).__name__,
                     "rows": table.select(pl.len()).collect().item(),
                     "columns": table.collect_schema().names(),

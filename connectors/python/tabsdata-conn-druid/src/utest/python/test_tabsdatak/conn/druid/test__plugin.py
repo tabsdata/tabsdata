@@ -42,7 +42,6 @@ from tabsdatak.conn.druid.error import (
 pytestmark = pytest.mark.druid
 
 
-
 # ---------------------------------------------------------------------------
 # Test context shims for DestContext
 # ---------------------------------------------------------------------------
@@ -233,9 +232,7 @@ def test_dest_plugin_wraps_submit_failure_as_druid_8_keeping_the_file(
 # ---------------------------------------------------------------------------
 
 
-def test_dest_plugin_wraps_task_failure_as_druid_9_and_discards(
-    monkeypatch, work_dir
-):
+def test_dest_plugin_wraps_task_failure_as_druid_9_and_discards(monkeypatch, work_dir):
     record = _staging(monkeypatch)
 
     def _wait(_task_id):
@@ -257,9 +254,7 @@ def test_dest_plugin_wraps_task_failure_as_druid_9_and_discards(
     assert ei.value.extra["datasource"] == "events"
     assert ei.value.extra["task_id"] == "task-1"
     assert "bad parquet" in ei.value.extra["reason"]
-    assert record.discarded == [
-        f"staging/{record.staged[0][0]}/{record.staged[0][1]}"
-    ]
+    assert record.discarded == [f"staging/{record.staged[0][0]}/{record.staged[0][1]}"]
 
 
 def test_dest_plugin_keeps_the_file_when_the_task_state_is_unknown(
@@ -333,6 +328,39 @@ def test_dest_plugin_submits_one_task_per_table(monkeypatch, work_dir):
         "part-00000-1.parquet",
     ]
     assert len(record.discarded) == 2
+
+
+def test_dest_plugin_leaves_a_none_datasource_untouched(monkeypatch, work_dir):
+    record = _staging(monkeypatch)
+    specs: list[dict] = []
+
+    def _fake_submit(spec: dict) -> str:
+        specs.append(spec)
+        return f"task-{len(specs)}"
+
+    _client(monkeypatch, submit=_fake_submit)
+    dest = DruidDest(tables=["events", "metrics"], if_table_exists="replace")
+    plugin.DruidDestPlugin().write_out(_dest_ctx(work_dir), _conn(), dest, [None, ROWS])
+
+    assert [s["spec"]["dataSchema"]["dataSource"] for s in specs] == ["metrics"]
+    assert len(record.staged) == 1
+    assert len(record.discarded) == 1
+
+
+def test_dest_plugin_writes_nothing_when_every_table_is_none(monkeypatch, work_dir):
+    record = _staging(monkeypatch)
+    make_client = MagicMock()
+    monkeypatch.setattr(impl, "make_overlord_client_for_dest", make_client)
+
+    plugin.DruidDestPlugin().write_out(
+        _dest_ctx(work_dir),
+        _conn(),
+        DruidDest(tables=["events", "metrics"]),
+        [None, None],
+    )
+
+    make_client.assert_not_called()
+    assert record.staged == []
 
 
 # ---------------------------------------------------------------------------

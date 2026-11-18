@@ -30,11 +30,11 @@ MANUAL = (
     "plugin from the connectors registry and the connection from "
     "--connection-file, then hands the plugin the outputs --outputs-manifest "
     "lists in the run's landing area: with a file handoff, write_out() gets "
-    "local parquet copies holding only the user's columns. Every output must "
-    "hold data, unless none does: then the plugin is not called. The plugin "
-    "context continues the state the function step left in --state-folder (or "
-    "the previous run's); it is drained back there, stored, and added to the "
-    "outputs manifest."
+    "local parquet copies holding only the user's columns. The plugin is "
+    "called on every run, with None for each output the subscriber returned "
+    "None for. The plugin context continues the state the function step left "
+    "in --state-folder (or the previous run's); it is drained back there, "
+    "stored, and added to the outputs manifest."
 )
 
 

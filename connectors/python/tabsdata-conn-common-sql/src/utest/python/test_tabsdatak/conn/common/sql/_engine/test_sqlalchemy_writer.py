@@ -39,22 +39,30 @@ def db_path(tmp_path: Path) -> Path:
     engine = create_engine(f"sqlite:///{p}")
     try:
         with engine.begin() as conn:
-            conn.execute(text(
-                "CREATE TABLE users (id INTEGER PRIMARY KEY, "
-                "name TEXT, age INTEGER)"
-            ))
-            conn.execute(text(
-                "INSERT INTO users (id, name, age) VALUES "
-                "(1, 'alice', 30), (2, 'bob', 25), (3, 'carol', 40)"
-            ))
-            conn.execute(text(
-                "CREATE TABLE orders (id INTEGER PRIMARY KEY, "
-                "user_id INTEGER, total REAL)"
-            ))
-            conn.execute(text(
-                "INSERT INTO orders (id, user_id, total) VALUES "
-                "(10, 1, 9.99), (11, 2, 14.50)"
-            ))
+            conn.execute(
+                text(
+                    "CREATE TABLE users (id INTEGER PRIMARY KEY, "
+                    "name TEXT, age INTEGER)"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO users (id, name, age) VALUES "
+                    "(1, 'alice', 30), (2, 'bob', 25), (3, 'carol', 40)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE TABLE orders (id INTEGER PRIMARY KEY, "
+                    "user_id INTEGER, total REAL)"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO orders (id, user_id, total) VALUES "
+                    "(10, 1, 9.99), (11, 2, 14.50)"
+                )
+            )
     finally:
         engine.dispose()
     return p
@@ -89,7 +97,8 @@ def _fast_retry(monkeypatch):
 
 @pytest.mark.parametrize("transactional", [True, False])
 def test_polars_single_table_append(db_path, work_dir, transactional):
-    src = _frame([
+    src = _frame(
+        [
             {"id": 100, "name": "dave", "age": 50},
             {"id": 101, "name": "eve", "age": 22},
         ],
@@ -108,7 +117,8 @@ def test_polars_single_table_append(db_path, work_dir, transactional):
 
 
 def test_polars_replace_replaces_the_rows(db_path, work_dir):
-    src = _frame([{"id": 1, "name": "only"}],
+    src = _frame(
+        [{"id": 1, "name": "only"}],
     )
     saw.PolarsWriteEngine().write(
         _cfg(db_path, if_table_exists="replace"),
@@ -117,9 +127,7 @@ def test_polars_replace_replaces_the_rows(db_path, work_dir):
     engine = create_engine(sqlite_uri(db_path))
     try:
         with engine.connect() as conn:
-            rows = conn.execute(
-                text("SELECT id, name FROM users")
-            ).fetchall()
+            rows = conn.execute(text("SELECT id, name FROM users")).fetchall()
             assert rows == [(1, "only")]
     finally:
         engine.dispose()
@@ -219,7 +227,8 @@ def test_polars_replace_chunked_does_not_truncate_itself(db_path, work_dir):
     # Multi-chunk replace: first batch replaces, subsequent batches
     # must append -- otherwise batch N+1 wipes batch N. Drive
     # chunk_size=1 via the cfg dict.
-    src = _frame([
+    src = _frame(
+        [
             {"id": 100, "name": "x"},
             {"id": 101, "name": "y"},
             {"id": 102, "name": "z"},
@@ -236,18 +245,23 @@ def test_polars_replace_chunked_does_not_truncate_itself(db_path, work_dir):
     engine = create_engine(sqlite_uri(db_path))
     try:
         with engine.connect() as conn:
-            ids = [r[0] for r in conn.execute(
-                text("SELECT id FROM users ORDER BY id")
-            ).fetchall()]
+            ids = [
+                r[0]
+                for r in conn.execute(
+                    text("SELECT id FROM users ORDER BY id")
+                ).fetchall()
+            ]
             assert ids == [100, 101, 102]
     finally:
         engine.dispose()
 
 
 def test_polars_multi_table(db_path, work_dir):
-    src_u = _frame([{"id": 1000, "name": "ZZ"}],
+    src_u = _frame(
+        [{"id": 1000, "name": "ZZ"}],
     )
-    src_o = _frame([{"id": 999, "user_id": 1000, "total": 1.0}],
+    src_o = _frame(
+        [{"id": 999, "user_id": 1000, "total": 1.0}],
     )
     saw.PolarsWriteEngine().write(
         _cfg(db_path, target_tables=["users", "orders"]),
@@ -256,14 +270,54 @@ def test_polars_multi_table(db_path, work_dir):
     engine = create_engine(sqlite_uri(db_path))
     try:
         with engine.connect() as conn:
-            assert conn.execute(text(
-                "SELECT name FROM users WHERE id=1000"
-            )).scalar_one() == "ZZ"
-            assert conn.execute(text(
-                "SELECT total FROM orders WHERE id=999"
-            )).scalar_one() == 1.0
+            assert (
+                conn.execute(text("SELECT name FROM users WHERE id=1000")).scalar_one()
+                == "ZZ"
+            )
+            assert (
+                conn.execute(text("SELECT total FROM orders WHERE id=999")).scalar_one()
+                == 1.0
+            )
     finally:
         engine.dispose()
+
+
+@pytest.mark.parametrize("transactional", [True, False])
+def test_polars_leaves_the_table_of_a_none_slot_untouched(db_path, transactional):
+    saw.PolarsWriteEngine().write(
+        _cfg(
+            db_path,
+            target_tables=["users", "orders"],
+            if_table_exists="replace",
+            transactional=transactional,
+        ),
+        [None, _frame([{"id": 999, "user_id": 1, "total": 1.0}])],
+    )
+    engine = create_engine(sqlite_uri(db_path))
+    try:
+        with engine.connect() as conn:
+            users = conn.execute(
+                text("SELECT id, name, age FROM users ORDER BY id")
+            ).fetchall()
+            orders = conn.execute(text("SELECT id FROM orders")).fetchall()
+    finally:
+        engine.dispose()
+    assert users == [(1, "alice", 30), (2, "bob", 25), (3, "carol", 40)]
+    assert orders == [(999,)]
+
+
+def test_polars_writes_nothing_when_every_slot_is_none(monkeypatch, tmp_path):
+    build = MagicMock()
+    monkeypatch.setattr(_sqlite_helpers, "build_engine", build)
+    saw.PolarsWriteEngine().write(
+        _SqliteSqlWriteCfg(
+            uri=f"sqlite:///{tmp_path / 'unused.db'}",
+            target_tables=["users", "orders"],
+            if_table_exists="replace",
+        ),
+        [None, None],
+    )
+    build.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -286,12 +340,11 @@ def test_polars_write_empty_frame_creates_table_with_replace(db_path, work_dir):
     engine = create_engine(sqlite_uri(db_path))
     try:
         with engine.connect() as conn:
-            n = conn.execute(
-                text("SELECT COUNT(*) FROM empty_replace")
-            ).scalar_one()
+            n = conn.execute(text("SELECT COUNT(*) FROM empty_replace")).scalar_one()
             assert n == 0
             cols = [
-                r[1] for r in conn.execute(
+                r[1]
+                for r in conn.execute(
                     text("PRAGMA table_info(empty_replace)")
                 ).fetchall()
             ]
@@ -387,12 +440,18 @@ def test_a_retried_write_does_not_repeat_the_rows_it_wrote(
     engine = create_engine(sqlite_uri(db_path))
     try:
         with engine.connect() as conn:
-            assert conn.execute(
-                text("SELECT COUNT(*) FROM users WHERE id=1000")
-            ).scalar_one() == 1
-            assert conn.execute(
-                text("SELECT COUNT(*) FROM orders WHERE id=999")
-            ).scalar_one() == 1
+            assert (
+                conn.execute(
+                    text("SELECT COUNT(*) FROM users WHERE id=1000")
+                ).scalar_one()
+                == 1
+            )
+            assert (
+                conn.execute(
+                    text("SELECT COUNT(*) FROM orders WHERE id=999")
+                ).scalar_one()
+                == 1
+            )
     finally:
         engine.dispose()
     assert calls["n"] == 4
@@ -403,7 +462,8 @@ def test_engine_disposed_after_write_failure(monkeypatch, tmp_path: Path):
     fake_engine.connect.side_effect = _programming("nope")
 
     monkeypatch.setattr(
-        _sqlite_helpers, "build_engine",
+        _sqlite_helpers,
+        "build_engine",
         lambda *a, **kw: fake_engine,
     )
     with pytest.raises(ProgrammingError):
@@ -435,16 +495,14 @@ class _RowcountForbidden:
 def _arrow_schema():
     import pyarrow as pa
 
-    return pa.schema(
-        [
-            pa.field("ts_tz", pa.timestamp("us", tz="UTC")),
-            pa.field("ts_naive", pa.timestamp("us")),
-            pa.field("f4", pa.float32()),
-            pa.field("f8", pa.float64()),
-            pa.field("t", pa.time64("ns")),
-            pa.field("s", pa.string()),
-        ]
-    )
+    return pa.schema([
+        pa.field("ts_tz", pa.timestamp("us", tz="UTC")),
+        pa.field("ts_naive", pa.timestamp("us")),
+        pa.field("f4", pa.float32()),
+        pa.field("f8", pa.float64()),
+        pa.field("t", pa.time64("ns")),
+        pa.field("s", pa.string()),
+    ])
 
 
 def test_dialect_type_fixes_maps_tz_timestamp_to_datetimeoffset_on_mssql():
@@ -731,7 +789,7 @@ class _Recording:
 @pytest.mark.parametrize(
     "name,dialect,table,statement",
     [
-        ("postgresql", "postgresql", "s.t", 'TRUNCATE TABLE s.t'),
+        ("postgresql", "postgresql", "s.t", "TRUNCATE TABLE s.t"),
         ("postgresql", "postgresql", "S.My T", 'TRUNCATE TABLE "S"."My T"'),
         ("mysql", "mysql", "db.t", "TRUNCATE TABLE db.t"),
         ("mssql", "mssql", "dbo.My T", "TRUNCATE TABLE dbo.[My T]"),
@@ -758,9 +816,7 @@ def test_a_replace_empties_an_existing_table_as_its_dialect_allows(
         seen.append((table_name, schema))
         return True
 
-    monkeypatch.setattr(
-        sqlalchemy, "inspect", lambda _: MagicMock(has_table=has_table)
-    )
+    monkeypatch.setattr(sqlalchemy, "inspect", lambda _: MagicMock(has_table=has_table))
     saw._empty_table_if_exists(connection, table)
     assert connection.statements == [statement]
     *prefix, bare = table.split(".")

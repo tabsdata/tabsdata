@@ -440,7 +440,7 @@ def file_handoff(tmp_path: Path) -> DestinationHandoff:
     )
 
 
-def test_read_tables_maps_an_output_without_data_to_bad_manifest(tmp_path):
+def test_read_tables_hands_an_output_without_data_over_as_none(tmp_path):
     request = Request.load(
         write_request(tmp_path / "request.yaml"),
         RunDestinationPluginErrorCode.RDP_1,
@@ -452,8 +452,8 @@ def test_read_tables_maps_an_output_without_data_to_bad_manifest(tmp_path):
         request=request,
         manifest=manifest,
     )
-    with pytest.raises(BadManifestError):
-        command.read_tables()
+    command.read_tables()
+    assert [slot.table for slot in command.handoff.slots] == [None]
 
 
 def test_read_tables_maps_an_unreadable_landing_file_to_read_failed(tmp_path):
@@ -509,6 +509,25 @@ def test_write_tables_returns_normally(tmp_path):
 
     writing_command(tmp_path, Plugin()).write_tables()
     assert len(calls) == 1
+
+
+def test_write_tables_hands_the_plugin_none_for_an_output_without_data(tmp_path):
+    received = []
+
+    class Plugin:
+        def write_out(
+            self,
+            context,
+            connection,
+            destination,
+            tables,
+        ):
+            received.append(tables)
+
+    command = writing_command(tmp_path, Plugin())
+    command.read_tables()
+    command.write_tables()
+    assert received == [[None]]
 
 
 def test_the_plugin_works_in_the_work_folder(tmp_path):
@@ -681,14 +700,20 @@ def test_main_missing_outputs_manifest_returns_bad_manifest(
     assert main() == BadManifestError.exit_code
 
 
-def test_main_all_null_manifest_skips_write_out(
+def test_main_all_null_manifest_calls_write_out_which_writes_nothing(
     tmp_path,
     built_bundle,
     monkeypatch,
     http_ok_url,
 ):
-    # A subscriber that returns None for every output slot produced no new data
-    # this run, so the destination plugin is skipped and main() succeeds.
+    handed = []
+    grow = DestinationHandoff.grow
+
+    def spy(self, *arguments):
+        handed.append([slot.table for slot in self.slots])
+        return grow(self, *arguments)
+
+    monkeypatch.setattr(DestinationHandoff, "grow", spy)
     request_path = write_request(tmp_path / "request.yaml")
     connection_file = write_connection_file(
         tmp_path / "connection.yaml",
@@ -706,6 +731,8 @@ def test_main_all_null_manifest_skips_write_out(
         responder_url=http_ok_url,
     )
     assert main() == 0
+    assert handed == [[None]]
+    assert not (tmp_path / "destination" / "sink.parquet").exists()
 
 
 # --- main: end-to-end --------------------------------------------------
@@ -786,7 +813,9 @@ def shipping_setup(
     return tmp_path / "destination" / "sink.parquet"
 
 
-_DEPRECATED = "LocalFileDestPlugin.write_out takes the deprecated list[TableFileSpec]"
+_DEPRECATED = (
+    "LocalFileDestPlugin.write_out takes the deprecated list[TableFileSpec | None]"
+)
 
 
 def test_main_logs_that_a_legacy_plugin_is_deprecated(

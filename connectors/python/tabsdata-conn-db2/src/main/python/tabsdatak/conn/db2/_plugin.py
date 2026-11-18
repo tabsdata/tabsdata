@@ -171,13 +171,13 @@ class Db2SrcPlugin(SrcPlugin[Db2SrcConn, Db2Src]):
         )
 
 
-class Db2DestPlugin(DestPlugin[Db2DestConn, Db2Dest, list[pl.LazyFrame]]):
+class Db2DestPlugin(DestPlugin[Db2DestConn, Db2Dest, list[pl.LazyFrame | None]]):
     def write_out(
         self,
         ctx: DestContext,
         conn: Db2DestConn,
         dest: Db2Dest,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         from sqlalchemy.exc import OperationalError, SQLAlchemyError
 

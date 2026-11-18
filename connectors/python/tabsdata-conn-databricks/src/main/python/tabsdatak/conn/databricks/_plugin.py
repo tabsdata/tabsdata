@@ -12,9 +12,10 @@ from typing import Any
 
 import polars as pl
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._dest import present
 from tabsdatak.conn.common.error import ConnException
 
-# noinspection PyProtectedMember
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.initial_values import resolve_initial_values
 from tabsdatak.conn.common.types import _convert
@@ -233,14 +234,14 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrcConn, DatabricksSrc]):
 
 
 class _DatabricksDestPlugin(
-    DestPlugin[DatabricksDestConn, DatabricksDest, list[pl.LazyFrame]],
+    DestPlugin[DatabricksDestConn, DatabricksDest, list[pl.LazyFrame | None]],
 ):
     def write_out(
         self,
         ctx: DestContext,
         conn: DatabricksDestConn,
         dest: DatabricksDest,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         # noinspection PyProtectedMember
         from tabsdatak.conn.databricks import _impl
@@ -260,18 +261,27 @@ class _DatabricksDestPlugin(
                 slots=len(tables),
             )
 
+        merge_cfgs = dest._merge_cfgs()
+        if merge_cfgs is None:
+            frames, target_tables = present(tables, dest.tables)
+        else:
+            frames, target_tables, merge_cfgs = present(tables, dest.tables, merge_cfgs)
+        if not frames:
+            logger.info("databricks: no table to write; nothing to do")
+            return
+
         write_cfg = _impl.DatabricksWriteCfg(
             conn=conn,
-            target_tables=list(dest.tables),
+            target_tables=target_tables,
             if_table_exists=dest.if_table_exists,
             schema_evolution=dest._evolution().schema_evolution,
             ctx=ctx,
             watermark_column=dest._watermark_column(),
-            merge_cfgs=dest._merge_cfgs(),
+            merge_cfgs=merge_cfgs,
         )
         host = _convert(conn.host_url, str)
         try:
-            _impl.write_all_tables(write_cfg, tables)
+            _impl.write_all_tables(write_cfg, frames)
         except ConnException:
             raise
         except Exception as e:  # noqa: BLE001 -- runtime wrapper

@@ -14,23 +14,22 @@ import polars as pl
 import pytest
 from tabsdatax.itest.fixture.backends.s3local import S3LocalDomain, s3local_domain
 
+# noinspection PyProtectedMember
+import tabsdatak.conn.s3._plugin as plugin
+from tabsdatak._handoff import DestinationContract
 from tabsdatak.api import Secret
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import _plugin as _file_plugin, _target
+from tabsdatak.conn.common.file._store import FileStore
+from tabsdatak.conn.common.file.constants import FILE_META_PATH
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import AwsAccessSecretKey
 from tabsdatak.conn.s3 import S3Dest, S3DestConn, S3Src, S3SrcConn
 from tabsdatak.conn.s3._explorer import S3ConnectionExplorer
-from tabsdatak.conn.common.file._store import FileStore
-from tabsdatak.conn.common.file.constants import FILE_META_PATH
-
-# noinspection PyProtectedMember
-import tabsdatak.conn.s3._plugin as plugin
 
 pytestmark = pytest.mark.s3
-
 
 
 def _aws_creds() -> AwsAccessSecretKey:
@@ -58,18 +57,6 @@ def _dest_conn(**overrides) -> S3DestConn:
     )
     kw.update(overrides)
     return S3DestConn(**kw)
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +150,26 @@ def test_dest_plugin_writes_through_the_connection_store(monkeypatch, tmp_path):
     assert captured["store"] == plugin.file_store(conn)
     assert captured["errors"] is plugin.ERRORS
     assert captured["cfg"].paths == ["out/x.parquet"]
+
+
+def test_dest_plugin_takes_lazy_frames_or_none():
+    assert DestinationContract(plugin.S3DestPlugin).frames()
+
+
+def test_dest_plugin_hands_none_tables_to_the_writer(monkeypatch, tmp_path):
+    captured: dict = {}
+    monkeypatch.setattr(
+        _target, "write_files", lambda **options: captured.update(options)
+    )
+    table = pl.LazyFrame({"a": [1]})
+    plugin.S3DestPlugin().write_out(
+        _dest_ctx(tmp_path),
+        _dest_conn(),
+        S3Dest(paths=["out/x.parquet", "out/y.parquet"]),
+        [None, table],
+    )
+    assert captured["tables"] == [None, table]
+    assert captured["cfg"].paths == ["out/x.parquet", "out/y.parquet"]
 
 
 # ---------------------------------------------------------------------------

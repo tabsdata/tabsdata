@@ -171,13 +171,15 @@ class OracleSrcPlugin(SrcPlugin[OracleSrcConn, OracleSrc]):
         )
 
 
-class OracleDestPlugin(DestPlugin[OracleDestConn, OracleDest, list[pl.LazyFrame]]):
+class OracleDestPlugin(
+    DestPlugin[OracleDestConn, OracleDest, list[pl.LazyFrame | None]]
+):
     def write_out(
         self,
         ctx: DestContext,
         conn: OracleDestConn,
         dest: OracleDest,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         from sqlalchemy.exc import OperationalError, SQLAlchemyError
 

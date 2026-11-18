@@ -38,7 +38,6 @@ from tabsdatak.server._tdrunner.function._handlers.columns import ColumnPolicy, 
 from tabsdatak.server._tdrunner.function._handlers.handoff import (
     DestinationHandoff,
     Handoff,
-    MissingOutputError,
     OutputCopyError,
     OutputReadError,
 )
@@ -98,14 +97,7 @@ class DestinationPlugin(Command[RunDestinationPluginArguments]):
         logger.info("Running the destination plugin")
         self.load()
         self.hydrate()
-        if self.empty:
-            logger.info(
-                f"The subscriber returned no data for its "
-                f"{len(self.manifest.outputs)} output(s); "
-                f"{type(self.plugin).__name__} is not called"
-            )
-        else:
-            self.write()
+        self.write()
         self.drain()
         self.store_state()
         return 0
@@ -118,7 +110,7 @@ class DestinationPlugin(Command[RunDestinationPluginArguments]):
             self.write_tables()
         finally:
             self.handoff.reap()
-        logger.info(f"Destination plugin wrote {len(self.handoff.slots)} table(s)")
+        logger.info(f"Destination plugin took {len(self.handoff.slots)} output(s)")
 
     def load(self) -> None:
         self.request = Request.load(
@@ -190,11 +182,6 @@ class DestinationPlugin(Command[RunDestinationPluginArguments]):
             )
         logger.debug(f"State stored at {state.target.uri}")
 
-    @property
-    def empty(self) -> bool:
-        outputs = self.manifest.outputs
-        return bool(outputs) and all(output.uri is None for output in outputs)
-
     def load_connection(self) -> Conn:
         try:
             return ConnectionDocument(self.connection_file).load()
@@ -231,12 +218,6 @@ class DestinationPlugin(Command[RunDestinationPluginArguments]):
     def read_tables(self) -> None:
         try:
             slots = self.handoff.seed(self.request.info, self.manifest)
-        except MissingOutputError as error:
-            raise RunDestinationPluginErrorCode.RDP_8.exception(
-                cause=error,
-                slot=error.slot,
-                name=error.name,
-            )
         except OutputReadError as error:
             raise RunDestinationPluginErrorCode.RDP_10.exception(
                 cause=error,
@@ -254,9 +235,10 @@ class DestinationPlugin(Command[RunDestinationPluginArguments]):
         logger.debug(f"Outputs {self.manifest.outputs} handed over as {slots}")
 
     def write_tables(self) -> None:
+        slots = self.handoff.slots
         logger.info(
-            f"Writing {len(self.handoff.slots)} table(s) through "
-            f"{type(self.plugin).__name__}"
+            f"Handing {len(slots)} output(s) to {type(self.plugin).__name__}, "
+            f"{sum(slot.table is None for slot in slots)} of them None"
         )
         try:
             self.handoff.grow(

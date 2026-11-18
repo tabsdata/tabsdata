@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 import polars as pl
 import pymongo
@@ -234,7 +235,8 @@ def _install_client(monkeypatch, client: _FakeClient) -> _FakeClient:
 
 def test_write_out_inserts_when_id_field_none(monkeypatch, work_dir):
     client = _install_client(monkeypatch, _FakeClient())
-    table = _table([{"name": "alice", "age": 30}, {"name": "bob", "age": 31}],
+    table = _table(
+        [{"name": "alice", "age": 30}, {"name": "bob", "age": 31}],
     )
     dest = MongoDBDest(
         collections_with_ids=[("app.users", None)],
@@ -252,7 +254,8 @@ def test_write_out_inserts_when_id_field_none(monkeypatch, work_dir):
 
 def test_write_out_upserts_when_id_field_provided(monkeypatch, work_dir):
     client = _install_client(monkeypatch, _FakeClient())
-    table = _table([
+    table = _table(
+        [
             {"user_id": 1, "name": "alice"},
             {"user_id": 2, "name": "bob"},
         ],
@@ -274,7 +277,8 @@ def test_write_out_inserts_when_id_field_and_update_existing_false(
     work_dir,
 ):
     client = _install_client(monkeypatch, _FakeClient())
-    table = _table([{"user_id": 1, "name": "alice"}],
+    table = _table(
+        [{"user_id": 1, "name": "alice"}],
     )
     dest = MongoDBDest(
         collections_with_ids=[("app.users", "user_id")],
@@ -294,7 +298,8 @@ def test_write_out_replace_drops_existing_collection(monkeypatch, work_dir):
     # Pre-populate the fake collection so count_documents() returns 1
     db = client["app"]
     db.collections["users"] = _FakeCollection("users", exists=True)
-    table = _table([{"name": "alice"}],
+    table = _table(
+        [{"name": "alice"}],
     )
     dest = MongoDBDest(
         collections_with_ids=[("app.users", None)],
@@ -313,7 +318,8 @@ def test_write_out_replace_drops_existing_collection(monkeypatch, work_dir):
 
 def test_write_out_chunks_by_docs_per_trx(monkeypatch, work_dir):
     client = _install_client(monkeypatch, _FakeClient())
-    table = _table([{"name": f"u{i}"} for i in range(7)],
+    table = _table(
+        [{"name": f"u{i}"} for i in range(7)],
     )
     dest = MongoDBDest(
         collections_with_ids=[("app.users", None)],
@@ -330,7 +336,8 @@ def test_write_out_chunks_by_docs_per_trx(monkeypatch, work_dir):
 
 def test_write_out_uses_transactions_when_enabled(monkeypatch, work_dir):
     client = _install_client(monkeypatch, _FakeClient())
-    table = _table([{"name": "alice"}, {"name": "bob"}],
+    table = _table(
+        [{"name": "alice"}, {"name": "bob"}],
     )
     dest = MongoDBDest(
         collections_with_ids=[("app.users", None)],
@@ -361,6 +368,41 @@ def test_write_out_multiple_collections(monkeypatch, work_dir):
 
     assert "users" in client["app"].collections
     assert "orders" in client["app"].collections
+
+
+def test_write_out_leaves_a_none_collection_untouched(monkeypatch, work_dir):
+    client = _install_client(monkeypatch, _FakeClient())
+    db = client["app"]
+    users = db.collections["users"] = _FakeCollection("users", exists=True)
+    dest = MongoDBDest(
+        collections_with_ids=[("app.users", None), ("app.orders", "id")],
+        if_collection_exists="replace",
+    )
+
+    plugin._MongoDBDestPlugin().write_out(
+        _Ctx(work_dir), _bare_conn(), dest, [None, _table([{"id": 1}])]
+    )
+
+    assert users.dropped is False
+    assert users.inserted_one == []
+    assert users.bulk_write_calls == []
+    (call,) = db.collections["orders"].bulk_write_calls
+    (op,) = call["ops"]
+    assert isinstance(op, pymongo.UpdateOne)
+
+
+def test_write_out_connects_to_nothing_when_every_table_is_none(monkeypatch, work_dir):
+    factory = MagicMock()
+    monkeypatch.setattr(pymongo, "MongoClient", factory)
+    dest = MongoDBDest(
+        collections_with_ids=[("app.users", None), ("app.orders", None)],
+    )
+
+    plugin._MongoDBDestPlugin().write_out(
+        _Ctx(work_dir), _bare_conn(), dest, [None, None]
+    )
+
+    factory.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

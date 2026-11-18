@@ -664,8 +664,8 @@ def subscriber(
     takes one `TableFrameSpec` parameter per input table plus an
     *optional* trailing `ctx: TransactionCtx`, and returns one `TableFrame`
     per destination slot -- that return value is what gets written.
-    Return `None` for every slot to write nothing; `None` in only some
-    slots fails the run (RDP_8).
+    Return `None` for a slot to leave its target as it is; with `None`
+    in every slot, the destination writes nothing.
 
     A subscriber hands all its slots to the destination in one write;
     a destination with a `transactional` option writes them in one

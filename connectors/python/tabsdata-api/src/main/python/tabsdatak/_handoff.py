@@ -30,7 +30,7 @@ from tabsdatak.spi import (
     TableFileSpec,
 )
 
-LEGACY_DEST_TABLES = list[TableFileSpec]
+LEGACY_DEST_TABLES = list[TableFileSpec | None]
 
 
 class RestartRead(Exception):
@@ -69,7 +69,7 @@ class PluginContract[Plugin]:
     @staticmethod
     def lazy_frames() -> Any:
         polars = sys.modules.get("polars")
-        return None if polars is None else list[polars.LazyFrame]
+        return None if polars is None else list[polars.LazyFrame | None]
 
     @staticmethod
     def mentions(
@@ -259,6 +259,14 @@ def scan_parquet(file: Any) -> Any:
 
 
 class DestinationContract(PluginContract[DestPlugin]):
+    @staticmethod
+    def same(annotation: Any, expected: Any) -> bool:
+        if get_origin(annotation) is not list or get_origin(expected) is not list:
+            return annotation == expected
+        [entry] = get_args(annotation)
+        [wanted] = get_args(expected)
+        return set(get_args(entry) or (entry,)) == set(get_args(wanted) or (wanted,))
+
     def tables(self) -> Any:
         for klass in self.plugin.__mro__:
             for base in klass.__dict__.get("__orig_bases__", ()):
@@ -268,12 +276,12 @@ class DestinationContract(PluginContract[DestPlugin]):
 
     def frames(self) -> bool:
         declared = self.tables()
-        frames = declared != LEGACY_DEST_TABLES
-        if frames and declared != self.lazy_frames():
+        frames = not self.same(declared, LEGACY_DEST_TABLES)
+        if frames and not self.same(declared, self.lazy_frames()):
             raise ValueError(
                 f"{self.plugin.__qualname__} declares {declared!r} as its tables; a "
-                f"destination plugin declares list[pl.LazyFrame] as the third type "
-                f"argument of DestPlugin, or none for the legacy files",
+                f"destination plugin declares list[pl.LazyFrame | None] as the "
+                f"third type argument of DestPlugin, or none for the legacy files",
             )
         method = self.plugin.write_out
         if method is DestPlugin.write_out:
@@ -284,7 +292,7 @@ class DestinationContract(PluginContract[DestPlugin]):
             if frames:
                 raise ValueError(
                     f"{self.plugin.__qualname__}.write_out: annotate its fourth "
-                    f"parameter with list[pl.LazyFrame]",
+                    f"parameter with list[pl.LazyFrame | None]",
                 )
             return False
         try:
@@ -298,17 +306,18 @@ class DestinationContract(PluginContract[DestPlugin]):
                 ) from error
             return False
         if frames:
-            if received != declared:
+            if not self.same(received, declared):
                 raise ValueError(
                     f"{self.plugin.__qualname__}.write_out: `{parameter.name}` is "
                     f"typed as {received!r}, but the plugin declares "
-                    f"list[pl.LazyFrame]; annotate it with list[pl.LazyFrame]",
+                    f"list[pl.LazyFrame | None]; annotate it with "
+                    f"list[pl.LazyFrame | None]",
                 )
             return True
         if self.mentions(received, self.frame_types()):
             raise ValueError(
                 f"{self.plugin.__qualname__}.write_out: `{parameter.name}` is typed as "
                 f"{received!r}, but the plugin declares no frames; declare "
-                f"list[pl.LazyFrame] as the third type argument of DestPlugin",
+                f"list[pl.LazyFrame | None] as the third type argument of DestPlugin",
             )
         return False

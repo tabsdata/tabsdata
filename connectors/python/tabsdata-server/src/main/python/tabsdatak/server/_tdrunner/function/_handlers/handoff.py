@@ -81,17 +81,6 @@ class InputCountError(HandoffError):
         self.expected = expected
 
 
-class MissingOutputError(HandoffError):
-    def __init__(
-        self,
-        slot: int,
-        name: str,
-    ) -> None:
-        super().__init__(f"Output slot {slot} ({name!r}) has no data")
-        self.slot = slot
-        self.name = name
-
-
 class OutputReadError(HandoffError):
     def __init__(
         self,
@@ -286,7 +275,7 @@ class SourceHandoff(Handoff):
 
 @dataclass
 class DestinationSlot(Slot):
-    table: pl.LazyFrame | Path
+    table: pl.LazyFrame | Path | None
 
 
 @dataclass(kw_only=True)
@@ -303,10 +292,11 @@ class DestinationHandoff(Handoff):
         info: Info,
         manifest: OutputManifest,
     ) -> list[DestinationSlot]:
-        frames: list[TableFrame] = []
+        frames: list[TableFrame | None] = []
         for slot, entry in enumerate(manifest.outputs):
             if entry.uri is None:
-                raise MissingOutputError(slot, entry.name)
+                frames.append(None)
+                continue
             source = TableFile.stored(info.landing_file(slot))
             try:
                 frames.append(self.source.scan(source))
@@ -328,7 +318,7 @@ class DestinationHandoff(Handoff):
                 DestinationSlot(
                     name,
                     position,
-                    self.target.extract(frame),
+                    None if frame is None else self.target.extract(frame),
                 )
                 for position, (name, frame) in enumerate(zip(names, frames))
             ]
@@ -338,7 +328,7 @@ class DestinationHandoff(Handoff):
         self,
         info: Info,
         names: list[str],
-        frames: list[TableFrame],
+        frames: list[TableFrame | None],
     ) -> list[DestinationSlot]:
         self.base_folder.mkdir(parents=True, exist_ok=True)
         tables_folder = Path(tempfile.mkdtemp(dir=self.base_folder))
@@ -346,6 +336,9 @@ class DestinationHandoff(Handoff):
         slots: list[DestinationSlot] = []
         plans: list[pl.LazyFrame] = []
         for position, (name, frame) in enumerate(zip(names, frames)):
+            if frame is None:
+                slots.append(DestinationSlot(name, position, None))
+                continue
             table = tables_folder / f"{position}.parquet"
             try:
                 plans.append(self.target.sink(frame, TableFile.local(table)))
@@ -366,7 +359,9 @@ class DestinationHandoff(Handoff):
             pl.collect_all(plans, engine="streaming")
         except Exception as error:
             raise OutputCopyError(
-                ", ".join(str(slot.position) for slot in slots),
+                ", ".join(
+                    str(slot.position) for slot in slots if slot.table is not None
+                ),
                 info.function_landing.uri,
                 str(error),
             ) from error

@@ -17,13 +17,10 @@ from tabsdatax.itest.fixture.backends.azurebloblocal import (
     azurebloblocal_domain,
 )
 
+# noinspection PyProtectedMember
+import tabsdatak.conn.azureblob._plugin as plugin
+from tabsdatak._handoff import DestinationContract
 from tabsdatak.api import Secret
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.file import _plugin as _file_plugin, _target
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.types import AzureAccountKey
 from tabsdatak.conn.azureblob import (
     AzureBlobDest,
     AzureBlobDestConn,
@@ -31,14 +28,16 @@ from tabsdatak.conn.azureblob import (
     AzureBlobSrcConn,
 )
 from tabsdatak.conn.azureblob._explorer import AzureBlobConnectionExplorer
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.file import _plugin as _file_plugin, _target
 from tabsdatak.conn.common.file._store import FileStore
 from tabsdatak.conn.common.file.constants import FILE_META_PATH
 
 # noinspection PyProtectedMember
-import tabsdatak.conn.azureblob._plugin as plugin
+from tabsdatak.conn.common.types import AzureAccountKey
 
 pytestmark = pytest.mark.azureblob
-
 
 
 def _az_creds() -> AzureAccountKey:
@@ -66,21 +65,9 @@ def _dest_conn(**overrides) -> AzureBlobDestConn:
     return AzureBlobDestConn(**kw)
 
 
-
-
-
-
-
-
-
-
-
-
 # ---------------------------------------------------------------------------
 # credentials
 # ---------------------------------------------------------------------------
-
-
 
 
 def test_credentials_rejects_non_account_key():
@@ -181,6 +168,26 @@ def test_dest_plugin_writes_through_the_connection_store(monkeypatch, tmp_path):
     assert captured["store"] == plugin.file_store(conn)
     assert captured["errors"] is plugin.ERRORS
     assert captured["cfg"].paths == ["out/x.parquet"]
+
+
+def test_dest_plugin_takes_lazy_frames_or_none():
+    assert DestinationContract(plugin.AzureBlobDestPlugin).frames()
+
+
+def test_dest_plugin_hands_none_tables_to_the_writer(monkeypatch, tmp_path):
+    captured: dict = {}
+    monkeypatch.setattr(
+        _target, "write_files", lambda **options: captured.update(options)
+    )
+    table = pl.LazyFrame({"a": [1]})
+    plugin.AzureBlobDestPlugin().write_out(
+        _dest_ctx(tmp_path),
+        _dest_conn(),
+        AzureBlobDest(paths=["out/x.parquet", "out/y.parquet"]),
+        [None, table],
+    )
+    assert captured["tables"] == [None, table]
+    assert captured["cfg"].paths == ["out/x.parquet", "out/y.parquet"]
 
 
 # ---------------------------------------------------------------------------

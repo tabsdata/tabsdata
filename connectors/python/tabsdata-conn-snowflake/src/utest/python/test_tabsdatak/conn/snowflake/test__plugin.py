@@ -5,10 +5,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import polars as pl
 import pytest
-from test_tabsdatak.conn.snowflake.support import _FakeCtx
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.sql.error import (
@@ -16,18 +16,22 @@ from tabsdatak.conn.common.sql.error import (
     SqlCommonValidateException,
 )
 from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.conn.snowflake import MergeCfg, SnowflakeDestConn, SnowflakeDest
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.snowflake import _impl as impl
-
 # noinspection PyProtectedMember
-from tabsdatak.conn.snowflake import _plugin as plugin
+from tabsdatak.conn.snowflake import (
+    MergeCfg,
+    SnowflakeDest,
+    SnowflakeDestConn,
+    _impl as impl,
+    _plugin as plugin,
+)
+from tabsdatak.conn.snowflake._explorer import SnowflakeConnectionExplorer
 from tabsdatak.conn.snowflake.error import (
     SnowflakeErrorCode,
     SnowflakeRuntimeException,
 )
-from tabsdatak.conn.snowflake._explorer import SnowflakeConnectionExplorer
+from test_tabsdatak.conn.snowflake.support import _FakeCtx
 
 pytestmark = pytest.mark.snowflake
 
@@ -207,10 +211,48 @@ def test_dest_plugin_forwards_one_merge_cfg_per_table(monkeypatch, work_dir):
     assert captured["cfg"].merge_cfgs == [first, second]
 
 
+def test_dest_plugin_hands_over_only_the_present_tables(monkeypatch, work_dir):
+    src = _make_parquet(work_dir / "b.parquet", [{"id": 2}])
+    captured: dict = {}
+    monkeypatch.setattr(
+        impl,
+        "write_all_tables",
+        lambda cfg, tables: captured.update(cfg=cfg, tables=list(tables)),
+    )
+
+    first = MergeCfg(on=["id"], op_column="op")
+    second = MergeCfg(on=["other_id"], op_column="op")
+    dest = SnowflakeDest(
+        tables=["DB.S.A", "DB.S.B"],
+        if_table_exists="merge",
+        merge_cfg=[first, second],
+    )
+    plugin.SnowflakeDestPlugin().write_out(
+        _dest_ctx(work_dir), _conn(), dest, [None, src]
+    )
+
+    assert captured["tables"] == [src]
+    assert captured["cfg"].target_tables == ["DB.S.B"]
+    assert captured["cfg"].merge_cfgs == [second]
+
+
+def test_dest_plugin_writes_nothing_when_every_table_is_none(monkeypatch, work_dir):
+    write = MagicMock()
+    monkeypatch.setattr(impl, "write_all_tables", write)
+    connect = MagicMock()
+    monkeypatch.setattr(impl, "build_snowflake_connection", connect)
+
+    dest = SnowflakeDest(tables=["DB.S.A", "DB.S.B"], if_table_exists="replace")
+    plugin.SnowflakeDestPlugin().write_out(
+        _dest_ctx(work_dir), _conn(), dest, [None, None]
+    )
+
+    write.assert_not_called()
+    connect.assert_not_called()
+
+
 @pytest.mark.parametrize("schema_evolution", ["strict", "update"])
-def test_dest_plugin_forwards_schema_evolution(
-    monkeypatch, work_dir, schema_evolution
-):
+def test_dest_plugin_forwards_schema_evolution(monkeypatch, work_dir, schema_evolution):
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     captured: dict = {}
     monkeypatch.setattr(

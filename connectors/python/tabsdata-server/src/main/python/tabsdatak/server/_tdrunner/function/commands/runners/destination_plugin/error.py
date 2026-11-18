@@ -103,13 +103,6 @@ class RunDestinationPluginErrorCode(ErrorCode):
         BadManifestError,
         "Cannot read the outputs manifest {path}: {detail}",
     )
-    RDP_8 = ErrorDef(
-        BadManifestError,
-        (
-            "Cannot hand over output {slot} ({name!r}): the subscriber returned no "
-            "frame for it, and a destination needs one for every output"
-        ),
-    )
     RDP_9 = ErrorDef(
         OutputCopyFailedError,
         "Cannot copy the landed output {slot} from {path}: {detail}",

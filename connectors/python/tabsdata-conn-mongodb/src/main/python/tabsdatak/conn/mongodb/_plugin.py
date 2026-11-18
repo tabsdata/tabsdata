@@ -15,6 +15,8 @@ from urllib.parse import quote_plus
 # noinspection PyProtectedMember
 import polars as pl
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._dest import present
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.mongodb import (
     DestCfgKey,
@@ -268,13 +270,15 @@ def _iter_documents(frame: pl.LazyFrame, batch_rows: int) -> Iterator[dict]:
 # --- Plugin: destination ---------------------------------------------
 
 
-class _MongoDBDestPlugin(DestPlugin[MongoDBDestConn, MongoDBDest, list[pl.LazyFrame]]):
+class _MongoDBDestPlugin(
+    DestPlugin[MongoDBDestConn, MongoDBDest, list[pl.LazyFrame | None]]
+):
     def write_out(
         self,
         ctx: DestContext,
         conn: MongoDBDestConn,
         dest: MongoDBDest,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         from pymongo.errors import BulkWriteError, PyMongoError
 
@@ -294,18 +298,23 @@ class _MongoDBDestPlugin(DestPlugin[MongoDBDestConn, MongoDBDest, list[pl.LazyFr
                 slots=len(tables),
             )
 
+        frames, collections_with_ids = present(tables, dest.collections_with_ids)
+        if not frames:
+            logger.info("mongodb: no table to write; nothing to do")
+            return
+
         logger.debug("mongodb: establishing pymongo client")
         client = _build_client(conn)
         default_db = _default_database_name(client)
-        total = len(dest.collections_with_ids)
+        total = len(collections_with_ids)
         try:
             session_cm = client.start_session()
             session = session_cm.__enter__()
             try:
                 for i, (table, (collection_fqn, id_field)) in enumerate(
                     zip(
-                        tables,
-                        dest.collections_with_ids,
+                        frames,
+                        collections_with_ids,
                     ),
                     1,
                 ):

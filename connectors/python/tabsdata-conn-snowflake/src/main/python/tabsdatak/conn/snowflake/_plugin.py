@@ -10,6 +10,8 @@ from typing import Any
 
 import polars as pl
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._dest import present
 from tabsdatak.conn.common.error import ConnException
 from tabsdatak.conn.snowflake import (
     DestCfgKey,
@@ -87,14 +89,14 @@ def _is_connection_error(exc: BaseException) -> bool:
 
 
 class SnowflakeDestPlugin(
-    DestPlugin[SnowflakeDestConn, SnowflakeDest, list[pl.LazyFrame]],
+    DestPlugin[SnowflakeDestConn, SnowflakeDest, list[pl.LazyFrame | None]],
 ):
     def write_out(
         self,
         ctx: DestContext,
         conn: SnowflakeDestConn,
         dest: SnowflakeDest,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         # noinspection PyProtectedMember
         from tabsdatak.conn.snowflake import _impl
@@ -116,18 +118,26 @@ class SnowflakeDestPlugin(
             )
 
         logger.info("snowflake: write_out starting (%d table(s))", len(dest.tables))
+        merge_cfgs = dest._merge_cfgs()
+        if merge_cfgs is None:
+            frames, target_tables = present(tables, dest.tables)
+        else:
+            frames, target_tables, merge_cfgs = present(tables, dest.tables, merge_cfgs)
+        if not frames:
+            logger.info("snowflake: no table to write; nothing to do")
+            return
         write_cfg = _impl.SnowflakeWriteCfg(
             conn=conn,
-            target_tables=list(dest.tables),
+            target_tables=target_tables,
             schema_evolution=dest._evolution().schema_evolution,
             schema_evolution_engine=dest._evolution().engine,
             if_table_exists=dest.if_table_exists,
             ctx=ctx,
             watermark_column=dest._watermark_column(),
-            merge_cfgs=dest._merge_cfgs(),
+            merge_cfgs=merge_cfgs,
         )
         try:
-            _impl.write_all_tables(write_cfg, tables)
+            _impl.write_all_tables(write_cfg, frames)
         except ConnException:
             raise
         except Exception as e:  # noqa: BLE001 -- runtime wrapper
@@ -142,7 +152,7 @@ class SnowflakeDestPlugin(
                 cause=e,
                 table=", ".join(write_cfg.target_tables),
             )
-        logger.info("snowflake: write_out finished (%d table(s))", len(dest.tables))
+        logger.info("snowflake: write_out finished (%d table(s))", len(frames))
 
 
 SNOWFLAKE_DEST = DestDef(

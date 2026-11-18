@@ -8,17 +8,20 @@ import logging
 
 import polars as pl
 import pytest
-from test_tabsdatak.conn.awsglue.support import FakeCtx, conn
 
-from tabsdatak.conn.awsglue import AwsGlueDest, AwsGlueDestConn
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.awsglue import _impl as impl
+from tabsdatak._handoff import DestinationContract
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.awsglue import _plugin as plugin
+# noinspection PyProtectedMember
+from tabsdatak.conn.awsglue import (
+    AwsGlueDest,
+    AwsGlueDestConn,
+    _impl as impl,
+    _plugin as plugin,
+)
 from tabsdatak.conn.awsglue._explorer import AwsGlueConnectionExplorer
 from tabsdatak.conn.awsglue.error import AwsGlueErrorCode, AwsGlueRuntimeException
+from test_tabsdatak.conn.awsglue.support import FakeCtx, conn
 
 pytestmark = pytest.mark.conn_awsglue
 
@@ -69,7 +72,7 @@ def test_write_out_hands_the_writer_what_the_destination_resolves(monkeypatch):
     assert cfg.if_table_exists == "replace"
     assert cfg.schema_evolution == "update"
     assert cfg.transaction_id == "trx-9"
-    assert captured["frames"] is frames
+    assert captured["frames"] == frames
 
 
 def test_write_out_defaults_to_a_strict_append(monkeypatch):
@@ -86,6 +89,36 @@ def test_write_out_refuses_a_slot_count_that_differs_from_the_tables(monkeypatch
     with pytest.raises(AwsGlueRuntimeException) as raised:
         plugin.AwsGlueDestPlugin().write_out(FakeCtx(), conn(), dest, [_frame()])
     assert raised.value.api_error is AwsGlueErrorCode.AWSGLUE_6
+
+
+def test_write_out_skips_the_tables_of_none_slots(monkeypatch):
+    captured = _captured(monkeypatch)
+    dest = AwsGlueDest(tables=["orders", "returns", "customers"])
+    kept = _frame()
+    plugin.AwsGlueDestPlugin().write_out(FakeCtx(), conn(), dest, [None, kept, None])
+    assert captured["cfg"].tables == ["returns"]
+    assert captured["frames"] == [kept]
+
+
+def test_write_out_writes_nothing_when_every_slot_is_none(monkeypatch):
+    captured = _captured(monkeypatch)
+    dest = AwsGlueDest(tables=["orders", "customers"])
+    plugin.AwsGlueDestPlugin().write_out(FakeCtx(), conn(), dest, [None, None])
+    assert captured == {}
+
+
+def test_write_out_refuses_a_slot_count_that_differs_even_with_none_slots(
+    monkeypatch,
+):
+    _captured(monkeypatch)
+    dest = AwsGlueDest(tables=["orders"])
+    with pytest.raises(AwsGlueRuntimeException) as raised:
+        plugin.AwsGlueDestPlugin().write_out(FakeCtx(), conn(), dest, [None, None])
+    assert raised.value.api_error is AwsGlueErrorCode.AWSGLUE_6
+
+
+def test_plugin_takes_lazy_frames_or_none():
+    assert DestinationContract(plugin.AwsGlueDestPlugin).frames()
 
 
 def test_write_out_lets_a_connector_error_through(monkeypatch):

@@ -247,6 +247,13 @@ def test_trash_dest_write_out_discards_without_reading():
     assert out is None
 
 
+def test_trash_dest_write_out_discards_none_tables():
+    out = plugin.TrashDestPlugin().write_out(
+        object(), TrashDestConn(), TrashDest(), [None]
+    )
+    assert out is None
+
+
 def test_trash_dest_takes_lazy_frames():
     assert DestinationContract(plugin.TrashDestPlugin).frames()
 
@@ -303,6 +310,30 @@ def test_frame_dest_reports_what_each_table_holds(tmp_path):
             {"type": "LazyFrame", "rows": 2, "columns": ["a", "b"]},
             {"type": "LazyFrame", "rows": 1, "columns": ["c"]},
         ],
+    }
+
+
+def test_frame_dest_reports_a_none_output_as_null(tmp_path):
+    plugin.DevFrameDestPlugin().write_out(
+        TransactionContext(),
+        DevFrameDestConn(folder=str(tmp_path)),
+        DevFrameDest(outputs=2),
+        [None, pl.LazyFrame({"c": [3]})],
+    )
+    assert json.loads((tmp_path / "trx-1.json").read_text(encoding="utf-8")) == {
+        "tables": [None, {"type": "LazyFrame", "rows": 1, "columns": ["c"]}],
+    }
+
+
+def test_frame_dest_reports_every_output_as_null_when_all_are_none(tmp_path):
+    plugin.DevFrameDestPlugin().write_out(
+        TransactionContext(),
+        DevFrameDestConn(folder=str(tmp_path)),
+        DevFrameDest(outputs=2),
+        [None, None],
+    )
+    assert json.loads((tmp_path / "trx-1.json").read_text(encoding="utf-8")) == {
+        "tables": [None, None],
     }
 
 

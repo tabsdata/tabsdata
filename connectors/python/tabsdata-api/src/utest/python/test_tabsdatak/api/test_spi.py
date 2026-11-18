@@ -7,7 +7,7 @@ from __future__ import annotations
 import types
 import typing
 from pathlib import Path
-from typing import Any, Iterable, Iterator, Sequence
+from typing import Any, Iterable, Iterator, Optional, Sequence
 
 import polars as pl
 import pytest
@@ -726,7 +726,7 @@ def test_stage_receives_positional_per_table_manifest():
     assert ctx.staged[0][0] == manifest
 
 
-# --- destination handoff: list[pl.LazyFrame] ------------------------------
+# --- destination handoff: list[pl.LazyFrame | None] -----------------------
 
 
 class LegacyDestPlugin(DestPlugin[_Conn, _SDDest]):
@@ -735,7 +735,7 @@ class LegacyDestPlugin(DestPlugin[_Conn, _SDDest]):
         ctx: DestContext,
         conn: _Conn,
         dest: _SDDest,
-        tables: list[TableFileSpec],
+        tables: list[TableFileSpec | None],
     ) -> None:
         return None
 
@@ -745,7 +745,48 @@ class UnannotatedDestPlugin(DestPlugin[_Conn, _SDDest]):
         return None
 
 
-class LazyFrameDestPlugin(DestPlugin[_Conn, _SDDest, list[pl.LazyFrame]]):
+class LazyFrameDestPlugin(DestPlugin[_Conn, _SDDest, list[pl.LazyFrame | None]]):
+    def write_out(
+        self,
+        ctx: DestContext,
+        conn: _Conn,
+        dest: _SDDest,
+        tables: list[pl.LazyFrame | None],
+    ) -> None:
+        return None
+
+
+class InheritedDestPlugin(LazyFrameDestPlugin):
+    pass
+
+
+class OptionalFrameDestPlugin(
+    DestPlugin[_Conn, _SDDest, list[Optional[pl.LazyFrame]]],
+):
+    def write_out(
+        self,
+        ctx: DestContext,
+        conn: _Conn,
+        dest: _SDDest,
+        tables: list[pl.LazyFrame | None],
+    ) -> None:
+        return None
+
+
+class ExplicitLegacyDestPlugin(
+    DestPlugin[_Conn, _SDDest, list[TableFileSpec | None]],
+):
+    def write_out(
+        self,
+        ctx: DestContext,
+        conn: _Conn,
+        dest: _SDDest,
+        tables: list[TableFileSpec | None],
+    ) -> None:
+        return None
+
+
+class FramesWithoutNoneDestPlugin(DestPlugin[_Conn, _SDDest, list[pl.LazyFrame]]):  # type: ignore[type-var]
     def write_out(
         self,
         ctx: DestContext,
@@ -756,17 +797,26 @@ class LazyFrameDestPlugin(DestPlugin[_Conn, _SDDest, list[pl.LazyFrame]]):
         return None
 
 
-class InheritedDestPlugin(LazyFrameDestPlugin):
-    pass
-
-
-class ExplicitLegacyDestPlugin(DestPlugin[_Conn, _SDDest, list[TableFileSpec]]):
+class FilesWithoutNoneDestPlugin(DestPlugin[_Conn, _SDDest, list[TableFileSpec]]):  # type: ignore[type-var]
     def write_out(
         self,
         ctx: DestContext,
         conn: _Conn,
         dest: _SDDest,
         tables: list[TableFileSpec],
+    ) -> None:
+        return None
+
+
+class TablesWithoutNoneDestPlugin(
+    DestPlugin[_Conn, _SDDest, list[pl.LazyFrame | None]],
+):
+    def write_out(  # type: ignore[override]
+        self,
+        ctx: DestContext,
+        conn: _Conn,
+        dest: _SDDest,
+        tables: list[pl.LazyFrame],
     ) -> None:
         return None
 
@@ -799,12 +849,12 @@ class UndeclaredFramesDestPlugin(DestPlugin[_Conn, _SDDest]):
         ctx: DestContext,
         conn: _Conn,
         dest: _SDDest,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         return None
 
 
-class OtherTablesDestPlugin(DestPlugin[_Conn, _SDDest, list[pl.LazyFrame]]):
+class OtherTablesDestPlugin(DestPlugin[_Conn, _SDDest, list[pl.LazyFrame | None]]):
     def write_out(  # type: ignore[override]
         self,
         ctx: DestContext,
@@ -815,12 +865,16 @@ class OtherTablesDestPlugin(DestPlugin[_Conn, _SDDest, list[pl.LazyFrame]]):
         return None
 
 
-class UnannotatedFramesDestPlugin(DestPlugin[_Conn, _SDDest, list[pl.LazyFrame]]):
+class UnannotatedFramesDestPlugin(
+    DestPlugin[_Conn, _SDDest, list[pl.LazyFrame | None]],
+):
     def write_out(self, ctx, conn, dest, tables):  # type: ignore[no-untyped-def]
         return None
 
 
-class UnresolvedFramesDestPlugin(DestPlugin[_Conn, _SDDest, list[pl.LazyFrame]]):
+class UnresolvedFramesDestPlugin(
+    DestPlugin[_Conn, _SDDest, list[pl.LazyFrame | None]],
+):
     def write_out(self, ctx, conn, dest, tables: MissingFrames):  # type: ignore[name-defined]  # noqa: F821
         return None
 
@@ -873,20 +927,27 @@ def test_a_plugin_overriding_nothing_keeps_the_file_list():
 
 @pytest.mark.parametrize(
     "plugin",
-    [LazyFrameDestPlugin, InheritedDestPlugin],
+    [LazyFrameDestPlugin, InheritedDestPlugin, OptionalFrameDestPlugin],
 )
 def test_a_plugin_receives_the_lazy_frames_it_declares(plugin):
     assert DestinationContract(plugin).frames()
     register(plugin)
 
 
+THIRD_TYPE = "declares list\\[pl.LazyFrame \\| None\\] as the third type"
+ANNOTATE_FRAMES = "annotate it with list\\[pl.LazyFrame \\| None\\]"
+
+
 @pytest.mark.parametrize(
     "plugin, message",
     [
-        (DataFrameDestPlugin, "declares list\\[pl.LazyFrame\\] as the third type"),
-        (BareFrameDestPlugin, "declares list\\[pl.LazyFrame\\] as the third type"),
+        (DataFrameDestPlugin, THIRD_TYPE),
+        (BareFrameDestPlugin, THIRD_TYPE),
+        (FramesWithoutNoneDestPlugin, THIRD_TYPE),
+        (FilesWithoutNoneDestPlugin, THIRD_TYPE),
         (UndeclaredFramesDestPlugin, "declares no frames"),
-        (OtherTablesDestPlugin, "annotate it with list\\[pl.LazyFrame\\]"),
+        (OtherTablesDestPlugin, ANNOTATE_FRAMES),
+        (TablesWithoutNoneDestPlugin, ANNOTATE_FRAMES),
         (UnannotatedFramesDestPlugin, "annotate its fourth parameter"),
         (UnresolvedFramesDestPlugin, "does not resolve at runtime"),
     ],
@@ -925,7 +986,7 @@ def test_the_legacy_warning_names_the_replacement():
     with pytest.warns(LegacyDestTablesWarning) as raised:
         message = warn_legacy_dest(LegacyDestPlugin)
     assert "LegacyDestPlugin.write_out" in message
-    assert "declare list[pl.LazyFrame]" in str(raised[0].message)
+    assert "declare list[pl.LazyFrame | None]" in str(raised[0].message)
 
 
 # --- source handoff: list[Iterable[LazyFrameInput]] -------------------------

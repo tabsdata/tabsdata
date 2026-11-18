@@ -16,13 +16,12 @@ from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputEntry,
     OutputManifest,
 )
-from tabsdatak.server._tdrunner.function._handlers.columns import ColumnPolicy, Zone
 from tabsdatak.server._tdrunner.function._handlers import handoff as handoffs
+from tabsdatak.server._tdrunner.function._handlers.columns import ColumnPolicy, Zone
 from tabsdatak.server._tdrunner.function._handlers.handoff import (
     DestinationHandoff,
     Handoff,
     InputCountError,
-    MissingOutputError,
     OutputReadError,
     SourceHandoff,
     UnexpectedTableError,
@@ -97,18 +96,18 @@ class LegacyDestination(DestPlugin):
         ctx: DestContext,
         conn: object,
         dest: object,
-        tables: list[TableFileSpec],
+        tables: list[TableFileSpec | None],
     ) -> None:
         self.received = tables
 
 
-class LazyFrameDestination(DestPlugin[Any, Any, list[pl.LazyFrame]]):
+class LazyFrameDestination(DestPlugin[Any, Any, list[pl.LazyFrame | None]]):
     def write_out(
         self,
         ctx: DestContext,
         conn: object,
         dest: object,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         self.received = tables
 
@@ -220,21 +219,62 @@ def test_seeding_nothing_gives_no_slots(tmp_path):
     assert slots == []
 
 
-def test_an_output_without_data_is_missing(tmp_path):
-    info = landing_info(tmp_path)
-    manifest = OutputManifest(
+def partly_landed(info: Info) -> OutputManifest:
+    return OutputManifest(
         outputs=(
+            OutputEntry(name="out_0"),
             land(
                 info,
-                0,
-                [1],
+                1,
+                [3],
             ),
-            OutputEntry(name="out_1"),
         )
     )
-    with pytest.raises(MissingOutputError) as raised:
-        handoff(tmp_path).seed(info, manifest)
-    assert (raised.value.slot, raised.value.name) == (1, "out_1")
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_every_form_hands_over_an_output_without_data_as_none(tmp_path, legacy):
+    info = landing_info(tmp_path)
+    slots = handoff(tmp_path, legacy=legacy).seed(info, partly_landed(info))
+    assert [(slot.name, slot.position) for slot in slots] == [
+        ("out_0", 0),
+        ("out_1", 1),
+    ]
+    assert slots[0].table is None
+    assert values(slots[1].table) == {"x": [3]}
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_every_form_hands_over_outputs_all_without_data_as_none(tmp_path, legacy):
+    info = landing_info(tmp_path)
+    manifest = OutputManifest(
+        outputs=(OutputEntry(name="out_0"), OutputEntry(name="out_1")),
+    )
+    slots = handoff(tmp_path, legacy=legacy).seed(info, manifest)
+    assert [slot.table for slot in slots] == [None, None]
+
+
+@pytest.mark.parametrize(
+    "plugin, legacy",
+    [(LegacyDestination, True), (LazyFrameDestination, False)],
+)
+def test_a_plugin_grows_with_none_for_an_output_without_data(
+    tmp_path,
+    plugin,
+    legacy,
+):
+    info = landing_info(tmp_path)
+    chosen = handoff(tmp_path, legacy=legacy)
+    chosen.seed(info, partly_landed(info))
+    destination = plugin()
+    chosen.grow(
+        destination,
+        "context",
+        "connection",
+        "destination",
+    )
+    assert destination.received[0] is None
+    assert values(destination.received[1]) == {"x": [3]}
 
 
 def test_an_unreadable_landing_file_is_reported(tmp_path):

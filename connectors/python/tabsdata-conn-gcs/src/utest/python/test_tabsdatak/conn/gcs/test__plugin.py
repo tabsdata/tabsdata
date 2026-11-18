@@ -14,23 +14,22 @@ import polars as pl
 import pytest
 from tabsdatax.itest.fixture.backends.gcslocal import GcsLocalDomain, gcslocal_domain
 
+# noinspection PyProtectedMember
+import tabsdatak.conn.gcs._plugin as plugin
+from tabsdatak._handoff import DestinationContract
 from tabsdatak.api import Secret
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import _plugin as _file_plugin, _target
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.types import GCPJson
-from tabsdatak.conn.gcs import GCSDestConn, GCSSrcConn, GCSDest, GCSSrc
-from tabsdatak.conn.gcs._explorer import GCSConnectionExplorer
 from tabsdatak.conn.common.file._store import FileStore
 from tabsdatak.conn.common.file.constants import FILE_META_PATH
 
 # noinspection PyProtectedMember
-import tabsdatak.conn.gcs._plugin as plugin
+from tabsdatak.conn.common.types import GCPJson
+from tabsdatak.conn.gcs import GCSDest, GCSDestConn, GCSSrc, GCSSrcConn
+from tabsdatak.conn.gcs._explorer import GCSConnectionExplorer
 
 pytestmark = pytest.mark.gcs
-
 
 
 def _gcp_creds() -> GCPJson:
@@ -55,19 +54,9 @@ def _dest_conn(**overrides) -> GCSDestConn:
     return GCSDestConn(**kw)
 
 
-
-
-
-
-
-
-
-
 # ---------------------------------------------------------------------------
 # credentials
 # ---------------------------------------------------------------------------
-
-
 
 
 def test_credentials_rejects_non_gcpjson(monkeypatch):
@@ -160,6 +149,26 @@ def test_dest_plugin_writes_through_the_connection_store(monkeypatch, tmp_path):
     assert captured["store"] == plugin.file_store(conn)
     assert captured["errors"] is plugin.ERRORS
     assert captured["cfg"].paths == ["out/x.parquet"]
+
+
+def test_dest_plugin_takes_lazy_frames_or_none():
+    assert DestinationContract(plugin.GCSDestPlugin).frames()
+
+
+def test_dest_plugin_hands_none_tables_to_the_writer(monkeypatch, tmp_path):
+    captured: dict = {}
+    monkeypatch.setattr(
+        _target, "write_files", lambda **options: captured.update(options)
+    )
+    table = pl.LazyFrame({"a": [1]})
+    plugin.GCSDestPlugin().write_out(
+        _dest_ctx(tmp_path),
+        _dest_conn(),
+        GCSDest(paths=["out/x.parquet", "out/y.parquet"]),
+        [None, table],
+    )
+    assert captured["tables"] == [None, table]
+    assert captured["cfg"].paths == ["out/x.parquet", "out/y.parquet"]
 
 
 # ---------------------------------------------------------------------------

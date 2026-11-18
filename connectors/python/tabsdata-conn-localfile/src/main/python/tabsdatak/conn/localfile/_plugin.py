@@ -62,14 +62,14 @@ class LocalFileSrcPlugin(SrcPlugin[LocalFileSrcConn, LocalFileSrc]):
 
 
 class LocalFileDestPlugin(
-    DestPlugin[LocalFileDestConn, LocalFileDest, list[pl.LazyFrame]]
+    DestPlugin[LocalFileDestConn, LocalFileDest, list[pl.LazyFrame | None]]
 ):
     def write_out(
         self,
         ctx: DestContext,
         conn: LocalFileDestConn,
         dest: LocalFileDest,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         _target.write_files(
             ctx=ctx,

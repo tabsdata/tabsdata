@@ -10,6 +10,8 @@ from typing import Any
 
 import polars as pl
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._dest import present
 from tabsdatak.conn.druid import (
     DestCfgKey,
     DestCfgSpec,
@@ -76,7 +78,7 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
 
 
 class DruidDestPlugin(
-    DestPlugin[DruidDestConn, DruidDest, list[pl.LazyFrame]],
+    DestPlugin[DruidDestConn, DruidDest, list[pl.LazyFrame | None]],
 ):
     """Apache Druid destination plugin.
 
@@ -87,7 +89,8 @@ class DruidDestPlugin(
     on success or raises ``DRUID_*`` on any failure. Once the task has
     ended, successfully or not, its staged file is deleted, best effort.
 
-    One ingestion task is submitted per target datasource; per-task
+    One ingestion task is submitted per target datasource with a table; a
+    datasource whose table is ``None`` is left as it is. Per-task
     parallelism is governed by ``DruidDest.max_concurrent_subtasks``.
     """
 
@@ -96,7 +99,7 @@ class DruidDestPlugin(
         ctx: DestContext,
         conn: DruidDestConn,
         dest: DruidDest,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         # All adapter imports live inside the method body so the
         # tabsdata-conn-druid package stays cheap to import for a
@@ -120,6 +123,11 @@ class DruidDestPlugin(
                 slots=len(tables),
             )
 
+        frames, datasources = present(tables, dest.tables)
+        if not frames:
+            logger.info("druid: no table to write; nothing to do")
+            return
+
         staging = conn.staging
 
         # ---- Stage parquet to the cloud --------------------------
@@ -135,9 +143,9 @@ class DruidDestPlugin(
         logger.debug("druid: establishing overlord client")
         client = adapter.make_overlord_client_for_dest(conn, dest)
         store = adapter.staging_store(staging)
-        total = len(dest.tables)
+        total = len(datasources)
         with client:
-            for slot_idx, (datasource, frame) in enumerate(zip(dest.tables, tables)):
+            for slot_idx, (datasource, frame) in enumerate(zip(datasources, frames)):
                 logger.info(
                     "druid: writing datasource %d/%d: %r",
                     slot_idx + 1,

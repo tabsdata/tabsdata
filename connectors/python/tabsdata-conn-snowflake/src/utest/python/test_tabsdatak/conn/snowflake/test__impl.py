@@ -4,21 +4,28 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import polars as pl
 import pytest
 
 from tabsdatak.api import Secret
-from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
 from tabsdatak.conn.common.sql.error import SqlCommonRuntimeException
 from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.conn.snowflake import SnowflakeDestConn
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.snowflake import (
+    SnowflakeDest,
+    SnowflakeDestConn,
+    _impl as impl,
+    _plugin,
+)
+from tabsdatak.conn.snowflake.error import (
+    SnowflakeRuntimeException,
+)
 from test_tabsdatak.conn.snowflake.support import (
-    _FakeConnection,
     _INFER_PREFIX,
+    _FakeConnection,
     _FakeCtx,
     _FakeCursor,
     column_fakes as _column_fakes,
@@ -26,16 +33,7 @@ from test_tabsdatak.conn.snowflake.support import (
     watermark_answers as _watermark_answers,
 )
 
-# noinspection PyProtectedMember
-from tabsdatak.conn.snowflake import _iceberg, _impl as impl
-from tabsdatak.conn.snowflake.error import (
-    SnowflakeErrorCode,
-    SnowflakeRuntimeException,
-)
-
-
 pytestmark = pytest.mark.snowflake
-
 
 
 def _parquet(path: Path, **columns) -> pl.LazyFrame:
@@ -251,8 +249,6 @@ def test_stage_falls_back_to_session_temp_stage_when_unset():
 # ---------------------------------------------------------------------------
 
 
-
-
 def test_build_snowflake_connection_calls_connect_with_resolved_params(monkeypatch):
     captured: dict = {}
 
@@ -296,9 +292,7 @@ def fake_sf_connection(monkeypatch):
     return fake
 
 
-def test_write_all_tables_drives_use_warehouse_first(
-    fake_sf_connection, tmp_path
-):
+def test_write_all_tables_drives_use_warehouse_first(fake_sf_connection, tmp_path):
     parquet = _parquet(tmp_path / "in.parquet")
     cfg = _write_cfg()
     impl.write_all_tables(cfg, [parquet])
@@ -327,14 +321,15 @@ def test_write_all_tables_skips_namespace_when_database_unset(
     fake_sf_connection, tmp_path
 ):
     parquet = _parquet(tmp_path / "in.parquet")
-    cfg = _write_cfg(conn=_conn(database=None, schema=None, warehouse=None), target_tables=["T"])
+    cfg = _write_cfg(
+        conn=_conn(database=None, schema=None, warehouse=None), target_tables=["T"]
+    )
     impl.write_all_tables(cfg, [parquet])
     assert not any(s.startswith("USE DATABASE") for s in fake_sf_connection.log)
     assert not any(s.startswith("USE SCHEMA") for s in fake_sf_connection.log)
 
 
 def test_write_all_tables_raises_when_namespace_not_adopted(monkeypatch, tmp_path):
-    from tabsdatak.conn.snowflake.error import SnowflakeRuntimeException
 
     class _BoomOnUseCursor(_FakeCursor):
         def execute(self, sql: str) -> None:
@@ -351,9 +346,7 @@ def test_write_all_tables_raises_when_namespace_not_adopted(monkeypatch, tmp_pat
         impl.write_all_tables(cfg, [parquet])
 
 
-def test_write_all_tables_creates_stage_puts_then_copies(
-    fake_sf_connection, tmp_path
-):
+def test_write_all_tables_creates_stage_puts_then_copies(fake_sf_connection, tmp_path):
     parquet = _parquet(tmp_path / "in.parquet")
     cfg = _write_cfg()
     impl.write_all_tables(cfg, [parquet])
@@ -363,14 +356,10 @@ def test_write_all_tables_creates_stage_puts_then_copies(
     # double-quoted in the emitted SQL.
     assert any(s.startswith("CREATE STAGE IF NOT EXISTS MY_STAGE") for s in sql)
     assert any(s.startswith("PUT 'file:///") for s in sql)
-    assert any(
-        s.startswith('COPY INTO "ANALYTICS"."PUBLIC"."T"') for s in sql
-    )
+    assert any(s.startswith('COPY INTO "ANALYTICS"."PUBLIC"."T"') for s in sql)
 
 
-def test_write_all_tables_reads_the_parquet_logical_types(
-    fake_sf_connection, tmp_path
-):
+def test_write_all_tables_reads_the_parquet_logical_types(fake_sf_connection, tmp_path):
     # Without USE_LOGICAL_TYPE the inferred schema is the file's physical types:
     # a timestamp column comes back as the NUMBER holding its epoch, and a
     # decimal without its precision and scale. TEMPORARY so the format is this
@@ -426,9 +415,7 @@ def test_write_all_tables_truncates_before_copy_on_replace(
     impl.write_all_tables(cfg, [parquet])
     sql = fake_sf_connection.log
     truncate_idx = next(
-        i
-        for i, s in enumerate(sql)
-        if s == 'TRUNCATE "ANALYTICS"."PUBLIC"."T"'
+        i for i, s in enumerate(sql) if s == 'TRUNCATE "ANALYTICS"."PUBLIC"."T"'
     )
     copy_idx = next(
         i
@@ -438,18 +425,14 @@ def test_write_all_tables_truncates_before_copy_on_replace(
     assert truncate_idx < copy_idx
 
 
-def test_write_all_tables_does_not_truncate_on_append(
-    fake_sf_connection, tmp_path
-):
+def test_write_all_tables_does_not_truncate_on_append(fake_sf_connection, tmp_path):
     parquet = _parquet(tmp_path / "in.parquet")
     cfg = _write_cfg()
     impl.write_all_tables(cfg, [parquet])
     assert not any(s.startswith("TRUNCATE") for s in fake_sf_connection.log)
 
 
-def test_write_all_tables_iterates_one_per_table(
-    fake_sf_connection, tmp_path
-):
+def test_write_all_tables_iterates_one_per_table(fake_sf_connection, tmp_path):
     p1 = _parquet(tmp_path / "a.parquet")
     p2 = _parquet(tmp_path / "b.parquet")
     cfg = _write_cfg(target_tables=["DB.S.T1", "DB.S.T2"])
@@ -460,18 +443,40 @@ def test_write_all_tables_iterates_one_per_table(
     assert 'COPY INTO "DB"."S"."T2"' in copies[1]
 
 
-def test_write_all_tables_closes_connection_on_exit(
+def test_write_out_leaves_a_none_target_untouched(fake_sf_connection, tmp_path):
+    dest = SnowflakeDest(
+        tables=["DB.S.T1", "DB.S.T2"],
+        if_table_exists="replace",
+        schema_evolution="update",
+    )
+    _plugin.SnowflakeDestPlugin().write_out(
+        _FakeCtx(), _conn(), dest, [None, _parquet(tmp_path / "b.parquet")]
+    )
+
+    sql = fake_sf_connection.log
+    assert not any('"T1"' in s for s in sql)
+    assert 'TRUNCATE "DB"."S"."T2"' in sql
+    assert any(s.startswith('COPY INTO "DB"."S"."T2"') for s in sql)
+
+
+def test_write_out_connects_to_nothing_when_every_table_is_none(
     fake_sf_connection, tmp_path
 ):
+    dest = SnowflakeDest(tables=["DB.S.T1", "DB.S.T2"], if_table_exists="replace")
+    _plugin.SnowflakeDestPlugin().write_out(_FakeCtx(), _conn(), dest, [None, None])
+
+    assert fake_sf_connection.log == []
+    assert fake_sf_connection.closed is False
+
+
+def test_write_all_tables_closes_connection_on_exit(fake_sf_connection, tmp_path):
     parquet = _parquet(tmp_path / "in.parquet")
     cfg = _write_cfg()
     impl.write_all_tables(cfg, [parquet])
     assert fake_sf_connection.closed is True
 
 
-def test_write_all_tables_closes_connection_on_failure(
-    monkeypatch, tmp_path
-):
+def test_write_all_tables_closes_connection_on_failure(monkeypatch, tmp_path):
     parquet = _parquet(tmp_path / "in.parquet")
 
     fake = _FakeConnection()
@@ -480,6 +485,7 @@ def test_write_all_tables_closes_connection_on_failure(
         class _BoomCursor(_FakeCursor):
             def execute(self, sql: str) -> None:  # noqa: ARG002
                 raise RuntimeError("boom")
+
         return _BoomCursor(fake.log)
 
     fake.cursor = cursor_that_fails  # type: ignore[assignment]
@@ -604,9 +610,7 @@ def _alters(log):
     return [s for s in log if s.startswith("ALTER TABLE") and "ENABLE_" not in s]
 
 
-def test_iceberg_engine_widens_a_column_the_batch_has_outgrown(
-    monkeypatch, tmp_path
-):
+def test_iceberg_engine_widens_a_column_the_batch_has_outgrown(monkeypatch, tmp_path):
     fake = _evolving_connection(monkeypatch, [("NAME", "VARCHAR(10)")], [])
     fake.results[_INFER_PREFIX] = (
         [("COLUMN_NAME",), ("TYPE",)],
@@ -640,9 +644,7 @@ def test_iceberg_engine_turns_the_native_mark_off(monkeypatch, tmp_path):
     ]
 
 
-def test_iceberg_engine_leaves_a_synonym_of_the_same_type_alone(
-    monkeypatch, tmp_path
-):
+def test_iceberg_engine_leaves_a_synonym_of_the_same_type_alone(monkeypatch, tmp_path):
     """DESC TABLE reports VARCHAR(16777216) where infer_schema reports TEXT for
     the same column. Without aligning the two vocabularies every write on a
     table with an unparameterized text column would be refused."""
@@ -653,9 +655,7 @@ def test_iceberg_engine_leaves_a_synonym_of_the_same_type_alone(
     assert _alters(fake.log) == []
 
 
-def test_iceberg_engine_refuses_a_change_snowflake_cannot_make(
-    monkeypatch, tmp_path
-):
+def test_iceberg_engine_refuses_a_change_snowflake_cannot_make(monkeypatch, tmp_path):
     fake = _evolving_connection(
         monkeypatch, [("AMOUNT", "NUMBER(38,0)")], [("AMOUNT", "TEXT")]
     )
@@ -665,9 +665,7 @@ def test_iceberg_engine_refuses_a_change_snowflake_cannot_make(
     assert not any(s.startswith("COPY INTO") for s in fake.log)
 
 
-def test_iceberg_engine_evolves_before_it_truncates_a_replace(
-    monkeypatch, tmp_path
-):
+def test_iceberg_engine_evolves_before_it_truncates_a_replace(monkeypatch, tmp_path):
     # A replace refills the table it just evolved, so the ALTER has to land
     # first -- and before the COPY, which purges the file it is read from.
     fake = _evolving_connection(
@@ -676,8 +674,11 @@ def test_iceberg_engine_evolves_before_it_truncates_a_replace(
     impl.write_all_tables(
         _iceberg_cfg(if_table_exists="replace"), [_parquet(tmp_path / "in.parquet")]
     )
-    alter = next(i for i, s in enumerate(fake.log) if s.startswith("ALTER TABLE")
-                 and "ENABLE_" not in s)
+    alter = next(
+        i
+        for i, s in enumerate(fake.log)
+        if s.startswith("ALTER TABLE") and "ENABLE_" not in s
+    )
     truncate = next(i for i, s in enumerate(fake.log) if s.startswith("TRUNCATE"))
     copy = next(i for i, s in enumerate(fake.log) if s.startswith("COPY INTO"))
     assert alter < truncate < copy
@@ -740,9 +741,9 @@ def test_native_engine_emits_no_alters_of_its_own(monkeypatch, tmp_path):
     fake = _evolving_connection(
         monkeypatch, ["ID"], [("ID", "NUMBER(38,0)"), ("NOTE", "TEXT")]
     )
-    impl.write_all_tables(_write_cfg(schema_evolution="update"), [
-        _parquet(tmp_path / "in.parquet")
-    ])
+    impl.write_all_tables(
+        _write_cfg(schema_evolution="update"), [_parquet(tmp_path / "in.parquet")]
+    )
     assert _alters(fake.log) == []
     assert [s for s in fake.log if "ENABLE_SCHEMA_EVOLUTION" in s] == [
         _evolution_mark(True)
@@ -766,9 +767,7 @@ def test_write_all_tables_sets_the_mark_after_creating_and_before_copying(
 def test_write_all_tables_sets_the_mark_on_every_table_it_writes(
     fake_sf_connection, tmp_path
 ):
-    cfg = _write_cfg(
-        target_tables=["DB.S.T1", "DB.S.T2"], schema_evolution="update"
-    )
+    cfg = _write_cfg(target_tables=["DB.S.T1", "DB.S.T2"], schema_evolution="update")
     impl.write_all_tables(
         cfg, [_parquet(tmp_path / f"{n}.parquet") for n in ("a", "b")]
     )
@@ -911,9 +910,7 @@ def test_write_all_tables_creates_a_loaded_target_whole(
     assert "WHERE" not in _create_statement(fake_sf_connection.log)
 
 
-def test_write_all_tables_keeps_the_marker_in_the_staging_table(
-    monkeypatch, tmp_path
-):
+def test_write_all_tables_keeps_the_marker_in_the_staging_table(monkeypatch, tmp_path):
     """The staging copy must keep the marker -- it is what the clauses read."""
     fake = _evolving_connection(
         monkeypatch, ["C", "OP"], [("C", "NUMBER(38,0)"), ("OP", "TEXT")]
@@ -921,8 +918,6 @@ def test_write_all_tables_keeps_the_marker_in_the_staging_table(
     cfg = _write_cfg(if_table_exists="merge", merge_cfgs=_merge_cfgs("c"))
     impl.write_all_tables(cfg, [_cdc_parquet(tmp_path / "in.parquet")])
     assert "WHERE" not in _temp_create_statement(fake.log)
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -999,9 +994,7 @@ def test_append_watermark_adds_the_column_to_the_target_without_a_default(
 def test_append_watermark_leaves_a_target_that_already_has_the_column_alone(
     monkeypatch, tmp_path
 ):
-    fake = _evolving_connection(
-        monkeypatch, ["C", _WATERMARK], [("C", "NUMBER(38,0)")]
-    )
+    fake = _evolving_connection(monkeypatch, ["C", _WATERMARK], [("C", "NUMBER(38,0)")])
     impl.write_all_tables(_watermark_cfg(), [_parquet(tmp_path / "in.parquet")])
     assert _watermark_alters(fake.log) == []
 
@@ -1028,9 +1021,7 @@ def test_append_watermark_is_added_under_strict(monkeypatch, tmp_path):
     assert len(_watermark_alters(fake.log)) == 1
 
 
-def test_append_watermark_leaves_the_iceberg_pass_nothing_to_add(
-    monkeypatch, tmp_path
-):
+def test_append_watermark_leaves_the_iceberg_pass_nothing_to_add(monkeypatch, tmp_path):
     """Added ahead of the diff, so the engine that may also add columns finds
     it already there -- one statement, not two claims on the same column."""
     fake = _evolving_connection(monkeypatch, ["C"], [("C", "NUMBER(38,0)")])
@@ -1048,9 +1039,7 @@ def test_append_watermark_leaves_the_iceberg_pass_nothing_to_add(
     assert not [s for s in after if s.startswith("ALTER TABLE") and "ENABLE_" not in s]
 
 
-def test_append_skips_entirely_when_the_trx_is_already_stamped(
-    monkeypatch, tmp_path
-):
+def test_append_skips_entirely_when_the_trx_is_already_stamped(monkeypatch, tmp_path):
     fake = _column_fakes(
         ["C", _WATERMARK],
         [("C", "NUMBER(38,0)")],
@@ -1062,9 +1051,7 @@ def test_append_skips_entirely_when_the_trx_is_already_stamped(
     assert not any(s.startswith("COPY INTO") for s in fake.log)
 
 
-def test_append_proceeds_when_the_target_carries_a_different_trx(
-    monkeypatch, tmp_path
-):
+def test_append_proceeds_when_the_target_carries_a_different_trx(monkeypatch, tmp_path):
     fake = _column_fakes(
         ["C", _WATERMARK],
         [("C", "NUMBER(38,0)")],
@@ -1075,9 +1062,7 @@ def test_append_proceeds_when_the_target_carries_a_different_trx(
     assert any(s.startswith("COPY INTO") for s in fake.log)
 
 
-def test_append_checks_the_watermark_before_it_stages_anything(
-    monkeypatch, tmp_path
-):
+def test_append_checks_the_watermark_before_it_stages_anything(monkeypatch, tmp_path):
     # A rerun with nothing to do should not pay to rewrite and upload a file it
     # is about to decline to load.
     fake = _column_fakes(
@@ -1094,9 +1079,7 @@ def test_append_checks_the_watermark_before_it_stages_anything(
     assert probe < put
 
 
-def test_append_binds_the_trx_id_rather_than_interpolating_it(
-    monkeypatch, tmp_path
-):
+def test_append_binds_the_trx_id_rather_than_interpolating_it(monkeypatch, tmp_path):
     fake = _column_fakes(
         ["C", _WATERMARK],
         [("C", "NUMBER(38,0)")],
@@ -1112,14 +1095,14 @@ def test_append_binds_the_trx_id_rather_than_interpolating_it(
     assert stamp == ("TRX_1",)
 
 
-def test_a_replace_never_stamps_even_when_handed_a_watermark(
-    monkeypatch, tmp_path
-):
+def test_a_replace_never_stamps_even_when_handed_a_watermark(monkeypatch, tmp_path):
     """SnowflakeDest refuses the pairing, and the write path declines it again
     rather than resting on a validation two layers away."""
     staged = _staged_files(monkeypatch)
     fake = _evolving_connection(monkeypatch, ["C"], [("C", "NUMBER(38,0)")])
-    impl.write_all_tables(_watermark_cfg(if_table_exists="replace"), [_parquet(tmp_path / "in.parquet")])
+    impl.write_all_tables(
+        _watermark_cfg(if_table_exists="replace"), [_parquet(tmp_path / "in.parquet")]
+    )
     frame = staged[0]
     assert frame.columns == ["c"]
     assert _watermark_alters(fake.log) == []

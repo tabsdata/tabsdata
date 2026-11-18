@@ -175,14 +175,14 @@ class PostgresSrcPlugin(SrcPlugin[PostgresSrcConn, PostgresSrc]):
 
 
 class PostgresDestPlugin(
-    DestPlugin[PostgresDestConn, PostgresDest, list[pl.LazyFrame]]
+    DestPlugin[PostgresDestConn, PostgresDest, list[pl.LazyFrame | None]]
 ):
     def write_out(
         self,
         ctx: DestContext,
         conn: PostgresDestConn,
         dest: PostgresDest,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         from sqlalchemy.exc import OperationalError, SQLAlchemyError
 

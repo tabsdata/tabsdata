@@ -18,6 +18,9 @@ from tabsdatak.conn.clickhouse import (
 )
 from tabsdatak.conn.clickhouse._explorer import ClickHouseConnectionExplorer
 from tabsdatak.conn.clickhouse.error import ClickHouseErrorCode
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._dest import present
 from tabsdatak.conn.common.error import ConnException
 
 # noinspection PyProtectedMember
@@ -81,14 +84,14 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
 
 
 class _ClickHouseDestPlugin(
-    DestPlugin[ClickHouseDestConn, ClickHouseDest, list[pl.LazyFrame]],
+    DestPlugin[ClickHouseDestConn, ClickHouseDest, list[pl.LazyFrame | None]],
 ):
     def write_out(
         self,
         ctx: DestContext,
         conn: ClickHouseDestConn,
         dest: ClickHouseDest,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         # noinspection PyProtectedMember
         from tabsdatak.conn.clickhouse import _impl
@@ -107,16 +110,20 @@ class _ClickHouseDestPlugin(
                 tables=len(dest.tables),
                 slots=len(tables),
             )
+        frames, target_tables = present(tables, dest.tables)
+        if not frames:
+            logger.info("clickhouse: no table to write, nothing to do")
+            return
 
         write_cfg = _impl.ClickHouseWriteCfg(
             conn=conn,
-            target_tables=list(dest.tables),
+            target_tables=target_tables,
             if_table_exists=dest.if_table_exists,
             schema_evolution=dest._evolution().schema_evolution,
         )
 
         try:
-            _impl.write_via_bulk_loader(write_cfg, list(tables))
+            _impl.write_via_bulk_loader(write_cfg, frames)
         except TypeError as e:
             # Unsupported staging location surfaced by
             # ``build_cloud_storage``.

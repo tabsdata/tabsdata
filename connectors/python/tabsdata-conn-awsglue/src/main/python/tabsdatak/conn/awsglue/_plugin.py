@@ -17,6 +17,7 @@ from tabsdatak.conn.awsglue import (
 )
 from tabsdatak.conn.awsglue._explorer import AwsGlueConnectionExplorer
 from tabsdatak.conn.awsglue.error import AwsGlueErrorCode
+from tabsdatak.conn.common._dest import present
 from tabsdatak.conn.common.error import ConnException
 from tabsdatak.spi import (
     DestContext,
@@ -41,14 +42,14 @@ def _logging_level(dest_cfg: DestCfgSpec | None) -> int:
 
 
 class AwsGlueDestPlugin(
-    DestPlugin[AwsGlueDestConn, AwsGlueDest, list[pl.LazyFrame]],
+    DestPlugin[AwsGlueDestConn, AwsGlueDest, list[pl.LazyFrame | None]],
 ):
     def write_out(
         self,
         ctx: DestContext,
         conn: AwsGlueDestConn,
         dest: AwsGlueDest,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         # noinspection PyProtectedMember
         from tabsdatak.conn.awsglue import _impl
@@ -64,17 +65,21 @@ class AwsGlueDestPlugin(
                 slots=len(tables),
             )
 
-        logger.info("awsglue: write_out starting (%d table(s))", len(dest.tables))
+        frames, names = present(tables, list(dest.tables))
+        if not frames:
+            logger.info("awsglue: nothing to write, every table is None")
+            return
+        logger.info("awsglue: write_out starting (%d table(s))", len(names))
         resolution = dest._evolution()
         cfg = _impl.WriteCfg(
             conn=conn,
-            tables=list(dest.tables),
+            tables=names,
             if_table_exists=resolution.if_table_exists,
             schema_evolution=resolution.schema_evolution,
             transaction_id=ctx.transaction_id,
         )
         try:
-            _impl.write_all_tables(cfg, tables)
+            _impl.write_all_tables(cfg, frames)
         except ConnException:
             raise
         except Exception as e:  # noqa: BLE001 -- runtime wrapper
@@ -82,7 +87,7 @@ class AwsGlueDestPlugin(
                 cause=e,
                 table=", ".join(cfg.tables),
             )
-        logger.info("awsglue: write_out finished (%d table(s))", len(dest.tables))
+        logger.info("awsglue: write_out finished (%d table(s))", len(names))
 
 
 AWSGLUE_DEST = DestDef(

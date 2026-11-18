@@ -99,14 +99,14 @@ class AzureBlobSrcPlugin(SrcPlugin[AzureBlobSrcConn, AzureBlobSrc]):
 
 
 class AzureBlobDestPlugin(
-    DestPlugin[AzureBlobDestConn, AzureBlobDest, list[pl.LazyFrame]]
+    DestPlugin[AzureBlobDestConn, AzureBlobDest, list[pl.LazyFrame | None]]
 ):
     def write_out(
         self,
         ctx: DestContext,
         conn: AzureBlobDestConn,
         dest: AzureBlobDest,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         _target.write_files(
             ctx=ctx,

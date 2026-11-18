@@ -13,6 +13,7 @@ import polars as pl
 from tabsdata.expansions.foundation.writers import avro  # noqa: TID251
 from tabsdatak.common._fileformat.error import FileFormatErrorCode
 from tabsdatak.common._fileformat.taxonomy import DestFileFormat
+from tabsdatak.conn.common._dest import present
 from tabsdatak.conn.common._find import PATH_SEPARATOR
 from tabsdatak.conn.common.file._plugin import (
     FilePluginErrors,
@@ -117,7 +118,7 @@ def write_files(
     ctx: DestContext,
     cfg: WriterConf,
     store: FileStore,
-    tables: list[pl.LazyFrame],
+    tables: list[pl.LazyFrame | None],
     errors: FilePluginErrors,
 ) -> None:
     if len(tables) != len(cfg.paths):
@@ -127,10 +128,14 @@ def write_files(
         )
     targets = [resolve_dest_tokens(path, ctx) for path in cfg.paths]
     found = formats(cfg.file_format, targets)
+    frames, targets, found = present(tables, targets, found)
+    if not frames:
+        logger.info("file-writer: nothing to write, every table is None")
+        return
     csv = csv_options(cfg.format_cfg)
     total = len(targets)
     for position, (target, file_format, frame) in enumerate(
-        zip(targets, found, tables), 1
+        zip(targets, found, frames), 1
     ):
         logger.info("file-writer: writing path %d/%d: %r", position, total, target)
         try:

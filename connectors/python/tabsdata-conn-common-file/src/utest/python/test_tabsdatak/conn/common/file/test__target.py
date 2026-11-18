@@ -29,16 +29,14 @@ ERRORS = FilePluginErrors(
     write_failed=FileCommonErrorCode.FILE_COMMON_8,
 )
 
-ROWS = pl.LazyFrame(
-    {
-        "id": [1, 2],
-        "name": ["a,b", None],
-        "at": [
-            datetime(2026, 1, 15, 11, 20, 30, tzinfo=timezone.utc),
-            None,
-        ],
-    }
-).with_columns(pl.col("at").dt.convert_time_zone("Europe/Madrid"))
+ROWS = pl.LazyFrame({
+    "id": [1, 2],
+    "name": ["a,b", None],
+    "at": [
+        datetime(2026, 1, 15, 11, 20, 30, tzinfo=timezone.utc),
+        None,
+    ],
+}).with_columns(pl.col("at").dt.convert_time_zone("Europe/Madrid"))
 
 
 @dataclass
@@ -51,7 +49,7 @@ class Ctx:
 def written(
     tmp_path: Path,
     paths: list[str],
-    tables: list[pl.LazyFrame],
+    tables: list[pl.LazyFrame | None],
     file_format: DestFileFormat = DestFileFormat.AUTO,
     format_cfg: dict | None = None,
 ) -> Path:
@@ -218,3 +216,35 @@ def test_an_empty_table_writes_its_columns(tmp_path):
         "id",
         "name",
     ]
+
+
+def test_a_none_table_leaves_its_path_untouched(tmp_path):
+    written(tmp_path, ["a.csv", "b.csv", "c.csv"], [ROWS, ROWS, ROWS])
+    root = written(
+        tmp_path, ["a.csv", "b.csv", "c.csv"], [ROWS.head(1), None, ROWS.head(1)]
+    )
+    assert pl.read_csv(root / "a.csv").height == 1
+    assert pl.read_csv(root / "b.csv").height == 2
+    assert pl.read_csv(root / "c.csv").height == 1
+
+
+def test_a_none_table_creates_no_file(tmp_path):
+    root = written(tmp_path, ["a.csv", "b.csv"], [None, ROWS])
+    assert sorted(path.name for path in root.iterdir()) == ["b.csv"]
+
+
+def test_only_none_tables_write_nothing(tmp_path):
+    root = written(tmp_path, ["a.csv", "${TRX_ID}/b.csv"], [None, None])
+    assert not root.exists()
+
+
+def test_paths_of_mixed_formats_are_refused_even_for_a_none_table(tmp_path):
+    with pytest.raises(CommonInitException) as raised:
+        written(tmp_path, ["a.csv", "b.parquet"], [ROWS, None])
+    assert raised.value.api_error is FileFormatErrorCode.FILE_FORMAT_4
+
+
+def test_tables_and_paths_must_pair_with_none_tables(tmp_path):
+    with pytest.raises(ConnException) as raised:
+        written(tmp_path, ["a.csv"], [None, None])
+    assert raised.value.api_error is FileCommonErrorCode.FILE_COMMON_16

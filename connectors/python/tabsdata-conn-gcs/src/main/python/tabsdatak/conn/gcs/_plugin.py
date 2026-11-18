@@ -86,13 +86,13 @@ class GCSSrcPlugin(SrcPlugin[GCSSrcConn, GCSSrc]):
         )
 
 
-class GCSDestPlugin(DestPlugin[GCSDestConn, GCSDest, list[pl.LazyFrame]]):
+class GCSDestPlugin(DestPlugin[GCSDestConn, GCSDest, list[pl.LazyFrame | None]]):
     def write_out(
         self,
         ctx: DestContext,
         conn: GCSDestConn,
         dest: GCSDest,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         _target.write_files(
             ctx=ctx,

@@ -84,13 +84,13 @@ class S3SrcPlugin(SrcPlugin[S3SrcConn, S3Src]):
         )
 
 
-class S3DestPlugin(DestPlugin[S3DestConn, S3Dest, list[pl.LazyFrame]]):
+class S3DestPlugin(DestPlugin[S3DestConn, S3Dest, list[pl.LazyFrame | None]]):
     def write_out(
         self,
         ctx: DestContext,
         conn: S3DestConn,
         dest: S3Dest,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         _target.write_files(
             ctx=ctx,

@@ -11,6 +11,8 @@ from typing import Any
 
 import polars as pl
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._dest import present
 from tabsdatak.conn.starrocks import (
     DestCfgKey,
     DestCfgSpec,
@@ -66,14 +68,14 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
 
 
 class StarRocksDestPlugin(
-    DestPlugin[StarRocksDestConn, StarRocksDest, list[pl.LazyFrame]],
+    DestPlugin[StarRocksDestConn, StarRocksDest, list[pl.LazyFrame | None]],
 ):
     def write_out(
         self,
         ctx: DestContext,
         conn: StarRocksDestConn,
         dest: StarRocksDest,
-        tables: list[pl.LazyFrame],
+        tables: list[pl.LazyFrame | None],
     ) -> None:
         from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
@@ -93,6 +95,10 @@ class StarRocksDestPlugin(
                 tables=len(dest.tables),
                 slots=len(tables),
             )
+        frames, target_tables = present(tables, dest.tables)
+        if not frames:
+            logger.info("starrocks: no table to write, nothing to do")
+            return
 
         host = conn._host()
         port = conn._port()
@@ -104,7 +110,7 @@ class StarRocksDestPlugin(
             database=database,
             credentials=conn.credentials,
             staging=conn.staging,
-            target_tables=list(dest.tables),
+            target_tables=target_tables,
             if_table_exists=dest.if_table_exists,
             schema_evolution=dest._evolution().schema_evolution,
             conn_cfg=dict(conn.conn_cfg) if conn.conn_cfg else None,
@@ -117,7 +123,7 @@ class StarRocksDestPlugin(
         upload_id = uuid.uuid4().hex
 
         try:
-            adapter.execute(write_cfg, list(tables), upload_id)
+            adapter.execute(write_cfg, frames, upload_id)
         except OperationalError as e:
             raise StarRocksErrorCode.STARROCKS_4.exception(
                 cause=e,
