@@ -26,6 +26,11 @@ RELEASE_PACKAGES = (
     "tabsdata",
     "tabsdata-agent",
 )
+SPLIT_RELEASE_PACKAGES = (
+    "tabsdata[all]",
+    "tabsdata-agent",
+)
+FIRST_WHOLE_RELEASE = Version("2.4.0")
 EXTRA_PACKAGES = ("kubernetes",)
 INSTALL_TIMEOUT = 1800
 INSTANCE_ROLE = "upgrade"
@@ -91,6 +96,12 @@ def uv(*arguments: str) -> None:
     run([command, *arguments], env=environment)
 
 
+def release_packages(version: str) -> tuple[str, ...]:
+    if Version(version) < FIRST_WHOLE_RELEASE:
+        return SPLIT_RELEASE_PACKAGES
+    return RELEASE_PACKAGES
+
+
 def create_environment(version: str, folder: Path) -> PythonEnvironment:
     folder.mkdir(parents=True, exist_ok=True)
     environment = PythonEnvironment(
@@ -133,7 +144,7 @@ def create_environment(version: str, folder: Path) -> PythonEnvironment:
         python,
         "--index",
         RELEASE_INDEX,
-        *(f"{package}=={version}" for package in RELEASE_PACKAGES),
+        *(f"{package}=={version}" for package in release_packages(version)),
         *EXTRA_PACKAGES,
     )
     return environment
