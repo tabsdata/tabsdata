@@ -56,7 +56,7 @@ class _FunctionArchive:
     function_type: str
     connector: str | None
     connection: str | None
-    workers: dict[str, str] | None
+    workers: dict[str, str]
     trend_transformers_info: list[TrendTransformerInfo] | None = None
 
 
@@ -70,11 +70,11 @@ _KIND_TO_API_TYPE: dict[str, str] = {
 }
 
 
-def _workers(info: FunctionInfo) -> dict[str, str] | None:
+def _workers(info: FunctionInfo) -> dict[str, str]:
     """The workers payload ``function_register`` stores on the function:
     ``{"CT": {"mask": ...}}`` for a ``CronTrigger``, ``{"ST": {}}`` (every
     ``StageTriggerConfig`` field has a server default) for a
-    ``@stream_publisher``, else ``None``; each config is JSON-encoded.
+    ``@stream_publisher``, else ``{}``; each config is JSON-encoded.
 
     A stream publisher must emit ``"ST"``: without it the server never
     schedules its long-running worker, and the function gets no rows.
@@ -84,7 +84,7 @@ def _workers(info: FunctionInfo) -> dict[str, str] | None:
         return {"CT": json.dumps({"mask": trigger_by.mask})}
     if getattr(info, "__kind__", None) == KIND_STREAM_PUBLISHER_DEF:
         return {"ST": json.dumps({})}
-    return None
+    return {}
 
 
 def _trigger_string_list(info: FunctionInfo) -> list[str] | None:

@@ -253,13 +253,13 @@ def test_cron_workers_returns_ct_payload_for_cron_trigger():
     assert "0 * * * *" in workers["CT"]
 
 
-def test_cron_workers_returns_none_for_non_cron_trigger():
+def test_cron_workers_returns_empty_for_non_cron_trigger():
     info = _transformer_info(trigger_by=TablesTrigger(tables=["c/a"]))
-    assert fa._workers(info) is None
+    assert fa._workers(info) == {}
 
 
-def test_cron_workers_returns_none_for_none_trigger():
-    assert fa._workers(_publisher_info(trigger_by=None)) is None
+def test_cron_workers_returns_empty_for_none_trigger():
+    assert fa._workers(_publisher_info(trigger_by=None)) == {}
 
 
 def test_workers_returns_st_payload_for_stream_publisher():
@@ -376,7 +376,7 @@ def test_create_archive_publisher_cron_extracts_metadata(project_root, _no_op_bu
     assert archive.tables == ["t1", "t2"]
     assert archive.string_dependencies == []
     assert archive.trigger_string_list == []  # cron -> workers
-    assert archive.workers is not None and "CT" in archive.workers
+    assert "CT" in archive.workers
     assert archive.connector == qualified_class(_FakeSrc)
     assert archive.connection == qualified_class(_FakeSrcConn)
     assert archive.table_types == {}
@@ -431,7 +431,7 @@ def test_create_archive_transformer_tables_trigger(project_root, _no_op_bundle):
     assert archive.string_dependencies == ["coll/a", "coll/b"]
     assert archive.tables == ["out"]
     assert archive.trigger_string_list == ["coll/trig"]
-    assert archive.workers is None
+    assert archive.workers == {}
     assert archive.connector is None  # transformers have no connector
     assert archive.connection is None
 
@@ -749,6 +749,16 @@ def test_update_function_defaults_reset_flags_to_false(project_root, _no_op_bund
     assert seen["reset_state"] is False
     assert seen["reset_stage"] is False
     assert seen["base_path"] is None
+
+
+def test_update_function_drops_the_trigger_worker_a_function_no_longer_has(
+    project_root, _no_op_bundle
+):
+    coll, seen = _coll_with_fake_connection(_no_op_bundle)
+
+    coll.update_function("old_fn", _publisher_info(trigger_by=None), project_root)
+
+    assert seen["workers"] == {}
 
 
 def _coll_with_fake_register_connection():

@@ -18,6 +18,7 @@ from tabsdatax.itest.fixture.functions.harness import (
 )
 from tabsdatax.itest.fixture.instances.tabsdata import Instance, tabsdata_instance
 
+from tabsdatak.sdk.status_utils.groups import Entity, is_final
 from testi_tabsdatak.conn.common.cluster import (
     COLLECTION_ANNOTATION,
     FUNCTION_ANNOTATION,
@@ -36,6 +37,7 @@ from testi_tabsdatak.sdk.workloads import (
     REMOVAL_TIMEOUT,
     STARTUP_TIMEOUT,
     cron_job_of,
+    cron_workers,
     current_status,
     finish,
     lifecycle,
@@ -192,6 +194,40 @@ def test_updating_a_cron_function_replaces_its_cron_job(
             replaced, STARTUP_TIMEOUT, "the updated cron trigger was not replaced"
         )
         assert new.metadata.labels[FUNCTION_ID] == function_id
+    finally:
+        collection.get_function("ticker").delete()
+
+
+@tabsdata_instance(consumer="tdtest")
+@pytest.mark.timeout(1200)
+def test_updating_a_cron_function_without_its_trigger_removes_its_cron_job(
+    instance_tdtest: Instance,
+    collection_factory: CollectionFactory,
+):
+    cluster = Cluster(instance_tdtest)
+    collection = source_collection(collection_factory)
+    function = register(collection, lifecycle.ticker, "ticker")
+    try:
+        function_id = cron_job_of(function, cluster).metadata.labels[FUNCTION_ID]
+
+        collection.update_function(
+            "ticker",
+            info=lifecycle.untriggered_ticker,
+            project_root=str(FUNCTIONS),
+            new_function_name="ticker",
+        )
+
+        def untriggered():
+            return not cluster.cronjobs_of_function(function_id) and all(
+                is_final(Entity.WORKER, worker.status)
+                for worker in cron_workers(function)
+            )
+
+        eventually(
+            untriggered,
+            REMOVAL_TIMEOUT,
+            "the function updated without its cron trigger kept a cron job",
+        )
     finally:
         collection.get_function("ticker").delete()
 

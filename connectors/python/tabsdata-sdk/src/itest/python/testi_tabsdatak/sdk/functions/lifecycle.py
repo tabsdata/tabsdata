@@ -32,3 +32,8 @@ def quick(frame: TableFrameSpec) -> TableFrameSpec:
 )
 def ticker(frame: TableFrameSpec) -> TableFrameSpec:
     return frame
+
+
+@publisher(source=_SOURCE, output_tables=["ticked"])
+def untriggered_ticker(frame: TableFrameSpec) -> TableFrameSpec:
+    return frame

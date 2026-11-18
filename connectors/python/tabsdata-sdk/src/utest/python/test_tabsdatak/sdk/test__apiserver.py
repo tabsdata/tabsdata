@@ -618,6 +618,12 @@ def test_function_update_omits_reset_flags_when_none(monkeypatch):
     assert "base_path" not in body
 
 
+def test_function_update_sends_an_empty_workers_map(monkeypatch):
+    server, capture = _server_with_captured_post(monkeypatch)
+    server.function_update(collection_name="coll", function_name="fn", workers={})
+    assert capture.seen["json"]["workers"] == {}
+
+
 class _CaptureGet:
     """A ``get`` replacement that records its path and returns a dummy 200
     response so ``raise_for_status`` is a no-op."""
