@@ -38,13 +38,21 @@ from tabsdatak.conn.kafka._serdes import (
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.kafka._stream_plugin import KafkaStreamSrcPlugin
-from tabsdatak.spi import StreamSrcPluginCtx
+from tabsdatak.spi import FrameMetadata, StreamSrcPluginCtx
 
 SCHEMAS = Path(__file__).parents[4] / "resources/testi_tabsdatak/conn/kafka/schemas"
 PROTOBUF_MESSAGE = "PersonV1"
 PLUGIN_TIMEOUT_SECONDS = 60.0
 CAPTURE_TIMEOUT_SECONDS = 45.0
 STREAM_CFG = {"tabsdata.kafka.poll.max_secs": 2}
+
+
+def idle_after(secs: int) -> StreamThresholds:
+    """Batches a second apart at most, and an empty one after `secs` seconds
+    without messages."""
+    return StreamThresholds(
+        batch=BatchThresholds(min_secs=1, max_secs=1, idle_secs=secs)
+    )
 
 
 def batch_of(rows: int | None = None) -> StreamThresholds:
@@ -81,6 +89,7 @@ class KafkaCtx(StreamSrcPluginCtx):
         self._state: dict[str, Any] = {}
         self._tabsdata_owns_state = False
         self.staged: list[StagedManifest] = []
+        self.sent: list[FrameMetadata | None] = []
         self._lock = threading.Lock()
 
     @property
@@ -173,6 +182,8 @@ class KafkaCtx(StreamSrcPluginCtx):
 
     def stage(self, tables_files=None, new_state=None):
         with self._lock:
+            for tables in tables_files or ():
+                self.sent.extend(table.metadata for table in tables or ())
             sent = self._local.stage(tables_files, new_state)
             if new_state is None:
                 return sent

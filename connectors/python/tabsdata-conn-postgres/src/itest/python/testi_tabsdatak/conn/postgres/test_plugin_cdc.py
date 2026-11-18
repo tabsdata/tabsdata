@@ -300,6 +300,13 @@ def _ids(frame: pl.DataFrame) -> list[int]:
     return sorted(frame["id"].to_list())
 
 
+def _has(ctx: _CdcCtx, slot: int, id_: int) -> bool:
+    """Whether a change of row `id_` was staged for `slot`: a slot holds a file in
+    every batch, an empty one while its table has no change."""
+    captured = _captured(ctx, slot=slot)
+    return captured is not None and id_ in _ids(captured)
+
+
 @postgrescdc_domain("postgrescdc_employees_xs")
 def test_cdc_plugin_stages_captured_inserts(
     domain_postgrescdc_employees_xs: PostgrescdcDomain, tmp_path: Path
@@ -443,10 +450,7 @@ def test_cdc_plugin_captures_every_tracked_table(
                     _await_captured(
                         ctx,
                         "a change from each tracked table",
-                        lambda _frame: (
-                            _captured(ctx, slot=0) is not None
-                            and _captured(ctx, slot=1) is not None
-                        ),
+                        lambda _frame: _has(ctx, 0, 1) and _has(ctx, 1, 2),
                     )
 
     # Each tracked table owns an output slot, positionally by `tables`.
@@ -488,3 +492,30 @@ def test_cdc_plugin_publishes_every_row_of_interleaved_transactions(
         assert max(stages[i] for i in earlier) < min(stages[i] for i in later), case
     published = publish_in_order(ctx.manifests(), work_dir(tmp_path, "publish"), "id")
     assert published == set(INTERLEAVED_IDS)
+
+
+@postgrescdc_domain("postgrescdc_employees_xs")
+def test_cdc_plugin_stages_an_empty_table_for_a_tracked_table_without_changes(
+    domain_postgrescdc_employees_xs: PostgrescdcDomain, tmp_path: Path
+):
+    domain = domain_postgrescdc_employees_xs
+    with cdc_probe(domain, "td_cdc_busy") as busy:
+        with cdc_probe(domain, "td_cdc_quiet") as quiet:
+            with replication_slot(domain, "td_cdc_quiet_slot") as slot:
+                src = _stream_src(
+                    [cdc_table(busy.name), cdc_table(quiet.name)], slot, "head"
+                )
+                busy.insert(1, "busy-table")
+
+                ctx = _CdcCtx(work_dir(tmp_path))
+                with _running(ctx, cdc_src_conn(domain), src):
+                    _await_captured(
+                        ctx, "the busy table's insert", lambda _frame: _has(ctx, 0, 1)
+                    )
+
+    manifests = ctx.manifests()
+    assert manifests
+    assert all(len(files) >= 1 for manifest in manifests for files in manifest)
+    quiet_frame = _captured(ctx, slot=1)
+    assert quiet_frame.height == 0
+    assert any(column.endswith(OP_COLUMN_SUFFIX) for column in quiet_frame.columns)

@@ -24,6 +24,7 @@ from testi_tabsdatak.conn.salesforce.backend import (
     sobject_rows,
     src_conn,
     tabular_report,
+    text_column,
 )
 
 # noinspection PyProtectedMember
@@ -204,3 +205,22 @@ def test_report_src_plugin_read_in_label_column_names(
     )
     [frame] = served(out, tmp_path / "served")
     assert frame.columns == report_columns(domain, report, "label")
+
+
+@salesforce_domain("salesforce")
+def test_report_src_plugin_read_in_matching_no_rows_lands_an_empty_typed_table(
+    domain_salesforce: SalesforceDomain, tmp_path: Path
+):
+    domain = domain_salesforce
+    report = tabular_report(domain)
+    src = SalesforceReportSrc(
+        reports=[report],
+        filter=[(text_column(domain, report), "equals", "td-no-such-value")],
+    )
+    out = plugin._SalesforceReportSrcPlugin().read_in(
+        PluginSrcCtx(work_dir(tmp_path)), src_conn(domain), src
+    )
+    [[table]] = taken(out, tmp_path / "served")
+    assert table.known
+    assert table.frame.height == 0
+    assert table.frame.columns == report_columns(domain, report)

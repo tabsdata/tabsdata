@@ -20,7 +20,12 @@ from testi_tabsdatak.conn.common.sql.employees_model import (
     emp_nos,
 )
 from testi_tabsdatak.conn.common.sql.plugin_ctx import WatermarkSrcCtx
-from testi_tabsdatak.conn.common.sql.plugin_io import entity_rows, slot_rows, work_dir
+from testi_tabsdatak.conn.common.sql.plugin_io import (
+    empty_table,
+    entity_rows,
+    slot_rows,
+    work_dir,
+)
 from testi_tabsdatak.conn.databricks.backend import src_conn
 
 # noinspection PyProtectedMember
@@ -119,13 +124,14 @@ def test_src_plugin_read_in_resumes_from_advanced_initial_values(
     assert first["emp_no"].to_list() == [n for n in all_emp_nos if n > cursor]
 
     # What a publisher does with the watermark it just consumed; the next run must
-    # read from it rather than from the seed, so it sees nothing new. The statement
-    # manifest types a zero-row result, so the input still holds a typed empty
-    # table rather than nothing at all.
+    # read from it rather than from the seed, so it sees nothing new. A query
+    # matching no rows yields one empty table, typed as its rows are.
     ctx.set_attr("cursor", all_emp_nos[-1])
-    empty = slot_rows(plugin._DatabricksSrcPlugin().read_in(ctx, src_conn(domain), src))
-    assert empty.height == 0
-    assert empty.columns == ["emp_no"]
+    empty = empty_table(
+        plugin._DatabricksSrcPlugin().read_in(ctx, src_conn(domain), src)
+    )
+    assert empty.metadata.known
+    assert empty.frame.collect_schema() == first.schema
 
     # A run whose ctx never stored the bind falls back to the seed.
     again = slot_rows(

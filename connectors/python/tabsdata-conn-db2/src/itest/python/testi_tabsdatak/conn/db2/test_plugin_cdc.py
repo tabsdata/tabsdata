@@ -576,3 +576,32 @@ def test_cdc_publishes_every_row_of_interleaved_transactions(
     publish = tmp_path / "publish"
     publish.mkdir()
     assert publish_in_order(manifests, publish, "ID") == set(INTERLEAVED_IDS)
+
+
+@db2cdc_domain("db2cdc_employees_xs")
+def test_cdc_stages_an_empty_table_for_a_tracked_table_without_changes(
+    domain_db2cdc_employees_xs: Db2CdcDomain, tmp_path: Path
+):
+    domain = domain_db2cdc_employees_xs
+    with cdc_source_table(domain) as (busy, busy_cd):
+        with cdc_source_table(domain) as (_, quiet_cd):
+            cdc_insert(domain, busy, [{"id": 1, "name": "busy", "age": 1}])
+            cdc_wait_cd_count(domain, busy_cd, expected=1)
+
+            ctx = _CdcCtx(tmp_path / "work", until=_staged({1}))
+            ctx.work_dir.mkdir()
+            src = Db2CdcStreamSrc(
+                tables=[busy_cd, quiet_cd], start_from="head", src_cfg=dict(_SRC_CFG)
+            )
+            _run_plugin(ctx, cdc_src_conn(domain), src)
+
+    manifests = [staged.manifest for staged in ctx.staged if staged.committed]
+    assert manifests
+    assert all(len(files) >= 1 for manifest in manifests for files in manifest)
+    quiet = [
+        pl.from_arrow(pq.read_table(file))
+        for manifest in manifests
+        for file in manifest[1]
+    ]
+    assert sum(frame.height for frame in quiet) == 0
+    assert any(column.endswith("cdc.meta.op") for column in quiet[0].columns)

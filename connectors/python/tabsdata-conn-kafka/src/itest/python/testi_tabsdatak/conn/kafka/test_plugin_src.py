@@ -20,6 +20,7 @@ from testi_tabsdatak.conn.kafka.harness import (
     Variant,
     batch_of,
     committed_manifests,
+    idle_after,
     run_plugin,
     staged_at_least,
     staged_frames,
@@ -32,6 +33,7 @@ from testi_tabsdatak.conn.kafka.harness import (
 
 from tabsdatak.conn.kafka._serdes import JsonKafkaSerde
 from tabsdatak.conn.kafka.constants import KAFKA_META_TOPIC
+from tabsdatak.spi import FrameMetadata
 
 pytestmark = [
     pytest.mark.kafka,
@@ -160,3 +162,29 @@ def test_stream_src_plugin_schema_change_segregates_files(
         frozenset({KAFKA_META_TOPIC, "name", "age"}): ["alice", "bob"],
         frozenset({KAFKA_META_TOPIC, "name", "city"}): ["carol"],
     }
+
+
+@redpanda_domain("redpanda")
+def test_stream_src_plugin_idle_batch_stages_one_empty_table_of_unknown_columns(
+    domain_redpanda: RedpandaDomain, tmp_path: Path
+):
+    domain = domain_redpanda
+    ctx = KafkaCtx(
+        work_dir(tmp_path),
+        until=lambda ctx: bool(committed_manifests(ctx)),
+        thresholds=idle_after(1),
+    )
+    bus = broker(domain)
+    with bus.fresh_topic() as topic:
+        conn, src = stream_src(
+            domain, topic=topic, variant=JSON_VARIANT, src_cfg=STREAM_CFG
+        )
+        run_plugin(ctx, conn, src)
+
+    assert ctx.satisfied
+    [staged, *_] = committed_manifests(ctx)
+    assert [len(files) for files in staged.manifest] == [1]
+    [frame] = staged_frames(ctx)[:1]
+    assert frame.schema == pl.Schema({KAFKA_META_TOPIC: pl.String})
+    assert frame.height == 0
+    assert ctx.sent[0] == FrameMetadata(known=False)

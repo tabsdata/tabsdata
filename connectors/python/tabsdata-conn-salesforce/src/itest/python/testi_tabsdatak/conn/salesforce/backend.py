@@ -76,3 +76,13 @@ def report_columns(
         column if strategy == "columnName" else info[column]["label"]
         for column in describe["reportMetadata"]["detailColumns"]
     ]
+
+
+def text_column(domain: SalesforceDomain, report_id: str) -> str:
+    """A detail column of the report holding text, to filter the report on."""
+    describe = client(domain).restful(f"analytics/reports/{report_id}/describe")
+    info = describe["reportExtendedMetadata"]["detailColumnInfo"]
+    for column in describe["reportMetadata"]["detailColumns"]:
+        if info[column]["dataType"] == "string":
+            return column
+    pytest.skip(f"report {report_id!r} has no text column to filter on")
