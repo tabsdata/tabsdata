@@ -37,6 +37,7 @@ from tabsdatak.api import Secret
 from tabsdatak.conn.common.sql.cdc._ingester import CDC_OFFSET_STATE_KEY
 from tabsdatak.conn.common.sql.cdc._model import TableObject, TrackedTable
 from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
+from tabsdatak.conn.common.sql.cdc.error import SqlCdcException
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.mysql import _cdc_impl
@@ -570,6 +571,8 @@ def test_resolve_url_preserves_explicit_driver():
 def _truncate_ready(qualified: str = "app.users") -> BinlogIngester:
     bi = _ingester_with_tables([qualified])
     bi.init_schema_registry(CdcFormat())
+    for table, tracked in bi._tracked_tables.items():
+        bi._schema_registry.register_from_catalog(table, tracked)
     return bi
 
 
@@ -626,16 +629,25 @@ def test_truncate_is_emitted_with_the_known_table_definition():
     assert change.new_values == {"id": None, "name": None}
 
 
-def test_truncate_of_a_never_captured_table_is_still_emitted():
-    """Dropping it would strand rows in the destination, so it carries the
-    unknown definition rather than being skipped."""
+def test_truncate_of_a_never_captured_table_carries_its_catalog_definition():
+    """Every tracked table is registered from the catalog as the stream
+    starts, so one truncated before any change still has its definition."""
     bi = _truncate_ready()
 
     change = bi._truncate_change(_query_event("truncate table users"), "uuid:7", GtidOffset(gtid="uuid:1-7"))
 
     assert change is not None
-    assert change.schema.columns == ()
-    assert change.new_values == {}
+    assert change.schema is bi._schema_registry.latest("app.users")
+
+
+def test_truncate_of_a_tracked_table_without_a_registered_schema_is_an_error():
+    bi = _ingester_with_tables(["app.users"])
+    bi.init_schema_registry(CdcFormat())
+
+    with pytest.raises(SqlCdcException, match="CDC_31"):
+        bi._truncate_change(
+            _query_event("truncate table users"), "uuid:7", GtidOffset(gtid="uuid:1-7")
+        )
 
 
 def test_truncate_stands_alone_in_its_own_transaction():

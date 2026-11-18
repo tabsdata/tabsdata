@@ -44,6 +44,7 @@ from tabsdatak.conn.common.sql.cdc._ingester import CDC_OFFSET_STATE_KEY
 from tabsdatak.conn.common.sql.cdc._model import TableObject, TrackedTable
 from tabsdatak.conn.common.sql.cdc._runner import CdcRunConfig
 from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
+from tabsdatak.conn.common.sql.cdc.error import SqlCdcException
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.postgres import _cdc_impl
@@ -474,6 +475,8 @@ def _truncate_ready(qualified: str = "public.users") -> Wal2JsonIngester:
     table definition it stamps on the emitted row."""
     bi = _ingester_with_tables([qualified])
     bi.init_schema_registry(CdcFormat())
+    for table, tracked in bi._tracked_tables.items():
+        bi._schema_registry.register_from_catalog(table, tracked)
     return bi
 
 
@@ -507,11 +510,9 @@ def test_truncate_is_emitted_with_the_known_table_definition():
     assert change.old_values == {"id": None, "name": None}
 
 
-def test_truncate_of_a_never_captured_table_is_still_emitted():
-    """A table truncated before any change revealed its columns has no
-    definition. The event must still reach the destination -- dropping it
-    would leave rows there that nothing ever removes -- so it carries the
-    unknown definition instead."""
+def test_truncate_of_a_never_captured_table_carries_its_catalog_definition():
+    """Every tracked table is registered from the catalog as the stream
+    starts, so one truncated before any change still has its definition."""
     bi = _truncate_ready()
 
     change = bi._truncate_change(
@@ -525,8 +526,22 @@ def test_truncate_of_a_never_captured_table_is_still_emitted():
 
     assert change is not None
     assert change.operation is CdcOperation.TRUNCATE
-    assert change.schema.columns == ()
-    assert change.new_values == {}
+    assert change.schema is bi._schema_registry.latest("public.users")
+
+
+def test_truncate_of_a_tracked_table_without_a_registered_schema_is_an_error():
+    bi = _ingester_with_tables(["public.users"])
+    bi.init_schema_registry(CdcFormat())
+
+    with pytest.raises(SqlCdcException, match="CDC_31"):
+        bi._truncate_change(
+            payload=_truncate_payload(),
+            xid="77",
+            sequence=1,
+            timestamp=TS,
+            offset=LsnOffset(lsn=900),
+            segment=900,
+        )
 
 
 def test_truncate_keeps_the_transaction_position():

@@ -24,6 +24,8 @@ from tabsdatak.conn.common.sql.cdc._model import TableObject, TrackedTable
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql.cdc._runner import CdcRunConfig, _PendingLoad
+from tabsdatak.conn.common.sql.cdc._schema import SchemaRegistry
+from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 from tabsdatak.conn.db2 import _cdc_impl
 from tabsdatak.conn.db2._cdc_impl import CommitSeqOffset, SqlReplicaIngester
 
@@ -182,7 +184,15 @@ def _ingester(monkeypatch) -> SqlReplicaIngester:
     }
     bi._tracked_tables = tracked
     bi._before_img_prefixes = dict.fromkeys(TABLES)
+    catalog = SchemaRegistry(
+        type_mapper=lambda t: t,
+        large_column_classifier=lambda t: None,
+        cdc_format=CdcFormat(),
+    )
+    for data, table in tracked.items():
+        catalog.register_from_catalog(data, table)
     bi._schema_registry = MagicMock()
+    bi._schema_registry.latest.side_effect = catalog.latest
     bi._poll_max_secs = 0.05
     monkeypatch.setattr(bi, "open_session", lambda work_dir: _Session())
     monkeypatch.setattr(bi, "harvest_tables", lambda **kwargs: tracked)
