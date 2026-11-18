@@ -14,6 +14,7 @@ from pathlib import Path
 
 import fastavro
 import pytest
+from obstore.exceptions import GenericError
 from tabsdatax.itest.fixture.backends.azurebloblocal import AzureBlobLocalDomain
 from tabsdatax.itest.fixture.backends.gcslocal import GcsLocalDomain
 from tabsdatax.itest.fixture.backends.s3local import S3LocalDomain
@@ -39,6 +40,7 @@ GROWTH_PER_THREAD = 12 * MEBIBYTE
 ROUNDS = 2
 CHILD_SECONDS = 900
 UPLOAD_TIMEOUT = "600s"
+UPLOAD_ATTEMPTS = 2
 LAND = Path(__file__).parent / "children" / "land.py"
 
 ROWS_PER_BLOCK = 20000
@@ -126,15 +128,27 @@ FORMATS = {
 }
 
 
+def uploaded(domain, local: Path, options: dict) -> tuple[str, FileStore]:
+    for attempt in range(UPLOAD_ATTEMPTS):
+        root = f"{domain.uri.rstrip('/')}/readers-{uuid.uuid4().hex}"
+        store = FileStore(root, {**options, "timeout": UPLOAD_TIMEOUT})
+        try:
+            with open(local, "rb") as content:
+                store.store().put(local.name, content)
+        except GenericError:
+            if attempt == UPLOAD_ATTEMPTS - 1:
+                raise
+        else:
+            return root, store
+    raise AssertionError("unreachable")
+
+
 def landed(domain, tmp_path: Path, file_format: str, size: int):
     extension, write = FORMATS[file_format]
     local = tmp_path / f"in-{size}{extension}"
     rows = write(local, size)
-    root = f"{domain.uri.rstrip('/')}/readers-{uuid.uuid4().hex}"
     options = dict(domain.storage_options)
-    store = FileStore(root, {**options, "timeout": UPLOAD_TIMEOUT})
-    with open(local, "rb") as content:
-        store.store().put(local.name, content)
+    root, store = uploaded(domain, local, options)
     local.unlink()
     target = tmp_path / f"landed-{size}.parquet"
     try:
