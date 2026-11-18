@@ -11,6 +11,8 @@ from dataclasses import replace
 from datetime import datetime
 from typing import cast
 
+import polars as pl
+
 from tabsdatak.common._fileformat.error import FileFormatErrorCode
 from tabsdatak.common._fileformat.taxonomy import SrcFileFormat
 from tabsdatak.common._storage.failures import RecordedStream
@@ -102,10 +104,12 @@ def read_files(
     origin: Origin,
     errors: FilePluginErrors,
 ) -> list[Iterable[LazyFrameInput]]:
+    entries: list[str] = []
     taken: list[list[str]] = []
     purgeables: list[list[str]] = []
     for slot, entry in enumerate(cfg.paths):
-        directory, pattern = split_pattern(entry.replace("\\", PATH_SEPARATOR))
+        entries.append(entry.replace("\\", PATH_SEPARATOR))
+        directory, pattern = split_pattern(entries[-1])
         found = selected(ctx, cfg, store, slot, directory, pattern, entry, errors)
         logger.info(
             "file-reader: path %d/%d %r took %d file(s)",
@@ -118,8 +122,10 @@ def read_files(
         purgeables.append([joined(directory, file.name) for file in found.purgeable])
     checked(cfg, taken)
     return [
-        tables(ctx, cfg, store, origin, slot, paths, purgeable)
-        for slot, (paths, purgeable) in enumerate(zip(taken, purgeables, strict=True))
+        tables(ctx, cfg, store, origin, slot, entry, paths, purgeable)
+        for slot, (entry, paths, purgeable) in enumerate(
+            zip(entries, taken, purgeables, strict=True)
+        )
     ]
 
 
@@ -156,9 +162,12 @@ def tables(
     store: FileStore,
     origin: Origin,
     slot: int,
+    entry: str,
     paths: list[str],
     purgeable: list[str],
 ) -> Iterator[LazyFrameInput]:
+    if not paths:
+        yield unknown(None if cfg.drop_metadata else origin(store, entry))
     slot_cfg = cfg.format_cfg_for(slot)
     sheet = sheet_in(slot_cfg)
     for path in paths:
@@ -223,6 +232,11 @@ def opened(store: FileStore, path: str, wrapped: str | None) -> Readable:
     if archive(path) is not None:
         return RecordedStream(member(store, path))
     return RecordedStream(decompressed(store.open(path), wrapped))
+
+
+def unknown(where: str | None) -> LazyFrameInput:
+    columns = None if where is None else {FILE_META_PATH: where}
+    return LazyFrameInput(pl.LazyFrame(), FrameMetadata(columns=columns, known=False))
 
 
 def described(table: LazyFrameInput, where: str) -> LazyFrameInput:

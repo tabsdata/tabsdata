@@ -20,7 +20,7 @@ from tabsdatax.itest.fixture.backends.s3 import S3System, s3_system
 from tabsdatax.itest.fixture.functions.files import ObjectStore, PluginSrcCtx
 
 # from testi_tabsdatak.conn.common import ebcdic
-from testi_tabsdatak.conn.common.landed import taken
+from testi_tabsdatak.conn.common.landed import taken, unknown
 from testi_tabsdatak.conn.common.plugin_ctx import LastModSrcCtx
 from testi_tabsdatak.conn.s3.backend import run_prefix, src_conn, store
 
@@ -185,7 +185,7 @@ def test_src_wildcard_in_basename_matches_multiple_objects(
 
 
 @s3_system("s3")
-def test_src_wildcard_with_no_matches_returns_empty_slot(
+def test_src_wildcard_with_no_matches_returns_one_unknown_table(
     system_s3: S3System, tmp_path: Path
 ):
     prefix = run_prefix(system_s3.sys_path, "td-integ")
@@ -193,7 +193,7 @@ def test_src_wildcard_with_no_matches_returns_empty_slot(
 
     out = _read_back(system_s3, prefix, S3Src(paths=["*.parquet"]), tmp_path)
     assert len(out) == 1
-    assert out[0] == []
+    assert unknown(out[0])
 
 
 @s3_system("s3")

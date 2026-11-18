@@ -21,6 +21,7 @@ from tabsdatak.spi import FrameMetadata, LazyFrameInput
 class Served:
     frame: pl.DataFrame
     metadata: dict[str, Any] = field(default_factory=dict)
+    known: bool = True
 
 
 def served(table: LazyFrameInput, folder: Path) -> Served:
@@ -30,8 +31,14 @@ def served(table: LazyFrameInput, folder: Path) -> Served:
     metadata = table.metadata() if callable(table.metadata) else table.metadata
     stored = StoredMetadata.read(StoredMetadata.of(metadata or FrameMetadata()))
     frame = serve(pl.scan_parquet(target), stored).collect()
-    return Served(frame, dict(stored.columns or {}))
+    return Served(frame, dict(stored.columns or {}), stored.known)
 
 
 def taken(slots: list[Iterable[LazyFrameInput]], folder: Path) -> list[list[Served]]:
     return [[served(table, folder) for table in slot] for slot in slots]
+
+
+def unknown(slot: list[Served]) -> bool:
+    """Whether a slot holds what a source reads when it finds no data: one empty
+    table of unknown columns."""
+    return len(slot) == 1 and not slot[0].known and slot[0].frame.height == 0

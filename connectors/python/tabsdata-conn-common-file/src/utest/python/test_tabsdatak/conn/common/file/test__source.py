@@ -26,7 +26,7 @@ from tabsdatak.conn.common.file._plugin import FilePluginErrors, ReaderConf
 from tabsdatak.conn.common.file._store import FileStore
 from tabsdatak.conn.common.file.constants import FILE_META_PATH
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
-from tabsdatak.spi import LazyFrameInput
+from tabsdatak.spi import FrameMetadata, LazyFrameInput
 
 pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("no_transporter")]
 
@@ -75,6 +75,14 @@ def read(tmp_path, cfg: ReaderConf, ctx: Context | None = None):
             errors=ERRORS,
         )
     ]
+
+
+def unknown(table: LazyFrameInput) -> bool:
+    return (
+        isinstance(table.metadata, FrameMetadata)
+        and not table.metadata.known
+        and table.frame.collect().shape == (0, 0)
+    )
 
 
 def path_of(table: LazyFrameInput) -> str | None:
@@ -155,7 +163,7 @@ def test_each_slot_keeps_its_own_cursor_and_skips_what_it_took(tmp_path):
     assert [len(slot) for slot in first] == [1, 1]
     assert sorted(ctx.attrs) == ["file-lastmod.slot0", "file-lastmod.slot1"]
     again = read(tmp_path, ReaderConf.from_src(None, src), ctx)
-    assert [len(slot) for slot in again] == [0, 0]
+    assert [[unknown(table) for table in slot] for slot in again] == [[True], [True]]
 
 
 def csv(path, when: datetime):
@@ -179,8 +187,8 @@ def test_purge_deletes_what_a_prior_run_took(tmp_path):
     (first,) = read(tmp_path, ReaderConf.from_src(None, src), ctx)
     assert len(first) == 2
     assert a.exists() and b.exists()
-    (second,) = read(tmp_path, ReaderConf.from_src(None, src), ctx)
-    assert second == []
+    ((second,),) = read(tmp_path, ReaderConf.from_src(None, src), ctx)
+    assert unknown(second)
     assert not a.exists() and not b.exists()
 
 
@@ -212,3 +220,18 @@ def test_without_purge_nothing_is_deleted(tmp_path):
     read(tmp_path, ReaderConf.from_src(None, src), ctx)
     read(tmp_path, ReaderConf.from_src(None, src), ctx)
     assert a.exists() and b.exists()
+
+
+def test_a_path_matching_no_file_reads_one_empty_table_of_unknown_columns(tmp_path):
+    (tmp_path / "a.csv").write_text("a\n1\n", encoding="utf-8")
+    [[table]] = read(tmp_path, ReaderConf.from_src(None, Src(["*.json"])))
+    assert unknown(table)
+    assert path_of(table) == "s3://bucket/*.json"
+
+
+def test_a_path_matching_no_file_without_metadata_has_no_columns_to_add(tmp_path):
+    src = Src(["*.json"])
+    src.src_cfg = {SRC_META_DROP_KEY: True}
+    [[table]] = read(tmp_path, ReaderConf.from_src(None, src))
+    assert unknown(table)
+    assert table.metadata.columns is None

@@ -21,7 +21,7 @@ from tabsdatax.itest.fixture.functions.files import ObjectStore, PluginSrcCtx
 from testi_tabsdatak.conn.azureblob.backend import run_prefix, src_conn, store
 
 # from testi_tabsdatak.conn.common import ebcdic
-from testi_tabsdatak.conn.common.landed import taken
+from testi_tabsdatak.conn.common.landed import taken, unknown
 from testi_tabsdatak.conn.common.plugin_ctx import LastModSrcCtx
 
 # noinspection PyProtectedMember
@@ -186,7 +186,7 @@ def test_src_wildcard_in_basename_matches_multiple_objects(
 
 
 @azureblob_system("azureblob")
-def test_src_wildcard_with_no_matches_returns_empty_slot(
+def test_src_wildcard_with_no_matches_returns_one_unknown_table(
     system_azureblob: AzureblobSystem, tmp_path: Path
 ):
     prefix = run_prefix(system_azureblob.sys_path, "td-integ")
@@ -196,7 +196,7 @@ def test_src_wildcard_with_no_matches_returns_empty_slot(
         system_azureblob, prefix, AzureBlobSrc(paths=["*.parquet"]), tmp_path
     )
     assert len(out) == 1
-    assert out[0] == []
+    assert unknown(out[0])
 
 
 @azureblob_system("azureblob")

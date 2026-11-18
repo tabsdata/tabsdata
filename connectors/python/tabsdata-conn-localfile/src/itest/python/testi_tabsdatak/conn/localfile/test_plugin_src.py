@@ -15,7 +15,7 @@ from tabsdatax.itest.fixture.backends.fs import FsDomain, fs_domain
 from tabsdatax.itest.fixture.functions.files import PluginSrcCtx
 
 # from testi_tabsdatak.conn.common import ebcdic
-from testi_tabsdatak.conn.common.landed import Served, taken
+from testi_tabsdatak.conn.common.landed import Served, taken, unknown
 from testi_tabsdatak.conn.common.plugin_ctx import LastModSrcCtx
 from testi_tabsdatak.conn.localfile.backend import (
     scratch,
@@ -103,7 +103,7 @@ def test_src_wildcard_in_basename_matches_multiple_files(
 
 
 @fs_domain("fs")
-def test_src_wildcard_with_no_matches_returns_empty_slot(
+def test_src_wildcard_with_no_matches_returns_one_unknown_table(
     domain_fs: FsDomain, request: pytest.FixtureRequest
 ):
     _, base, work = scratch(domain_fs, request)
@@ -115,7 +115,7 @@ def test_src_wildcard_with_no_matches_returns_empty_slot(
     out = read_in(ctx, src_conn(base), src)
 
     assert len(out) == 1
-    assert out[0] == []
+    assert unknown(out[0])
     assert ctx.attrs == {}
 
 
@@ -249,7 +249,7 @@ def test_src_first_run_with_no_matches_still_stores_the_baseline(
     src = LocalFileSrc(paths=["*.parquet"], initial_last_modified=CUTOFF)
     ctx = LastModSrcCtx(work)
 
-    assert read_in(ctx, src_conn(base), src) == [[]]
+    assert [unknown(slot) for slot in read_in(ctx, src_conn(base), src)] == [True]
     assert sorted(ctx.attrs) == ["file-lastmod.slot0"]
 
     # The stored cursor holds the baseline and no entry yet, so a file appearing
@@ -278,7 +278,7 @@ def test_src_second_run_imports_a_file_tied_at_the_cursor_timestamp(
     assert _slot_names(read_in(tied, src_conn(base), src)[0]) == ["tied.parquet"]
 
     idle = LastModSrcCtx(root / "idle", tied.attrs)
-    assert read_in(idle, src_conn(base), src) == [[]]
+    assert [unknown(slot) for slot in read_in(idle, src_conn(base), src)] == [True]
 
 
 @fs_domain("fs")
@@ -301,7 +301,7 @@ def test_src_file_appearing_backdated_below_the_cursor_is_not_imported(
 
     stage_parquet(base, "backdated.parquet", CUTOFF - timedelta(hours=1))
     resumed = LastModSrcCtx(root / "resumed", ctx.attrs)
-    assert read_in(resumed, src_conn(base), src) == [[]]
+    assert [unknown(slot) for slot in read_in(resumed, src_conn(base), src)] == [True]
 
 
 @fs_domain("fs")

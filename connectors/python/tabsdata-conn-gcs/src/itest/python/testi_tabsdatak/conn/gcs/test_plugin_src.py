@@ -20,7 +20,7 @@ from tabsdatax.itest.fixture.backends.gcs import GCSSystem, gcs_system
 from tabsdatax.itest.fixture.functions.files import ObjectStore, PluginSrcCtx
 
 # from testi_tabsdatak.conn.common import ebcdic
-from testi_tabsdatak.conn.common.landed import taken
+from testi_tabsdatak.conn.common.landed import taken, unknown
 from testi_tabsdatak.conn.common.plugin_ctx import LastModSrcCtx
 from testi_tabsdatak.conn.gcs.backend import run_prefix, src_conn, store
 
@@ -185,7 +185,7 @@ def test_src_wildcard_in_basename_matches_multiple_objects(
 
 
 @gcs_system("gcs")
-def test_src_wildcard_with_no_matches_returns_empty_slot(
+def test_src_wildcard_with_no_matches_returns_one_unknown_table(
     system_gcs: GCSSystem, tmp_path: Path
 ):
     prefix = run_prefix(system_gcs.sys_path, "td-integ")
@@ -193,7 +193,7 @@ def test_src_wildcard_with_no_matches_returns_empty_slot(
 
     out = _read_back(system_gcs, prefix, GCSSrc(paths=["*.parquet"]), tmp_path)
     assert len(out) == 1
-    assert out[0] == []
+    assert unknown(out[0])
 
 
 @gcs_system("gcs")
