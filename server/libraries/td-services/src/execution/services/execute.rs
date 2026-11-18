@@ -84,6 +84,7 @@ pub(crate) mod tests {
     use super::*;
     use crate::Services;
     use crate::collection::services::connection::test_support::create_collection;
+    use crate::execution::TriggerError;
     use crate::function::children::ChildFunctionError;
     use std::collections::{HashMap, HashSet};
     use std::error::Error;
@@ -122,12 +123,12 @@ pub(crate) mod tests {
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::TableType;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, Description, Enabled, ExecutionName,
-        ExecutionStatus, FunctionName, FunctionOnly, FunctionRuntimeValues, GroupName, InputIdx,
-        LogicalFunctionRunStatus, LogicalTableDataVersionId, OverrideDisabledTrigger,
-        PhysicalFunctionRunId, PhysicalTableDataVersionId, ProjectId, ProjectName, SkipIfRunning,
-        TableName, TableNameDto, TransactionKey, TransactionStatus, TriggeredOn, UserId,
-        VersionPos,
+        AccessTokenId, BundleId, CollectionName, ConnectionKind, Decorator, Description, Enabled,
+        ExecutionName, ExecutionStatus, FunctionName, FunctionOnly, FunctionRuntimeValues,
+        GroupName, InputIdx, LogicalFunctionRunStatus, LogicalTableDataVersionId,
+        OverrideDisabledTrigger, PhysicalFunctionRunId, PhysicalTableDataVersionId, ProjectId,
+        ProjectName, SkipIfRunning, TableName, TableNameDto, TransactionKey, TransactionStatus,
+        TriggeredOn, UserId, VersionPos, WorkerConfig, WorkerTypeDto,
     };
     use td_objects::types::basic::{CollectionIdName, ExternalUid, FunctionIdName, TableIdName};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
@@ -2030,6 +2031,62 @@ pub(crate) mod tests {
         assert!(matches!(
             err.domain_err::<ChildFunctionError>(),
             ChildFunctionError::NotUserManaged(_)
+        ));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_manually_triggering_a_stage_publisher_is_refused(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection = db
+            .scoped(p.project_id)
+            .seed()
+            .collection(&CollectionName::try_from("stage_guard")?, &UserId::admin())
+            .await?;
+        let create = FunctionRegister {
+            workers: Some(HashMap::from([(
+                WorkerTypeDto::StageTrigger,
+                WorkerConfig::default(),
+            )])),
+            child_functions: None,
+            name: FunctionName::try_from("stream_pub")?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: Some(ConnectionKind::try_from("mysqlSrcConn")?),
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_0")?].into(),
+            table_types: None,
+            parent_tables: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+        };
+        db.scoped(p.project_id)
+            .seed()
+            .function(&collection, &create)
+            .await?;
+
+        let err = execute_by_name(
+            &db,
+            p.project_id,
+            "stage_guard",
+            "stream_pub",
+            FunctionOnly::FALSE,
+            OverrideDisabledTrigger::FALSE,
+        )
+        .await
+        .expect_err("a stage publisher must not be triggered manually");
+
+        assert!(matches!(
+            err.domain_err::<TriggerError>(),
+            TriggerError::StageTriggered(_)
         ));
         Ok(())
     }

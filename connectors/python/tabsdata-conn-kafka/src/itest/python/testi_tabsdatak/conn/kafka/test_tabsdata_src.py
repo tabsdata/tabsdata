@@ -86,7 +86,6 @@ def test_stream_publisher_reads_topic_from_redpanda_domain(
         )
         try:
             bus.produce(topic, publisher.ROWS)
-            function.trigger()
             published = _await_rows(
                 collection, publisher.PUBLISHED_TABLE, expected.height
             )
@@ -115,7 +114,6 @@ def test_stream_publisher_receives_ctx_from_redpanda_domain(
         )
         try:
             bus.produce(topic, publisher.ROWS)
-            function.trigger()
             _await_rows(collection, publisher.CTX_PUBLISHED_TABLE, rows)
             bus.produce(topic, publisher.ROWS)
             published = _await_rows(collection, publisher.CTX_PUBLISHED_TABLE, 2 * rows)

@@ -18,7 +18,7 @@ use ta_services::ctx_service::ReqCtx;
 use td_database::access::LockInstant;
 use td_database::access::{Holds, InProject, ProjectLock};
 use td_database::domain::{Apiserver, DomainConnection};
-use td_error::TdError;
+use td_error::{TdError, td_error};
 use td_execution::TransactionBy;
 use td_execution::topology::FunctionState;
 use td_execution::topology::ProjectTopology;
@@ -28,8 +28,9 @@ use td_objects::dxo::execution::{
     ExecutionDB, ExecutionInsertDB, ExecutionRequest, ExecutionResponse, TriggerResponse,
 };
 use td_objects::dxo::function::FunctionDBWithNames;
+use td_objects::dxo::worker::WorkerDB;
 use td_objects::types::basic::TriggerOutcome;
-use td_objects::types::basic::{ExecutionId, TriggerType, TriggeredOn};
+use td_objects::types::basic::{ExecutionId, FunctionName, TriggerType, TriggeredOn, WorkerType};
 use td_objects::types::plan::PlanOptions;
 use td_queries::Queries;
 
@@ -39,6 +40,14 @@ pub(crate) mod plan;
 pub(crate) mod release;
 pub(crate) mod settlement;
 pub(crate) mod update_status;
+
+#[td_error]
+pub enum TriggerError {
+    #[error(
+        "Function '{0}' is a stream publisher; its stream trigger runs it once per batch, so it cannot be triggered manually. Its runs are listed by 'tdk stream plans'"
+    )]
+    StageTriggered(FunctionName) = 2000,
+}
 
 /// The trigger gates shared by the function- and version-trigger services,
 /// run under the project's lock before planning. `Some` names the
@@ -61,6 +70,26 @@ pub(crate) async fn trigger_gate(
         }));
     }
     external_uid_holder(conn, &function.function_id, &request.external_uid).await
+}
+
+async fn ensure_triggerable(
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
+    function: &FunctionDBWithNames,
+    trigger_type: &TriggerType,
+) -> Result<(), TdError> {
+    match trigger_type {
+        TriggerType::Manual => {
+            let stage_trigger: Option<WorkerDB> = conn
+                .fetch_first(and!(&function.id, WorkerType::StageTrigger))
+                .await?;
+            if stage_trigger.is_some() {
+                Err(TriggerError::StageTriggered(function.name.clone()))?
+            }
+        }
+        TriggerType::CronTrigger => {}
+        TriggerType::StageTrigger => {}
+    }
+    Ok(())
 }
 
 /// The full trigger flow shared by both trigger services, once
@@ -93,6 +122,7 @@ pub(crate) async fn execute(
     };
     let topology = ProjectTopology::current(conn, &function.project_id).await?;
     ensure_user_managed(&function, topology.parent_of(&function_id))?;
+    ensure_triggerable(conn, &function, &trigger_type).await?;
     let execution_plan = topology.plan(FunctionState::Executable, &function_id, &options)?;
     execution_plan.validate(transaction_by)?;
 

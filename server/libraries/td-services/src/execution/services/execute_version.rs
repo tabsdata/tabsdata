@@ -95,7 +95,9 @@ async fn execute_function_version(
 mod tests {
     use super::*;
     use crate::Services;
+    use crate::execution::TriggerError;
     use crate::function::children::ChildFunctionError;
+    use std::collections::HashMap;
     use std::str::FromStr;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
@@ -109,12 +111,12 @@ mod tests {
     use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunStatusUpdateDB};
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, ExecutionId,
-        ExecutionName, ExternalUid, FunctionIdName, FunctionName, FunctionOnly,
+        AccessTokenId, BundleId, CollectionIdName, CollectionName, ConnectionKind, Decorator,
+        ExecutionId, ExecutionName, ExternalUid, FunctionIdName, FunctionName, FunctionOnly,
         FunctionRuntimeValues, LogicalFunctionRunStatus, ProjectId, SkipIfRunning, TableNameDto,
         TransactionKey, UserId,
     };
-    use td_objects::types::basic::{FunctionVersionId, TriggerType};
+    use td_objects::types::basic::{FunctionVersionId, TriggerType, WorkerConfig, WorkerTypeDto};
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
@@ -708,6 +710,124 @@ mod tests {
             err.domain_err::<ChildFunctionError>(),
             ChildFunctionError::NotUserManaged(_)
         ));
+        Ok(())
+    }
+
+    fn publisher(name: &str) -> Result<FunctionRegister, TdError> {
+        Ok(FunctionRegister {
+            child_functions: None,
+            name: FunctionName::try_from(name)?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: Some(ConnectionKind::try_from("mysqlSrcConn")?),
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_0")?].into(),
+            table_types: None,
+            parent_tables: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        })
+    }
+
+    async fn seed_stage_publisher(
+        db: &TdPool,
+        project_id: ProjectId,
+    ) -> Result<FunctionDB, TdError> {
+        let collection = db
+            .scoped(project_id)
+            .seed()
+            .collection(&CollectionName::try_from("stage_guard")?, &UserId::admin())
+            .await?;
+        let create = FunctionRegister {
+            workers: Some(HashMap::from([(
+                WorkerTypeDto::StageTrigger,
+                WorkerConfig::default(),
+            )])),
+            ..publisher("stream_pub")?
+        };
+        db.scoped(project_id)
+            .seed()
+            .function(&collection, &create)
+            .await
+    }
+
+    async fn trigger_version(
+        db: &TdPool,
+        function: &FunctionDB,
+        trigger_type: TriggerType,
+    ) -> Result<TriggerResponse, TdError> {
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
+            FunctionVersionParam {
+                function_version: function.id.clone(),
+            },
+            InternalExecutionRequest {
+                name: None,
+                function_only: FunctionOnly::default(),
+                skip_if_running: SkipIfRunning::default(),
+                external_uid: None,
+                trigger_type,
+            },
+        );
+        Ok(Services::with_defaults(db.clone())
+            .execute_function_version(request)
+            .await?
+            .data)
+    }
+
+    #[td_test::test(db)]
+    async fn test_manual_trigger_of_a_stage_publisher_is_refused(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let function = seed_stage_publisher(&db, p.project_id).await?;
+
+        let err = trigger_version(&db, &function, TriggerType::Manual)
+            .await
+            .expect_err("a stage publisher must not be triggered manually");
+
+        assert!(matches!(
+            err.domain_err::<TriggerError>(),
+            TriggerError::StageTriggered(_)
+        ));
+        let executions: Vec<ExecutionDB> = db.fetch_all(&function.id).await?;
+        assert!(executions.is_empty());
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_stage_trigger_runs_its_publisher(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let function = seed_stage_publisher(&db, p.project_id).await?;
+
+        let response = trigger_version(&db, &function, TriggerType::StageTrigger).await?;
+
+        assert_eq!(response.outcome, TriggerOutcome::Scheduled);
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_manual_trigger_without_a_stage_trigger_runs(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection = db
+            .scoped(p.project_id)
+            .seed()
+            .collection(&CollectionName::try_from("no_stage")?, &UserId::admin())
+            .await?;
+        let function = db
+            .scoped(p.project_id)
+            .seed()
+            .function(&collection, &publisher("plain_pub")?)
+            .await?;
+        let response = trigger_version(&db, &function, TriggerType::Manual).await?;
+
+        assert_eq!(response.outcome, TriggerOutcome::Scheduled);
         Ok(())
     }
 }

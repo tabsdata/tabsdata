@@ -266,7 +266,8 @@ fn list                 [--proj PROJECT] [--coll COLLECTION] [-o]
 fn trigger  --name NAME [--proj PROJECT] [--coll COLLECTION] [--plan-name N]
             [--wait [--timeout S] | --no-wait]
                         #   --wait waits for the plan (see Waiting), --no-wait returns it at once;
-                        #   with neither, `tdk set --trigger-wait` decides (default: true, waits)
+                        #   with neither, `tdk set --trigger-wait` decides (default: true, waits);
+                        #   a stream publisher is refused: its stream trigger runs it
 fn enable   --name NAME [--proj PROJECT] [--coll COLLECTION]
 fn disable  --name NAME [--proj PROJECT] [--coll COLLECTION]
                         #   already in that state: reports it, changes nothing
@@ -289,7 +290,8 @@ The two kinds of orchestrator-managed trigger: a function registered with a
 listing narrowed to it; `enable` / `disable` are `tdk fn enable` / `tdk fn
 disable` restricted to functions that have the matching trigger — a function
 without one is refused, naming `tdk fn` instead — and, like them, do nothing when
-the function is already in that state.
+the function is already in that state. A stream publisher runs only from its
+stream trigger, once per batch, and cannot be triggered manually.
 
 ```
 cron   list                 [--proj PROJECT] [--coll COLLECTION] [--name FUNCTION] [--all-projects] [-o]

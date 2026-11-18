@@ -38,6 +38,7 @@ FUNCTIONS = Path(__file__).parent / "functions"
 streamer = function_module(FUNCTIONS, "streamer")
 
 STAGE_TRIGGER = "ST"
+STAGE_TRIGGERED = "TriggerError::2000"
 RUNNING = worker_status_to_mapping(WorkerStatus.RUNNING.value)
 STARTUP_TIMEOUT = 600
 REMOVAL_TIMEOUT = 180
@@ -45,11 +46,9 @@ PAUSES = [0, 0, 1, 3, 0, 5, 0, 2]
 
 
 def register(collection: Collection, info, name: str) -> Function:
-    function = collection.register_function(
+    return collection.register_function(
         info=info, project_root=str(FUNCTIONS), function_name=name
     )
-    function.trigger()
-    return function
 
 
 def stage_workers(function: Function) -> list[Worker]:
@@ -148,6 +147,25 @@ def test_updating_a_stream_publisher_repeatedly_keeps_the_newest_streamer(
             assert not monitor.violations, monitor.violations[:5]
         finally:
             collection.get_function("updated").enable(False)
+
+
+@tabsdata_instance(consumer="tdtest")
+@redpanda_domain("redpanda")
+@pytest.mark.timeout(600)
+def test_triggering_a_stream_publisher_by_hand_is_refused(
+    instance_tdtest: Instance,
+    domain_redpanda: RedpandaDomain,
+    collection_factory: CollectionFactory,
+):
+    collection = collection_factory("sources", src_conn(domain_redpanda))
+    with broker(domain_redpanda).fresh_topic(streamer.TOGGLE_TOPIC):
+        function = register(collection, streamer.toggled, "toggled")
+        try:
+            with pytest.raises(Exception) as refused:
+                function.trigger()
+            assert refused.value.code == STAGE_TRIGGERED
+        finally:
+            function.enable(False)
 
 
 @tabsdata_instance(consumer="tdtest")

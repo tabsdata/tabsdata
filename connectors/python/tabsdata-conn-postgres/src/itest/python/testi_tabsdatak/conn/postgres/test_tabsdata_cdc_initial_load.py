@@ -77,7 +77,6 @@ def test_stream_publisher_initial_load_from_postgrescdc_domain(
                 info=FUNCTION, project_root=str(FUNCTIONS)
             )
             try:
-                function.trigger()
                 loaded = await_published(
                     collection,
                     cdc_publisher.PUBLISHED_TABLE,
@@ -129,7 +128,6 @@ def test_stream_publisher_restart_does_not_reload_on_postgrescdc_domain(
                 info=FUNCTION, project_root=str(FUNCTIONS)
             )
             try:
-                function.trigger()
                 await_published(
                     collection,
                     cdc_publisher.PUBLISHED_TABLE,
@@ -171,7 +169,6 @@ def test_stream_publisher_truncate_after_the_load_on_postgrescdc_domain(
                 info=FUNCTION, project_root=str(FUNCTIONS)
             )
             try:
-                function.trigger()
                 await_published(
                     collection,
                     cdc_publisher.PUBLISHED_TABLE,

@@ -601,7 +601,7 @@ def test_load_function_def_subscriber_kind_loads_subscriber_info(
 def test_load_function_def_stream_publisher_kind_loads_stream_publisher_info(
     stream_publisher_bundle,
 ):
-    """Without this, `tdk fn trigger` on a `@stream_publisher` fails at
+    """Without this, every run of a `@stream_publisher` fails at
     the `function` step with WrongKindError (RF_4) — even though
     upstream steps (`source-plugin`'s substitution) have done their
     job materialising the staged inputs."""
