@@ -60,7 +60,7 @@ fn done_with_data(table: &str) -> Result<CallbackRequest, TdError> {
                 info: TableInfo {
                     column_count: ColumnCount::try_from(1i64)?,
                     row_count: RowCount::try_from(2i64)?,
-                    schema_hash: SchemaHash::try_from("hash")?,
+                    schema_hash: Some(SchemaHash::try_from("hash")?),
                     data_bytes: None,
                 },
             }],

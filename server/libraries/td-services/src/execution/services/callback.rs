@@ -583,7 +583,7 @@ pub(crate) mod tests {
                         info: TableInfo {
                             column_count: ColumnCount::try_from(1i64)?,
                             row_count: RowCount::try_from(2i64)?,
-                            schema_hash: SchemaHash::try_from("hash")?,
+                            schema_hash: Some(SchemaHash::try_from("hash")?),
                             data_bytes: None,
                         },
                     },
@@ -697,7 +697,7 @@ pub(crate) mod tests {
                         info: TableInfo {
                             column_count: ColumnCount::try_from(1i64)?,
                             row_count: RowCount::try_from(2i64)?,
-                            schema_hash: SchemaHash::try_from("hash")?,
+                            schema_hash: Some(SchemaHash::try_from("hash")?),
                             data_bytes: None,
                         },
                     },
@@ -735,7 +735,7 @@ pub(crate) mod tests {
                         info: TableInfo {
                             column_count: ColumnCount::try_from(3i64)?,
                             row_count: RowCount::try_from(4i64)?,
-                            schema_hash: SchemaHash::try_from("hash")?,
+                            schema_hash: Some(SchemaHash::try_from("hash")?),
                             data_bytes: None,
                         },
                     },
@@ -871,6 +871,120 @@ pub(crate) mod tests {
             table_data_version_1.schema_hash,
             Some(SchemaHash::try_from("hash")?)
         );
+        Ok(())
+    }
+
+    fn two_table_run() -> Result<Vec<TestExecution>, TdError> {
+        Ok(vec![TestExecution {
+            expected_status: ExecutionStatus::Finished,
+            transactions: vec![TestTransaction {
+                expected_status: TransactionStatus::Committed,
+                functions: vec![TestFunction {
+                    collection: CollectionName::try_from("c_0")?,
+                    name: FunctionName::try_from("f_0")?,
+                    dependencies: vec![],
+                    tables: vec![
+                        TableNameDto::try_from("t_0")?,
+                        TableNameDto::try_from("t_1")?,
+                    ],
+                    initial_status: LogicalFunctionRunStatus::Running,
+                    expected_status: LogicalFunctionRunStatus::Committed,
+                }],
+            }],
+        }])
+    }
+
+    fn written(
+        table: &str,
+        columns: i64,
+        rows: i64,
+        schema_hash: Option<&str>,
+    ) -> Result<WrittenTable, TdError> {
+        Ok(WrittenTable::Data {
+            table: TableName::try_from(table)?,
+            info: TableInfo {
+                column_count: ColumnCount::try_from(columns)?,
+                row_count: RowCount::try_from(rows)?,
+                schema_hash: schema_hash.map(SchemaHash::try_from).transpose()?,
+                data_bytes: None,
+            },
+        })
+    }
+
+    #[td_test::test(db)]
+    async fn test_callback_empty_without_schema_hash(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        test_callback(
+            db.clone(),
+            p.project_id,
+            two_table_run()?,
+            "f_0",
+            WorkerCallbackStatus::Done,
+            Some(FunctionOutput {
+                output: vec![
+                    written("t_0", 3, 4, Some("hash"))?,
+                    written("t_1", 0, 0, None)?,
+                ],
+            }),
+        )
+        .await?;
+        test_callback(
+            db.clone(),
+            p.project_id,
+            two_table_run()?,
+            "f_0",
+            WorkerCallbackStatus::Done,
+            Some(FunctionOutput {
+                output: vec![written("t_0", 0, 0, None)?, written("t_1", 0, 0, None)?],
+            }),
+        )
+        .await?;
+
+        let versions = db
+            .timeline()
+            .fetch_all::<PhysicalTableDataVersionDBWithNames>(&TableName::try_from("t_0")?)
+            .await?;
+        assert_eq!(versions.len(), 2);
+        let (empty, with_rows) = (&versions[0], &versions[1]);
+        assert_eq!(with_rows.has_data, Some(HasData::TRUE));
+        assert_eq!(empty.has_data, Some(HasData::TRUE));
+        assert_eq!(empty.schema_changed, Some(SchemaChanged::FALSE));
+        assert_eq!(empty.column_count, Some(ColumnCount::try_from(3i64)?));
+        assert_eq!(empty.row_count, Some(RowCount::try_from(0i64)?));
+        assert_eq!(empty.schema_hash, Some(SchemaHash::try_from("hash")?));
+
+        let versions = db
+            .timeline()
+            .fetch_all::<PhysicalTableDataVersionDBWithNames>(&TableName::try_from("t_1")?)
+            .await?;
+        assert_eq!(versions.len(), 2);
+        for version in &versions {
+            assert_eq!(version.has_data, Some(HasData::FALSE));
+            assert_eq!(version.column_count, None);
+            assert_eq!(version.row_count, None);
+            assert_eq!(version.schema_hash, None);
+        }
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_callback_rows_without_schema_hash(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let result = test_callback(
+            db.clone(),
+            p.project_id,
+            two_table_run()?,
+            "f_0",
+            WorkerCallbackStatus::Done,
+            Some(FunctionOutput {
+                output: vec![
+                    written("t_0", 3, 4, None)?,
+                    written("t_1", 1, 2, Some("hash"))?,
+                ],
+            }),
+        )
+        .await;
+        assert!(result.is_err());
         Ok(())
     }
 
