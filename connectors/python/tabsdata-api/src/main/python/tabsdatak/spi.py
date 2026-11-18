@@ -244,6 +244,10 @@ class FrameMetadata:
             the format's defaults.
         columns: Each entry is added as a column holding its value on
             every row, by convention named with a leading `@`.
+        known: Whether the frame has the columns of the table it
+            reads. `False` for an empty frame standing in for a table
+            whose columns cannot be learnt; the function sees it as
+            `TableFrame.known`.
 
     Raises:
         ValueError: A serialized or untyped frame has no format, or
@@ -257,6 +261,7 @@ class FrameMetadata:
     typed: bool = True
     parsing: ParseOptions | None = None
     columns: MetadataSpec | None = None
+    known: bool = True
 
     def __post_init__(self) -> None:
         if self.format is None:

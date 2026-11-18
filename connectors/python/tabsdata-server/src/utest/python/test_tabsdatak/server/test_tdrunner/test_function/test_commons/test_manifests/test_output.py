@@ -81,7 +81,20 @@ def test_load_reads_the_stats(tmp_path):
     )
 
 
-@pytest.mark.parametrize("missing", sorted(STATS_DOCUMENT))
+def test_load_reads_stats_without_a_schema_hash_as_an_unknown_schema(tmp_path):
+    stats = {
+        key: value for key, value in STATS_DOCUMENT.items() if key != "schema_hash"
+    }
+    path = tmp_path / "outputs.yaml"
+    path.write_text(
+        yaml.safe_dump({
+            "outputs": [{"name": "a", "uri": "s3://b/a.t", "stats": stats}]
+        })
+    )
+    assert OutputManifest.load(path).outputs[0].stats.schema_hash is None
+
+
+@pytest.mark.parametrize("missing", sorted(set(STATS_DOCUMENT) - {"schema_hash"}))
 def test_load_rejects_incomplete_stats(tmp_path, missing):
     stats = {key: value for key, value in STATS_DOCUMENT.items() if key != missing}
     path = tmp_path / "outputs.yaml"

@@ -265,3 +265,37 @@ def test_sink_keeps_system_columns(tmp_path, zone):
     )
     columns = pl.read_parquet_schema(stored_path(tmp_path, "t1"))
     assert any(column.startswith(TD_SYSTEM_COLUMN_PREFIX) for column in columns)
+
+
+def empty_table_frame(columns: dict | None = None) -> TableFrame:
+    return TableFrame._build(pl.LazyFrame(schema=columns), CreationMode.MUT)
+
+
+def test_sink_drops_the_schema_hash_of_empty_outputs_without_user_columns(tmp_path):
+    manifest = HOST.sink(
+        [
+            empty_table_frame(),
+            empty_table_frame({"@td.file.path": pl.String}),
+            empty_table_frame({"x": pl.Int64}),
+            fake_table_frame(),
+            None,
+        ],
+        ["t1", "t2", "t3", "t4", "t5"],
+        stored_targets(tmp_path, "t1", "t2", "t3", "t4", "t5"),
+        state=state_output(tmp_path, {}),
+    )
+    hashes = [
+        None if entry.stats is None else entry.stats.schema_hash
+        for entry in manifest.outputs
+    ]
+    assert [entry.stats is None for entry in manifest.outputs] == [
+        False,
+        False,
+        False,
+        False,
+        True,
+    ]
+    assert hashes[:2] == [None, None]
+    assert all(hash is not None for hash in hashes[2:4])
+    assert manifest.outputs[0].stats.row_count == 0
+    assert manifest.state.stats.schema_hash is not None

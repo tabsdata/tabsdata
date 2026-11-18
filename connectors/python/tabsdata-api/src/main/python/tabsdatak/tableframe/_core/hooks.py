@@ -239,6 +239,7 @@ def compute(op: str, sources: tuple, params: dict, call: Callable) -> "TableFram
         idx=genesis.idx if genesis is not None else None,
         version=views[0].version,
         source=primary,
+        known=all(view.state is None or view.state.known for view in views),
     )
 
     state = get_hook(cls, op, "state")

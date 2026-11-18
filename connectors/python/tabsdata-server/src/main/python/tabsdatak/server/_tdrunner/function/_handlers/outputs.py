@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import polars as pl
 
 from tabsdatak.common._actions.dataquality.record import Check
@@ -67,9 +69,12 @@ class Outputs:
     ) -> OutputManifest:
         plans: list[pl.LazyFrame] = []
         written: list[tuple[str, TableFile]] = []
+        columnless: set[str] = set()
         for table, value, target in zip(tables, results, targets):
             if value is None:
                 continue
+            if not value._user_columns():
+                columnless.add(table)
             try:
                 plans.append(self.policy.sink(value, target))
             except Exception as error:
@@ -104,12 +109,20 @@ class Outputs:
             )
             for table, target in written
         }
+        for table in columnless:
+            entries[table] = self.unknown(entries[table])
         return OutputManifest(
             outputs=tuple(
                 entries.get(table, OutputEntry(name=table)) for table in tables
             ),
             state=None if state is None else entries[state.name],
         )
+
+    @staticmethod
+    def unknown(entry: OutputEntry) -> OutputEntry:
+        if entry.stats is None or entry.stats.row_count > 0:
+            return entry
+        return replace(entry, stats=replace(entry.stats, schema_hash=None))
 
     def stats(self, table: str, target: TableFile) -> TableStats:
         try:

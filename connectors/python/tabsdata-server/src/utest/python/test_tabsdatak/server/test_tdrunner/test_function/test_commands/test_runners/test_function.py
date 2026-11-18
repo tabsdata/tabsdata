@@ -844,13 +844,17 @@ def test_targets_of_a_subscriber_are_its_landing_files(
 # --- unit: sink ---------------------------------------------------------
 
 
-def sinking_command(tmp_path: Path, fixture_publisher) -> Function:
+def sinking_command(
+    tmp_path: Path,
+    fixture_publisher,
+    result: TableFrame | None = None,
+) -> Function:
     return function_command(
         tmp_path,
         request=build_request(tmp_path, "my_table"),
         user_function=UserFunction(fixture_publisher),
         output_tables=["my_table"],
-        results=[fake_table_frame()],
+        results=[fake_table_frame() if result is None else result],
         checks=[],
         state=SimpleNamespace(output=lambda: None),
     )
@@ -863,6 +867,26 @@ def test_sink_writes_the_outputs_manifest_entries(tmp_path, fixture_publisher):
     assert entry.name == "my_table"
     assert entry.uri == stored_path(tmp_path, "my_table").as_uri()
     assert entry.stats.row_count == 1
+
+
+@pytest.mark.parametrize(
+    "columns, hashed", [({}, False), ({"x": pl.Int64}, True)], ids=["none", "user"]
+)
+def test_sink_drops_the_schema_hash_of_empty_outputs_without_user_columns(
+    tmp_path,
+    fixture_publisher,
+    columns,
+    hashed,
+):
+    command = sinking_command(
+        tmp_path,
+        fixture_publisher,
+        result=TableFrame._build(pl.LazyFrame(schema=columns), CreationMode.MUT),
+    )
+    command.sink()
+    (entry,) = command.outputs_manifest.outputs
+    assert entry.stats.row_count == 0
+    assert (entry.stats.schema_hash is not None) is hashed
 
 
 def test_sink_maps_a_write_failure_to_output_write_failed(

@@ -82,6 +82,7 @@ def test_data_lands_with_its_own_types_and_its_metadata(tmp_path):
         "layout": "columnar",
         "typed": True,
         "columns": {"@query": "select 1"},
+        "known": True,
     }
 
 
@@ -332,6 +333,24 @@ def test_stored_metadata_reads_back_as_it_was():
     assert list(read.schema["b"].to_schema()) == ["y", "x"]
 
 
+def test_metadata_stored_before_known_reads_it_as_known():
+    stored = StoredMetadata.of(FrameMetadata()).filter(pl.col("kind") != "known")
+    assert StoredMetadata.read(stored).known is True
+
+
+@pytest.mark.parametrize("known", [True, False])
+def test_whether_the_columns_are_known_is_stored(known):
+    stored = StoredMetadata.of(FrameMetadata(known=known))
+    assert dict(stored.iter_rows())["known"] == json.dumps(known)
+    assert StoredMetadata.read(stored).known is known
+
+
+@pytest.mark.parametrize("content", ['"false"', "0", "null"])
+def test_a_stored_known_that_is_not_a_boolean_is_refused(content):
+    with pytest.raises(StoredMetadataError):
+        StoredMetadata.read(pl.DataFrame({"kind": ["known"], "content": [content]}))
+
+
 def test_a_type_that_cannot_be_stored_is_refused_at_landing(tmp_path):
     frame = pl.LazyFrame({"o": ["a"]}, schema={"o": pl.Categorical})
     with pytest.raises(MetadataMismatchError, match="cannot be stored"):
@@ -473,7 +492,7 @@ def landed_record(
 def test_landed_inputs_get_their_metadata_and_system_columns(tmp_path):
     info = Info.model_validate(info_payload())
     record = landed_record(tmp_path, 0, 0, [1, 2])
-    served = LandedInputs(info).scan(record).collect()
+    served = LandedInputs(info).scan(record).frame.collect()
     expected = (
         LandedInputs(info).stamp(pl.LazyFrame({"id": [1, 2]}), {"@part": 0}).collect()
     )
@@ -492,3 +511,43 @@ def test_a_record_without_landed_data_cannot_be_served(tmp_path):
     inputs = LandedInputs(Info.model_validate(info_payload()))
     with pytest.raises(NotLandedError):
         inputs.scan(InputRecord())
+
+
+# --- frames of unknown columns -------------------------------------------------
+
+
+def unknown_record(root: Path) -> InputRecord:
+    landed = land(
+        root,
+        pl.LazyFrame(),
+        FrameMetadata(columns={"@page": 3}, known=False),
+    )
+    return InputRecord(location=landed.data, metadata_location=landed.metadata)
+
+
+def test_an_empty_frame_of_unknown_columns_is_served_with_the_added_columns(
+    tmp_path,
+):
+    info = Info.model_validate(info_payload())
+    scanned = LandedInputs(info).scan(unknown_record(tmp_path))
+    served = scanned.frame.collect()
+    expected = LandedInputs(info).stamp(pl.LazyFrame(), {"@page": 3}).collect()
+    assert not scanned.known
+    assert served.height == 0
+    assert served.columns == expected.columns
+    assert "@td.@page" in served.columns
+
+
+def test_a_frame_landed_without_metadata_is_known(tmp_path):
+    inputs = LandedInputs(Info.model_validate(info_payload()))
+    assert inputs.scan(landed_record(tmp_path, 0, 0, [1])).known
+
+
+def test_a_frame_of_unknown_columns_with_rows_is_refused_at_landing(tmp_path):
+    with pytest.raises(MetadataMismatchError, match="must be empty"):
+        land(tmp_path, pl.LazyFrame({"id": [1]}), FrameMetadata(known=False))
+
+
+def test_unknown_columns_learnt_while_streaming_are_checked_once_landed(tmp_path):
+    with pytest.raises(MetadataMismatchError, match="must be empty"):
+        land(tmp_path, pl.LazyFrame({"id": [1]}), lambda: FrameMetadata(known=False))

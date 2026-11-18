@@ -39,6 +39,7 @@ class MetadataKind(Enum):
     TYPED = "typed"
     PARSING = "parsing"
     COLUMNS = "columns"
+    KNOWN = "known"
 
 
 SERIALIZED_FORMATS = (SourceFormat.NDJSON,)
@@ -145,6 +146,7 @@ class StoredMetadata:
             entries.append((MetadataKind.PARSING, asdict(options)))
         if metadata.columns is not None:
             entries.append((MetadataKind.COLUMNS, metadata.columns))
+        entries.append((MetadataKind.KNOWN, metadata.known))
         return pl.DataFrame(
             {
                 KIND_COLUMN: [kind.value for kind, _ in entries],
@@ -167,9 +169,12 @@ class StoredMetadata:
         source = entries.get(MetadataKind.FORMAT)
         typed = entries.get(MetadataKind.TYPED, True)
         parsing = entries.get(MetadataKind.PARSING)
+        known = entries.get(MetadataKind.KNOWN, True)
         try:
             if not isinstance(typed, bool):
                 raise ValueError(f"typed is {typed!r}, not a boolean")
+            if not isinstance(known, bool):
+                raise ValueError(f"known is {known!r}, not a boolean")
             source_format = None if source is None else SourceFormat(source)
             if parsing is not None and source_format is None:
                 raise ValueError("parse options are stored without a format")
@@ -186,6 +191,7 @@ class StoredMetadata:
                 if parsing is None
                 else source_format.parse_options_class(**parsing),
                 columns=entries.get(MetadataKind.COLUMNS),
+                known=known,
             )
         except (TypeError, ValueError) as error:
             raise StoredMetadataError(

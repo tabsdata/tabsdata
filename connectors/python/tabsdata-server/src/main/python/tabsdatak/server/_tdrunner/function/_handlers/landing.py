@@ -33,6 +33,12 @@ from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 
 
 @dataclass(frozen=True)
+class ScannedFrame:
+    frame: pl.LazyFrame
+    known: bool = True
+
+
+@dataclass(frozen=True)
 class LandedFile:
     position: int
     index: int
@@ -132,6 +138,12 @@ class Landing:
         description = self.location(position, index, METADATA_SUFFIX)
         TableFile.stored(description).sink(stored.lazy()).collect()
         stats = landed.stats()
+        if not metadata.known and stats.row_count > 0:
+            raise MetadataMismatchError(
+                position,
+                f"a frame of unknown columns must be empty, not of "
+                f"{stats.row_count} row(s)",
+            )
         return LandedFile(
             position=position,
             index=index,
@@ -158,14 +170,14 @@ class LandedInputs:
         )
         self.idx = IdxGenerator()
 
-    def scan(self, record: InputRecord) -> pl.LazyFrame:
+    def scan(self, record: InputRecord) -> ScannedFrame:
         if record.location is None or record.metadata_location is None:
             raise NotLandedError(record)
         frame, metadata = LandedTable(
             TableFile.stored(record.location).locator(),
             TableFile.stored(record.metadata_location).locator(),
         ).scan()
-        return self.stamp(frame, metadata.columns)
+        return ScannedFrame(self.stamp(frame, metadata.columns), metadata.known)
 
     def stamp(
         self,

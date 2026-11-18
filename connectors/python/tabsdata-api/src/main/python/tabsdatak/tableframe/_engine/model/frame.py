@@ -139,6 +139,7 @@ class TableFrameState:
     version: DataVersion | None = None
     genesis: DataGenesis | None = None
     aspects: dict[Aspect_, object] = field(default_factory=dict)
+    known: bool = True
 
     @classmethod
     def empty(cls) -> TableFrameState:
@@ -149,4 +150,5 @@ class TableFrameState:
             version=None if self.version is None else self.version.clone(),
             genesis=None if self.genesis is None else self.genesis.clone(),
             aspects=dict(self.aspects),
+            known=self.known,
         )

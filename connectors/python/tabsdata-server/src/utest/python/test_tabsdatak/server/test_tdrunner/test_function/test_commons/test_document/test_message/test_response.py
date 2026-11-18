@@ -27,7 +27,9 @@ from tabsdatak.server._tdrunner.function._commons.manifests.output import (
     OutputManifest,
     TableStats,
 )
-from tabsdatak.server._tdrunner.function._commons.error.command import CommandRuntimeException
+from tabsdatak.server._tdrunner.function._commons.error.command import (
+    CommandRuntimeException,
+)
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -100,6 +102,30 @@ def test_function_output_tags_each_written_table():
                 },
             },
             {"NoData": {"table": "orders"}},
+        ],
+    }
+
+
+UNKNOWN = TableStats(column_count=1, row_count=0, data_bytes=8)
+
+
+def test_an_unknown_schema_round_trips(tmp_path: Path):
+    response = Response(output=(TableEntry(table="orders", info=UNKNOWN),))
+    path = tmp_path / "response.yaml"
+    response.write(path)
+    assert Response.load(path) == response
+
+
+def test_function_output_reports_data_of_an_unknown_schema_without_its_hash():
+    response = Response(output=(TableEntry(table="orders", info=UNKNOWN),))
+    assert response.function_output().document() == {
+        "output": [
+            {
+                "Data": {
+                    "table": "orders",
+                    "info": {"column_count": 1, "row_count": 0, "data_bytes": 8},
+                },
+            },
         ],
     }
 
