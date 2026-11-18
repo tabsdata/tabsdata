@@ -105,7 +105,7 @@ impl ChildFunction {
             snippet: Some(self.snippet.clone()),
             decorator: Some(Decorator::Transformer),
             dependencies: self.dependencies.clone(),
-            triggers: None,
+            triggers: Some(None),
             tables: self.tables.clone(),
             table_types: self.table_types.clone(),
             runtime_values: Some(FunctionRuntimeValues::default()),
@@ -160,7 +160,9 @@ pub struct FunctionUpdate {
     pub connector: Option<Option<Connector>>,
     pub connection: Option<Option<ConnectionKind>>,
     pub dependencies: Option<Vec<TableDependencyDto>>,
-    pub triggers: Option<Vec<TableTriggerDto>>,
+    /// None keeps the current triggers; `null` derives them from the
+    /// dependencies, as a register without triggers does.
+    pub triggers: Option<Option<Vec<TableTriggerDto>>>,
     pub tables: Option<Vec<TableNameDto>>,
     pub table_types: Option<HashMap<TableNameDto, TableType>>,
     pub parent_tables: Option<HashMap<TableNameDto, TableNameDto>>,

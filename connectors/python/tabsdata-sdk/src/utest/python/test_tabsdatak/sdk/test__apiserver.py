@@ -618,6 +618,33 @@ def test_function_update_omits_reset_flags_when_none(monkeypatch):
     assert "base_path" not in body
 
 
+def test_function_update_sends_null_triggers_to_derive_them(monkeypatch):
+    server, capture = _server_with_captured_post(monkeypatch)
+    server.function_update(
+        collection_name="coll", function_name="fn", derive_triggers=True
+    )
+    body = capture.seen["json"]
+    assert "triggers" in body
+    assert body["triggers"] is None
+
+
+def test_function_update_sends_the_triggers_it_is_given(monkeypatch):
+    server, capture = _server_with_captured_post(monkeypatch)
+    server.function_update(
+        collection_name="coll",
+        function_name="fn",
+        trigger_by=["coll/t"],
+        derive_triggers=True,
+    )
+    assert capture.seen["json"]["triggers"] == ["coll/t"]
+
+
+def test_function_update_omits_triggers_when_not_told_to_derive(monkeypatch):
+    server, capture = _server_with_captured_post(monkeypatch)
+    server.function_update(collection_name="coll", function_name="fn")
+    assert "triggers" not in capture.seen["json"]
+
+
 def test_function_update_sends_an_empty_workers_map(monkeypatch):
     server, capture = _server_with_captured_post(monkeypatch)
     server.function_update(collection_name="coll", function_name="fn", workers={})

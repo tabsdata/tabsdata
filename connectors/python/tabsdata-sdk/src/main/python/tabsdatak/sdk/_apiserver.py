@@ -1186,6 +1186,7 @@ class APIServer:
         reset_stage: bool = None,
         child_functions: list[dict] = None,
         parent_tables: dict[str, str] = None,
+        derive_triggers: bool = False,
         raise_for_status: bool = True,
     ):
         endpoint = self._scoped(
@@ -1238,6 +1239,8 @@ class APIServer:
                 child_functions,
             ],
         )
+        if derive_triggers and trigger_by is None:
+            data["triggers"] = None
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 

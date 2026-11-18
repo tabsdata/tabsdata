@@ -751,6 +751,17 @@ def test_update_function_defaults_reset_flags_to_false(project_root, _no_op_bund
     assert seen["base_path"] is None
 
 
+def test_update_function_asks_for_the_default_triggers_to_be_derived(
+    project_root, _no_op_bundle
+):
+    coll, seen = _coll_with_fake_connection(_no_op_bundle)
+
+    coll.update_function("old_fn", _transformer_info(trigger_by=None), project_root)
+
+    assert seen["trigger_by"] is None
+    assert seen["derive_triggers"] is True
+
+
 def test_update_function_drops_the_trigger_worker_a_function_no_longer_has(
     project_root, _no_op_bundle
 ):

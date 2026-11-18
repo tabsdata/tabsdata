@@ -359,7 +359,8 @@ pub(crate) mod tests {
                 .await?;
             if update
                 .triggers
-                .as_deref()
+                .as_ref()
+                .and_then(|triggers| triggers.as_deref())
                 .unwrap_or(&[])
                 .contains(trigger_dto)
             {
@@ -384,7 +385,7 @@ pub(crate) mod tests {
             connector: update.connector.unwrap_or(create.connector),
             connection: update.connection.unwrap_or(create.connection),
             dependencies: update.dependencies,
-            triggers: update.triggers,
+            triggers: update.triggers.flatten(),
             tables: update.tables,
             table_types: update.table_types,
             parent_tables: None,

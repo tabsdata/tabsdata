@@ -449,7 +449,7 @@ pub(crate) mod tests {
             "writer",
             FunctionUpdate {
                 tables: Some(vec![TableNameDto::try_from("table_w")?]),
-                triggers: Some(vec![TableTriggerDto::try_from("table_c")?]),
+                triggers: Some(Some(vec![TableTriggerDto::try_from("table_c")?])),
                 ..Default::default()
             },
         )
@@ -496,7 +496,7 @@ pub(crate) mod tests {
             "consumer",
             FunctionUpdate {
                 dependencies: Some(vec![TableDependencyDto::try_from("table_p@HEAD~1..HEAD")?]),
-                triggers: Some(vec![]),
+                triggers: Some(Some(vec![])),
                 tables: Some(vec![TableNameDto::try_from("table_c")?]),
                 ..Default::default()
             },

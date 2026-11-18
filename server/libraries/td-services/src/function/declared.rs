@@ -4,7 +4,8 @@
 
 //! A function version's declarations, as an update would send them. An
 //! update that leaves a list `None` keeps the current one, as it keeps the
-//! scalars it leaves out; an empty list clears it.
+//! scalars it leaves out; an empty list clears it. A `null` trigger list
+//! derives the triggers from the dependencies.
 
 use crate::function::services::read::vec_create_table_dependency;
 use td_database::access::{AccessMode, InProject};
@@ -59,13 +60,13 @@ pub async fn carried_forward(
             .await?;
         let table_ids: Vec<TableId> = triggers.iter().map(|t| t.trigger_by_table_id).collect();
         let tables: Vec<TableDBWithNames> = conn.scd2().chunked().fetch_all(&table_ids, ()).await?;
-        update.triggers = Some(
+        update.triggers = Some(Some(
             tables
                 .iter()
                 .map(LabeledTableTrigger::from)
                 .map(|t| TableTriggerDto::try_from(t.to_string().as_str()))
                 .collect::<Result<_, _>>()?,
-        );
+        ));
     }
     Ok(update)
 }

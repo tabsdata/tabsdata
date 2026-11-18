@@ -61,7 +61,7 @@ impl<'a> From<&'a FunctionUpdate> for FunctionSpec<'a> {
             table_types: update.table_types.as_ref(),
             parent_tables: None,
             dependencies: update.dependencies.as_deref(),
-            triggers: update.triggers.as_deref(),
+            triggers: update.triggers.as_ref().and_then(|t| t.as_deref()),
             reuse_frozen: update.reuse_frozen_tables,
             reset_state: update.reset_state,
         }

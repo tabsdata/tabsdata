@@ -243,7 +243,7 @@ mod tests {
             project,
             FunctionUpdate {
                 dependencies: Some(vec![]),
-                triggers: Some(vec![]),
+                triggers: Some(Some(vec![])),
                 tables: Some(vec![]),
                 ..Default::default()
             },
@@ -253,9 +253,49 @@ mod tests {
         Ok(())
     }
 
+    #[td_test::test(db)]
+    async fn test_update_with_null_triggers_derives_them_from_the_dependencies(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let (project, _, tf) = transformer_with_declarations(&db).await?;
+        update_tf(
+            &db,
+            project,
+            FunctionUpdate {
+                triggers: Some(Some(vec![])),
+                ..Default::default()
+            },
+        )
+        .await?;
+        assert_eq!(declared_counts(&db, tf.function_id).await?, (1, 1, 0));
+
+        update_tf(
+            &db,
+            project,
+            FunctionUpdate {
+                triggers: Some(None),
+                ..Default::default()
+            },
+        )
+        .await?;
+        assert_eq!(declared_counts(&db, tf.function_id).await?, (1, 1, 1));
+        Ok(())
+    }
+
+    #[test]
+    fn test_update_tells_null_triggers_from_absent_ones() {
+        let absent: FunctionUpdate = from_str("{}").unwrap();
+        assert_eq!(absent.triggers, None);
+        let derived: FunctionUpdate = from_str(r#"{"triggers":null}"#).unwrap();
+        assert_eq!(derived.triggers, Some(None));
+        let none: FunctionUpdate = from_str(r#"{"triggers":[]}"#).unwrap();
+        assert_eq!(none.triggers, Some(Some(vec![])));
+    }
+
     use crate::Services;
     use crate::function::register::RegisterFunctionError;
     use crate::function::services::tests::{assert_register, assert_update};
+    use serde_json::from_str;
     use std::collections::HashMap;
     use std::ops::Deref;
     use std::str::FromStr;
@@ -1470,7 +1510,7 @@ mod tests {
             bundle_id: Some(BundleId::default()),
             snippet: Some("function_foo snippet updated".try_into()?),
             decorator: Some(Decorator::Transformer),
-            triggers: Some(vec![TableTriggerDto::try_from("trigger_table")?]),
+            triggers: Some(Some(vec![TableTriggerDto::try_from("trigger_table")?])),
             runtime_values: Some(FunctionRuntimeValues::try_from("new mock runtime values")?),
             ..Default::default()
         };
@@ -1576,7 +1616,7 @@ mod tests {
             snippet: Some("function_foo snippet updated".try_into()?),
             decorator: Some(Decorator::Transformer),
             runtime_values: Some(FunctionRuntimeValues::try_from("new mock runtime values")?),
-            triggers: Some(vec![]),
+            triggers: Some(Some(vec![])),
             ..Default::default()
         };
 
@@ -1680,7 +1720,7 @@ mod tests {
             bundle_id: Some(BundleId::default()),
             snippet: Some("function_foo snippet updated".try_into()?),
             decorator: Some(Decorator::Transformer),
-            triggers: Some(vec![TableTriggerDto::try_from("trigger_table")?]),
+            triggers: Some(Some(vec![TableTriggerDto::try_from("trigger_table")?])),
             runtime_values: Some(FunctionRuntimeValues::try_from("new mock runtime values")?),
             ..Default::default()
         };
@@ -1795,7 +1835,7 @@ mod tests {
                 TableDependencyDto::try_from("trigger_table")?,
                 TableDependencyDto::try_from("trigger_table_2")?,
             ]),
-            triggers: Some(vec![TableTriggerDto::try_from("trigger_table_2")?]),
+            triggers: Some(Some(vec![TableTriggerDto::try_from("trigger_table_2")?])),
             tables: Some(vec![
                 TableNameDto::try_from("joaquin_table")?,
                 TableNameDto::try_from("joaquin_table_3")?,
@@ -2211,7 +2251,7 @@ mod tests {
             snippet: Some("function_2 snippet".try_into()?),
             decorator: Some(Decorator::Transformer),
             dependencies,
-            triggers,
+            triggers: triggers.map(Some),
             tables,
             runtime_values: Some(FunctionRuntimeValues::try_from("mock runtime values")?),
             reuse_frozen_tables: ReuseFrozen::FALSE,
@@ -2529,7 +2569,7 @@ mod tests {
         let update = FunctionUpdate {
             name: Some("function_2".try_into()?),
             dependencies: Some(vec![]),
-            triggers: Some(vec![]),
+            triggers: Some(Some(vec![])),
             ..Default::default()
         };
 

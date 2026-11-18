@@ -1044,6 +1044,7 @@ class Collection:
                 reset_state=reset_state,
                 reset_stage=reset_stage,
                 child_functions=child_functions,
+                derive_triggers=True,
                 raise_for_status=raise_for_status,
             )
 
