@@ -980,7 +980,6 @@ def _format_expected_signature(
     input_count: int,
     input_mode: str | Sequence[str],
     output_count: int,
-    allow_transaction_ctx: bool = True,
 ) -> str:
     modes = _slot_modes(input_mode, input_count)
     params = ",\n        ".join(
@@ -992,8 +991,6 @@ def _format_expected_signature(
     out_args = ", ".join(["TableFrameSpec"] * output_count) if output_count > 0 else ""
     ctx_note = (
         " (an optional trailing ``ctx: TransactionCtx`` parameter is also allowed)"
-        if allow_transaction_ctx
-        else ""
     )
     # With a single output slot the lone TableFrameSpec may be returned
     # bare, without the enclosing 1-tuple -- surface that alternative so
@@ -1067,7 +1064,6 @@ def check_callable_signature(
     input_count: int,
     input_mode: str | Sequence[str],
     output_count: int,
-    allow_transaction_ctx: bool = True,
     input_reasons: Sequence[str | None] | None = None,
 ) -> None:
     """Validate a decorated function's signature against the
@@ -1081,13 +1077,9 @@ def check_callable_signature(
     :param output_count: Number of return-tuple elements.
     :param input_reasons: Per input slot, why it requires its mode, added
         to the error a mismatch raises (``None`` for no reason to give).
-    :param allow_transaction_ctx: When ``True`` (the default for
-        ``@publisher`` / ``@transformer`` / ``@subscriber``), a
-        single trailing ``ctx: TransactionCtx`` parameter is allowed after
-        the input slots. ``@stream_publisher`` passes ``False`` --
-        stream publishers run inside the runtime's long-lived
-        plugin loop, not per-trx, so no ``TransactionCtx`` is available
-        at the call boundary.
+
+    A single trailing ``ctx: TransactionCtx`` parameter is allowed after
+    the input slots.
     """
     name = getattr(func, "__name__", repr(func))
     expected = _format_expected_signature(
@@ -1095,7 +1087,6 @@ def check_callable_signature(
         input_count=input_count,
         input_mode=input_mode,
         output_count=output_count,
-        allow_transaction_ctx=allow_transaction_ctx,
     )
 
     try:
@@ -1108,28 +1099,20 @@ def check_callable_signature(
 
     # Accepted shape:
     #   - exactly ``input_count`` slot params, or
-    #   - when ``allow_transaction_ctx`` is True, ``input_count`` slot
-    #     params followed by one optional trailing param
-    #     annotated as ``TransactionCtx`` (or a subclass).
+    #   - ``input_count`` slot params followed by one optional trailing
+    #     param annotated as ``TransactionCtx`` (or a subclass).
     if len(params) < input_count:
         raise ValueError(
             f"{name!r}: must declare at least {input_count} parameter(s) "
             f"(got {len(params)}){expected}"
         )
-    max_params = input_count + (1 if allow_transaction_ctx else 0)
-    if len(params) > max_params:
-        if allow_transaction_ctx:
-            raise ValueError(
-                f"{name!r}: declares {len(params)} parameter(s) but only "
-                f"{input_count} input slot(s) plus an optional trailing "
-                f"TransactionCtx parameter are allowed{expected}"
-            )
+    if len(params) > input_count + 1:
         raise ValueError(
             f"{name!r}: declares {len(params)} parameter(s) but only "
-            f"{input_count} input slot(s) are allowed (a trailing "
-            f"TransactionCtx parameter is not supported here){expected}"
+            f"{input_count} input slot(s) plus an optional trailing "
+            f"TransactionCtx parameter are allowed{expected}"
         )
-    if allow_transaction_ctx and len(params) == input_count + 1:
+    if len(params) == input_count + 1:
         extra = params[input_count]
         extra_hint = hints.get(extra.name)
         if extra_hint is None or not _is_transaction_ctx_slot(extra_hint):

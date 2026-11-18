@@ -175,3 +175,50 @@ def test_stream_publisher_truncate_after_the_load_on_mysqlcdc_domain(
 
     assert TRUNCATE in ops(truncated)
     assert loaded_ids(truncated, KEY) == []
+
+
+@tabsdata_instance(consumer="tdtest")
+@mysqlcdc_domain("mysqlcdc_employees_xs")
+def test_stream_publisher_receives_ctx_from_mysqlcdc_domain(
+    instance_tdtest: Instance,
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain,
+    collection_factory: CollectionFactory,
+) -> None:
+    domain = domain_mysqlcdc_employees_xs
+    batch = cdc_publisher.CTX_BATCH_COLUMN
+    transaction = cdc_publisher.CTX_TRANSACTION_COLUMN
+    with cdc_probe(domain, cdc_publisher.TRACKED_TABLE) as probe:
+        for row in cdc_publisher.SEEDED_ROWS:
+            probe.insert(row["id"], row["name"])
+
+        collection = collection_factory("sources", cdc_src_conn(domain))
+        function = collection.register_function(
+            info=cdc_publisher.pub_stream_publisher_receives_ctx_from_mysqlcdc_domain,
+            project_root=str(FUNCTIONS),
+        )
+        try:
+            function.trigger()
+            loaded = await_published(
+                collection,
+                cdc_publisher.CTX_PUBLISHED_TABLE,
+                lambda frame: loaded_ids(frame, KEY) == SEEDED,
+            )
+
+            probe.insert(101, "after-the-load")
+            captured = await_published(
+                collection,
+                cdc_publisher.CTX_PUBLISHED_TABLE,
+                lambda frame: 101 in captured_ids(frame, KEY),
+            )
+        finally:
+            function.enable(False)
+
+    # Each batch is one transaction, and the state one batch sets is the state
+    # a later one reads: the counter and the transaction id advance together.
+    assert loaded[batch].n_unique() == 1
+    assert captured[batch].n_unique() == 1
+    assert loaded[batch][0] >= 1
+    assert captured[batch][0] > loaded[batch][0]
+    assert loaded[transaction].n_unique() == 1
+    assert captured[transaction].n_unique() == 1
+    assert captured[transaction][0] != loaded[transaction][0]

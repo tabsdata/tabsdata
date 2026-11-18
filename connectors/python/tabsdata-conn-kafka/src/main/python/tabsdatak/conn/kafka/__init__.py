@@ -26,8 +26,7 @@ the CDC connectors (mysql / postgres / db2). Imported from
 The connection (with credentials) is resolved from the function's
 collection at run time; a flow function only references
 `KafkaStreamSrc`. A `@stream_publisher` function receives the
-flushed batch as a list of frames and must NOT declare a `ctx`
-parameter.
+flushed batch as a list of frames.
 
 Examples:
     .. code-block:: python
@@ -325,8 +324,8 @@ class KafkaStreamSrc(StreamSrc):
     schema, and a row whose values do not fit them is a dead letter.
 
     Used as the `source` of a `@stream_publisher`; that function
-    receives the batch as a list of frames and must NOT declare a
-    `ctx` parameter. The emitted table name is the `topic`.
+    receives the batch as a list of frames. The emitted table name is
+    the `topic`.
 
     Every batch this source stages automatically carries a
     `@td.kafka.topic` column holding the topic the message was consumed

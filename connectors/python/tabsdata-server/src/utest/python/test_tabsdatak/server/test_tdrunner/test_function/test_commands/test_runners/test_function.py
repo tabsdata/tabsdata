@@ -1766,12 +1766,12 @@ def test_main_creates_out_dir_before_invoking_user_function(
     assert status == 0, status
 
 
-# --- ctx parameter works for @transformer and @subscriber too -----------
+# --- ctx parameter works for the other kinds too ------------------------
 #
 # The runtime in ``run_function`` is kind-agnostic: it constructs the
 # FunctionCtx and drains it based on ``has_transaction_ctx_param(func)`` only,
 # regardless of which decorator wrapped the user function. These tests
-# pin that behaviour for the two non-publisher kinds so anyone narrowing
+# pin that behaviour for the non-publisher kinds so anyone narrowing
 # the ctx surface in the future hits a test failure.
 
 
@@ -1837,6 +1837,40 @@ def test_main_ctx_aware_transformer_hydrates_and_drains(
         request_path,
     )
     assert stored_state(tmp_path) == {"smoke.last-seen": "tx-after-from-state-in"}
+
+
+def test_main_ctx_aware_stream_publisher_hydrates_and_drains(
+    tmp_path,
+    monkeypatch,
+    request,
+    http_ok_url,
+):
+    """A @stream_publisher runs once per batch, in the transaction that
+    commits it, so a trailing ``ctx: TransactionCtx`` reads and stores state
+    like a publisher's."""
+    extracted = build_extracted_bundle(
+        tmp_path,
+        monkeypatch,
+        request,
+        project_name="sp_ctx_project",
+        pkg_name="sp_ctx_pkg",
+        module_name="stream_publisher",
+        decorated_name="my_stream_publisher",
+    )
+
+    request_path = request_with_state_slots(
+        tmp_path / "request.yaml",
+        outputs=("people_streamed",),
+        previous={"smoke.last-seen": "from-state-in"},
+    )
+    run_with_state(
+        tmp_path,
+        extracted,
+        monkeypatch,
+        http_ok_url,
+        request_path,
+    )
+    assert stored_state(tmp_path) == {"smoke.last-seen": "sp-after-from-state-in"}
 
 
 def test_main_ctx_aware_subscriber_hydrates_and_drains(

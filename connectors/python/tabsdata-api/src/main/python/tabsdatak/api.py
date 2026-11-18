@@ -476,10 +476,10 @@ def stream_publisher(
 
     Consumes a long-lived change stream (CDC, log/queue tail). The
     function takes one `TableFramesSpec` parameter per source slot
-    (always array mode) and returns one `TableFrame` per output
-    table. Unlike the other decorators it must **not** declare a
-    `ctx` parameter -- it runs inside the runtime's stream loop, not
-    per-trx, so no `TransactionCtx` exists at the call boundary.
+    (always array mode) plus an *optional* trailing
+    `ctx: TransactionCtx`, and returns one `TableFrame` per output
+    table. The function runs once per batch, in the transaction that
+    commits it, so `ctx` is that transaction's context.
 
     Each batch is one unit: its outputs commit in the same transaction
     or not at all, so the tables of one stream advance together.
@@ -515,10 +515,9 @@ def stream_publisher(
         descriptor.
 
     Raises:
-        ApiException: If the function signature is invalid (e.g. it
-            declares a `ctx` parameter), if the batch thresholds are not
-            consistent, or if `flush_interval_mins` is given next to
-            a batch threshold.
+        ApiException: If the function signature is invalid, if the batch
+            thresholds are not consistent, or if `flush_interval_mins`
+            is given next to a batch threshold.
     """
     thresholds = StreamThresholds(
         batch=_batch_thresholds(
@@ -726,7 +725,7 @@ class TransactionCtx(TransactionCtxLegacy, ABC):
     function and connector plugin.
 
     A function receives it by declaring a trailing `ctx: TransactionCtx`
-    parameter (not allowed on `@stream_publisher`). Carries the
+    parameter. Carries the
     identifiers of the execution, transaction and function run it
     belongs to (named as the server API names them), a per-flow
     attribute store that survives across invocations (`get_attr` /
@@ -845,8 +844,8 @@ class FlowCtx(FlowCtxLegacy, ABC):
 
 class FunctionCtx(TransactionCtx, FlowCtx, ABC):
     """Context handed to a user-decorated function (`@publisher` /
-    `@transformer` / `@subscriber`) that declares a trailing
-    `ctx` parameter.
+    `@stream_publisher` / `@transformer` / `@subscriber`) that declares
+    a trailing `ctx` parameter.
 
     :categories: functions
 

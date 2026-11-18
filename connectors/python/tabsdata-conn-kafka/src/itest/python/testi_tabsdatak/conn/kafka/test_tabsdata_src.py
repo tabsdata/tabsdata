@@ -95,3 +95,43 @@ def test_stream_publisher_reads_topic_from_redpanda_domain(
             # The streamer runs until disabled; leaving it up leaks a pod past
             # teardown.
             function.enable(False)
+
+
+@tabsdata_instance(consumer="tdtest")
+@redpanda_domain("redpanda")
+def test_stream_publisher_receives_ctx_from_redpanda_domain(
+    instance_tdtest: Instance,
+    domain_redpanda: RedpandaDomain,
+    collection_factory: CollectionFactory,
+) -> None:
+    domain = domain_redpanda
+    bus = broker(domain)
+    rows = len(publisher.ROWS)
+    collection = collection_factory("sources", src_conn(domain))
+    with bus.fresh_topic(publisher.CTX_TOPIC) as topic:
+        function = collection.register_function(
+            info=publisher.pub_stream_publisher_receives_ctx_from_redpanda_domain,
+            project_root=str(FUNCTIONS),
+        )
+        try:
+            bus.produce(topic, publisher.ROWS)
+            function.trigger()
+            _await_rows(collection, publisher.CTX_PUBLISHED_TABLE, rows)
+            bus.produce(topic, publisher.ROWS)
+            published = _await_rows(collection, publisher.CTX_PUBLISHED_TABLE, 2 * rows)
+        finally:
+            function.enable(False)
+
+    # Each batch is one transaction, and the state one batch sets is the state
+    # the next one reads: the counter and the transaction id advance together.
+    # A run that publishes nothing, such as the one the trigger starts, counts
+    # too, so the first published counter is not necessarily 1.
+    batches = published.select(
+        publisher.CTX_BATCH_COLUMN, publisher.CTX_TRANSACTION_COLUMN
+    ).unique()
+    counters = sorted(batches[publisher.CTX_BATCH_COLUMN].to_list())
+    transactions = batches[publisher.CTX_TRANSACTION_COLUMN].to_list()
+    assert len(counters) >= 2
+    assert counters[0] >= 1
+    assert len(set(counters)) == len(counters)
+    assert len(set(transactions)) == len(counters)

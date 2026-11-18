@@ -12,8 +12,7 @@ summary: >-
   messages that fail validation go to the dead-letter topic instead of failing
   the batch. A batch closes every 500 messages or, failing that, every five
   minutes (batch_max_rows, batch_max_secs). Stream publishers start when
-  registered, take no trigger and no ctx, and receive each slot as a list of
-  frames.
+  registered, take no trigger, and receive each slot as a list of frames.
 """
 
 import json

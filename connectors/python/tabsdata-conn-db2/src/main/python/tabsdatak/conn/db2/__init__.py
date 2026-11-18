@@ -41,8 +41,7 @@ Examples:
                     input_tables=["mycoll/cities"])
         def publish(cities: TableFrameSpec) -> TableFrameSpec:
             return cities
-A `@stream_publisher` receives the flushed batch as a list of frames
-and must NOT declare a `ctx` parameter.
+A `@stream_publisher` receives the flushed batch as a list of frames.
 
 Examples:
     .. code-block:: python

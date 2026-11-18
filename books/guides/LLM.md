@@ -281,8 +281,7 @@ Specifically:
     ARRAY-mode -- each path entry may glob to multiple files, so
     the slot binds to a `list[TableFrame]`.
   - For `@stream_publisher`, each is always `list[TableFrame]`: a
-    stream source hands over the files of one batch per slot. The
-    function must not declare a `ctx` parameter.
+    stream source hands over the files of one batch per slot.
   - For `@transformer` / `@subscriber`, an input that can hand over
     several versions of its table -- `@NEW` (every version since the
     function's previous run), a `v..v` range or a `v,v` list -- must

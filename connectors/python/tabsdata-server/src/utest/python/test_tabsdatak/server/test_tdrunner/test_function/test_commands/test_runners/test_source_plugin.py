@@ -29,7 +29,11 @@ from tabsdatak._info import PublisherInfo
 # Imported at module level so that string-form type annotations (under
 # ``from __future__ import annotations``) on locally-defined
 # @stream_publisher fixtures resolve via ``get_type_hints``.
-from tabsdatak.api import TableFrameSpec, TableFramesSpec  # noqa: F401
+from tabsdatak.api import (  # noqa: F401
+    TableFrameSpec,
+    TableFramesSpec,
+    TransactionCtx,
+)
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak.common._storage.transfer import OBJECT_STORES
 from tabsdatak.server._tdrunner.function._commons.context.source import SourceContext
@@ -678,6 +682,16 @@ def test_inputs_are_named_after_the_publisher_parameters(fixture_publisher):
     assert binding_of(1).input_names(fixture_publisher) == ["in_1"]
     assert binding_of(-1).input_names(fixture_publisher) == ["in_1"]
     assert binding_of(0).input_names(fixture_publisher) == []
+
+
+def function_with_ctx(in_1: TableFramesSpec, ctx: TransactionCtx) -> TableFrameSpec:
+    return None
+
+
+def test_the_ctx_parameter_is_not_an_input():
+    publisher = SimpleNamespace(func=function_with_ctx)
+    assert binding_of(1).input_names(publisher) == ["in_1"]
+    assert binding_of(-1).input_names(publisher) == ["in_1"]
 
 
 def test_the_inputs_manifest_records_each_landed_file(tmp_path):

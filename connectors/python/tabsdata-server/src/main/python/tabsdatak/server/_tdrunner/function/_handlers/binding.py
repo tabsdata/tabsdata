@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
+from tabsdatak._api import has_transaction_ctx_param
 from tabsdatak._connectors import get_src, get_stream_src
 from tabsdatak._info import PublisherInfo, StreamPublisherInfo, _unwrap_info
 from tabsdatak.api import Src
@@ -116,7 +117,10 @@ class SourceBinding:
         return self.cardinality < 0
 
     def input_names(self, publisher: Publisher) -> list[str]:
-        parameters = list(inspect.signature(_unwrap_info(publisher.func)).parameters)
+        function = _unwrap_info(publisher.func)
+        parameters = list(inspect.signature(function).parameters)
+        if has_transaction_ctx_param(function):
+            parameters = parameters[:-1]
         if self.variable:
             return parameters
         return parameters[: self.cardinality]

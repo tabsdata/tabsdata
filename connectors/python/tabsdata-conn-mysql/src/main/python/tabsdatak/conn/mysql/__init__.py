@@ -40,8 +40,7 @@ Examples:
                     input_tables=["mycoll/cities"])
         def publish(cities: TableFrameSpec) -> TableFrameSpec:
             return cities
-A `@stream_publisher` receives the flushed batch as a list of frames
-and must NOT declare a `ctx` parameter.
+A `@stream_publisher` receives the flushed batch as a list of frames.
 
 Examples:
     .. code-block:: python
@@ -582,7 +581,7 @@ class MySQLCdcStreamSrc(StreamSrc):
     A streaming change-data-capture source: it emits one
     tableframe-batch per binlog flush across the tracked tables. The
     decorated `@stream_publisher` function receives the flushed batch
-    as a list of frames and must NOT declare a `ctx` parameter.
+    as a list of frames.
 
     Args:
         tables: Qualified `schema.table` names to track, each listed once.

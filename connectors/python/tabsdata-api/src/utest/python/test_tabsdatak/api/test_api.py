@@ -1338,32 +1338,22 @@ def test_auto_publisher_decorator_default_none_on_tables():
     assert my_pub.on_tables is None
 
 
-def test_stream_publisher_rejects_trailing_transaction_ctx_param():
-    # ``@stream_publisher`` is the one decorator where the trailing
-    # ``ctx: TransactionCtx`` shape is rejected -- stream publishers run
-    # inside the runtime's long-lived plugin loop, not per-trx, so
-    # no ``TransactionCtx`` is available at the call boundary.
-    with pytest.raises(ApiException) as excinfo:
+def test_stream_publisher_signature_allows_optional_trailing_transaction_ctx():
+    @m.stream_publisher(
+        source=_auto_src(),
+        batch_max_secs=60,
+        output_tables=["t1"],
+    )
+    def my_pub(
+        t1: list[tableframe.TableFrame | None] | None,
+        ctx: m.TransactionCtx,
+    ) -> tuple[tableframe.TableFrame | None]:
+        return (None,)
 
-        @m.stream_publisher(
-            source=_auto_src(),
-            batch_max_secs=60,
-            output_tables=["t1"],
-        )
-        def _my_pub(
-            t1: list[tableframe.TableFrame | None] | None,
-            ctx: m.TransactionCtx,
-        ) -> tuple[tableframe.TableFrame | None]:
-            return (None,)
-
-    assert excinfo.value.api_error is ApiErrorCode.API_18
+    assert _api.has_transaction_ctx_param(my_pub.func) is True
 
 
-def test_stream_publisher_rejects_any_extra_trailing_param():
-    # Confirm the same is true for a non-TransactionCtx extra param; the
-    # error message should mention the no-ctx-allowed rule, not the
-    # "TransactionCtx required" rule that applies to the other three
-    # decorators.
+def test_stream_publisher_rejects_non_transaction_ctx_trailing_param():
     with pytest.raises(ApiException) as excinfo:
 
         @m.stream_publisher(
@@ -1378,9 +1368,7 @@ def test_stream_publisher_rejects_any_extra_trailing_param():
             return (None,)
 
     assert excinfo.value.api_error is ApiErrorCode.API_18
-    assert "trailing TransactionCtx parameter is not supported here" in str(
-        excinfo.value
-    )
+    assert "must be a TransactionCtx subclass" in str(excinfo.value)
 
 
 def test_subscriber_signature_allows_optional_trailing_transaction_ctx():

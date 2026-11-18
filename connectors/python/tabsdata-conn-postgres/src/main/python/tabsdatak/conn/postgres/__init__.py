@@ -41,8 +41,7 @@ Examples:
                     input_tables=["mycoll/cities"])
         def publish(cities: TableFrameSpec) -> TableFrameSpec:
             return cities
-A `@stream_publisher` receives the flushed batch as a list of frames
-and must NOT declare a `ctx` parameter.
+A `@stream_publisher` receives the flushed batch as a list of frames.
 
 Examples:
     .. code-block:: python
@@ -553,7 +552,7 @@ class PostgresCdcStreamSrc(StreamSrc):
     consumer confirms. `replication_slot` names it and
     `replication_slot_behavior` controls create vs reuse. The
     decorated `@stream_publisher` function receives the flushed batch
-    as a list of frames and must NOT declare a `ctx` parameter.
+    as a list of frames.
 
     Args:
         tables: Qualified `schema.table` names to track, each listed once.
