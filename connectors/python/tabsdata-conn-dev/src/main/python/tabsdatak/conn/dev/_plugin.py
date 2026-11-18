@@ -46,7 +46,7 @@ class DataGenSrcPlugin(SrcPlugin[DataGenSrcConn, DataGenSrc]):
                 chunk = data._next_chunk(ctx, i)
             except Exception as exc:
                 raise DevErrorCode.DEV_8.exception(cause=exc, slot=i)
-            tables.append([] if chunk is None else [LazyFrameInput(chunk.lazy())])
+            tables.append([LazyFrameInput(chunk.lazy())])
         return tables
 
 
@@ -63,7 +63,7 @@ class DevFrameSrcPlugin(SrcPlugin[DevFrameSrcConn, DevFrameSrc]):
                 chunk = data._next_chunk(ctx, i)
             except Exception as exc:
                 raise DevErrorCode.DEV_16.exception(cause=exc, slot=i)
-            tables.append([] if chunk is None else [LazyFrameInput(chunk.lazy())])
+            tables.append([LazyFrameInput(chunk.lazy())])
         return tables
 
 

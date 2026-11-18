@@ -16,7 +16,7 @@ from tabsdatax.itest.fixture.backends.salesforce import (
     salesforce_domain,
 )
 from tabsdatax.itest.fixture.functions.files import PluginSrcCtx
-from testi_tabsdatak.conn.common.landed import taken
+from testi_tabsdatak.conn.common.landed import taken, unknown
 from testi_tabsdatak.conn.common.sql.plugin_io import work_dir
 from testi_tabsdatak.conn.salesforce.backend import (
     ACCOUNT,
@@ -107,11 +107,27 @@ def test_src_plugin_read_in_matching_no_rows_lands_an_empty_table(
     out = plugin._SalesforceSrcPlugin().read_in(
         PluginSrcCtx(work_dir(tmp_path)), src_conn(domain_salesforce), src
     )
-    # Unlike the SQL sources, a query matching nothing still hands over a table,
-    # so the input is never empty; with no record to type, it has no columns
-    # either.
-    assert len(out[0]) == 1
-    assert served(out, tmp_path / "served")[0].shape == (0, 0)
+    # With no record to type, the fields are typed as the queried object's
+    # describe types them.
+    [[table]] = taken(out, tmp_path / "served")
+    assert table.known
+    assert table.frame.schema == pl.Schema({"Id": pl.String})
+    assert table.frame.height == 0
+
+
+@salesforce_domain("salesforce")
+def test_src_plugin_read_in_matching_no_rows_of_a_parents_field_is_unknown(
+    domain_salesforce: SalesforceDomain, tmp_path: Path
+):
+    src = SalesforceSrc(
+        queries=[
+            f"SELECT Id, Owner.Name FROM {ACCOUNT} WHERE Name = 'td-no-such-account'"
+        ]
+    )
+    out = plugin._SalesforceSrcPlugin().read_in(
+        PluginSrcCtx(work_dir(tmp_path)), src_conn(domain_salesforce), src
+    )
+    assert unknown(taken(out, tmp_path / "served")[0])
 
 
 @salesforce_domain("salesforce")

@@ -151,7 +151,7 @@ def test_read_in_unchunked_emits_whole_frame_every_run(tmp_path):
         assert only.equals(frame)
 
 
-def test_read_in_chunked_advances_offset_then_returns_none(tmp_path):
+def test_read_in_chunked_advances_offset_then_returns_an_empty_frame(tmp_path):
     ctx = FakeSrcCtx(tmp_path)
     frame = pl.DataFrame({"b": [10, 20, 30, 40, 50]})
     src = DataGenSrc(data=[Data(frame, chunk_size=2)])
@@ -164,7 +164,8 @@ def test_read_in_chunked_advances_offset_then_returns_none(tmp_path):
     assert r1.to_dict(as_series=False) == {"b": [10, 20]}
     assert r2.to_dict(as_series=False) == {"b": [30, 40]}
     assert r3.to_dict(as_series=False) == {"b": [50]}
-    assert r4 is None
+    assert r4.schema == frame.schema
+    assert r4.height == 0
 
 
 def test_read_in_returns_one_slot_per_data_independently(tmp_path):
@@ -183,7 +184,8 @@ def test_read_in_returns_one_slot_per_data_independently(tmp_path):
 
     third = _read(ctx, src)
     assert third[0].equals(full)
-    assert third[1] is None
+    assert third[1].schema == chunked.schema
+    assert third[1].height == 0
 
 
 # ---------------------------------------------------------------------------

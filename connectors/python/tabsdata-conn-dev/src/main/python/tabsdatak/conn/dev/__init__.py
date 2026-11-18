@@ -89,7 +89,8 @@ class Data:
       run.
     * `chunk_size=N` -- `N` rows are emitted per run, advancing an
       offset kept in the plugin's per-flow state; once the offset
-      reaches the end the slot yields `None` (no more rows).
+      reaches the end the slot yields an empty frame with the
+      dataframe's columns.
 
     On the wire a `Data` serialises to `{"parquet": <base64>,
     "chunk_size": <int|null>}`: the dataframe is written to parquet and
@@ -158,8 +159,6 @@ class Data:
             return self._frame
         key = f"{_OFFSET_PREFIX}{slot}"
         offset = int(ctx.get_attr(key) or 0)
-        if offset >= self._frame.height:
-            return None
         chunk = self._frame.slice(offset, self.chunk_size)
         ctx.set_attr(key, offset + chunk.height)
         return chunk

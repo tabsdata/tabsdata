@@ -537,6 +537,64 @@ def test_src_plugin_handles_empty_result_set(monkeypatch, work_dir):
     _, _, src = _soql(monkeypatch, [])
     [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
     assert _served(table).shape == (0, 0)
+    assert not _metadata(table).known
+
+
+def _empty(monkeypatch, work_dir, query: str) -> tuple:
+    fake = _FakeSF()
+    fake.describes = {"Opportunity": OPPORTUNITY}
+    _patch_login(monkeypatch, fake)
+    src = SalesforceSrc(queries=[query])
+    [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    return fake, table
+
+
+def test_an_empty_result_is_typed_as_its_object_describes_the_selected_fields(
+    monkeypatch, work_dir
+):
+    fake, table = _empty(
+        monkeypatch,
+        work_dir,
+        "select amount, ID,\n closedate FROM Opportunity WHERE IsWon = true",
+    )
+    frame = _served(table)
+    assert frame.schema == pl.Schema({
+        "Amount": pl.Decimal(18, 2),
+        "Id": pl.String,
+        "CloseDate": pl.Date,
+    })
+    assert frame.height == 0
+    assert _metadata(table).known
+    assert fake.described == ["Opportunity"]
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT Id, BillingAddress FROM Opportunity",
+        "SELECT Id, Missing FROM Opportunity",
+        "SELECT Id, Owner.Name FROM Opportunity",
+        "SELECT Id, (SELECT Id FROM OpportunityLineItems) FROM Opportunity",
+        "SELECT COUNT() FROM Opportunity",
+        "SELECT FIELDS(STANDARD) FROM Opportunity",
+        "SELECT Id FROM Undescribable",
+    ],
+    ids=[
+        "untyped field",
+        "unknown field",
+        "relationship",
+        "subquery",
+        "function",
+        "fields",
+        "undescribable object",
+    ],
+)
+def test_an_empty_result_whose_fields_cannot_be_typed_is_unknown(
+    monkeypatch, work_dir, query
+):
+    _, table = _empty(monkeypatch, work_dir, query)
+    assert _served(table).shape == (0, 0)
+    assert not _metadata(table).known
 
 
 def test_src_plugin_reports_soql_and_cutoff_as_metadata(monkeypatch, work_dir):

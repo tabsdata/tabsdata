@@ -7,6 +7,7 @@ from __future__ import annotations
 import gzip
 import json
 import logging
+import re
 import time
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import replace
@@ -102,6 +103,11 @@ _SFR_READ_SECONDS = 300
 
 # What an aggregate SOQL query returns its rows as; it has no description.
 _SF_AGGREGATE_RESULT = "AggregateResult"
+_SF_SIMPLE_QUERY = re.compile(
+    r"\s*SELECT\s+(?P<fields>.+?)\s+FROM\s+(?P<sobject>\w+)\b",
+    re.IGNORECASE | re.DOTALL,
+)
+_SF_PLAIN_FIELD = re.compile(r"\w+")
 _SF_MAX_DECIMAL_PRECISION = 38
 
 # A described field's dtype, by its Salesforce type, as its JSON value
@@ -268,6 +274,11 @@ def _soql_input(
 
     def metadata() -> FrameMetadata:
         read = folded()
+        if not read.schema:
+            schema = queried_schema(query, describe)
+            if schema is None:
+                return replace(read, columns=columns, known=False)
+            return replace(read, schema=schema, columns=columns)
         schema = described_schema(read.schema, sobjects, describe)
         return replace(read, schema=schema, columns=columns)
 
@@ -338,6 +349,29 @@ def field_dtype(field: dict) -> pl.DataType | None:
                 return pl.Decimal(precision, scale)
         return pl.Float64()
     return _SF_FIELD_TYPES.get(kind)
+
+
+def queried_schema(
+    query: str, describe: Callable[[str], dict[str, pl.DataType]]
+) -> pl.Schema | None:
+    """The schema of a query that returned no records, as the describe of the
+    sObject it selects from types each of its fields, or ``None`` when that
+    cannot be known: a field other than a plain one of that sObject, or one
+    its describe does not type."""
+    match = _SF_SIMPLE_QUERY.match(query)
+    if match is None:
+        return None
+    names = [name.strip() for name in match["fields"].split(",")]
+    if not all(_SF_PLAIN_FIELD.fullmatch(name) for name in names):
+        return None
+    described = {
+        name.lower(): (name, dtype)
+        for name, dtype in describe(match["sobject"]).items()
+    }
+    fields = [described.get(name.lower()) for name in names]
+    if any(field is None for field in fields):
+        return None
+    return pl.Schema(fields)
 
 
 def described_schema(
