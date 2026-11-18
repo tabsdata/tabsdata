@@ -161,7 +161,10 @@ def test_src_overlapping_globs_import_the_same_file_in_every_slot(
     assert sorted(ctx.attrs) == ["file-lastmod.slot0", "file-lastmod.slot1"]
 
     resumed = LastModSrcCtx(root / "resumed", ctx.attrs)
-    assert read_in(resumed, src_conn(base), src) == [[], []]
+    assert [unknown(slot) for slot in read_in(resumed, src_conn(base), src)] == [
+        True,
+        True,
+    ]
 
 
 @fs_domain("fs")
@@ -331,9 +334,9 @@ def test_src_reordering_paths_reimports_because_slots_are_positional(
     ]
 
     unchanged = LastModSrcCtx(root / "unchanged", ctx.attrs)
-    assert read_in(unchanged, src_conn(base), ordered) == [
-        [],
-        [],
+    assert [unknown(slot) for slot in read_in(unchanged, src_conn(base), ordered)] == [
+        True,
+        True,
     ]
 
     # A cursor is addressed by the path's position, not by the path itself, so

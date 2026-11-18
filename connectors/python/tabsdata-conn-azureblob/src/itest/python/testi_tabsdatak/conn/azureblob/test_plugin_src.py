@@ -314,7 +314,9 @@ def test_src_overlapping_globs_import_the_same_object_in_every_slot(
     assert sorted(ctx.attrs) == ["file-lastmod.slot0", "file-lastmod.slot1"]
 
     resumed = LastModSrcCtx(_work(tmp_path, "resumed"), ctx.attrs)
-    assert _read_with(resumed, system_azureblob, prefix, src) == [[], []]
+    assert [
+        unknown(slot) for slot in _read_with(resumed, system_azureblob, prefix, src)
+    ] == [True, True]
 
 
 @azureblob_system("azureblob")
@@ -387,7 +389,10 @@ def test_src_reordering_paths_reimports_because_slots_are_positional(
     ]
 
     unchanged = LastModSrcCtx(_work(tmp_path, "run2"), ctx.attrs)
-    assert _read_with(unchanged, system_azureblob, prefix, ordered) == [[], []]
+    assert [
+        unknown(slot)
+        for slot in _read_with(unchanged, system_azureblob, prefix, ordered)
+    ] == [True, True]
 
     # A cursor is addressed by the path's position, not by the path itself, so
     # swapping two entries hands each slot the other one's cursor -- which knows
