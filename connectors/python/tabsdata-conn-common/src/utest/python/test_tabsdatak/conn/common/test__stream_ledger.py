@@ -14,7 +14,7 @@ from tabsdatax.itest.fixture.functions.stream import LocalStage
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._ledger import StageLedger
-from tabsdatak.spi import LazyFrameInput
+from tabsdatak.spi import FrameMetadata, LazyFrameInput
 
 LEDGER_LOGGER = "tabsdatak.conn.common._stream._ledger"
 
@@ -60,6 +60,18 @@ def test_the_slots_without_files_are_unstaged(stage):
     assert ledger.unstaged() == ["s.a", "s.c"]
     ledger.write("s.a", table())
     assert ledger.unstaged() == ["s.c"]
+
+
+def test_a_frame_is_staged_with_its_metadata(stage, monkeypatch):
+    sent = []
+    send = stage.send
+    monkeypatch.setattr(
+        stage, "send", lambda tables: sent.append(tables) or send(tables)
+    )
+    ledger = StageLedger(ctx=stage, slots=["s.a"])
+    metadata = FrameMetadata(known=False)
+    ledger.stage("s.a", pl.LazyFrame(), metadata)
+    assert [table.metadata for [tables] in sent for table in tables] == [metadata]
 
 
 def test_a_lazy_frame_is_staged_as_it_is(stage):

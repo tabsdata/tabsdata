@@ -187,3 +187,7 @@ class SqlCdcErrorCode(ErrorCode):
         SqlCdcException,
         "Tracked table {table!r} has no registered schema",
     )  # SchemaRegistry.latest
+    CDC_32 = ErrorDef(
+        SqlCdcException,
+        "Output slot {index} of the staged batch holds no table",
+    )  # CdcStageSrcPlugin.process_files

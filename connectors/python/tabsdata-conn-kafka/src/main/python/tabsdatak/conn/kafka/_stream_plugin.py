@@ -25,6 +25,8 @@ import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
+import polars as pl
+
 # noinspection PyProtectedMember
 from tabsdatak.api import BufferThresholds, PollThresholds
 from tabsdatak.conn.common._stream._config import StreamRunConfig
@@ -56,7 +58,10 @@ from tabsdatak.conn.kafka._stream_impl import (
     KafkaOffset,
     KafkaRecord,
 )
+from tabsdatak.conn.kafka.constants import KAFKA_META_TOPIC
 from tabsdatak.spi import (
+    FrameMetadata,
+    LazyFrameInput,
     StreamSrcDef,
     StreamStageSrc,
 )
@@ -143,6 +148,14 @@ class KafkaStreamSrcPlugin(
 
     def slots(self, run: StreamRun[KafkaRecord, KafkaOffset]) -> Sequence[str]:
         return [run.ingester.topic]
+
+    def empty(
+        self, run: StreamRun[KafkaRecord, KafkaOffset], slot: str
+    ) -> LazyFrameInput:
+        return LazyFrameInput(
+            pl.LazyFrame(schema={KAFKA_META_TOPIC: pl.String}),
+            FrameMetadata(known=False),
+        )
 
     def build_encoder(self, run: StreamRun[KafkaRecord, KafkaOffset]) -> KafkaEncoder:
         return KafkaEncoder(

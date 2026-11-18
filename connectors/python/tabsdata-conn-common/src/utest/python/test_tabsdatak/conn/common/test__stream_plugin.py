@@ -9,7 +9,7 @@ import threading
 from pathlib import Path
 from typing import Self
 
-import pyarrow as pa
+import polars as pl
 import pytest
 
 # noinspection PyProtectedMember
@@ -41,6 +41,7 @@ from tabsdatak.conn.common._stream._sentinels import BufferSentinel
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._signal import StopSignal
 from tabsdatak.conn.common.error import ConnErrorCode, ConnStreamException
+from tabsdatak.spi import FrameMetadata, LazyFrameInput
 
 
 class FakeCtx:
@@ -111,8 +112,8 @@ class FakeDisk:
     def unstaged(self) -> list[str]:
         return [f"t{slot}" for slot, files in enumerate(self._manifest) if not files]
 
-    def write(self, slot: str, table) -> None:
-        self._manifest[int(slot[1:])].append(table)
+    def stage(self, slot: str, frame, metadata=None) -> None:
+        self._manifest[int(slot[1:])].append((dict(frame.collect_schema()), metadata))
 
     def publish(self, new_state) -> None:
         self.ctx.stage(self._manifest, new_state)
@@ -290,24 +291,25 @@ def test_publish_empty_manifest_does_not_stage():
     assert disk.cleared == 0
 
 
-def test_a_due_heartbeat_stages_an_empty_manifest_with_the_offset():
+UNKNOWN = ({}, FrameMetadata(known=False))
+
+
+def test_a_due_heartbeat_stages_an_unknown_table_for_every_slot_with_the_offset():
     ctx = FakeCtx(active_values=[])
     disk = FakeDisk(manifest=[[], []], heartbeat=True)
     ingester = OwnedOffsetIngester()
     buffer = FakeBuffer()
 
     assert publish(ctx, disk, buffer, ingester) is True
-    assert ctx.staged == [([[], []], {"offset": buffer.offset})]
+    assert ctx.staged == [([[UNKNOWN], [UNKNOWN]], {"offset": buffer.offset})]
     assert ingester.acknowledged_offsets == [buffer.offset]
     assert disk.cleared == 1
 
 
 def test_publish_stages_an_empty_table_for_every_slot_without_files():
-    empty = pa.table({"id": pa.array([], pa.int64())})
-
     class Typed(Plugin):
         def empty(self, run, slot):
-            return None if slot == "t2" else empty
+            return LazyFrameInput(pl.LazyFrame(schema={"id": pl.Int64}))
 
     ctx = FakeCtx(active_values=[])
     disk = FakeDisk(manifest=[[Path("t0.parquet")], [], []])
@@ -315,25 +317,10 @@ def test_publish_stages_an_empty_table_for_every_slot_without_files():
     ingester = FakeIngester()
 
     assert Typed().publish(run_of(ctx, ingester), bound(disk, ctx), disk, buffer)
+    typed = ({"id": pl.Int64}, None)
     assert ctx.staged == [
-        ([[Path("t0.parquet")], [empty], []], ingester.stage_state_marker)
+        ([[Path("t0.parquet")], [typed], [typed]], ingester.stage_state_marker)
     ]
-
-
-def test_a_due_heartbeat_stages_an_empty_table_for_every_slot():
-    empty = pa.table({"id": pa.array([], pa.int64())})
-
-    class Typed(Plugin):
-        def empty(self, run, slot):
-            return empty
-
-    ctx = FakeCtx(active_values=[])
-    disk = FakeDisk(manifest=[[], []], heartbeat=True)
-    ingester = OwnedOffsetIngester()
-    buffer = FakeBuffer()
-
-    assert Typed().publish(run_of(ctx, ingester), bound(disk, ctx), disk, buffer)
-    assert ctx.staged == [([[empty], [empty]], {"offset": buffer.offset})]
 
 
 def test_publish_stages_manifest_and_commits_offset():

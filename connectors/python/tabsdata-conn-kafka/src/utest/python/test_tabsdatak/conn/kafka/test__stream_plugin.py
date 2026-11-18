@@ -38,7 +38,7 @@ from tabsdatak.conn.kafka._stream_plugin import (
 from tabsdatak.conn.kafka.constants import KAFKA_META_TOPIC
 from tabsdatak.conn.kafka.error import KafkaErrorCode
 from tabsdatak.error import TabsdataException
-from tabsdatak.spi import StreamStageSrc
+from tabsdatak.spi import FrameMetadata, StreamStageSrc
 
 pytestmark = pytest.mark.kafka
 
@@ -92,6 +92,13 @@ def test_the_buffer_bytes_default_yields_to_the_source_config():
         _src(src_cfg={"tabsdata.kafka.buffer.max_bytes": 1024})
     )
     assert cfg.buffer.max_bytes == 1024
+
+
+def test_an_empty_table_of_a_topic_holds_only_its_topic_column():
+    table = KafkaStreamSrcPlugin().empty(MagicMock(), "orders")
+    assert table.frame.collect().schema == pl.Schema({KAFKA_META_TOPIC: pl.String})
+    assert table.frame.collect().height == 0
+    assert table.metadata == FrameMetadata(known=False)
 
 
 def test_run_config_defaults():

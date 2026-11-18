@@ -338,8 +338,12 @@ def test_an_empty_table_of_a_tracked_table_has_its_latest_schema():
 
     table = _Plugin().empty(run, "s.t")
 
-    assert table.num_rows == 0
-    assert table.schema == version.pa_schema
+    assert table.frame.collect().height == 0
+    assert (
+        table.frame.collect_schema()
+        == pl.DataFrame(version.pa_schema.empty_table()).schema
+    )
+    assert table.metadata is None
     with pytest.raises(SqlCdcException, match="CDC_31"):
         _Plugin().empty(run, "s.other")
 

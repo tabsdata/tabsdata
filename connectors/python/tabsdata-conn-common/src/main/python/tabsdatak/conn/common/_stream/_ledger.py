@@ -11,6 +11,7 @@ import polars as pl
 import pyarrow as pa
 
 from tabsdatak.spi import (
+    FrameMetadata,
     LazyFrameInput,
     StageFileStats,
     StreamSrcPluginCtx,
@@ -54,10 +55,15 @@ class StageLedger:
     def write(self, slot: str, table: pa.Table) -> None:
         self.stage(slot, pl.DataFrame(table).lazy())
 
-    def stage(self, slot: str, frame: pl.LazyFrame) -> None:
+    def stage(
+        self,
+        slot: str,
+        frame: pl.LazyFrame,
+        metadata: FrameMetadata | None = None,
+    ) -> None:
         position = self._positions[slot]
         tables: list[list[LazyFrameInput] | None] = [None] * len(self._positions)
-        tables[position] = [LazyFrameInput(frame)]
+        tables[position] = [LazyFrameInput(frame, metadata)]
         for stats in self._ctx.stage(tables)[position]:
             self._staged[position].append(stats)
             self._rows += stats.rows

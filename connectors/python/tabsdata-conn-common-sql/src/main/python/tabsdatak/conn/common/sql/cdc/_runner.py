@@ -36,7 +36,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
-import pyarrow as pa
+import polars as pl
 
 from tabsdatak.api import StreamSrc
 
@@ -76,7 +76,13 @@ from tabsdatak.conn.common.sql.cdc.constants import (
 )
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
-from tabsdatak.spi import Conn, StageFileStats, StreamSrcPluginCtx, StreamStateSpec
+from tabsdatak.spi import (
+    Conn,
+    LazyFrameInput,
+    StageFileStats,
+    StreamSrcPluginCtx,
+    StreamStateSpec,
+)
 
 NO_TIME_LIMIT = math.inf
 
@@ -396,8 +402,9 @@ class CdcPlugin[C: Conn, SS: StreamSrc](
                 state = {**state, CDC_INITIAL_LOAD_STATE_KEY: done}
         return state
 
-    def empty(self, run: CdcRun, slot: str) -> pa.Table:
-        return run.ingester.schema_registry.latest(slot).pa_schema.empty_table()
+    def empty(self, run: CdcRun, slot: str) -> LazyFrameInput:
+        schema = run.ingester.schema_registry.latest(slot).pa_schema
+        return LazyFrameInput(pl.DataFrame(schema.empty_table()).lazy())
 
     def may_checkpoint(self, run: CdcRun) -> bool:
         return super().may_checkpoint(run) and not _initial_load_pending(

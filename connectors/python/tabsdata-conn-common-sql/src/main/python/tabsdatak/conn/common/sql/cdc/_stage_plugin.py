@@ -158,6 +158,10 @@ def _key_order(frames: list[pl.LazyFrame]) -> list[int] | None:
     return [position for _, _, position in spans] + empty
 
 
+def _known(table: LazyFrameInput) -> bool:
+    return not isinstance(table.metadata, FrameMetadata) or table.metadata.known
+
+
 class CdcStageSrc(StreamStageSrc):
     """Config type for the CDC stream-stage publisher binding."""
 
@@ -180,8 +184,8 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
         and de-duplicated on ``(seg, ord)``, and filtered against the
         per-slot ``(seg, ord)`` cursor in ``ctx`` (none stored -> no
         filtering), all lazily, as one table; the new high-water
-        ``(seg, ord)`` is persisted via ``ctx.set_attr``. An input slot
-        without tables yields one empty table of unknown columns. Returns
+        ``(seg, ord)`` is persisted via ``ctx.set_attr``. A slot of an
+        empty table of unknown columns passes through as it is. Returns
         the per-slot tables to publish (see module docstring for the full
         contract).
 
@@ -196,9 +200,9 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
         for index, slot in enumerate(files):
             tables = list(slot)
             if not tables:
-                results.append([
-                    LazyFrameInput(pl.LazyFrame(), FrameMetadata(known=False))
-                ])
+                raise SqlCdcErrorCode.CDC_32.exception(index=index)
+            if not any(_known(table) for table in tables):
+                results.append(tables)
                 continue
 
             lazy_frames = [table.frame for table in tables]

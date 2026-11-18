@@ -23,6 +23,7 @@ from datetime import datetime
 from typing import Any, Protocol, cast
 
 import obstore
+import polars as pl
 
 from tabsdatak.common._storage.frames import FrameLocator
 from tabsdatak.common._storage.landed import LANDING_SUFFIX, LandedPair, LandedTable
@@ -31,6 +32,7 @@ from tabsdatak.conn.common._cursor import LastModifiedCursor
 from tabsdatak.conn.common._find import Listed, find
 from tabsdatak.conn.stream.stage.error import ManifestStageErrorCode
 from tabsdatak.spi import (
+    FrameMetadata,
     LazyFrameInput,
     SrcDef,
     SrcPlugin,
@@ -74,7 +76,10 @@ class ManifestStageSrcPlugin(SrcPlugin[_StreamStageSrcConn, StreamStageSrc]):
             f"{[len(names) for names in tables]}"
         )
         return [
-            [self.table(location, root, name) for name in names] for names in tables
+            [self.table(location, root, name) for name in names]
+            if names
+            else [LazyFrameInput(pl.LazyFrame(), FrameMetadata(known=False))]
+            for names in tables
         ]
 
     @staticmethod
