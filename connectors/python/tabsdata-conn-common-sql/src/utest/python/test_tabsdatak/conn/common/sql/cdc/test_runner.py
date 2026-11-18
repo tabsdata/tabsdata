@@ -12,10 +12,12 @@ stages lands on a local stand-in for the function stage."""
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import polars as pl
 import pyarrow as pa
 import pytest
+import sqlalchemy.types as sa_types
 from tabsdatax.itest.fixture.functions.stream import LocalStage
 
 # noinspection PyProtectedMember
@@ -33,18 +35,22 @@ from tabsdatak.conn.common._stream.constants import (
     DEFAULT_POLL_IDLE_SECS,
 )
 from tabsdatak.conn.common.sql.cdc import _runner
+from tabsdatak.conn.common.sql.cdc._column import TrackedColumn
 from tabsdatak.conn.common.sql.cdc._deduplicator import Deduplicated
 from tabsdatak.conn.common.sql.cdc._ingester import CDC_INITIAL_LOAD_STATE_KEY
+from tabsdatak.conn.common.sql.cdc._model import TableObject, TrackedTable
 from tabsdatak.conn.common.sql.cdc._runner import (
     CdcPlugin,
     CdcRunConfig,
     _initial_load_pending,
 )
+from tabsdatak.conn.common.sql.cdc._schema import SchemaRegistry
 from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_FETCH_SIZE,
     DEFAULT_MAX_LARGE_TEXT_LENGTH,
 )
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcException
+from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 from tabsdatak.spi import LazyFrameInput
 
 # --- fakes --------------------------------------------------------------
@@ -308,6 +314,34 @@ def _checkpoint(ctx, ingester, cfg: CdcRunConfig, offset) -> None:
         ctx=ctx, ingester=ingester, cfg=cfg, stop_signal=StopSignal()
     )
     plugin.checkpoint(run, offset)
+
+
+# --- empty tables ---------------------------------------------------------
+
+
+def test_an_empty_table_of_a_tracked_table_has_its_latest_schema():
+    registry = SchemaRegistry(
+        type_mapper=lambda t: t,
+        large_column_classifier=lambda t: None,
+        cdc_format=CdcFormat(columns_format="columns", flatten_columns=True),
+    )
+    version = registry.register_from_catalog(
+        "s.t",
+        TrackedTable(
+            data_table=TableObject(schema="s", table="t"),
+            cdc_table=TableObject(schema="s", table="t"),
+            columns=[TrackedColumn(name="a", satype=sa_types.Integer())],
+            pk=["a"],
+        ),
+    )
+    run = SimpleNamespace(ingester=SimpleNamespace(schema_registry=registry))
+
+    table = _Plugin().empty(run, "s.t")
+
+    assert table.num_rows == 0
+    assert table.schema == version.pa_schema
+    with pytest.raises(SqlCdcException, match="CDC_31"):
+        _Plugin().empty(run, "s.other")
 
 
 # --- checkpoints ----------------------------------------------------------

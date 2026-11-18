@@ -4,12 +4,14 @@
 
 from __future__ import annotations
 
+import pytest
 import sqlalchemy.types as sa_types
 
 from tabsdatak.conn.common.sql.cdc._column import TrackedColumn
 from tabsdatak.conn.common.sql.cdc._dictionary import schema_hash
 from tabsdatak.conn.common.sql.cdc._model import TableObject, TrackedTable
 from tabsdatak.conn.common.sql.cdc._schema import SchemaRegistry
+from tabsdatak.conn.common.sql.cdc.error import SqlCdcException
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 
 TABLE = "s.t"
@@ -38,6 +40,11 @@ def _tracked(pk: list[str]) -> TrackedTable:
 
 def _raw(*names: str) -> tuple:
     return tuple((name, "INTEGER", sa_types.Integer()) for name in names)
+
+
+def test_the_latest_schema_of_a_table_never_registered_is_an_error():
+    with pytest.raises(SqlCdcException, match="CDC_31"):
+        _registry().latest(TABLE)
 
 
 def test_a_catalog_version_carries_the_primary_key():

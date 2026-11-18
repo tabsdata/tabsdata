@@ -21,6 +21,7 @@ from tabsdatak.conn.common.sql.cdc._dictionary import (
 from tabsdatak.conn.common.sql.cdc._dtype import sqlalchemy_to_arrow, value_converter
 from tabsdatak.conn.common.sql.cdc._model import TrackedTable
 from tabsdatak.conn.common.sql.cdc.dialect import LargeColumnKind
+from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 
 logger = logging.getLogger(__name__)
@@ -44,26 +45,15 @@ class SchemaRegistry:
         self._hashes: dict[str, dict[str, SchemaVersion]] = {}
         self._raw_keys: dict[str, dict[RawSchemaKey, SchemaVersion]] = {}
         self._primary_keys: dict[str, tuple[str, ...]] = {}
-        self._unknown: SchemaVersion | None = None
 
     def version(self, table: str, ordinal: int) -> SchemaVersion:
         return self._versions[table][ordinal]
 
-    def latest(self, table: str) -> SchemaVersion | None:
+    def latest(self, table: str) -> SchemaVersion:
         versions = self._versions.get(table)
-        return versions[-1] if versions else None
-
-    def unknown(self) -> SchemaVersion:
-        if self._unknown is None:
-            self._unknown = SchemaVersion(
-                version=INITIAL_SCHEMA_VERSION,
-                raw=(),
-                hash=schema_hash((), ()),
-                columns=(),
-                pa_schema=build_pa_schema((), self._cdc_format),
-                large_columns=(),
-            )
-        return self._unknown
+        if not versions:
+            raise SqlCdcErrorCode.CDC_31.exception(table=table)
+        return versions[-1]
 
     def large_columns(
         self, columns: tuple[TrackedColumn, ...]

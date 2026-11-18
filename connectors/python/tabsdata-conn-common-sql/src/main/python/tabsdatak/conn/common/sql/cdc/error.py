@@ -183,3 +183,7 @@ class SqlCdcErrorCode(ErrorCode):
         SqlCdcException,
         "The initial load's time was read before its snapshot began",
     )  # InitialLoadSession.timestamp
+    CDC_31 = ErrorDef(
+        SqlCdcException,
+        "Tracked table {table!r} has no registered schema",
+    )  # SchemaRegistry.latest

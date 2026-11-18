@@ -33,7 +33,7 @@ from tabsdatak.conn.common.sql.cdc._stage_plugin import (
     _seg_key,
 )
 from tabsdatak.conn.common.sql.cdc.constants import CDC_META_ORD, CDC_META_SEG
-from tabsdatak.spi import LazyFrameInput
+from tabsdatak.spi import FrameMetadata, LazyFrameInput
 
 
 class FakeCtx:
@@ -207,12 +207,25 @@ def test_cursor_preserves_value_beyond_int64(tmp_path):
     assert _cursor(ctx) == (str(big_seg), "1")
 
 
-def test_empty_slot_yields_empty_list_and_no_state(tmp_path):
+def test_a_slot_without_tables_yields_one_unknown_table_and_no_state(tmp_path):
     ctx = FakeCtx(tmp_path / "work")
 
-    out = CdcStageSrcPlugin().process_files(ctx, [[]])
+    [[table]] = CdcStageSrcPlugin().process_files(ctx, [[]])
 
-    assert out == [[]]
+    assert table.frame.collect().shape == (0, 0)
+    assert table.metadata == FrameMetadata(known=False)
+    assert _cursor(ctx) == (None, None)
+
+
+def test_a_slot_of_an_empty_staged_table_yields_it_typed_and_no_state(tmp_path):
+    ctx = FakeCtx(tmp_path / "work")
+    empty = _write(tmp_path / "a.parquet", [])
+
+    [[table]] = CdcStageSrcPlugin().process_files(ctx, [[empty]])
+
+    assert table.frame.collect().height == 0
+    assert table.frame.collect_schema() == empty.frame.collect_schema()
+    assert table.metadata is None
     assert _cursor(ctx) == (None, None)
 
 

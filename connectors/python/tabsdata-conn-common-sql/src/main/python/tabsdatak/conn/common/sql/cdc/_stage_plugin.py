@@ -48,6 +48,7 @@ from tabsdatak.conn.common.sql.cdc._initial_load import INITIAL_LOAD_SEGMENT
 from tabsdatak.conn.common.sql.cdc.constants import CDC_META_ORD, CDC_META_SEG
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 from tabsdatak.spi import (
+    FrameMetadata,
     LazyFrameInput,
     SrcDef,
     SrcPluginCtx,
@@ -179,9 +180,10 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
         and de-duplicated on ``(seg, ord)``, and filtered against the
         per-slot ``(seg, ord)`` cursor in ``ctx`` (none stored -> no
         filtering), all lazily, as one table; the new high-water
-        ``(seg, ord)`` is persisted via ``ctx.set_attr``. An empty input
-        slot yields an empty output slot. Returns the per-slot tables to
-        publish (see module docstring for the full contract).
+        ``(seg, ord)`` is persisted via ``ctx.set_attr``. An input slot
+        without tables yields one empty table of unknown columns. Returns
+        the per-slot tables to publish (see module docstring for the full
+        contract).
 
         Removing duplicates and sorting cost a pass that holds the whole
         batch's keys. When :func:`_key_order` finds the staged files
@@ -194,8 +196,9 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
         for index, slot in enumerate(files):
             tables = list(slot)
             if not tables:
-                # No tables staged for this slot this run; nothing to emit.
-                results.append([])
+                results.append([
+                    LazyFrameInput(pl.LazyFrame(), FrameMetadata(known=False))
+                ])
                 continue
 
             lazy_frames = [table.frame for table in tables]
@@ -326,8 +329,8 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
 # Entry-point binding for the CDC stream-stage publisher. Like the generic
 # ``STREAM_STAGE_SRC`` the manifest decides the output-slot count at read
 # time, so ``cardinality`` returns the ``-1`` sentinel (slot-count check
-# disabled) and there is no explorer. ``ARRAY`` mode because an output slot
-# may carry zero files (fully filtered) or one (the collapsed batch).
+# disabled) and there is no explorer. ``ARRAY`` mode, each output slot
+# carrying one table: the collapsed batch, or an empty one.
 CDC_STAGE_SRC = SrcDef(
     conn=_StreamStageSrcConn,
     type_=".cdc-stage",

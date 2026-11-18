@@ -1275,9 +1275,7 @@ class BinlogIngester(CdcIngester):
         )
         if qualified is None or self._schema_registry is None:
             return None
-        schema_version = (
-            self._schema_registry.latest(qualified) or self._schema_registry.unknown()
-        )
+        schema_version = self._schema_registry.latest(qualified)
         null_row = {column.name: None for column in schema_version.columns}
         return CdcDataChange(
             operation=CdcOperation.TRUNCATE,

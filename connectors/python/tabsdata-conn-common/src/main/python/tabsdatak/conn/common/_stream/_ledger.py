@@ -44,6 +44,13 @@ class StageLedger:
     def has_files(self) -> bool:
         return any(self._staged)
 
+    def unstaged(self) -> list[str]:
+        return [
+            slot
+            for slot, position in self._positions.items()
+            if not self._staged[position]
+        ]
+
     def write(self, slot: str, table: pa.Table) -> None:
         self.stage(slot, pl.DataFrame(table).lazy())
 

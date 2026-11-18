@@ -53,6 +53,15 @@ def test_a_written_table_is_sent_to_its_slot(stage):
     assert ledger.has_files
 
 
+def test_the_slots_without_files_are_unstaged(stage):
+    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b", "s.c"])
+    assert ledger.unstaged() == ["s.a", "s.b", "s.c"]
+    ledger.write("s.b", table(1))
+    assert ledger.unstaged() == ["s.a", "s.c"]
+    ledger.write("s.a", table())
+    assert ledger.unstaged() == ["s.c"]
+
+
 def test_a_lazy_frame_is_staged_as_it_is(stage):
     ledger = StageLedger(ctx=stage, slots=["s.a"])
     ledger.stage("s.a", pl.LazyFrame({"id": [4, 5]}))

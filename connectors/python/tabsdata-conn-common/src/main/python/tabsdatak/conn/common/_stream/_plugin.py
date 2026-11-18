@@ -11,6 +11,8 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+import pyarrow as pa
+
 from tabsdatak.api import StreamSrc, StreamThresholds
 from tabsdatak.conn.common._stream._config import StreamRunConfig
 from tabsdatak.conn.common._stream._encoder import StreamEncoder
@@ -164,6 +166,9 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
     def stage_state(self, run: StreamRun[R, O], offset: O) -> StreamStateSpec:
         return run.ingester.stage_state(offset)
 
+    def empty(self, run: StreamRun[R, O], slot: str) -> pa.Table | None:
+        return None
+
     def may_checkpoint(self, run: StreamRun[R, O]) -> bool:
         return not run.ctx.first_stage
 
@@ -293,6 +298,10 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
     ) -> bool:
         if not ledger.has_files and not disk_sentinel.idle_due():
             return False
+        for slot in ledger.unstaged():
+            table = self.empty(run, slot)
+            if table is not None:
+                ledger.write(slot, table)
         offset = buffer_sentinel.offset
         ledger.publish(self.stage_state(run, offset))
         run.ingester.acknowledge_offset(offset)

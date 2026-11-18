@@ -36,6 +36,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
+import pyarrow as pa
+
 from tabsdatak.api import StreamSrc
 
 # noinspection PyProtectedMember
@@ -393,6 +395,9 @@ class CdcPlugin[C: Conn, SS: StreamSrc](
             if done is not None:
                 state = {**state, CDC_INITIAL_LOAD_STATE_KEY: done}
         return state
+
+    def empty(self, run: CdcRun, slot: str) -> pa.Table:
+        return run.ingester.schema_registry.latest(slot).pa_schema.empty_table()
 
     def may_checkpoint(self, run: CdcRun) -> bool:
         return super().may_checkpoint(run) and not _initial_load_pending(
