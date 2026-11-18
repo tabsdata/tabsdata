@@ -138,7 +138,7 @@ class TableFrame(EngineFrame):
         """
 
     @property
-    def known(self) -> bool:
+    def schema_known(self) -> bool:
         """Whether this `TableFrame` has the columns of the table it reads.
 
         `False` when a publisher's source found no data and could not learn
@@ -151,7 +151,7 @@ class TableFrame(EngineFrame):
         Examples:
             .. code-block:: python
 
-                tf.known  # False for an empty frame of unknown columns
+                tf.schema_known  # False for an empty frame of unknown columns
         """
 
     def __getitem__(self, item: Any) -> TableFrame:

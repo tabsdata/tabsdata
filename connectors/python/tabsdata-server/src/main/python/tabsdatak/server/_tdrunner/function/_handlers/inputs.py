@@ -74,7 +74,7 @@ class Inputs:
             return None
         if self.publisher:
             return TableFrame._build(
-                scanned.frame, CreationMode.TAB, known=scanned.known
+                scanned.frame, CreationMode.TAB, schema_known=scanned.known
             )
         return TableFrame._build(
             scanned.frame,
@@ -94,7 +94,7 @@ class Inputs:
         return TableFrame._build(
             self.concat([scanned.frame for scanned in scans]),
             CreationMode.TAB,
-            known=all(scanned.known for scanned in scans),
+            schema_known=all(scanned.known for scanned in scans),
         )
 
     @classmethod

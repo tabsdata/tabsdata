@@ -86,21 +86,21 @@ def test_clone_carries_a_cloned_state_forward():
 
 
 def test_a_tableframe_is_known_by_default():
-    assert tableframe_of(pl.LazyFrame({"a": [1]})).known
-    assert TableFrame({"a": [1]}, **_grant()).known
+    assert tableframe_of(pl.LazyFrame({"a": [1]})).schema_known
+    assert TableFrame({"a": [1]}, **_grant()).schema_known
 
 
 def test_a_tableframe_built_unknown_stays_unknown_through_operations():
-    frame = TableFrame._build(pl.LazyFrame(), CreationMode.TAB, known=False)
-    assert not frame.known
-    assert not frame.filter(pl.lit(True)).known
-    assert not frame.with_columns(pl.lit(1).alias("a")).known
+    frame = TableFrame._build(pl.LazyFrame(), CreationMode.TAB, schema_known=False)
+    assert not frame.schema_known
+    assert not frame.filter(pl.lit(True)).schema_known
+    assert not frame.with_columns(pl.lit(1).alias("a")).schema_known
 
 
-def test_known_cannot_be_set():
+def test_schema_known_cannot_be_set():
     frame = tableframe_of(pl.LazyFrame({"a": [1]}))
     with pytest.raises(AttributeError):
-        frame.known = False
+        frame.schema_known = False
 
 
 def test_operation_returns_a_tableframe():

@@ -247,7 +247,7 @@ class FrameMetadata:
         known: Whether the frame has the columns of the table it
             reads. `False` for an empty frame standing in for a table
             whose columns cannot be learnt; the function sees it as
-            `TableFrame.known`.
+            `TableFrame.schema_known`.
 
     Raises:
         ValueError: A serialized or untyped frame has no format, or
