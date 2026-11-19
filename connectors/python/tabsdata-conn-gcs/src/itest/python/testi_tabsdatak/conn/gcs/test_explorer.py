@@ -18,7 +18,7 @@ from testi_tabsdatak.conn.gcs.backend import credentials, src_conn
 
 from tabsdatak.conn.common.file._explorer import FileStorageEntity
 from tabsdatak.conn.gcs import GCSSrcConn
-from tabsdatak.conn.gcs._explorer import GCSConnectionExplorer
+from tabsdatak.conn.gcs._plugin import GCSConnectionExplorer
 
 pytestmark = pytest.mark.gcs
 

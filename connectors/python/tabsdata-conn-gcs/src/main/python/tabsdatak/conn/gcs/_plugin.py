@@ -11,11 +11,11 @@ import polars as pl
 from tabsdatak.common._storage.transfer import GOOGLE_SERVICE_ACCOUNT_KEY_OPTION
 from tabsdatak.conn.common.file import _plugin, _source, _target
 from tabsdatak.conn.common.file._store import FileStore, forwarded
+from tabsdatak.conn.common.file._store_explorer import FileStoreExplorer
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import GCPJson, _convert
 from tabsdatak.conn.gcs import GCSDest, GCSDestConn, GCSSrc, GCSSrcConn
-from tabsdatak.conn.gcs._explorer import GCSConnectionExplorer
 from tabsdatak.conn.gcs.error import GCSErrorCode
 from tabsdatak.error import ApiException
 from tabsdatak.spi import (
@@ -55,6 +55,16 @@ def file_store(conn: _AnyGCSConn) -> FileStore:
         raise ERRORS.cred_resolution.exception(cause=e, reason=str(e))
     options = {GOOGLE_SERVICE_ACCOUNT_KEY_OPTION: key}
     return FileStore(root, {**options, **forwarded(root, conn.conn_cfg)})
+
+
+# --- Explorer -----------------------------------------------------
+
+
+class GCSConnectionExplorer(FileStoreExplorer[_AnyGCSConn]):
+    """Verify connectivity to a GCS bucket and preview its objects."""
+
+    def store(self, conn: _AnyGCSConn) -> FileStore:
+        return file_store(conn)
 
 
 # --- Error-code bundle --------------------------------------------

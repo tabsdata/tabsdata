@@ -27,7 +27,6 @@ from tabsdatak.conn.common.file.constants import FILE_META_PATH
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import GCPJson
 from tabsdatak.conn.gcs import GCSDest, GCSDestConn, GCSSrc, GCSSrcConn
-from tabsdatak.conn.gcs._explorer import GCSConnectionExplorer
 
 pytestmark = pytest.mark.gcs
 
@@ -135,6 +134,36 @@ def test_src_plugin_reads_gcslocal_objects_lazily_naming_their_uri(
         store.delete(["in/a.parquet", "in/b.parquet"])
 
 
+def test_the_explorer_explores_the_store_the_plugin_reads():
+    conn = _src_conn(base_path="/landing", conn_cfg={"obstore.allow_http": True})
+    assert plugin.GCSConnectionExplorer().store(conn) == plugin.file_store(conn)
+
+
+@gcslocal_domain("gcslocal")
+def test_the_explorer_reaches_the_endpoint_the_connection_names(
+    domain_gcslocal: GcsLocalDomain,
+):
+    options = dict(domain_gcslocal.storage_options)
+    root = f"{domain_gcslocal.uri.rstrip('/')}/explorer-{uuid.uuid4().hex}"
+    store = FileStore(root, options)
+    obstore.put(store.store(), "in/returns.csv", b"id,total\n1,2.5\n2,3.5\n")
+    conn = GCSSrcConn(
+        bucket=root.removeprefix("gs://").partition("/")[0],
+        credentials=GCPJson(json=Secret(options["google_service_account_key"])),
+        base_path="/" + root.removeprefix("gs://").partition("/")[2],
+        conn_cfg={f"obstore.{key}": value for key, value in options.items()},
+    )
+    explorer = plugin.GCSConnectionExplorer()
+    try:
+        assert explorer.check_connect(conn) is None
+        (entity,) = explorer.metadata(conn)
+        assert entity.fqn() == f"{root}/in/returns.csv"
+        assert entity.field_names() == ["id", "total"]
+        assert explorer.data(conn, entity, limit=1) == [{"id": "1", "total": "2.5"}]
+    finally:
+        store.delete(["in/returns.csv"])
+
+
 def test_dest_plugin_writes_through_the_connection_store(monkeypatch, tmp_path):
     captured: dict = {}
     monkeypatch.setattr(
@@ -180,7 +209,7 @@ def test_gcs_src_def_wires_plugin_and_explorer():
     assert plugin.GCS_SRC.conn is GCSSrcConn
     assert plugin.GCS_SRC.src is GCSSrc
     assert plugin.GCS_SRC.plugin is plugin.GCSSrcPlugin
-    assert plugin.GCS_SRC.explorer is GCSConnectionExplorer
+    assert plugin.GCS_SRC.explorer is plugin.GCSConnectionExplorer
     assert plugin.GCS_SRC.type_ == "gcs-file-in"
 
 
@@ -188,7 +217,7 @@ def test_gcs_dest_def_wires_plugin_and_explorer():
     assert plugin.GCS_DEST.conn is GCSDestConn
     assert plugin.GCS_DEST.dest is GCSDest
     assert plugin.GCS_DEST.plugin is plugin.GCSDestPlugin
-    assert plugin.GCS_DEST.explorer is GCSConnectionExplorer
+    assert plugin.GCS_DEST.explorer is plugin.GCSConnectionExplorer
     assert plugin.GCS_DEST.type_ == "gcs-file-out"
 
 
