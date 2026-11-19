@@ -17,7 +17,7 @@ from tabsdatax.itest.fixture.backends.azureblob import (
 from testi_tabsdatak.conn.azureblob.backend import credentials, src_conn
 
 from tabsdatak.conn.azureblob import AzureBlobSrcConn
-from tabsdatak.conn.azureblob._explorer import AzureBlobConnectionExplorer
+from tabsdatak.conn.azureblob._plugin import AzureBlobConnectionExplorer
 from tabsdatak.conn.common.file._explorer import FileStorageEntity
 
 pytestmark = pytest.mark.azureblob

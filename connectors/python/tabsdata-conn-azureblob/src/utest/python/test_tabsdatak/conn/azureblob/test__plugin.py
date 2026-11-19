@@ -27,7 +27,6 @@ from tabsdatak.conn.azureblob import (
     AzureBlobSrc,
     AzureBlobSrcConn,
 )
-from tabsdatak.conn.azureblob._explorer import AzureBlobConnectionExplorer
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import _plugin as _file_plugin, _target
@@ -154,6 +153,41 @@ def test_src_plugin_reads_azurebloblocal_objects_lazily_naming_their_uri(
         store.delete(["in/a.parquet", "in/b.parquet"])
 
 
+def test_the_explorer_explores_the_store_the_plugin_reads():
+    conn = _src_conn(
+        base_path="/landing", conn_cfg={"obstore.endpoint": "http://127.0.0.1:10000"}
+    )
+    assert plugin.AzureBlobConnectionExplorer().store(conn) == plugin.file_store(conn)
+
+
+@azurebloblocal_domain("azurebloblocal")
+def test_the_explorer_reaches_the_endpoint_the_connection_names(
+    domain_azurebloblocal: AzureBlobLocalDomain,
+):
+    options = dict(domain_azurebloblocal.storage_options)
+    root = f"{domain_azurebloblocal.uri.rstrip('/')}/explorer-{uuid.uuid4().hex}"
+    store = FileStore(root, options)
+    obstore.put(store.store(), "in/returns.csv", b"id,total\n1,2.5\n2,3.5\n")
+    conn = AzureBlobSrcConn(
+        container=domain_azurebloblocal.container,
+        credentials=AzureAccountKey(
+            account_name=Secret(domain_azurebloblocal.account_name),
+            account_key=Secret(domain_azurebloblocal.account_key),
+        ),
+        base_path="/" + root.removeprefix("az://").partition("/")[2],
+        conn_cfg={f"obstore.{key}": value for key, value in options.items()},
+    )
+    explorer = plugin.AzureBlobConnectionExplorer()
+    try:
+        assert explorer.check_connect(conn) is None
+        (entity,) = explorer.metadata(conn)
+        assert entity.fqn() == f"{root}/in/returns.csv"
+        assert entity.field_names() == ["id", "total"]
+        assert explorer.data(conn, entity, limit=1) == [{"id": "1", "total": "2.5"}]
+    finally:
+        store.delete(["in/returns.csv"])
+
+
 def test_dest_plugin_writes_through_the_connection_store(monkeypatch, tmp_path):
     captured: dict = {}
     monkeypatch.setattr(
@@ -199,7 +233,7 @@ def test_azureblob_src_def_wires_plugin_and_explorer():
     assert plugin.AZURE_BLOB_SRC.conn is AzureBlobSrcConn
     assert plugin.AZURE_BLOB_SRC.src is AzureBlobSrc
     assert plugin.AZURE_BLOB_SRC.plugin is plugin.AzureBlobSrcPlugin
-    assert plugin.AZURE_BLOB_SRC.explorer is AzureBlobConnectionExplorer
+    assert plugin.AZURE_BLOB_SRC.explorer is plugin.AzureBlobConnectionExplorer
     assert plugin.AZURE_BLOB_SRC.type_ == "az-file-in"
 
 
@@ -207,7 +241,7 @@ def test_azureblob_dest_def_wires_plugin_and_explorer():
     assert plugin.AZURE_BLOB_DEST.conn is AzureBlobDestConn
     assert plugin.AZURE_BLOB_DEST.dest is AzureBlobDest
     assert plugin.AZURE_BLOB_DEST.plugin is plugin.AzureBlobDestPlugin
-    assert plugin.AZURE_BLOB_DEST.explorer is AzureBlobConnectionExplorer
+    assert plugin.AZURE_BLOB_DEST.explorer is plugin.AzureBlobConnectionExplorer
     assert plugin.AZURE_BLOB_DEST.type_ == "az-file-out"
 
 

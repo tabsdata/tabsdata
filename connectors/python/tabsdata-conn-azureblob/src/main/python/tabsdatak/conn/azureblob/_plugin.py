@@ -18,10 +18,10 @@ from tabsdatak.conn.azureblob import (
     AzureBlobSrc,
     AzureBlobSrcConn,
 )
-from tabsdatak.conn.azureblob._explorer import AzureBlobConnectionExplorer
 from tabsdatak.conn.azureblob.error import AzureBlobErrorCode
 from tabsdatak.conn.common.file import _plugin, _source, _target
 from tabsdatak.conn.common.file._store import FileStore, forwarded
+from tabsdatak.conn.common.file._store_explorer import FileStoreExplorer
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import AzureAccountKey, _convert
@@ -67,6 +67,16 @@ def file_store(conn: _AnyAzureBlobConn) -> FileStore:
     except ApiException as e:
         raise ERRORS.cred_resolution.exception(cause=e, reason=str(e))
     return FileStore(root, {**options, **forwarded(root, conn.conn_cfg)})
+
+
+# --- Explorer -----------------------------------------------------
+
+
+class AzureBlobConnectionExplorer(FileStoreExplorer[_AnyAzureBlobConn]):
+    """Verify connectivity to an Azure Blob Storage container and preview it."""
+
+    def store(self, conn: _AnyAzureBlobConn) -> FileStore:
+        return file_store(conn)
 
 
 # --- Error-code bundle --------------------------------------------
