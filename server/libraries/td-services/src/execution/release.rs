@@ -3,7 +3,8 @@
 //
 
 //! Releasing runs held on hold. A run is on hold only while an upstream run is
-//! Failed or on hold; once none is, it goes back to the scheduler. A replay
+//! Failed or on hold; once none is, it goes back to the scheduler. A
+//! subscriber's upstream runs are also the ones it waits for the commit of. A replay
 //! that heals a failed run releases its readers at once, and the project's
 //! pass releases whatever any other path left held.
 
@@ -14,7 +15,7 @@ use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::types::basic::{LogicalFunctionRunId, LogicalFunctionRunStatus};
-use td_queries::Queries;
+use td_queries::{Queries, Reach};
 use tracing::debug;
 
 /// Releases the on-hold readers of `healed`, and theirs in turn.
@@ -81,7 +82,7 @@ async fn on_hold_readers(
     }
     let readers = conn
         .logical_runs()
-        .downstream_one_hop(upstream, upstream)
+        .downstream_one_hop(upstream, upstream, Reach::Commit)
         .await?;
     if readers.is_empty() {
         return Ok(Vec::new());

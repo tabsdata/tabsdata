@@ -26,7 +26,7 @@ use td_objects::types::basic::{
     ExecutionId, FunctionId, HasData, LogicalFunctionRunId, LogicalFunctionRunStatus,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, RowCount, SchemaChanged, TableName, WorkerId,
 };
-use td_queries::Queries;
+use td_queries::{Queries, Reach};
 
 use crate::execution::release::release_readers_of;
 use crate::execution::settlement::commit_done_transactions;
@@ -468,7 +468,12 @@ async fn cascade_downstream_status(
     starting: &[LogicalFunctionRunId],
     status: &LogicalFunctionRunStatus,
 ) -> Result<(), TdError> {
-    let downstream_ids = bfs_downstream_lfrs(&mut *conn, starting).await?;
+    let reach = if *status == LogicalFunctionRunStatus::Yanked {
+        Reach::Data
+    } else {
+        Reach::Commit
+    };
+    let downstream_ids = bfs_downstream_lfrs(&mut *conn, starting, reach).await?;
     if downstream_ids.is_empty() {
         return Ok(());
     }
@@ -514,6 +519,7 @@ async fn cascade_downstream_status(
 async fn bfs_downstream_lfrs<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     starting: &[LogicalFunctionRunId],
+    reach: Reach,
 ) -> Result<Vec<LogicalFunctionRunId>, TdError> {
     let starting_set: HashSet<LogicalFunctionRunId> = starting.iter().cloned().collect();
     let mut visited: HashSet<LogicalFunctionRunId> = starting_set.clone();
@@ -523,7 +529,7 @@ async fn bfs_downstream_lfrs<S: SeesProjectRows, M: AccessMode>(
         let exclude: Vec<LogicalFunctionRunId> = visited.iter().cloned().collect();
         let next: Vec<LogicalFunctionRunId> = conn
             .logical_runs()
-            .downstream_one_hop(&frontier, &exclude)
+            .downstream_one_hop(&frontier, &exclude, reach)
             .await?;
         let mut new_frontier = Vec::new();
         for id in next {
@@ -794,6 +800,35 @@ pub(crate) mod tests {
         ) -> Fut,
         Fut: Future<Output = Result<(), TdError>>,
     {
+        run_status_scenario_with(db, project_id, test_executions, &[], test_run).await
+    }
+
+    /// [`run_status_scenario`] with the functions named in `subscribers`
+    /// registered as subscribers; every other one is a transformer.
+    pub(crate) async fn run_status_scenario_with<'a, F, Fut>(
+        db: TdPool,
+        project_id: ProjectId,
+        test_executions: &'a [TestExecution],
+        subscribers: &[&str],
+        test_run: F,
+    ) -> Result<
+        (
+            HashMap<&'a TestExecution, ExecutionDB>,
+            HashMap<&'a TestTransaction, TransactionDB>,
+            HashMap<&'a TestFunction, PhysicalFunctionRunDB>,
+        ),
+        TdError,
+    >
+    where
+        F: Fn(
+            &HashMap<&CollectionName, CollectionDB>,
+            &HashMap<&TestExecution, ExecutionDB>,
+            &HashMap<&TestTransaction, TransactionDB>,
+            &HashMap<&TestFunction, PhysicalFunctionRunDB>,
+            &HashMap<&TestFunction, WorkerDB>,
+        ) -> Fut,
+        Fut: Future<Output = Result<(), TdError>>,
+    {
         let collections: HashSet<_> = test_executions
             .iter()
             .flat_map(|e| &e.transactions)
@@ -864,7 +899,11 @@ pub(crate) mod tests {
                     description: "foo description".try_into()?,
                     bundle_id: BundleId::default(),
                     snippet: "foo snippet".try_into()?,
-                    decorator: Decorator::Publisher,
+                    decorator: if subscribers.contains(&test_function.name.as_str()) {
+                        Decorator::Subscriber
+                    } else {
+                        Decorator::Publisher
+                    },
                     connector: None,
                     connection: None,
                     base_path: None,

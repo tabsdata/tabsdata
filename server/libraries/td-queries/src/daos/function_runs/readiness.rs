@@ -6,21 +6,23 @@
 //! downstream cascade hop and the previous-run lookup.
 
 use crate::QueryExecutor;
-use crate::daos::function_runs::LogicalRuns;
 use crate::daos::function_runs::chain::{
     ProducerLfr, Visibility, build_chain, producer_chain, producer_status_in_strict,
     producer_status_not_in, unmaterialized,
 };
+use crate::daos::function_runs::gates::{Gate, Gated, gate_blocks, gates, is_subscriber};
+use crate::daos::function_runs::{LogicalRuns, Reach};
 use crate::primitives::scd2::open_interval_at;
 use crate::primitives::table::claim;
 use sea_query::{
     Asterisk, CommonTableExpression, Expr, ExprTrait, Func, Iden, JoinType, Order, Query,
-    SelectStatement, WithClause, WithQuery,
+    SelectStatement, UnionType, WithClause, WithQuery,
 };
 use ta_objects::Dao;
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
 use td_database::sea_query::builder::SeaQueryExt;
+use td_objects::dxo::function::FunctionDBIden;
 use td_objects::dxo::logical::{
     LogicalFunctionRunDB, LogicalFunctionRunDBIden, LogicalFunctionRunInputDBIden,
     LogicalTableDataVersionDBIden,
@@ -37,7 +39,9 @@ where
 {
     /// Scheduled / ReScheduled LFRs whose inputs all have a materialization
     /// visible at `at` from a Done or Committed producer, oldest-triggered
-    /// first. A result of exactly `limit` rows means there may be more.
+    /// first. A subscriber is held to the commit rule instead: it starts once
+    /// every other transaction it reads from has committed. A result of
+    /// exactly `limit` rows means there may be more.
     pub async fn to_execute(
         self,
         at: &AtTime,
@@ -83,7 +87,8 @@ where
     }
 
     /// LFR ids in `execution_id` with an upstream LFR that is Failed or
-    /// OnHold.
+    /// OnHold. A subscriber's upstream runs are also the ones it waits for
+    /// the commit of.
     pub async fn blocked_ids(
         self,
         execution_id: &ExecutionId,
@@ -97,13 +102,14 @@ where
 
     /// One hop of the failure cascade: the runs consuming an output version
     /// of any run in `producer_lfrs`, minus `exclude_consumers` and
-    /// self-loops.
+    /// self-loops, as far as `reach` goes.
     pub async fn downstream_one_hop(
         self,
         producer_lfrs: &[LogicalFunctionRunId],
         exclude_consumers: &[LogicalFunctionRunId],
+        reach: Reach,
     ) -> Result<Vec<LogicalFunctionRunId>, SqlError> {
-        downstream_one_hop_query(producer_lfrs, exclude_consumers)
+        downstream_one_hop_query(producer_lfrs, exclude_consumers, reach)
             .build_query_scalar()
             .fetch_all(self.executor)
             .await
@@ -115,9 +121,14 @@ where
 /// `exclude_consumers` and self-loops. The failure cascade walks this hop
 /// until the visited set stops growing, threading the visited ids through
 /// `exclude_consumers`.
+///
+/// [`Reach::Commit`] adds the subscribers gated on `producer_lfrs`, and only
+/// those that have not started: one that already wrote is never held or
+/// rescheduled through a run it did not read.
 pub(crate) fn downstream_one_hop_query(
     producer_lfrs: &[LogicalFunctionRunId],
     exclude_consumers: &[LogicalFunctionRunId],
+    reach: Reach,
 ) -> SelectStatement {
     let consumer = (
         LogicalFunctionRunInputDBIden::Table,
@@ -149,6 +160,28 @@ pub(crate) fn downstream_one_hop_query(
         stmt.and_where(
             Expr::col(consumer).is_not_in(exclude_consumers.iter().map(SeaValue::as_sea_expr)),
         );
+    }
+    if reach == Reach::Commit {
+        let gated = (Gated, LogicalFunctionRunDBIden::Id);
+        let mut waiting = gates();
+        waiting
+            .distinct()
+            .column(gated)
+            .and_where(
+                Expr::col((Gate, LogicalFunctionRunDBIden::Id))
+                    .is_in(producer_lfrs.iter().map(SeaValue::as_sea_expr)),
+            )
+            .and_where(Expr::col((Gated, LogicalFunctionRunDBIden::Status)).is_in([
+                LogicalFunctionRunStatus::Scheduled.as_sea_expr(),
+                LogicalFunctionRunStatus::ReScheduled.as_sea_expr(),
+                LogicalFunctionRunStatus::OnHold.as_sea_expr(),
+            ]));
+        if !exclude_consumers.is_empty() {
+            waiting.and_where(
+                Expr::col(gated).is_not_in(exclude_consumers.iter().map(SeaValue::as_sea_expr)),
+            );
+        }
+        stmt.union(UnionType::Distinct, waiting);
     }
     stmt.take()
 }
@@ -187,6 +220,19 @@ pub(crate) fn blocked_ids_query(execution_id: &ExecutionId) -> SelectStatement {
             LogicalFunctionRunStatus::OnHold,
         ]),
     );
+    let mut gated = gates();
+    gated
+        .column((Gated, LogicalFunctionRunDBIden::Id))
+        .and_where(
+            Expr::col((Gated, LogicalFunctionRunDBIden::ExecutionId))
+                .eq(execution_id.as_sea_expr()),
+        )
+        .and_where(gate_blocks());
+    let blocked = Expr::exists(chain).or(Expr::col((
+        LogicalFunctionRunDBIden::Table,
+        LogicalFunctionRunDBIden::Id,
+    ))
+    .in_subquery(gated));
     Query::select()
         .distinct()
         .column(LogicalFunctionRunDBIden::Id)
@@ -198,7 +244,7 @@ pub(crate) fn blocked_ids_query(execution_id: &ExecutionId) -> SelectStatement {
             ))
             .eq(execution_id.as_sea_expr()),
         )
-        .and_where(Expr::exists(chain))
+        .and_where(blocked)
         .take()
 }
 
@@ -362,6 +408,24 @@ pub(crate) fn fetch_ids_to_commit_query(execution_ids: &[ExecutionId]) -> WithQu
         .with(with_clause)
 }
 
+/// The run's function is a subscriber. What a subscriber writes leaves
+/// Tabsdata and no failure takes it back, so it starts only on inputs its
+/// transaction can commit on: every other transaction it reads from has
+/// committed.
+fn is_subscriber_run() -> SelectStatement {
+    Query::select()
+        .expr(Expr::val(1))
+        .from(FunctionDBIden::Table)
+        .and_where(
+            Expr::col((FunctionDBIden::Table, FunctionDBIden::Id)).equals((
+                LogicalFunctionRunDBIden::Table,
+                LogicalFunctionRunDBIden::FunctionVersionId,
+            )),
+        )
+        .and_where(is_subscriber(FunctionDBIden::Table))
+        .take()
+}
+
 /// Patch-agnostic: patch resolution happens at mint time, not here.
 /// The run's current attempt is still in flight. The database refuses to
 /// open a new attempt over it, so such a run is left for its attempt to end
@@ -401,7 +465,9 @@ fn attempt_in_flight() -> SelectStatement {
 pub(crate) fn fetch_lfrs_to_execute_query(at: &AtTime, limit: u64) -> SelectStatement {
     let pending_input = correlated_chain(
         build_chain(Visibility::At(at)),
-        unmaterialized().or(not_done_or_committed()),
+        unmaterialized()
+            .or(not_done_or_committed())
+            .or(blocks_commit().and(Expr::exists(is_subscriber_run()))),
     );
     let mut query = Query::select()
         .expr(Expr::col((LogicalFunctionRunDBIden::Table, Asterisk)))
@@ -612,7 +678,7 @@ mod tests {
         let sql = fetch_lfrs_to_execute_query(&at(), 50).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "logical_function_runs".* FROM "logical_function_runs" WHERE "logical_function_runs"."status" IN ('S', 'RS') AND (NOT EXISTS(SELECT "logical_function_run_inputs"."id" FROM "logical_function_run_inputs" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" LEFT JOIN LATERAL (SELECT "id" FROM "physical_table_data_versions" WHERE "physical_table_data_versions"."logical_table_data_version_id" = "logical_table_data_versions"."id" AND ("physical_table_data_versions"."valid_from" <= '2023-11-14 22:13:20.000000 +00:00' AND "physical_table_data_versions"."valid_to" > '2023-11-14 22:13:20.000000 +00:00') LIMIT 1 OFFSET 0) AS "current_ptdv" ON TRUE LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE ("logical_table_data_versions"."producer_logical_function_run_id" IS NULL OR "logical_table_data_versions"."producer_logical_function_run_id" <> "logical_function_run_inputs"."logical_function_run_id") AND "logical_function_run_inputs"."logical_function_run_id" = "logical_function_runs"."id" AND ("current_ptdv"."id" IS NULL OR ("producer_lfr"."id" IS NOT NULL AND "producer_lfr"."status" NOT IN ('D', 'C'))))) AND (NOT EXISTS(SELECT 1 FROM "physical_function_runs" WHERE "physical_function_runs"."logical_function_run_id" = "logical_function_runs"."id" AND "physical_function_runs"."valid_to" = ('infinity'::timestamptz) AND "physical_function_runs"."status" IN ('RR', 'DP', 'R'))) ORDER BY "logical_function_runs"."triggered_on" ASC LIMIT 50 FOR UPDATE OF "logical_function_runs" SKIP LOCKED"#
+            r#"SELECT "logical_function_runs".* FROM "logical_function_runs" WHERE "logical_function_runs"."status" IN ('S', 'RS') AND (NOT EXISTS(SELECT "logical_function_run_inputs"."id" FROM "logical_function_run_inputs" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" LEFT JOIN LATERAL (SELECT "id" FROM "physical_table_data_versions" WHERE "physical_table_data_versions"."logical_table_data_version_id" = "logical_table_data_versions"."id" AND ("physical_table_data_versions"."valid_from" <= '2023-11-14 22:13:20.000000 +00:00' AND "physical_table_data_versions"."valid_to" > '2023-11-14 22:13:20.000000 +00:00') LIMIT 1 OFFSET 0) AS "current_ptdv" ON TRUE LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE ("logical_table_data_versions"."producer_logical_function_run_id" IS NULL OR "logical_table_data_versions"."producer_logical_function_run_id" <> "logical_function_run_inputs"."logical_function_run_id") AND "logical_function_run_inputs"."logical_function_run_id" = "logical_function_runs"."id" AND ("current_ptdv"."id" IS NULL OR ("producer_lfr"."id" IS NOT NULL AND "producer_lfr"."status" NOT IN ('D', 'C')) OR ("producer_lfr"."id" IS NOT NULL AND "producer_lfr"."status" <> 'C' AND (NOT ("producer_lfr"."status" = 'D' AND "producer_lfr"."transaction_id" = "logical_function_runs"."transaction_id")) AND EXISTS(SELECT 1 FROM "functions" WHERE "functions"."id" = "logical_function_runs"."function_version_id" AND "functions"."decorator" = 'S'))))) AND (NOT EXISTS(SELECT 1 FROM "physical_function_runs" WHERE "physical_function_runs"."logical_function_run_id" = "logical_function_runs"."id" AND "physical_function_runs"."valid_to" = ('infinity'::timestamptz) AND "physical_function_runs"."status" IN ('RR', 'DP', 'R'))) ORDER BY "logical_function_runs"."triggered_on" ASC LIMIT 50 FOR UPDATE OF "logical_function_runs" SKIP LOCKED"#
         );
     }
 
@@ -622,7 +688,7 @@ mod tests {
         let sql = blocked_ids_query(&eid).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT DISTINCT "id" FROM "logical_function_runs" WHERE "logical_function_runs"."execution_id" = 202601010000000001 AND EXISTS(SELECT "logical_function_run_inputs"."id" FROM "logical_function_run_inputs" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE ("logical_table_data_versions"."producer_logical_function_run_id" IS NULL OR "logical_table_data_versions"."producer_logical_function_run_id" <> "logical_function_run_inputs"."logical_function_run_id") AND "logical_function_run_inputs"."logical_function_run_id" = "logical_function_runs"."id" AND ("producer_lfr"."id" IS NOT NULL AND "producer_lfr"."status" IN ('F', 'H')))"#
+            r#"SELECT DISTINCT "id" FROM "logical_function_runs" WHERE "logical_function_runs"."execution_id" = 202601010000000001 AND (EXISTS(SELECT "logical_function_run_inputs"."id" FROM "logical_function_run_inputs" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE ("logical_table_data_versions"."producer_logical_function_run_id" IS NULL OR "logical_table_data_versions"."producer_logical_function_run_id" <> "logical_function_run_inputs"."logical_function_run_id") AND "logical_function_run_inputs"."logical_function_run_id" = "logical_function_runs"."id" AND ("producer_lfr"."id" IS NOT NULL AND "producer_lfr"."status" IN ('F', 'H'))) OR "logical_function_runs"."id" IN (SELECT "gated"."id" FROM "logical_function_runs" AS "gated" INNER JOIN "functions" AS "gated_function" ON "gated_function"."id" = "gated"."function_version_id" AND "gated_function"."decorator" = 'S' INNER JOIN "logical_function_run_inputs" ON "logical_function_run_inputs"."logical_function_run_id" = "gated"."id" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" INNER JOIN "logical_function_runs" AS "gate_producer" ON "gate_producer"."id" = "logical_table_data_versions"."producer_logical_function_run_id" AND "gate_producer"."transaction_id" <> "gated"."transaction_id" INNER JOIN "logical_function_runs" AS "gate" ON "gate"."transaction_id" = "gate_producer"."transaction_id" WHERE "gated"."execution_id" = 202601010000000001 AND "gate"."status" IN ('F', 'H')))"#
         );
     }
 
@@ -644,7 +710,8 @@ mod tests {
     #[test]
     fn test_downstream_one_hop_query() {
         let exclude = vec![LogicalFunctionRunId::try_from("fr20260101-0000000002").unwrap()];
-        let sql = downstream_one_hop_query(&producers(), &exclude).to_string(PostgresQueryBuilder);
+        let sql = downstream_one_hop_query(&producers(), &exclude, Reach::Data)
+            .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
             r#"SELECT DISTINCT "logical_function_run_inputs"."logical_function_run_id" FROM "logical_function_run_inputs" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" WHERE "logical_table_data_versions"."producer_logical_function_run_id" IN (202601010000000001) AND "logical_function_run_inputs"."logical_function_run_id" <> "logical_table_data_versions"."producer_logical_function_run_id" AND "logical_function_run_inputs"."logical_function_run_id" NOT IN (202601010000000002)"#
@@ -652,8 +719,20 @@ mod tests {
     }
 
     #[test]
+    fn test_downstream_one_hop_query_reaching_the_commit() {
+        let exclude = vec![LogicalFunctionRunId::try_from("fr20260101-0000000002").unwrap()];
+        let sql = downstream_one_hop_query(&producers(), &exclude, Reach::Commit)
+            .to_string(PostgresQueryBuilder);
+        assert_eq!(
+            sql,
+            r#"SELECT DISTINCT "logical_function_run_inputs"."logical_function_run_id" FROM "logical_function_run_inputs" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" WHERE "logical_table_data_versions"."producer_logical_function_run_id" IN (202601010000000001) AND "logical_function_run_inputs"."logical_function_run_id" <> "logical_table_data_versions"."producer_logical_function_run_id" AND "logical_function_run_inputs"."logical_function_run_id" NOT IN (202601010000000002) UNION (SELECT DISTINCT "gated"."id" FROM "logical_function_runs" AS "gated" INNER JOIN "functions" AS "gated_function" ON "gated_function"."id" = "gated"."function_version_id" AND "gated_function"."decorator" = 'S' INNER JOIN "logical_function_run_inputs" ON "logical_function_run_inputs"."logical_function_run_id" = "gated"."id" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" INNER JOIN "logical_function_runs" AS "gate_producer" ON "gate_producer"."id" = "logical_table_data_versions"."producer_logical_function_run_id" AND "gate_producer"."transaction_id" <> "gated"."transaction_id" INNER JOIN "logical_function_runs" AS "gate" ON "gate"."transaction_id" = "gate_producer"."transaction_id" WHERE "gate"."id" IN (202601010000000001) AND "gated"."status" IN ('S', 'RS', 'H') AND "gated"."id" NOT IN (202601010000000002))"#
+        );
+    }
+
+    #[test]
     fn test_downstream_one_hop_query_without_exclusions() {
-        let sql = downstream_one_hop_query(&producers(), &[]).to_string(PostgresQueryBuilder);
+        let sql = downstream_one_hop_query(&producers(), &[], Reach::Data)
+            .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
             r#"SELECT DISTINCT "logical_function_run_inputs"."logical_function_run_id" FROM "logical_function_run_inputs" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" WHERE "logical_table_data_versions"."producer_logical_function_run_id" IN (202601010000000001) AND "logical_function_run_inputs"."logical_function_run_id" <> "logical_table_data_versions"."producer_logical_function_run_id""#

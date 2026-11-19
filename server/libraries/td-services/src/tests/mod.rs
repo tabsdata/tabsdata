@@ -42,6 +42,7 @@ mod scd2_writes;
 mod service_retry;
 mod sessions;
 mod status_transitions;
+mod subscriber_commit;
 mod table_delete;
 mod topology_versions;
 mod transaction_settlement;

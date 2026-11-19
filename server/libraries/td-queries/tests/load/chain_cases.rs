@@ -13,7 +13,7 @@ use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::crudl::ListParams;
 use td_objects::types::basic::AtTime;
-use td_queries::Queries;
+use td_queries::{Queries, Reach};
 
 use crate::harness::{record, seed};
 
@@ -118,7 +118,7 @@ async fn load_lfr_downstream_one_hop(db: TdPool) -> Result<(), TdError> {
     let t = Instant::now();
     let rows = db
         .logical_runs()
-        .downstream_one_hop(&h.producer_lfrs, &[])
+        .downstream_one_hop(&h.producer_lfrs, &[], Reach::Commit)
         .await?;
     record("lfr::downstream_one_hop", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty(), "producers have downstream consumers");

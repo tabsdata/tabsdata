@@ -49,8 +49,8 @@ use td_objects::types::basic::{
     VersionPos,
 };
 use td_objects::types::visible_projects::VisibleProjects;
-use td_queries::Queries;
 use td_queries::test_utils::{begin_locked, derive_metrics_facts, topology_write};
+use td_queries::{Queries, Reach};
 
 type Ptdv = PhysicalTableDataVersionDB;
 
@@ -206,7 +206,7 @@ async fn time_chain_queries(
         out,
         "lfr::downstream_one_hop",
         (db).logical_runs()
-            .downstream_one_hop(&h.producer_lfrs, &[])
+            .downstream_one_hop(&h.producer_lfrs, &[], Reach::Commit)
             .await?
     );
     let _ = timed!(
