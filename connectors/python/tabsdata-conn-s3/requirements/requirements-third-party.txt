@@ -2,7 +2,4 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-boto3==1.43.123
-fastavro==1.13.1
 polars==2.1.0
-pyarrow==26.0.0

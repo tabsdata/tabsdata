@@ -2,7 +2,4 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-azure-storage-blob==12.31.1
-fastavro==1.13.1
 polars==2.1.0
-pyarrow==26.0.0
