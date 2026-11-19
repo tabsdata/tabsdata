@@ -40,6 +40,11 @@ def check(store: FileStore) -> None:
     assert sorted(file.name for file in listed) == ["a.csv", "b c.csv", "café.csv"]
     assert all(file.last_modified.tzinfo is not None for file in listed)
     assert [file.name for file in store.listed("sub")] == ["d.csv"]
+    assert sorted(found["path"] for found in store.walk()) == sorted(NAMES)
+    assert [(found["path"], found["size"]) for found in store.walk("sub")] == [
+        ("sub/d.csv", len(content("sub/d.csv")))
+    ]
+    assert list(store.walk("su")) == []
     for name in NAMES:
         stream = store.open(name)
         assert stream.read(3) + stream.read() == content(name)
@@ -137,8 +142,7 @@ def test_listed_times_are_instants(tmp_path):
 def ranged_reads(store: FileStore) -> None:
     data = bytes(range(256)) * 40
     obstore.put(store.store(), "r.bin", data)
-    ranged = store.ranged("r.bin")
-    ranged.block = 1000
+    ranged = store.ranged("r.bin", 1000)
     assert ranged.read(10) == data[:10]
     assert ranged.seek(-5, io.SEEK_END) == len(data) - 5
     assert ranged.read() == data[-5:]

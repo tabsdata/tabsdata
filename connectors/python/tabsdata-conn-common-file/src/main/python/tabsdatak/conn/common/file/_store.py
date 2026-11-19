@@ -13,7 +13,7 @@ import polars as pl
 from obstore.store import ObjectStore
 
 from tabsdatak.common._storage.frames import FrameLocator
-from tabsdatak.common._storage.ranged import Ranged
+from tabsdatak.common._storage.ranged import RANGE_BLOCK, Ranged
 from tabsdatak.common._storage.transfer import (
     FALSE,
     OBJECT_STORES,
@@ -89,11 +89,15 @@ class FileStore:
             for item in listing["objects"]
         ]
 
+    def walk(self, directory: str = "") -> Iterator[Mapping[str, Any]]:
+        for chunk in obstore.list(self.store(), prefix=directory or None):
+            yield from chunk
+
     def open(self, path: str) -> Stream:
         return Stream(StorageLocation(self.uri(path), self.options).chunks())
 
-    def ranged(self, path: str) -> Ranged:
-        return Ranged(StorageLocation(self.uri(path), self.options))
+    def ranged(self, path: str, block: int = RANGE_BLOCK) -> Ranged:
+        return Ranged(StorageLocation(self.uri(path), self.options), block)
 
     def open_writer(self, key: str) -> IO[bytes]:
         return cast(IO[bytes], obstore.open_writer(self.store(), key))
