@@ -27,7 +27,6 @@ from tabsdatak.conn.common.file.constants import FILE_META_PATH
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import AwsAccessSecretKey
 from tabsdatak.conn.s3 import S3Dest, S3DestConn, S3Src, S3SrcConn
-from tabsdatak.conn.s3._explorer import S3ConnectionExplorer
 
 pytestmark = pytest.mark.s3
 
@@ -136,6 +135,43 @@ def test_src_plugin_reads_s3local_objects_lazily_naming_their_uri(
         store.delete(["in/a.parquet", "in/b.parquet"])
 
 
+def test_the_explorer_explores_the_store_the_plugin_reads():
+    conn = _src_conn(
+        base_path="/landing",
+        conn_cfg={"obstore.endpoint": "http://127.0.0.1:9000"},
+    )
+    assert plugin.S3ConnectionExplorer().store(conn) == plugin.file_store(conn)
+
+
+@s3local_domain("s3local")
+def test_the_explorer_reaches_the_endpoint_the_connection_names(
+    domain_s3local: S3LocalDomain,
+):
+    options = dict(domain_s3local.storage_options)
+    root = f"{domain_s3local.uri.rstrip('/')}/explorer-{uuid.uuid4().hex}"
+    store = FileStore(root, options)
+    obstore.put(store.store(), "in/returns.csv", b"id,total\n1,2.5\n2,3.5\n")
+    conn = S3SrcConn(
+        bucket=domain_s3local.bucket,
+        region=domain_s3local.region,
+        credentials=AwsAccessSecretKey(
+            access_key_id=Secret(domain_s3local.access_key),
+            secret_access_key=Secret(domain_s3local.secret_key),
+        ),
+        base_path=root.removeprefix(f"s3://{domain_s3local.bucket}"),
+        conn_cfg={f"obstore.{key}": value for key, value in options.items()},
+    )
+    explorer = plugin.S3ConnectionExplorer()
+    try:
+        assert explorer.check_connect(conn) is None
+        (entity,) = explorer.metadata(conn)
+        assert entity.fqn() == f"{root}/in/returns.csv"
+        assert entity.field_names() == ["id", "total"]
+        assert explorer.data(conn, entity, limit=1) == [{"id": "1", "total": "2.5"}]
+    finally:
+        store.delete(["in/returns.csv"])
+
+
 def test_dest_plugin_writes_through_the_connection_store(monkeypatch, tmp_path):
     captured: dict = {}
     monkeypatch.setattr(
@@ -181,7 +217,7 @@ def test_s3_src_def_wires_plugin_and_explorer():
     assert plugin.S3_SRC.conn is S3SrcConn
     assert plugin.S3_SRC.src is S3Src
     assert plugin.S3_SRC.plugin is plugin.S3SrcPlugin
-    assert plugin.S3_SRC.explorer is S3ConnectionExplorer
+    assert plugin.S3_SRC.explorer is plugin.S3ConnectionExplorer
     assert plugin.S3_SRC.type_ == "s3-file-in"
 
 
@@ -189,7 +225,7 @@ def test_s3_dest_def_wires_plugin_and_explorer():
     assert plugin.S3_DEST.conn is S3DestConn
     assert plugin.S3_DEST.dest is S3Dest
     assert plugin.S3_DEST.plugin is plugin.S3DestPlugin
-    assert plugin.S3_DEST.explorer is S3ConnectionExplorer
+    assert plugin.S3_DEST.explorer is plugin.S3ConnectionExplorer
     assert plugin.S3_DEST.type_ == "s3-file-out"
 
 

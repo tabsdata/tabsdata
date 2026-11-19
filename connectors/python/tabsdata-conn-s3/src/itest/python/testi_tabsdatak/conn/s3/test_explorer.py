@@ -15,7 +15,7 @@ from testi_tabsdatak.conn.s3.backend import credentials, src_conn
 
 from tabsdatak.conn.common.file._explorer import FileStorageEntity
 from tabsdatak.conn.s3 import S3SrcConn
-from tabsdatak.conn.s3._explorer import S3ConnectionExplorer
+from tabsdatak.conn.s3._plugin import S3ConnectionExplorer
 
 pytestmark = pytest.mark.s3
 

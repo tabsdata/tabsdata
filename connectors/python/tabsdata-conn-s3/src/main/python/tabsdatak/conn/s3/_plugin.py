@@ -15,11 +15,11 @@ from tabsdatak.common._storage.transfer import (
 )
 from tabsdatak.conn.common.file import _plugin, _source, _target
 from tabsdatak.conn.common.file._store import FileStore, forwarded
+from tabsdatak.conn.common.file._store_explorer import FileStoreExplorer
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.s3 import S3Dest, S3DestConn, S3Src, S3SrcConn
-from tabsdatak.conn.s3._explorer import S3ConnectionExplorer
 from tabsdatak.conn.s3.error import S3ErrorCode
 from tabsdatak.error import ApiException
 from tabsdatak.spi import (
@@ -53,6 +53,16 @@ def file_store(conn: _AnyS3Conn) -> FileStore:
     except ApiException as e:
         raise ERRORS.cred_resolution.exception(cause=e, reason=str(e))
     return FileStore(root, {**credentials, **forwarded(root, conn.conn_cfg)})
+
+
+# --- Explorer -----------------------------------------------------
+
+
+class S3ConnectionExplorer(FileStoreExplorer[_AnyS3Conn]):
+    """Verify connectivity to an S3 bucket and preview its objects."""
+
+    def store(self, conn: _AnyS3Conn) -> FileStore:
+        return file_store(conn)
 
 
 # --- Error-code bundle --------------------------------------------
