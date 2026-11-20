@@ -57,7 +57,9 @@ def build_snapshot_diff_cdc_bronze(
 
     # Derive value columns from the latest snapshot (skip PK + tabsdata system cols).
     value_cols = [
-        c for c in head.columns if c not in pk_cols and not c.startswith("$td.")
+        c
+        for c in head.columns
+        if c not in pk_cols and not c.startswith(("$td.", "@td."))
     ]
     last_schema = head.schema
     all_dtypes = {**pk_schema, **{c: last_schema[c] for c in value_cols}}
@@ -85,6 +87,8 @@ def build_snapshot_diff_cdc_bronze(
         return concat([erase, seed], how="diagonal_relaxed")
 
     # Incremental: diff prev vs. head → synthetic I/U/D.
+    head = head.select(pk_cols + value_cols)
+    prev = prev.select(pk_cols + value_cols)
     inserts = head.join(prev, on=pk_cols, how="anti").with_columns(
         lit(OP_INSERT).alias(MEDALLION_SYSTEM_COLUMN_OP)
     )

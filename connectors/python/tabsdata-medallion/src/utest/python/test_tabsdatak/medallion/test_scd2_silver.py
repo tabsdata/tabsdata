@@ -286,11 +286,16 @@ def test_empty_bronze_frames_treated_as_empty():
     assert expired_rows[0]["name"] == "Bob@v0"
 
 
-def test_empty_bronze_with_no_valid_head_raises():
-    """Both bronze and valid_head empty → ValueError. The helper has
-    no schema reference to fall back on, regardless of expired_head."""
-    with pytest.raises(ValueError, match="bronze input is empty"):
-        call([], valid_head=None, expired_head=None)
+@pytest.mark.parametrize("bronze", ["none", "empty_frame"])
+def test_empty_bronze_with_no_valid_head_returns_none(bronze):
+    """No bronze rows before the first silver state → (None, None): the
+    source had no rows yet, so silver has no data yet either."""
+    commits = (
+        []
+        if bronze == "none"
+        else [make_bronze_batch([("t1", 99, "ghost", OP_INSERT, TS_1)]).clear()]
+    )
+    assert call(commits, valid_head=None, expired_head=None) == (None, None)
 
 
 # ── Intra-batch transitions ──────────────────────────────────────────────────

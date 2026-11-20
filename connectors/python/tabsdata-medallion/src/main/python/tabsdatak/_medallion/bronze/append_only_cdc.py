@@ -14,8 +14,9 @@ from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_PK,
     MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
 )
+from tabsdatak._medallion.landed import landed
 from tabsdatak.tableframe import TableFrame
-from tabsdatak.tableframe.functions import col, concat, lit
+from tabsdatak.tableframe.functions import col, lit
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,8 @@ def build_append_only_cdc_bronze(
     new: list[TableFrame],
     pk: list[dict],
     event_ts_col: str,
-) -> TableFrame:
+    head: TableFrame | None = None,
+) -> TableFrame | None:
     """
     Generate synthetic I-only CDC bronze layer by treating every new arrival as an
     insert.
@@ -36,17 +38,19 @@ def build_append_only_cdc_bronze(
                 [{"tenant_id": td.String}, {"entity_id": td.Int64}]
         event_ts_col: name of the timestamp column in `new` that indicates the event
             time.
+        head: the table of `new` read at ``@HEAD``, None before it has data.
     Returns:
         A TableFrame with synthetic I-only CDC events representing the new arrivals.
+        When no version came, no rows with the bronze columns, and None while
+        there is no `head`.
     """
     pk_schema: dict[str, type] = {
         name: dtype for entry in pk for name, dtype in entry.items()
     }
     pk_cols = list(pk_schema.keys())
-    raw = concat(new, how="diagonal_relaxed") if new else None
-
+    raw = landed(new, head)
     if raw is None:
-        logger.debug("No new data; returning None")
+        logger.debug("No new data and no head; returning None")
         return None
 
     # Validate event_ts_col references a Datetime column.

@@ -198,10 +198,15 @@ def test_empty_bronze_frames_treated_as_empty():
     assert rows[0]["name"] == "Alice"
 
 
-def test_empty_bronze_with_no_scd1_head_raises():
-    """Both inputs empty → ValueError. No schema to return."""
-    with pytest.raises(ValueError, match="bronze input is empty"):
-        call([], scd1_head=None)
+@pytest.mark.parametrize("bronze", ["none", "empty_frame"])
+def test_empty_bronze_with_no_scd1_head_returns_none(bronze):
+    """No bronze rows before the first scd1 state → None."""
+    commits = (
+        []
+        if bronze == "none"
+        else [make_bronze_batch([("t1", 99, "ghost", OP_INSERT, TS_1)]).clear()]
+    )
+    assert call(commits, scd1_head=None) is None
 
 
 # ── Intra-batch op collapse ──────────────────────────────────────────────────

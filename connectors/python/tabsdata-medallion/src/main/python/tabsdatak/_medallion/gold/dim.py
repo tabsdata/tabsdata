@@ -122,14 +122,18 @@ def build_type2_dim(
     Type 2 gold history dimension — full version history for Entity /
     Hierarchy data, rebuilt each fire from three DISJOINT branches:
 
-      1. prior-expired — already-closed versions from
-         ``dim_<entity>_history@HEAD`` (``valid_to IS NOT NULL``). Passthrough;
-         they already carry ``version_sk`` + ``valid_from`` / ``valid_to``.
-      2. newly-expired — versions closed THIS cycle, from
-         ``_expired_silver@NEW``. Get ``version_sk`` added.
+      1. prior-expired — already-closed versions from ``history_head``
+         (``valid_to IS NOT NULL``). Passthrough; they already carry
+         ``version_sk`` + ``valid_from`` / ``valid_to``.
+      2. expired — the closed versions in ``expired_new``. Get
+         ``version_sk`` added.
       3. current-valid — the open version per entity, from
          ``_valid_silver@HEAD``. Replaces the prior open rows (which is why
          branch 1 keeps ONLY closed rows). ``valid_to`` stays null.
+
+    ``_expired_silver`` holds the whole closed history in every version,
+    so pass ``history_head=None`` and ``expired_new=[_expired_silver@HEAD]``;
+    with ``history_head`` set, those closed versions would come twice.
 
     ``version_sk = hash(<natural_key>, valid_from)`` is stable across the
     current-valid → newly-expired transition (``valid_from`` doesn't change
@@ -139,9 +143,9 @@ def build_type2_dim(
     The output is a full replace of ``dim_<entity>_history``.
 
     Args:
-        history_head: prior history dimension (``dim_<entity>_history@HEAD``).
-            None on the first-ever fire.
-        expired_new: newly-closed versions (``_expired_silver@NEW`` commits).
+        history_head: prior history dimension; None when ``expired_new``
+            holds the whole closed history.
+        expired_new: closed versions (``[_expired_silver@HEAD]``).
         valid_head: current open versions (``_valid_silver@HEAD``).
 
     Returns:

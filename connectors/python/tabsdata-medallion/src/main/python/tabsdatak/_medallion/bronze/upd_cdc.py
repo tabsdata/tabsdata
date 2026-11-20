@@ -20,6 +20,7 @@ from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_PK,
     MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
 )
+from tabsdatak._medallion.landed import landed
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col, concat, lit
 
@@ -87,7 +88,8 @@ def build_upd_cdc_bronze(
         A TableFrame of synthetic CDC events stamped with the bronze
         metadata columns ``@td.medallion.op`` / ``@td.medallion.source_ts`` /
         ``@td.medallion.bronze_ts``
-        / ``@td.medallion.pk``.
+        / ``@td.medallion.pk``. When no version came, no rows with the columns
+        of ``prior_bronze``, and None while there is none.
     """
     pk_schema: dict[str, type] = {
         name: dtype for entry in pk for name, dtype in entry.items()
@@ -160,14 +162,10 @@ def build_upd_cdc_bronze(
 
         return concat([erase, seed, classified_upd], how="diagonal_relaxed")
 
-    # Drop absent commits (``None`` entries) and short-circuit when the
-    # update stream had nothing this fire — concat has no frame to build.
-    upd_frames = [frame for frame in (upd_commits or []) if frame is not None]
-    upd_concat = concat(upd_frames, how="diagonal_relaxed") if upd_frames else None
-
+    upd_concat = landed(upd_commits)
     if upd_concat is None:
-        logger.info("No update data available; returning None")
-        return None
+        logger.info("No update data available")
+        return None if prior_bronze is None else prior_bronze.clear()
     # Incremental: classify each upd row against the prior bronze state.
     upd = _to_utc_datetime(upd_concat, updated_ts_col)
 

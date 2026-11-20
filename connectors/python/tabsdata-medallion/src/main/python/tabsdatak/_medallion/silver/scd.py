@@ -38,7 +38,7 @@ def build_scd2_silver(
     bronze: list[TableFrame],
     valid_head: TableFrame | None,
     expired_head: TableFrame | None,
-) -> tuple[TableFrame, TableFrame]:
+) -> tuple[TableFrame | None, TableFrame | None]:
     """
     SCD2 change-detect for the silver layer.
 
@@ -52,8 +52,8 @@ def build_scd2_silver(
 
     The helper is called by a stage-1 silver transformer that writes
     ``_valid_raw`` in REPLACE mode (the helper emits the full new
-    state) and ``_expired_raw`` in APPEND mode (only newly-closed
-    rows).
+    state) and ``_expired_raw`` in REPLACE mode (the whole closed
+    history).
 
     The PK column list is read from the bronze rows' ``@td.medallion.pk`` column
     (stamped by the bronze helpers) — no ``pk`` arg needed.
@@ -95,7 +95,11 @@ def build_scd2_silver(
     Returns:
         Tuple of (new_valid_state, new_expired_rows):
           - new_valid_state: full new ``_valid_raw`` state (REPLACE).
-          - new_expired_rows: newly-closed versions (APPEND).
+          - new_expired_rows: full new ``_expired_raw`` state, the closed
+            history of ``expired_head`` plus the versions closed this fire
+            (REPLACE).
+        With no new bronze rows, both heads unchanged, None before the
+        first fire that had some.
     """
     logger.debug(f"bronze length: {len(bronze)}")
     # Drop absent commits (``None`` entries); an empty batch yields no
@@ -104,14 +108,8 @@ def build_scd2_silver(
     incoming = concat(frames, how="diagonal_relaxed") if frames else None
 
     # No new bronze rows this fire → there's nothing to fold. Return the
-    # prior state unchanged. An empty valid_head is legitimate (a reset
-    # emptied the table); only a missing one leaves nothing to return.
+    # prior state unchanged, None before the first one.
     if incoming is None or _is_empty(incoming):
-        if valid_head is None:
-            raise ValueError(
-                "build_scd2_silver: bronze input is empty and valid_head is "
-                "None — nothing to process."
-            )
         return valid_head, expired_head
 
     incoming = _in_arrival_order(incoming)
@@ -213,7 +211,7 @@ def build_scd2_silver(
 def build_scd1_silver(
     bronze: list[TableFrame],
     scd1_head: TableFrame | None,
-) -> TableFrame:
+) -> TableFrame | None:
     """
     SCD1 change-detect for the silver layer (reference data).
 
@@ -242,20 +240,15 @@ def build_scd1_silver(
             first-ever silver fire.
 
     Returns:
-        Full new ``_scd1_raw`` state (REPLACE).
+        Full new ``_scd1_raw`` state (REPLACE); with no new bronze rows,
+        ``scd1_head`` unchanged, None before the first fire that had some.
     """
     frames = [frame for frame in (bronze or []) if frame is not None]
     incoming = concat(frames, how="diagonal_relaxed") if frames else None
 
     # No new bronze rows this fire → return the prior scd1 state
-    # unchanged. An empty scd1_head is legitimate (a reset emptied the
-    # table); only a missing one leaves nothing to return.
+    # unchanged, None before the first one.
     if incoming is None or _is_empty(incoming):
-        if scd1_head is None:
-            raise ValueError(
-                "build_scd1_silver: bronze input is empty and scd1_head is "
-                "None — nothing to process."
-            )
         return scd1_head
 
     incoming = _in_arrival_order(incoming)
@@ -371,8 +364,8 @@ def build_scd2_silver_cleanse(
     caller's responsibility on top of the helper's output.
 
     Args:
-        valid_raw: ``_scd2_valid_raw@NEW`` commits.
-        expired_raw: ``_scd2_expired_raw@NEW`` commits.
+        valid_raw: ``_scd2_valid_raw@HEAD``, as a one-element list.
+        expired_raw: ``_scd2_expired_raw@HEAD``, as a one-element list.
 
     Returns:
         Tuple of (valid_cleaned, expired_cleaned).
@@ -395,7 +388,7 @@ def build_scd1_silver_cleanse(
     caller's responsibility on top of the helper's output.
 
     Args:
-        scd1_raw: ``_scd1_raw@NEW`` commits.
+        scd1_raw: ``_scd1_raw@HEAD``, as a one-element list.
 
     Returns:
         Cleansed SCD1 silver TableFrame.

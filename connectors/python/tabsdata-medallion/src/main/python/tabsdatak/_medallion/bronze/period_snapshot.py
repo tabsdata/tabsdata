@@ -11,8 +11,9 @@ from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_PK,
     MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
 )
+from tabsdatak._medallion.landed import landed
 from tabsdatak.tableframe import TableFrame
-from tabsdatak.tableframe.functions import col, concat, lit
+from tabsdatak.tableframe.functions import col, lit
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,8 @@ logger = logging.getLogger(__name__)
 def build_period_snapshot_bronze(
     new: list[TableFrame],
     pk: list[dict],
-) -> TableFrame:
+    head: TableFrame | None = None,
+) -> TableFrame | None:
     """
     Generate synthetic bronze layer by treating every new arrival as a full snapshot for
     a specific period.
@@ -30,21 +32,19 @@ def build_period_snapshot_bronze(
         pk: ordered list of single-key dicts mapping each primary-key column name to its
             tabsdata dtype. Example:
                 [{"tenant_id": td.String}, {"entity_id": td.Int64}]
+        head: the table of `new` read at ``@HEAD``, None before it has data.
     Returns:
         A TableFrame representing the new arrivals as full snapshots for a specific
-        period.
+        period. When no version came, no rows with the bronze columns, and None
+        while there is no `head`.
     """
     pk_schema: dict[str, type] = {
         name: dtype for entry in pk for name, dtype in entry.items()
     }
     pk_cols = list(pk_schema.keys())
-    # Drop absent commits (``None`` entries) and short-circuit when nothing
-    # landed this period — concat has no frame to build from.
-    frames = [frame for frame in (new or []) if frame is not None]
-    raw = concat(frames, how="diagonal_relaxed") if frames else None
-
+    raw = landed(new, head)
     if raw is None:
-        logger.debug("No new data; returning None")
+        logger.debug("No new data and no head; returning None")
         return None
 
     run_ts = datetime.now(tz=timezone.utc)

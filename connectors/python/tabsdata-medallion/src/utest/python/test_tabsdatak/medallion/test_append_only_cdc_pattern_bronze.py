@@ -402,3 +402,18 @@ def test_no_update_or_delete_ops():
     rows = to_rows(out)
     assert len(rows) == 3  # NO de-duplication on PK collisions either.
     assert {r[M_OP] for r in rows} == {OP_INSERT}
+
+
+def test_no_new_version_without_a_head_returns_none():
+    assert call([]) is None
+
+
+def test_no_new_version_with_a_head_returns_no_rows_with_the_bronze_columns():
+    """A `None` version would hand the readers of bronze at `@NEW` its
+    previous batch again."""
+    batch = make_event_batch([("t1", 1, TS_A, "a")])
+    out = build_append_only_cdc_bronze(
+        new=[], pk=PK, event_ts_col=EVENT_TS_COL, head=batch
+    )
+    assert to_rows(out) == []
+    assert user_cols(out) == user_cols(call([batch]))

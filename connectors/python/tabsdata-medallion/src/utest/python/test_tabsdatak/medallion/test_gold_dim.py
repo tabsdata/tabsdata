@@ -14,7 +14,7 @@ from tabsdatak._medallion.gold.dim import (
     build_type1_dim,
     build_type2_dim,
 )
-from tabsdatak._medallion.gold.fact import build_fact
+from tabsdatak._medallion.gold.fact import build_fact, build_fact_table
 from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_DATE_SK,
     MEDALLION_SYSTEM_COLUMN_ENTITY_SK,
@@ -505,3 +505,26 @@ def test_fact_empty_events_returns_none():
     """No new events → concat returns None → build_fact returns None."""
     hist = make_dim_version_history([("c1", JAN, None, 111)])
     assert build_fact([], [(hist, ["customer_id"], "customer_version_sk")]) is None
+
+
+def test_fact_table_without_new_events_is_none():
+    """No new events → None, so the fact table stays as it is."""
+    hist = make_dim_version_history([("c1", JAN, None, 111)])
+    head = build_fact(
+        [make_event_silver([(1, "c1", 10.0, FEB_15)])],
+        [(hist, ["customer_id"], "customer_version_sk")],
+    )
+    dims = [(hist, ["customer_id"], "customer_version_sk")]
+    assert build_fact_table([], dims, head) is None
+    assert build_fact_table([None], dims, None) is None
+
+
+def test_fact_table_adds_the_new_facts_to_the_previous_ones():
+    hist = make_dim_version_history([("c1", JAN, None, 111)])
+    dims = [(hist, ["customer_id"], "customer_version_sk")]
+    first = build_fact_table([make_event_silver([(1, "c1", 10.0, FEB_15)])], dims, None)
+    second = build_fact_table(
+        [make_event_silver([(2, "c1", 20.0, FEB_15)])], dims, first
+    )
+    assert sorted(row["order_id"] for row in to_rows(first)) == [1]
+    assert sorted(row["order_id"] for row in to_rows(second)) == [1, 2]

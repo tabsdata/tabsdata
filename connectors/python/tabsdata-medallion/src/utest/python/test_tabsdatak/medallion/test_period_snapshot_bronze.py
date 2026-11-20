@@ -379,6 +379,7 @@ def test_missing_period_column_raises():
         pytest.param([], id="empty_list"),
         pytest.param(None, id="none"),
         pytest.param([None, None], id="all_none_entries"),
+        pytest.param([TableFrame.empty()], id="columnless_entry"),
     ],
 )
 def test_no_new_data_returns_none(new):
@@ -387,3 +388,12 @@ def test_no_new_data_returns_none(new):
     helper short-circuits to `None` instead of building an output frame
     (the periodic transformer's "nothing fired this period" path)."""
     assert build_period_snapshot_bronze(new=new, pk=PK) is None
+
+
+def test_no_new_version_with_a_head_returns_no_rows_with_the_bronze_columns():
+    """A `None` version would hand the readers of bronze at `@NEW` its
+    previous period again."""
+    batch = make_period_batch([("t1", 1, "a")], PERIOD_A)
+    out = build_period_snapshot_bronze(new=[], pk=PK, head=batch)
+    assert to_rows(out) == []
+    assert user_cols(out) == user_cols(call([batch]))

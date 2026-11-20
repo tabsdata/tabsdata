@@ -7,14 +7,15 @@ from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_OP,
     MEDALLION_SYSTEM_COLUMN_PK,
 )
+from tabsdatak._medallion.landed import landed
 from tabsdatak.tableframe import TableFrame
-from tabsdatak.tableframe.functions import col, concat
+from tabsdatak.tableframe.functions import col
 
 
 def build_append_only_silver(
     bronze_new: list[TableFrame],
     silver_head: TableFrame | None,
-) -> TableFrame:
+) -> TableFrame | None:
     """
     Cleanse + dedup append-only bronze rows for the silver layer.
 
@@ -24,10 +25,10 @@ def build_append_only_silver(
     travel
     queries keep the source event time), dedups within the incoming
     batch on the composite PK, then anti-joins against the existing
-    silver state to drop any PK already written to silver. The
-    anti-join catches at-least-once cross-commit duplicates — the
-    same event landing in two bronze commits across two separate
-    silver fires.
+    silver version to drop any PK it holds. Each silver version holds
+    only its fire's new rows, so the anti-join catches a duplicate
+    only when it landed in the previous fire's bronze commits, not a
+    PK written to silver earlier.
 
     The PK column list is read off the bronze rows' ``@td.medallion.pk`` column
     (stamped by ``build_append_only_cdc_bronze`` from the bronze
@@ -55,15 +56,17 @@ def build_append_only_silver(
         ``@td.medallion.bronze_ts``),
         deduped within the batch, free of any PK already present in
         ``silver_head``. ``@td.medallion.source_ts`` and ``@td.medallion.pk`` are
-        preserved.
+        preserved. When no bronze version came, no rows with the columns of
+        ``silver_head``, and None while there is no ``silver_head``: a None
+        version would hand its ``@NEW`` readers the previous rows again.
     """
-    # Drop absent commits (``None`` entries) and short-circuit when
-    # nothing landed this fire — concat has no frame to build from.
-    frames = [frame for frame in (bronze_new or []) if frame is not None]
-    raw = concat(frames, how="diagonal_relaxed") if frames else None
-
+    raw = landed(bronze_new)
     if raw is None:
-        return None
+        return None if silver_head is None else silver_head.clear()
+
+    cleaned = raw.drop([MEDALLION_SYSTEM_COLUMN_OP, MEDALLION_SYSTEM_COLUMN_BRONZE_TS])
+    if raw.first()._to_polars_df().is_empty():
+        return cleaned
 
     # ``@td.medallion.pk`` is stamped by the bronze helper as a List[String]
     # column carrying the PK column names on every row. Read the
@@ -77,8 +80,6 @@ def build_append_only_silver(
         ._to_pandas()[MEDALLION_SYSTEM_COLUMN_PK]
         .iloc[0]
     )
-
-    cleaned = raw.drop([MEDALLION_SYSTEM_COLUMN_OP, MEDALLION_SYSTEM_COLUMN_BRONZE_TS])
 
     deduped = cleaned.unique(subset=pk_cols)
 

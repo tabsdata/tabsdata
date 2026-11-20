@@ -707,14 +707,25 @@ def test_incremental_value_columns_flow_through_with_prior_bronze():
         pytest.param([None, None], id="all_none_entries"),
     ],
 )
-@pytest.mark.parametrize("with_prior", [False, True], ids=["no_prior", "with_prior"])
-def test_incremental_no_update_data_returns_none(upd_commits, with_prior):
-    """Incremental branch with no update data → `None`. With `full_commits`
-    empty (so we're on the incremental path) and `upd_commits` that
-    concatenates to nothing — an empty list, `None`, or all-`None` entries —
-    `concat` yields `None` and the helper returns `None`. This early return
-    fires BEFORE the `prior_bronze` handling, so it returns `None` whether
-    or not a prior bronze exists (the 'nothing landed this fire' path)."""
-    prior_bronze = make_prior_bronze([("t1", 1, OP_INSERT)]) if with_prior else None
+def test_incremental_no_update_data_returns_none_before_bronze_has_data(upd_commits):
+    """Incremental branch with no update data and no prior bronze → `None`:
+    there are no columns to write."""
+    assert call(full_commits=[], upd_commits=upd_commits, prior_bronze=None) is None
+
+
+@pytest.mark.parametrize(
+    "upd_commits",
+    [
+        pytest.param([], id="empty_list"),
+        pytest.param(None, id="none"),
+        pytest.param([None, None], id="all_none_entries"),
+    ],
+)
+def test_incremental_no_update_data_returns_no_rows_with_a_prior_bronze(upd_commits):
+    """Incremental branch with no update data and a prior bronze → no rows
+    with its columns. A `None` version would hand the readers of bronze at
+    `@NEW` its previous batch again."""
+    prior_bronze = make_prior_bronze([("t1", 1, OP_INSERT)])
     out = call(full_commits=[], upd_commits=upd_commits, prior_bronze=prior_bronze)
-    assert out is None
+    assert to_rows(out) == []
+    assert user_cols(out) == user_cols(prior_bronze)

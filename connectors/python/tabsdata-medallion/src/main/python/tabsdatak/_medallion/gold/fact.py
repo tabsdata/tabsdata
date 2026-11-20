@@ -11,6 +11,7 @@ from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_VALID_TO,
     MEDALLION_SYSTEM_COLUMN_VERSION_SK,
 )
+from tabsdatak._medallion.landed import landed
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col, concat
 
@@ -119,8 +120,7 @@ def build_fact(
         The fact rows (``fct_<event>`` or ``fct_<entity>_<period>``), or None
         when there are no new rows.
     """
-    frames = [frame for frame in (events or []) if frame is not None]
-    fct = concat(frames, how="diagonal_relaxed") if frames else None
+    fct = landed(events)
     if fct is None:
         return None
 
@@ -147,3 +147,27 @@ def build_fact(
     )
 
     return fct.drop([MEDALLION_SYSTEM_COLUMN_PK])
+
+
+def build_fact_table(
+    events: list[TableFrame | None] | None,
+    dim_versions: list[tuple[TableFrame, list[str], str]],
+    fact_head: TableFrame | None,
+) -> TableFrame | None:
+    """
+    The whole fact table: the rows of ``fact_head`` (the fact table read at
+    ``@HEAD``, None before its first version) followed by the facts
+    ``build_fact`` makes from the new ``events``. A subscriber that replaces
+    its destination with the fact table then writes every fact, not only the
+    last batch.
+
+    Returns:
+        The fact table, or None when no new events landed: the table stays
+        as it is.
+    """
+    if landed(events) is None:
+        return None
+    new = build_fact(events, dim_versions)
+    if fact_head is None:
+        return new
+    return concat([fact_head, new], how="diagonal_relaxed")

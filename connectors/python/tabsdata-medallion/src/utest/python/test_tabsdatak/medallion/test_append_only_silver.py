@@ -421,13 +421,36 @@ def test_silver_head_with_extra_columns_doesnt_confuse_dedup():
         pytest.param([None, None], id="all_none_entries"),
     ],
 )
-@pytest.mark.parametrize("with_silver", [False, True], ids=["no_silver", "with_silver"])
-def test_no_bronze_data_returns_none(bronze_new, with_silver):
-    """No bronze data → `None`. When `bronze_new` concatenates to nothing —
-    an empty list, `None`, or all-`None` entries — `concat` yields `None`
-    and the helper returns `None`. This early return fires BEFORE
-    `silver_head` is consulted, so it returns `None` whether or not a prior
-    silver state exists (the 'nothing new to append this fire' path)."""
-    silver_head = make_silver_head([("t1", 1, "seen", TS_A)]) if with_silver else None
+def test_no_bronze_data_returns_none_before_the_first_silver_version(bronze_new):
+    """No bronze data and no silver yet → `None`: there are no columns to
+    write."""
+    assert call(bronze_new=bronze_new, silver_head=None) is None
+
+
+@pytest.mark.parametrize(
+    "bronze_new",
+    [
+        pytest.param([], id="empty_list"),
+        pytest.param(None, id="none"),
+        pytest.param([None, None], id="all_none_entries"),
+    ],
+)
+def test_no_bronze_data_returns_no_rows_once_silver_has_a_version(bronze_new):
+    """No bronze data with a silver version → no rows, with its columns. A
+    `None` version would hand the readers of silver at `@NEW` its previous
+    rows again."""
+    silver_head = make_silver_head([("t1", 1, "seen", TS_A)])
     out = call(bronze_new=bronze_new, silver_head=silver_head)
-    assert out is None
+    assert to_rows(out) == []
+    assert user_cols(out) == user_cols(silver_head)
+
+
+@pytest.mark.parametrize("with_silver", [False, True], ids=["no_silver", "with_silver"])
+def test_zero_row_bronze_returns_zero_rows_with_the_silver_columns(with_silver):
+    """A bronze version written with zero rows (a quiet run upstream) passes
+    as zero silver rows with the columns a fire with rows publishes."""
+    batch = make_bronze_batch([("t1", 1, "a", TS_A)])
+    silver_head = make_silver_head([("t1", 1, "seen", TS_A)]) if with_silver else None
+    out = call(bronze_new=[batch.clear()], silver_head=silver_head)
+    assert to_rows(out) == []
+    assert user_cols(out) == user_cols(call(bronze_new=[batch], silver_head=None))

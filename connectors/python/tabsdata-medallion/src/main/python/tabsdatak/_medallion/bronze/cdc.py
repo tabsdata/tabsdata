@@ -11,6 +11,7 @@ from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_PK,
     MEDALLION_SYSTEM_COLUMN_SOURCE_TS,
 )
+from tabsdatak._medallion.landed import landed
 from tabsdatak.conn.common.sql.cdc.constants import (
     CDC_DATA_COL_NEW_PREFIX,
     CDC_DATA_COL_OLD_PREFIX,
@@ -76,9 +77,7 @@ def build_cdc_bronze(
     }
     pk_cols = list(pk_schema.keys())
 
-    # @NEW yields a list of commit-tables. Concat the cdc side (an empty
-    # list has no frame to concat — treat it as the no-cdc fallback).
-    cdc = concat(cdc_commits, how="diagonal_relaxed") if cdc_commits else None
+    cdc = landed(cdc_commits)
     if cdc is None:
         cdc = TableFrame.empty(
             schema=Schema({

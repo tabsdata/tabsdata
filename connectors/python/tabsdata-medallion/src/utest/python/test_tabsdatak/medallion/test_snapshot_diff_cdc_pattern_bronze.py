@@ -8,7 +8,7 @@ import pytest
 
 import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
-from tabsdatak.tableframe.functions import col
+from tabsdatak.tableframe.functions import col, lit
 from tabsdatak._medallion.bronze.snapshot_diff_cdc import (
     OP_DELETE,
     OP_INSERT,
@@ -271,6 +271,21 @@ def test_incremental_updates_only():
     assert len(rows) == 1
     assert rows[0][M_OP] == OP_UPDATE
     assert rows[0]["name"] == "name-CHANGED"
+
+
+def test_incremental_ignores_file_metadata_columns():
+    def with_path(frame: TableFrame, path: str) -> TableFrame:
+        return frame.with_columns(lit(path).alias("@td.file.path"))
+
+    prev = with_path(make_snapshot([("t1", 1, "name-0", "active", 100.0)]), "a.csv")
+    head = with_path(make_snapshot([("t1", 1, "name-1", "active", 100.0)]), "b.csv")
+    out = call(prev=prev, head=head, new=make_new_nonempty())
+
+    rows = to_rows(out)
+    assert len(rows) == 1
+    assert rows[0][M_OP] == OP_UPDATE
+    assert rows[0]["name"] == "name-1"
+    assert "@td.file.path" not in out.columns
 
 
 def test_incremental_no_changes_emits_nothing():
