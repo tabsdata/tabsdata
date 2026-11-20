@@ -15,7 +15,6 @@ from tabsdatak.tableframe._core.hooks import polars_of, tableframe_of
 from tabsdatak.tableframe._engine.event.error import DirectConstructionError
 from tabsdatak.tableframe._engine.frame.frame import EngineFrame
 from tabsdatak.tableframe._engine.model.frame import TableFrameState
-from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 
 pytestmark = pytest.mark.tableframe
 
@@ -83,24 +82,6 @@ def test_clone_carries_a_cloned_state_forward():
     assert isinstance(derived, TableFrame)
     assert isinstance(derived._state, TableFrameState)
     assert derived._state is not frame._state
-
-
-def test_a_tableframe_is_known_by_default():
-    assert tableframe_of(pl.LazyFrame({"a": [1]})).schema_known
-    assert TableFrame({"a": [1]}, **_grant()).schema_known
-
-
-def test_a_tableframe_built_unknown_stays_unknown_through_operations():
-    frame = TableFrame._build(pl.LazyFrame(), CreationMode.TAB, schema_known=False)
-    assert not frame.schema_known
-    assert not frame.filter(pl.lit(True)).schema_known
-    assert not frame.with_columns(pl.lit(1).alias("a")).schema_known
-
-
-def test_schema_known_cannot_be_set():
-    frame = tableframe_of(pl.LazyFrame({"a": [1]}))
-    with pytest.raises(AttributeError):
-        frame.schema_known = False
 
 
 def test_operation_returns_a_tableframe():

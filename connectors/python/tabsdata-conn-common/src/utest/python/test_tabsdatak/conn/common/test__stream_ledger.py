@@ -72,8 +72,8 @@ def test_a_frame_is_staged_with_its_metadata(stage, monkeypatch):
         stage, "send", lambda tables: sent.append(tables) or send(tables)
     )
     ledger = StageLedger(ctx=stage, slots=["s.a"], schemas=KeptSchemas())
-    metadata = FrameMetadata(known=False)
-    ledger.stage("s.a", pl.LazyFrame(), metadata)
+    metadata = FrameMetadata(columns={"@topic": "orders"})
+    ledger.stage("s.a", pl.LazyFrame({"id": [1]}), metadata)
     assert [table.metadata for [tables] in sent for table in tables] == [metadata]
 
 

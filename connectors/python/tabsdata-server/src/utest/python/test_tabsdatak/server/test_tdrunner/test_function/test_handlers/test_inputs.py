@@ -24,7 +24,7 @@ from tabsdatak.server._tdrunner.function._handlers.inputs import (
     SingleSlotError,
 )
 from tabsdatak.server._tdrunner.function._handlers.landing import Landing
-from tabsdatak.spi import FrameMetadata, LazyFrameInput, TableMode
+from tabsdatak.spi import LazyFrameInput, TableMode
 from tabsdatak.tableframe import TableFrame
 from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payload
 
@@ -50,15 +50,12 @@ def slot_entry(files: list[str]) -> InputEntry:
     )
 
 
-def landed_entry(root: Path, chunks: list[list[int] | None]) -> InputEntry:
+def landed_entry(root: Path, chunks: list[list[int]]) -> InputEntry:
     landing = Landing(Location(uri=(root / "landing").as_uri(), env_prefix="ROOT"))
     records = []
     for index, values in enumerate(chunks):
-        if values is None:
-            table = LazyFrameInput(pl.LazyFrame(), FrameMetadata(known=False))
-        else:
-            table = LazyFrameInput(pl.LazyFrame({"id": values}))
-        records.append(landing.land(0, index, table).record())
+        landed = landing.land(0, index, LazyFrameInput(pl.LazyFrame({"id": values})))
+        records.append(landed.record())
     return InputEntry(name="in_1", table_pos=0, tables=tuple(records))
 
 
@@ -85,9 +82,8 @@ def test_scan_of_a_stored_location(tmp_path):
     record = InputRecord(
         location=Location(uri=parquet_path.as_uri(), env_prefix="ROOT")
     )
-    scanned = inputs().scan(record)
-    assert scanned.frame.collect()["name"].to_list() == ["a", "b", "c"]
-    assert scanned.known
+    frame = inputs().scan(record)
+    assert frame.collect()["name"].to_list() == ["a", "b", "c"]
 
 
 def test_scan_with_an_unusable_mount_raises_input_scan(monkeypatch):
@@ -217,35 +213,3 @@ def test_slot_of_a_missing_landed_file_raises_input_scan(tmp_path):
     )
     with pytest.raises(InputScanError):
         inputs(publisher=True).slot(entry, TableMode.SINGLE)
-
-
-# --- known --------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("mode", [TableMode.SINGLE, TableMode.ARRAY])
-def test_landed_inputs_are_known(tmp_path, mode):
-    output = inputs(publisher=True).slot(landed_entry(tmp_path, [[1]]), mode)
-    frame = output if mode is TableMode.SINGLE else output[0]
-    assert frame.schema_known
-
-
-@pytest.mark.parametrize("mode", [TableMode.SINGLE, TableMode.ARRAY])
-def test_a_landed_frame_of_unknown_columns_is_served_unknown(tmp_path, mode):
-    output = inputs(publisher=True).slot(landed_entry(tmp_path, [None]), mode)
-    frame = output if mode is TableMode.SINGLE else output[0]
-    assert not frame.schema_known
-    assert frame._to_polars_lf().collect().height == 0
-
-
-def test_an_array_slot_tells_each_frame_whether_it_is_known(tmp_path):
-    output = inputs(publisher=True).slot(
-        landed_entry(tmp_path, [[1], None]), TableMode.ARRAY
-    )
-    assert [frame.schema_known for frame in output] == [True, False]
-
-
-def test_stored_inputs_are_known(tmp_path):
-    parquet_path = tmp_path / "x.parquet"
-    write_sample_parquet(parquet_path)
-    output = inputs().slot(slot_entry([str(parquet_path)]), TableMode.SINGLE)
-    assert output.schema_known

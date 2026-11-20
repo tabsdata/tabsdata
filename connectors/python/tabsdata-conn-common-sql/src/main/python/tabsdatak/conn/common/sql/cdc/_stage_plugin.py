@@ -48,7 +48,6 @@ from tabsdatak.conn.common.sql.cdc._initial_load import INITIAL_LOAD_SEGMENT
 from tabsdatak.conn.common.sql.cdc.constants import CDC_META_ORD, CDC_META_SEG
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 from tabsdatak.spi import (
-    FrameMetadata,
     LazyFrameInput,
     SrcDef,
     SrcPluginCtx,
@@ -158,10 +157,6 @@ def _key_order(frames: list[pl.LazyFrame]) -> list[int] | None:
     return [position for _, _, position in spans] + empty
 
 
-def _known(table: LazyFrameInput) -> bool:
-    return not isinstance(table.metadata, FrameMetadata) or table.metadata.known
-
-
 class CdcStageSrc(StreamStageSrc):
     """Config type for the CDC stream-stage publisher binding."""
 
@@ -184,8 +179,7 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
         and de-duplicated on ``(seg, ord)``, and filtered against the
         per-slot ``(seg, ord)`` cursor in ``ctx`` (none stored -> no
         filtering), all lazily, as one table; the new high-water
-        ``(seg, ord)`` is persisted via ``ctx.set_attr``. A slot of an
-        empty table of unknown columns passes through as it is. Returns
+        ``(seg, ord)`` is persisted via ``ctx.set_attr``. Returns
         the per-slot tables to publish (see module docstring for the full
         contract).
 
@@ -201,9 +195,6 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
             tables = list(slot)
             if not tables:
                 raise SqlCdcErrorCode.CDC_32.exception(index=index)
-            if not any(_known(table) for table in tables):
-                results.append(tables)
-                continue
 
             lazy_frames = [table.frame for table in tables]
             try:

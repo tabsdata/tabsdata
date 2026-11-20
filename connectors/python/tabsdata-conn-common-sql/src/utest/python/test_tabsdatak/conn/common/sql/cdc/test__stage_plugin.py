@@ -34,7 +34,7 @@ from tabsdatak.conn.common.sql.cdc._stage_plugin import (
 )
 from tabsdatak.conn.common.sql.cdc.constants import CDC_META_ORD, CDC_META_SEG
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcException
-from tabsdatak.spi import FrameMetadata, LazyFrameInput
+from tabsdatak.spi import LazyFrameInput
 
 
 class FakeCtx:
@@ -211,16 +211,6 @@ def test_cursor_preserves_value_beyond_int64(tmp_path):
 def test_a_slot_without_tables_is_an_error(tmp_path):
     with pytest.raises(SqlCdcException, match="CDC_32"):
         CdcStageSrcPlugin().process_files(FakeCtx(tmp_path / "work"), [[]])
-
-
-def test_a_slot_of_an_unknown_table_passes_through_and_no_state(tmp_path):
-    ctx = FakeCtx(tmp_path / "work")
-    unknown = LazyFrameInput(pl.LazyFrame(), FrameMetadata(known=False))
-
-    [[table]] = CdcStageSrcPlugin().process_files(ctx, [[unknown]])
-
-    assert table is unknown
-    assert _cursor(ctx) == (None, None)
 
 
 def test_a_slot_of_an_empty_staged_table_yields_it_typed_and_no_state(tmp_path):

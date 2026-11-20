@@ -130,7 +130,6 @@ def test_src_plugin_read_in_resumes_from_advanced_initial_values(
     empty = empty_table(
         plugin._DatabricksSrcPlugin().read_in(ctx, src_conn(domain), src)
     )
-    assert empty.metadata.known
     assert empty.frame.collect_schema() == first.schema
 
     # A run whose ctx never stored the bind falls back to the seed.

@@ -11,10 +11,7 @@ from tabsdatak.server._tdrunner.function._commons.manifests.input import (
     InputEntry,
     InputRecord,
 )
-from tabsdatak.server._tdrunner.function._handlers.landing import (
-    LandedInputs,
-    ScannedFrame,
-)
+from tabsdatak.server._tdrunner.function._handlers.landing import LandedInputs
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.spi import TableMode
 from tabsdatak.tableframe import TableFrame
@@ -69,15 +66,13 @@ class Inputs:
         return [self.table(record) for record in records]
 
     def table(self, record: InputRecord) -> Input:
-        scanned = self.scan(record)
-        if scanned is None:
+        frame = self.scan(record)
+        if frame is None:
             return None
         if self.publisher:
-            return TableFrame._build(
-                scanned.frame, CreationMode.TAB, schema_known=scanned.known
-            )
+            return TableFrame._build(frame, CreationMode.TAB)
         return TableFrame._build(
-            scanned.frame,
+            frame,
             CreationMode.MUT,
             idx=record.input_idx,
             version=record.version(),
@@ -85,17 +80,13 @@ class Inputs:
 
     def chunked(self, records: tuple[InputRecord, ...]) -> Input:
         scans = [
-            scanned
-            for scanned in (self.scan(record) for record in records)
-            if scanned is not None
+            frame
+            for frame in (self.scan(record) for record in records)
+            if frame is not None
         ]
         if not scans:
             return None
-        return TableFrame._build(
-            self.concat([scanned.frame for scanned in scans]),
-            CreationMode.TAB,
-            schema_known=all(scanned.known for scanned in scans),
-        )
+        return TableFrame._build(self.concat(scans), CreationMode.TAB)
 
     @classmethod
     def concat(cls, scans: list[pl.LazyFrame]) -> pl.LazyFrame:
@@ -141,7 +132,7 @@ class Inputs:
         )
         return pl.when(column.is_null()).then(None).otherwise(encoded).alias(name)
 
-    def scan(self, record: InputRecord) -> ScannedFrame | None:
+    def scan(self, record: InputRecord) -> pl.LazyFrame | None:
         if record.metadata_location is not None:
             try:
                 return self.landed.scan(record)
@@ -155,6 +146,6 @@ class Inputs:
         if source is None:
             return None
         try:
-            return ScannedFrame(source.scan())
+            return source.scan()
         except Exception as error:
             raise InputScanError(source.uri, str(error)) from error

@@ -60,10 +60,6 @@ class EngineFrame(BaseFrame):
         state = self._state.clone() if self._state is not None else None
         return type(self)._wrap(lf, state)
 
-    @property
-    def schema_known(self) -> bool:
-        return self._state.schema_known
-
     def _identity(self) -> str | None:
         genesis = self._state.genesis if self._state is not None else None
         return genesis.id if genesis is not None else None
@@ -147,15 +143,7 @@ class EngineFrame(BaseFrame):
 
     @classmethod
     def _build(
-        cls,
-        df,
-        mode,
-        *,
-        idx=None,
-        version=None,
-        origin=None,
-        source=None,
-        schema_known=True,
+        cls, df, mode, *, idx=None, version=None, origin=None, source=None
     ) -> Self:
         from tabsdatak.common._id import encode_id
         from tabsdatak.extensions.tableframe._engine.column.registry import registry
@@ -185,7 +173,6 @@ class EngineFrame(BaseFrame):
             genesis=DataGenesis(
                 idx=resolved_idx, origin=resolved_origin, id=encode_id()[1]
             ),
-            schema_known=schema_known,
         )
         return cls._wrap(df, state)
 

@@ -137,23 +137,6 @@ class TableFrame(EngineFrame):
                 tf.width
         """
 
-    @property
-    def schema_known(self) -> bool:
-        """Whether this `TableFrame` has the columns of the table it reads.
-
-        `False` when a publisher's source found no data and could not learn
-        the table's columns: the `TableFrame` is empty and holds no user
-        columns. A table written empty and without user columns keeps the
-        schema of its previous version.
-
-        :categories: attributes
-
-        Examples:
-            .. code-block:: python
-
-                tf.schema_known  # False for an empty frame of unknown columns
-        """
-
     def __getitem__(self, item: Any) -> TableFrame:
         """Select columns by name, or slice rows by position.
 

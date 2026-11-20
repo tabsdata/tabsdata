@@ -97,7 +97,6 @@ def test_src_plugin_read_in_resumes_from_advanced_initial_values(
     # matching no rows yields one empty table, typed as its rows are.
     ctx.set_attr("cursor", all_emp_nos[-1])
     empty = empty_table(plugin.PostgresSrcPlugin().read_in(ctx, src_conn(domain), src))
-    assert empty.metadata.known
     assert empty.frame.collect_schema() == first.schema
 
     # A run whose ctx never stored the bind falls back to the seed.
