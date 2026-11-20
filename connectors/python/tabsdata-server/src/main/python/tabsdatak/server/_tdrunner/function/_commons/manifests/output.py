@@ -13,8 +13,8 @@ from tabsdatak.server._tdrunner.function._commons.manifests.manifest import Mani
 class TableStats:
     column_count: int
     row_count: int
+    schema_hash: str
     data_bytes: int
-    schema_hash: str | None = None
 
 
 @dataclass(frozen=True)
