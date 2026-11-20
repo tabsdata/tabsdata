@@ -241,11 +241,9 @@ def test_an_explicit_format_reads_any_archive_as_that_format(tmp_path, name):
     assert frame.equals(FRAME)
 
 
-def test_auto_with_nothing_selected_reads_one_empty_table(tmp_path):
+def test_auto_with_nothing_selected_reads_no_table(tmp_path):
     stage(tmp_path, "a.csv", FRAME.write_csv().encode())
-    [frame] = served(tmp_path, "*.zip")
-    assert frame.height == 0
-    assert all(column.startswith(("$td.", "@td.")) for column in frame.columns)
+    assert served(tmp_path, "*.zip") == []
 
 
 @pytest.mark.parametrize(

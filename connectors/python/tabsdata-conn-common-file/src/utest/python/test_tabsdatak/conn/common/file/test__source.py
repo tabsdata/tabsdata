@@ -26,7 +26,7 @@ from tabsdatak.conn.common.file._plugin import FilePluginErrors, ReaderConf
 from tabsdatak.conn.common.file._store import FileStore
 from tabsdatak.conn.common.file.constants import FILE_META_PATH
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
-from tabsdatak.spi import FrameMetadata, LazyFrameInput
+from tabsdatak.spi import LazyFrameInput
 
 pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("no_transporter")]
 
@@ -47,6 +47,7 @@ class Src:
         self.src_cfg = None
         self.purge = False
         self.include_compressed = False
+        self.incremental = True
 
 
 class Context:
@@ -77,12 +78,21 @@ def read(tmp_path, cfg: ReaderConf, ctx: Context | None = None):
     ]
 
 
-def unknown(table: LazyFrameInput) -> bool:
-    return (
-        isinstance(table.metadata, FrameMetadata)
-        and not table.metadata.known
-        and table.frame.collect().shape == (0, 0)
-    )
+def landed(slots: list[list[LazyFrameInput]]) -> list[list[LazyFrameInput]]:
+    """`slots` as the runner lands them: each frame is read, and its metadata
+    is asked for once it is."""
+    for slot in slots:
+        for table in slot:
+            table.frame.collect()
+            if callable(table.metadata):
+                table.metadata()
+    return slots
+
+
+def empty(table: LazyFrameInput) -> pl.Schema | None:
+    """The schema of `table` when it is an empty frame, else `None`."""
+    frame = table.frame.collect()
+    return frame.schema if frame.height == 0 else None
 
 
 def path_of(table: LazyFrameInput) -> str | None:
@@ -159,11 +169,17 @@ def test_each_slot_keeps_its_own_cursor_and_skips_what_it_took(tmp_path):
     src = Src(["a.csv", "b.csv"])
     src.initial_last_modified = INITIAL
     ctx = Context()
-    first = read(tmp_path, ReaderConf.from_src(None, src), ctx)
+    first = landed(read(tmp_path, ReaderConf.from_src(None, src), ctx))
     assert [len(slot) for slot in first] == [1, 1]
-    assert sorted(ctx.attrs) == ["file-lastmod.slot0", "file-lastmod.slot1"]
+    assert sorted(key for key in ctx.attrs if key.startswith("file-lastmod")) == [
+        "file-lastmod.slot0",
+        "file-lastmod.slot1",
+    ]
     again = read(tmp_path, ReaderConf.from_src(None, src), ctx)
-    assert [[unknown(table) for table in slot] for slot in again] == [[True], [True]]
+    assert [[empty(table) for table in slot] for slot in again] == [
+        [pl.Schema({"a": pl.Int64})],
+        [pl.Schema({"b": pl.Int64})],
+    ]
 
 
 def csv(path, when: datetime):
@@ -187,8 +203,7 @@ def test_purge_deletes_what_a_prior_run_took(tmp_path):
     (first,) = read(tmp_path, ReaderConf.from_src(None, src), ctx)
     assert len(first) == 2
     assert a.exists() and b.exists()
-    ((second,),) = read(tmp_path, ReaderConf.from_src(None, src), ctx)
-    assert unknown(second)
+    read(tmp_path, ReaderConf.from_src(None, src), ctx)
     assert not a.exists() and not b.exists()
 
 
@@ -222,16 +237,49 @@ def test_without_purge_nothing_is_deleted(tmp_path):
     assert a.exists() and b.exists()
 
 
-def test_a_path_matching_no_file_reads_one_empty_table_of_unknown_columns(tmp_path):
+KEPT = {"@td.schema.0": '{"id": "Int64"}'}
+
+
+def kept() -> Context:
+    ctx = Context()
+    ctx.attrs.update(KEPT)
+    return ctx
+
+
+def test_a_path_matching_no_file_that_never_took_one_reads_no_table(tmp_path):
     (tmp_path / "a.csv").write_text("a\n1\n", encoding="utf-8")
-    [[table]] = read(tmp_path, ReaderConf.from_src(None, Src(["*.json"])))
-    assert unknown(table)
+    assert read(tmp_path, ReaderConf.from_src(None, Src(["*.json"]))) == [[]]
+
+
+def test_a_path_matching_no_file_reads_one_empty_table_of_its_last_schema(tmp_path):
+    [[table]] = read(tmp_path, ReaderConf.from_src(None, Src(["*.json"])), kept())
+    assert empty(table) == pl.Schema({"id": pl.Int64})
     assert path_of(table) == "s3://bucket/*.json"
 
 
 def test_a_path_matching_no_file_without_metadata_has_no_columns_to_add(tmp_path):
     src = Src(["*.json"])
     src.src_cfg = {SRC_META_DROP_KEY: True}
-    [[table]] = read(tmp_path, ReaderConf.from_src(None, src))
-    assert unknown(table)
-    assert table.metadata.columns is None
+    [[table]] = read(tmp_path, ReaderConf.from_src(None, src), kept())
+    assert empty(table) == pl.Schema({"id": pl.Int64})
+    assert table.metadata is None
+
+
+def test_a_path_matching_no_file_not_incremental_reads_no_table(tmp_path):
+    src = Src(["*.json"])
+    src.incremental = False
+    assert read(tmp_path, ReaderConf.from_src(None, src), kept()) == [[]]
+
+
+def test_the_schema_a_file_is_served_with_is_kept_for_its_slot(tmp_path):
+    (tmp_path / "a.csv").write_text("a,b\n1,x\n", encoding="utf-8")
+    ctx = Context()
+    landed(read(tmp_path, ReaderConf.from_src(None, Src(["a.csv"])), ctx))
+    assert ctx.attrs["@td.schema.0"] == '{"a": "Int64", "b": "String"}'
+
+
+def test_a_file_without_columns_leaves_the_kept_schema(tmp_path):
+    (tmp_path / "a.json").write_text("", encoding="utf-8")
+    ctx = kept()
+    [[table]] = landed(read(tmp_path, ReaderConf.from_src(None, Src(["a.json"])), ctx))
+    assert ctx.attrs["@td.schema.0"] == KEPT["@td.schema.0"]

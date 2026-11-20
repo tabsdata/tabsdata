@@ -1084,8 +1084,9 @@ def test_main_hydrates_and_drains_initial_values(
 ):
     """Store a previous-run state at system_input[0]'s location, let
     main() run the plugin (which is unaware of state), and verify drain
-    produced this run's local state file. The publisher plugin doesn't
-    itself mutate ctx, so the drained dict equals the hydrated one."""
+    produced this run's local state file. The publisher plugin adds only
+    the schema it served its slot with, so the drained dict is the
+    hydrated one plus that."""
     context_folder = tmp_path / "out"
     context_folder.mkdir()
     state_dir = tmp_path / "state"
@@ -1143,6 +1144,7 @@ def test_main_hydrates_and_drains_initial_values(
     assert status == 0, f"main() returned {status}"
 
     assert State.load(TableFile.local(state_dir / STATE_FILE)).values == {
-        "last-modified": "2026-05-27T00:00:00Z"
+        "last-modified": "2026-05-27T00:00:00Z",
+        "@td.schema.0": '{"id": "Int64", "name": "String"}',
     }
     assert not (tmp_path / "storage" / "state-out.t").exists()

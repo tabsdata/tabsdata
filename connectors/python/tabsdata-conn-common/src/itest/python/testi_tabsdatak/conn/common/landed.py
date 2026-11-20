@@ -38,6 +38,14 @@ def taken(slots: list[Iterable[LazyFrameInput]], folder: Path) -> list[list[Serv
     return [[served(table, folder) for table in slot] for slot in slots]
 
 
+def empty(slot: list[Served]) -> pl.Schema | None:
+    """The columns of what a source hands over when a run finds no new data:
+    one empty table. `None` when the slot holds anything else."""
+    if len(slot) == 1 and slot[0].frame.height == 0:
+        return slot[0].frame.schema
+    return None
+
+
 def unknown(slot: list[Served]) -> bool:
     """Whether a slot holds what a source reads when it finds no data: one empty
     table of unknown columns."""

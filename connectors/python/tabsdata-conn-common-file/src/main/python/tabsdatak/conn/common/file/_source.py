@@ -11,13 +11,12 @@ from dataclasses import replace
 from datetime import datetime
 from typing import cast
 
-import polars as pl
-
 from tabsdatak.common._fileformat.error import FileFormatErrorCode
 from tabsdatak.common._fileformat.taxonomy import SrcFileFormat
 from tabsdatak.common._storage.failures import RecordedStream
 from tabsdatak.conn.common._cursor import LastModifiedCursor
 from tabsdatak.conn.common._find import PATH_SEPARATOR, Found, find, split_pattern
+from tabsdatak.conn.common._schemas import SlotSchemas
 from tabsdatak.conn.common.file._archives import member
 from tabsdatak.conn.common.file._codecs import decompressed
 from tabsdatak.conn.common.file._plugin import (
@@ -166,8 +165,13 @@ def tables(
     paths: list[str],
     purgeable: list[str],
 ) -> Iterator[LazyFrameInput]:
-    if not paths:
-        yield unknown(None if cfg.drop_metadata else origin(store, entry))
+    schemas = SlotSchemas.of(ctx)
+    if not paths and cfg.incremental:
+        empty = schemas.empty(
+            slot, None if cfg.drop_metadata else located(origin(store, entry))
+        )
+        if empty is not None:
+            yield empty
     slot_cfg = cfg.format_cfg_for(slot)
     sheet = sheet_in(slot_cfg)
     for path in paths:
@@ -175,10 +179,12 @@ def tables(
         options = (slot_cfg or {}).get(file_format)
         table = read(ctx, store, file_format, options, path, wrapper(path))
         if cfg.drop_metadata:
-            yield table
+            yield schemas.served(slot, table)
             continue
         where = origin(store, path)
-        yield described(table, where if sheet is None else f"{where}#{sheet}")
+        yield schemas.served(
+            slot, described(table, where if sheet is None else f"{where}#{sheet}")
+        )
     if cfg.purge and purgeable:
         store.delete(purgeable)
         logger.info("file-reader: purged %d source file(s)", len(purgeable))
@@ -234,9 +240,8 @@ def opened(store: FileStore, path: str, wrapped: str | None) -> Readable:
     return RecordedStream(decompressed(store.open(path), wrapped))
 
 
-def unknown(where: str | None) -> LazyFrameInput:
-    columns = None if where is None else {FILE_META_PATH: where}
-    return LazyFrameInput(pl.LazyFrame(), FrameMetadata(columns=columns, known=False))
+def located(where: str) -> FrameMetadata:
+    return FrameMetadata(columns={FILE_META_PATH: where})
 
 
 def described(table: LazyFrameInput, where: str) -> LazyFrameInput:

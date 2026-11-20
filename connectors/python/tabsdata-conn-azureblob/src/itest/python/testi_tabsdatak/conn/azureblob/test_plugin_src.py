@@ -21,7 +21,7 @@ from tabsdatax.itest.fixture.functions.files import ObjectStore, PluginSrcCtx
 from testi_tabsdatak.conn.azureblob.backend import run_prefix, src_conn, store
 
 # from testi_tabsdatak.conn.common import ebcdic
-from testi_tabsdatak.conn.common.landed import taken, unknown
+from testi_tabsdatak.conn.common.landed import empty, taken
 from testi_tabsdatak.conn.common.plugin_ctx import LastModSrcCtx
 
 # noinspection PyProtectedMember
@@ -141,6 +141,10 @@ def _stage_workbook(
     objects.upload(local, f"{prefix}/{name}")
 
 
+# The columns of every object staged with `rows=[{"name": ...}]`.
+NAME = pl.Schema({"name": pl.String})
+
+
 def _stage(
     objects: ObjectStore,
     prefix: str,
@@ -186,7 +190,7 @@ def test_src_wildcard_in_basename_matches_multiple_objects(
 
 
 @azureblob_system("azureblob")
-def test_src_wildcard_with_no_matches_returns_one_unknown_table(
+def test_src_wildcard_with_no_matches_returns_no_table(
     system_azureblob: AzureblobSystem, tmp_path: Path
 ):
     prefix = run_prefix(system_azureblob.sys_path, "td-integ")
@@ -195,8 +199,7 @@ def test_src_wildcard_with_no_matches_returns_one_unknown_table(
     out = _read_back(
         system_azureblob, prefix, AzureBlobSrc(paths=["*.parquet"]), tmp_path
     )
-    assert len(out) == 1
-    assert unknown(out[0])
+    assert out == [[]]
 
 
 @azureblob_system("azureblob")
@@ -311,12 +314,18 @@ def test_src_overlapping_globs_import_the_same_object_in_every_slot(
     # Each slot keeps its own cursor, so an object both patterns match is imported
     # once per slot rather than deduplicated across them.
     assert [_names(slot) for slot in out] == [["shared"], ["shared"]]
-    assert sorted(ctx.attrs) == ["file-lastmod.slot0", "file-lastmod.slot1"]
+    assert sorted(ctx.attrs) == [
+        "@td.schema.0",
+        "@td.schema.1",
+        "file-lastmod.slot0",
+        "file-lastmod.slot1",
+    ]
 
     resumed = LastModSrcCtx(_work(tmp_path, "resumed"), ctx.attrs)
+    # Nothing new: each slot hands over one empty table of the columns it served.
     assert [
-        unknown(slot) for slot in _read_with(resumed, system_azureblob, prefix, src)
-    ] == [True, True]
+        empty(slot) for slot in _read_with(resumed, system_azureblob, prefix, src)
+    ] == [NAME, NAME]
 
 
 @azureblob_system("azureblob")
@@ -331,7 +340,7 @@ def test_src_second_run_resumes_from_the_stored_cursor(
     ctx = LastModSrcCtx(_work(tmp_path, "run1"))
 
     assert _names(_read_with(ctx, system_azureblob, prefix, src)[0]) == ["first"]
-    assert sorted(ctx.attrs) == ["file-lastmod.slot0"]
+    assert sorted(ctx.attrs) == ["@td.schema.0", "file-lastmod.slot0"]
 
     time.sleep(2)
     _stage(objects, prefix, "second.parquet", tmp_path, rows=[{"name": "second"}])
@@ -346,8 +355,8 @@ def test_src_second_run_resumes_from_the_stored_cursor(
 def test_src_without_initial_last_modified_keeps_no_cursor(
     system_azureblob: AzureblobSystem, tmp_path: Path
 ):
-    # A Src with no baseline is not incremental at all: nothing is stored on the
-    # context, so every run re-imports whatever the glob matches.
+    # A Src with no baseline keeps no cursor on the context, only the schema it
+    # served, so every run re-imports whatever the glob matches.
     objects = store(system_azureblob)
     prefix = run_prefix(system_azureblob.sys_path, "td-integ")
     _stage(objects, prefix, "only.parquet", tmp_path, rows=[{"name": "only"}])
@@ -356,7 +365,7 @@ def test_src_without_initial_last_modified_keeps_no_cursor(
     ctx = LastModSrcCtx(_work(tmp_path, "run1"))
 
     assert _names(_read_with(ctx, system_azureblob, prefix, src)[0]) == ["only"]
-    assert ctx.attrs == {}
+    assert ctx.attrs == {"@td.schema.0": '{"name": "String"}'}
 
     again = LastModSrcCtx(_work(tmp_path, "run2"), ctx.attrs)
     assert _names(_read_with(again, system_azureblob, prefix, src)[0]) == ["only"]
@@ -390,9 +399,8 @@ def test_src_reordering_paths_reimports_because_slots_are_positional(
 
     unchanged = LastModSrcCtx(_work(tmp_path, "run2"), ctx.attrs)
     assert [
-        unknown(slot)
-        for slot in _read_with(unchanged, system_azureblob, prefix, ordered)
-    ] == [True, True]
+        empty(slot) for slot in _read_with(unchanged, system_azureblob, prefix, ordered)
+    ] == [NAME, NAME]
 
     # A cursor is addressed by the path's position, not by the path itself, so
     # swapping two entries hands each slot the other one's cursor -- which knows

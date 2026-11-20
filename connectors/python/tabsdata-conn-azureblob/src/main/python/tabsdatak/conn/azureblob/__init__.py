@@ -243,6 +243,20 @@ class AzureBlobSrc(Src):
             A file has at most one of these extensions: an archive inside a
             compressed file (`a.csv.tar.gz`) is not read. Defaults to
             `False`.
+        incremental: Whether the data of each run adds to the data of the
+            previous runs (`True`, the default) or replaces it (`False`).
+            The function handles the data accordingly; this option tells
+            Tabsdata what to hand the function when a run finds no new
+            data. It applies to each path on its own: in the same run one
+            path can take files and another none. A path's files arrive as
+            a list, so a run that takes no file for a path hands the
+            function, for it:
+
+            * `True`: a list holding one empty `TableFrame` with the schema
+              of the last run that had data for that path, or an empty list
+              if no run has had data for it yet.
+            * `False`: always an empty list; the previous data of that path
+              is still valid.
     """
 
     paths: SrcPathsSpec
@@ -252,6 +266,7 @@ class AzureBlobSrc(Src):
     src_cfg: SrcCfgSpec | None = None
     purge: bool = False
     include_compressed: bool = False
+    incremental: bool = True
 
     def validate(self) -> None:
         """Cross-field validation of `format`, `paths` and `format_cfg`

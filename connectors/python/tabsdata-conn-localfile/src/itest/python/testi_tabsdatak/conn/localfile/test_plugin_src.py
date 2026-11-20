@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta, timezone
 
 # from decimal import Decimal
@@ -15,7 +16,7 @@ from tabsdatax.itest.fixture.backends.fs import FsDomain, fs_domain
 from tabsdatax.itest.fixture.functions.files import PluginSrcCtx
 
 # from testi_tabsdatak.conn.common import ebcdic
-from testi_tabsdatak.conn.common.landed import Served, taken, unknown
+from testi_tabsdatak.conn.common.landed import Served, empty, taken
 from testi_tabsdatak.conn.common.plugin_ctx import LastModSrcCtx
 from testi_tabsdatak.conn.localfile.backend import (
     scratch,
@@ -35,6 +36,10 @@ pytestmark = pytest.mark.localfile
 # The cursor tests stamp their files relative to this fixed instant rather than
 # to "now", so a run is reproducible and never races the clock.
 CUTOFF = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+
+# The columns every file `stage_parquet` writes.
+NAME = pl.Schema({"name": pl.String})
 
 
 def read_in(ctx, conn, src) -> list[list[Served]]:
@@ -103,7 +108,7 @@ def test_src_wildcard_in_basename_matches_multiple_files(
 
 
 @fs_domain("fs")
-def test_src_wildcard_with_no_matches_returns_one_unknown_table(
+def test_src_wildcard_with_no_matches_returns_no_table(
     domain_fs: FsDomain, request: pytest.FixtureRequest
 ):
     _, base, work = scratch(domain_fs, request)
@@ -114,8 +119,7 @@ def test_src_wildcard_with_no_matches_returns_one_unknown_table(
 
     out = read_in(ctx, src_conn(base), src)
 
-    assert len(out) == 1
-    assert unknown(out[0])
+    assert out == [[]]
     assert ctx.attrs == {}
 
 
@@ -158,12 +162,18 @@ def test_src_overlapping_globs_import_the_same_file_in_every_slot(
         ["shared.parquet"],
         ["shared.parquet"],
     ]
-    assert sorted(ctx.attrs) == ["file-lastmod.slot0", "file-lastmod.slot1"]
+    assert sorted(ctx.attrs) == [
+        "@td.schema.0",
+        "@td.schema.1",
+        "file-lastmod.slot0",
+        "file-lastmod.slot1",
+    ]
 
+    # Nothing new: each slot hands over one empty table of the columns it served.
     resumed = LastModSrcCtx(root / "resumed", ctx.attrs)
-    assert [unknown(slot) for slot in read_in(resumed, src_conn(base), src)] == [
-        True,
-        True,
+    assert [empty(slot) for slot in read_in(resumed, src_conn(base), src)] == [
+        NAME,
+        NAME,
     ]
 
 
@@ -204,8 +214,8 @@ def test_src_initial_last_modified_at_or_before_oldest_returns_all(
 def test_src_without_initial_last_modified_keeps_no_cursor(
     domain_fs: FsDomain, request: pytest.FixtureRequest
 ):
-    # A Src with no baseline is not incremental at all: nothing is stored on the
-    # context, so every run re-imports whatever the glob matches.
+    # A Src with no baseline keeps no cursor on the context, only the schema it
+    # served, so every run re-imports whatever the glob matches.
     root, base, work = scratch(domain_fs, request)
     stage_parquet(base, "only.parquet", CUTOFF)
 
@@ -213,7 +223,7 @@ def test_src_without_initial_last_modified_keeps_no_cursor(
     ctx = LastModSrcCtx(work)
 
     assert _slot_names(read_in(ctx, src_conn(base), src)[0]) == ["only.parquet"]
-    assert ctx.attrs == {}
+    assert ctx.attrs == {"@td.schema.0": '{"name": "String"}'}
 
     again = LastModSrcCtx(root / "again", ctx.attrs)
     assert _slot_names(read_in(again, src_conn(base), src)[0]) == ["only.parquet"]
@@ -231,7 +241,7 @@ def test_src_second_run_resumes_from_the_stored_cursor(
 
     first = read_in(ctx, src_conn(base), src)
     assert _slot_names(first[0]) == ["first.parquet"]
-    assert sorted(ctx.attrs) == ["file-lastmod.slot0"]
+    assert sorted(ctx.attrs) == ["@td.schema.0", "file-lastmod.slot0"]
 
     stage_parquet(base, "second.parquet", CUTOFF + timedelta(hours=1))
     resumed = LastModSrcCtx(root / "resumed", ctx.attrs)
@@ -252,7 +262,7 @@ def test_src_first_run_with_no_matches_still_stores_the_baseline(
     src = LocalFileSrc(paths=["*.parquet"], initial_last_modified=CUTOFF)
     ctx = LastModSrcCtx(work)
 
-    assert [unknown(slot) for slot in read_in(ctx, src_conn(base), src)] == [True]
+    assert read_in(ctx, src_conn(base), src) == [[]]
     assert sorted(ctx.attrs) == ["file-lastmod.slot0"]
 
     # The stored cursor holds the baseline and no entry yet, so a file appearing
@@ -281,7 +291,50 @@ def test_src_second_run_imports_a_file_tied_at_the_cursor_timestamp(
     assert _slot_names(read_in(tied, src_conn(base), src)[0]) == ["tied.parquet"]
 
     idle = LastModSrcCtx(root / "idle", tied.attrs)
-    assert [unknown(slot) for slot in read_in(idle, src_conn(base), src)] == [True]
+    assert [empty(slot) for slot in read_in(idle, src_conn(base), src)] == [NAME]
+
+
+@fs_domain("fs")
+def test_src_a_run_with_no_new_file_hands_the_columns_the_csv_was_served_with(
+    domain_fs: FsDomain, request: pytest.FixtureRequest
+):
+    # A CSV lands as text and is served with the types parsed from it; the
+    # empty table of a later run with no new file has those types, not text.
+    root, base, work = scratch(domain_fs, request)
+    rows = base / "rows.csv"
+    rows.write_text("id,name\n1,x\n", encoding="utf-8")
+    stamp = CUTOFF.timestamp()
+    os.utime(rows, (stamp, stamp))
+
+    src = LocalFileSrc(paths=["*.csv"], initial_last_modified=CUTOFF)
+    ctx = LastModSrcCtx(work)
+
+    [[first]] = read_in(ctx, src_conn(base), src)
+    served = pl.Schema({"id": pl.Int64, "name": pl.String})
+    assert first.frame.schema == served
+
+    resumed = LastModSrcCtx(root / "resumed", ctx.attrs)
+    assert [empty(slot) for slot in read_in(resumed, src_conn(base), src)] == [served]
+
+
+@fs_domain("fs")
+def test_src_not_incremental_hands_no_table_when_no_new_file(
+    domain_fs: FsDomain, request: pytest.FixtureRequest
+):
+    root, base, work = scratch(domain_fs, request)
+    stage_parquet(base, "first.parquet", CUTOFF)
+
+    src = LocalFileSrc(
+        paths=["*.parquet"], initial_last_modified=CUTOFF, incremental=False
+    )
+    ctx = LastModSrcCtx(work)
+
+    assert _slot_names(read_in(ctx, src_conn(base), src)[0]) == ["first.parquet"]
+
+    # The schema is kept, yet a run with no new file hands over nothing: the
+    # data of the last run is still valid.
+    resumed = LastModSrcCtx(root / "resumed", ctx.attrs)
+    assert read_in(resumed, src_conn(base), src) == [[]]
 
 
 @fs_domain("fs")
@@ -304,7 +357,7 @@ def test_src_file_appearing_backdated_below_the_cursor_is_not_imported(
 
     stage_parquet(base, "backdated.parquet", CUTOFF - timedelta(hours=1))
     resumed = LastModSrcCtx(root / "resumed", ctx.attrs)
-    assert [unknown(slot) for slot in read_in(resumed, src_conn(base), src)] == [True]
+    assert [empty(slot) for slot in read_in(resumed, src_conn(base), src)] == [NAME]
 
 
 @fs_domain("fs")
@@ -334,9 +387,9 @@ def test_src_reordering_paths_reimports_because_slots_are_positional(
     ]
 
     unchanged = LastModSrcCtx(root / "unchanged", ctx.attrs)
-    assert [unknown(slot) for slot in read_in(unchanged, src_conn(base), ordered)] == [
-        True,
-        True,
+    assert [empty(slot) for slot in read_in(unchanged, src_conn(base), ordered)] == [
+        NAME,
+        NAME,
     ]
 
     # A cursor is addressed by the path's position, not by the path itself, so

@@ -384,9 +384,9 @@ class _TriggeredOnDestCtx(_DestCtx):
 class _StubSrc:
     """Duck-typed stand-in for any connector's Src dataclass --
     ReaderConf.from_src only reads ``.paths``, ``.format``,
-    ``.format_cfg``, ``.initial_last_modified``, ``.src_cfg``, ``.purge``
-    and ``.include_compressed`` (``conn`` is now passed in separately by the
-    plugin)."""
+    ``.format_cfg``, ``.initial_last_modified``, ``.src_cfg``, ``.purge``,
+    ``.include_compressed`` and ``.incremental`` (``conn`` is now passed in
+    separately by the plugin)."""
 
     def __init__(self):
         self.paths = ["a.csv", "b.csv"]
@@ -396,6 +396,7 @@ class _StubSrc:
         self.src_cfg = None
         self.purge = False
         self.include_compressed = False
+        self.incremental = False
 
 
 def test_reader_conf_from_src_translates_fields():
@@ -407,6 +408,7 @@ def test_reader_conf_from_src_translates_fields():
     assert rc.format_cfg == {SrcFileFormat.CSV: {"separator": ","}}
     assert rc.initial_lastmod == "2026-01-01T00:00:00.000000+00:00"
     assert rc.drop_metadata is False
+    assert rc.incremental is False
 
 
 def test_reader_conf_from_src_reads_the_drop_metadata_key():
@@ -463,6 +465,7 @@ class _Src:
         self.src_cfg = None
         self.purge = False
         self.include_compressed = False
+        self.incremental = True
 
 
 @pytest.mark.parametrize(

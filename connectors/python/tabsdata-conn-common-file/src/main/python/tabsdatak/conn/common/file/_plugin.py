@@ -112,6 +112,7 @@ class ReaderConf:
     # consumed, once every file in this run has been read.
     purge: bool = False
     include_compressed: bool = False
+    incremental: bool = True
 
     @classmethod
     def from_src(cls, conn: Any, src: Any) -> "ReaderConf":
@@ -127,6 +128,7 @@ class ReaderConf:
             drop_metadata=bool((src.src_cfg or {}).get(SRC_META_DROP_KEY, False)),
             purge=bool(src.purge),
             include_compressed=src.include_compressed,
+            incremental=src.incremental,
         )
 
     def format_cfg_for(self, index: int) -> dict | None:
