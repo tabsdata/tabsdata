@@ -30,9 +30,8 @@ on:
       dump_server:
         description: "Dump all instances contents"
         required: false
-        type: choice
-        options: ['true', 'false']
-        default: 'false'
+        type: boolean
+        default: false
       anchor_tag:
         description: "Tag to check out every repository at, instead of its backbone anchor"
         required: false
@@ -70,39 +69,33 @@ on:
       run_on_linux_x86_64:
         description: "Run on Ubuntu (x86_64)"
         required: false
-        type: choice
-        options: ['true', 'false']
-        default: 'true'
+        type: boolean
+        default: true
       run_on_linux_arm_64:
         description: "Run on Ubuntu (arm_64)"
         required: false
-        type: choice
-        options: ['true', 'false']
-        default: 'false'
+        type: boolean
+        default: false
       run_on_macos_x86_64:
         description: "Run on macOS (x86_64)"
         required: false
-        type: choice
-        options: ['true', 'false']
-        default: 'false'
+        type: boolean
+        default: false
       run_on_macos_arm_64:
         description: "Run on macOS (arm_64)"
         required: false
-        type: choice
-        options: ['true', 'false']
-        default: 'true'
+        type: boolean
+        default: true
       run_on_windows_x86_64:
         description: "Run on Windows (x86_64)"
         required: false
-        type: choice
-        options: ['true', 'false']
-        default: 'true'
+        type: boolean
+        default: true
       run_on_windows_arm_64:
         description: "Run on Windows (arm_64)"
         required: false
-        type: choice
-        options: ['true', 'false']
-        default: 'false'
+        type: boolean
+        default: false
 
 jobs:
   cap-job:
@@ -250,7 +243,7 @@ jobs:
       TOKEN_ONEPASSWORD_TABSDATA: ${{ secrets.TOKEN_ONEPASSWORD_TABSDATA }}
     with:
       job_timeout: ${{ fromJson(needs.cap-job.outputs.job_timeout) }}
-      dump_server: ${{ inputs.dump_server }}
+      dump_server: ${{ inputs.dump_server && 'true' || 'false' }}
       anchor_tag: ${{ inputs.anchor_tag }}
       td_product: "open source"
       runner_mode: "release"
