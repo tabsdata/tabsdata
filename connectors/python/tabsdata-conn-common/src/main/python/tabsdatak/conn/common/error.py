@@ -43,6 +43,16 @@ class ConnStreamException(ConnException):
     pass
 
 
+class ConnStateException(ConnException):
+    """A source could not keep, or read back, the state it carries from one
+    run to the next.
+
+    :categories: error
+    """
+
+    pass
+
+
 class ConnErrorCode(ErrorCode):
     """Error codes shared across the connector-common layer.
 
@@ -204,3 +214,13 @@ class ConnErrorCode(ErrorCode):
         "The name {value!r} is listed more than once: it names the same object "
         "as {first!r}",
     )  # distinct_names_validate
+    # --- Slot schemas (tabsdatak.conn.common._schemas) --------------
+    CONN_38 = ErrorDef(
+        ConnStateException,
+        "The schema output slot {slot} was served with cannot be kept for later "
+        "runs: {detail}",
+    )
+    CONN_39 = ErrorDef(
+        ConnStateException,
+        "The schema kept for output slot {slot} cannot be read: {detail}",
+    )

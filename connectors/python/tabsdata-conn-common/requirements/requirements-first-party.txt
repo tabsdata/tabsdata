@@ -3,3 +3,4 @@
 #
 
 tabsdata-api==2.4.0
+tabsdata-common==2.4.0

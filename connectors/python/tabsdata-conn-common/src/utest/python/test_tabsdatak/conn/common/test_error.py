@@ -8,6 +8,7 @@ from tabsdatak.conn.common.error import (
     ConnErrorCode,
     ConnException,
     ConnInitException,
+    ConnStateException,
     ConnStreamException,
 )
 from tabsdatak.error import DEBUG_FRAMES_ENV_VAR, TabsdataException
@@ -27,6 +28,10 @@ def test_conn_init_exception_is_a_conn_exception():
 
 def test_conn_stream_exception_is_a_conn_exception():
     assert issubclass(ConnStreamException, ConnException)
+
+
+def test_conn_state_exception_is_a_conn_exception():
+    assert issubclass(ConnStateException, ConnException)
 
 
 # ---------------------------------------------------------------------------
@@ -71,8 +76,9 @@ def test_codes_have_expected_names_with_intentional_gap():
     # builds -- CONN_31 / CONN_32 for the two ways a cfg tree can
     # break the JSON-like value rule, CONN_33 for the stream buffer
     # sentinel, CONN_34 for the stream checkpoint, CONN_35 for the source
-    # acknowledgement that keeps failing, and CONN_36 for the stream that
-    # restarts too often without staging.
+    # acknowledgement that keeps failing, CONN_36 for the stream that
+    # restarts too often without staging, CONN_37 for a name listed twice,
+    # and CONN_38 / CONN_39 for a slot schema that cannot be kept or read.
     # CONN_5..CONN_7 were intentionally retired with the CloudLocation
     # move into the per-connector packages; the gap is preserved so
     # callers that still imported the conn-common variants surface
@@ -113,4 +119,6 @@ def test_codes_have_expected_names_with_intentional_gap():
         "CONN_35",
         "CONN_36",
         "CONN_37",
+        "CONN_38",
+        "CONN_39",
     ]
