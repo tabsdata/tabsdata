@@ -5,9 +5,13 @@
 """Tests for code/.pyi generation."""
 
 import ast
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
+import tabsdatax.generator.tableframe.engine.generate as generate
 from tabsdatax.generator.tableframe.engine.generate import perform
 from tabsdatax.generator.tableframe.model.model import Report, Symbol
 
@@ -442,6 +446,19 @@ def test_regeneration_carries_engine_frame_members_with_imports(main_root):
     assert "def grok(self, schema: ColumnDefinition) -> TableFrame:" in text
     assert "from pkg.grok import ColumnDefinition" in text
     assert "def gone(" not in text
+
+
+def test_stub_imports_are_sorted(main_root):
+    _regenerate_with_handwritten_stub(main_root, "class EngineFrame: ...\n")
+    stubs = sorted(str(path) for path in (main_root / "pkg" / "wrap").glob("*.pyi"))
+    config = str(Path(generate.__file__).parent / "ruff.toml")
+    result = subprocess.run(
+        [sys.executable, "-m", "ruff", "check", "--select", "I"]
+        + ["--config", config, *stubs],
+        capture_output=True,
+        encoding="utf-8",
+    )
+    assert result.returncode == 0, result.stdout
 
 
 def test_multiline_docstring_summary_stays_on_the_opening_line(main_root):

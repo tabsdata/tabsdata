@@ -9,6 +9,9 @@ Obtain one from `TableFrame.schema`. It behaves like an ordered dict
 
 from __future__ import annotations
 
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
+from pathlib import Path
 from typing import (
     Any,
     Awaitable,
@@ -24,11 +27,9 @@ from typing import (
     Sequence,
     Union,
 )
-from datetime import date, datetime, time, timedelta
-from decimal import Decimal
-from pathlib import Path
-from tabsdatak.tableframe.datatypes import DataType
+
 from tabsdatak.tableframe import TableFrame
+from tabsdatak.tableframe.datatypes import DataType
 
 class Schema:
     """Ordered mapping of column name to data type.

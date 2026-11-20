@@ -442,13 +442,29 @@ def _default_test_root(main_root: str, module: str) -> str:
 def _format(paths: list[Path]) -> None:
     config = str(Path(__file__).parent / "ruff.toml")
     sources = [str(path) for path in paths]
-    # .pyi stubs are formatted but NOT lint-fixed: `ruff check --fix` would strip
-    # imports it reads as unused (a stub's names are used only in annotations),
-    # breaking the stub. `.py` files get both passes (matches cargo make format_py).
+    # .pyi stubs only get their imports sorted (rule I): a full `ruff check --fix`
+    # would strip imports it reads as unused (a stub's names are used only in
+    # annotations), breaking the stub. `.py` files get both passes (matches cargo
+    # make format_py).
     code = [str(path) for path in paths if path.suffix != ".pyi"]
-    commands = [
+    stubs = [str(path) for path in paths if path.suffix == ".pyi"]
+    commands = []
+    if stubs:
+        commands.append([
+            sys.executable,
+            "-m",
+            "ruff",
+            "check",
+            "--fix",
+            "--select",
+            "I",
+            "--config",
+            config,
+            *stubs,
+        ])
+    commands.append(
         [sys.executable, "-m", "ruff", "format", "--config", config, *sources],
-    ]
+    )
     if code:
         commands.append([
             sys.executable,

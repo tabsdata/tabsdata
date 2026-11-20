@@ -13,6 +13,9 @@ documented on the method that uses them.
 
 from __future__ import annotations
 
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
+from pathlib import Path
 from typing import (
     Any,
     Awaitable,
@@ -26,15 +29,11 @@ from typing import (
     MutableMapping,
     Optional,
     Sequence,
+    TypeAlias,
     Union,
 )
-from datetime import date, datetime, time, timedelta
-from decimal import Decimal
-from pathlib import Path
-from typing import TypeAlias
 
-from tabsdatak.tableframe.datatypes import DataType
-from tabsdatak.tableframe.datatypes import Decimal
+from tabsdatak.tableframe.datatypes import DataType, Decimal
 from tabsdatak.tableframe.expr import Expr
 
 Ambiguous: TypeAlias = Literal["earliest", "latest", "raise", "null"]

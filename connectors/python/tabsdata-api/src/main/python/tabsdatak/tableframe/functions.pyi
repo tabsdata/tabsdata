@@ -10,6 +10,9 @@ build `Expr` values consumed by `TableFrame.select` / `with_columns` /
 
 from __future__ import annotations
 
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
+from pathlib import Path
 from typing import (
     Any,
     Awaitable,
@@ -25,13 +28,10 @@ from typing import (
     Sequence,
     Union,
 )
-from datetime import date, datetime, time, timedelta
-from decimal import Decimal
-from pathlib import Path
-from tabsdatak.tableframe.expr import Expr
-from tabsdatak.api import TableFrameSpec
-from tabsdatak.api import TableFramesSpec
+
+from tabsdatak.api import TableFrameSpec, TableFramesSpec
 from tabsdatak.tableframe._typing import ConcatMethod, PolarsDataType, PythonDataType
+from tabsdatak.tableframe.expr import Expr
 
 def col(
     name: str

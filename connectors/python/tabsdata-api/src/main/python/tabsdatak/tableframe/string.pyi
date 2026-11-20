@@ -12,6 +12,9 @@ integer types. Pattern arguments are regular expressions unless
 
 from __future__ import annotations
 
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
+from pathlib import Path
 from typing import (
     Any,
     Awaitable,
@@ -27,10 +30,7 @@ from typing import (
     Sequence,
     Union,
 )
-from datetime import date, datetime, time, timedelta
-from decimal import Decimal
-from pathlib import Path
-from tabsdatak.tableframe.expr import Expr
+
 from tabsdatak.tableframe._typing import (
     Ambiguous,
     IntoExpr,
@@ -39,6 +39,7 @@ from tabsdatak.tableframe._typing import (
     TimeUnit,
 )
 from tabsdatak.tableframe.datatypes import Int64
+from tabsdatak.tableframe.expr import Expr
 
 class ExprStringNameSpace:
     """String methods, accessed via `Expr.str`.

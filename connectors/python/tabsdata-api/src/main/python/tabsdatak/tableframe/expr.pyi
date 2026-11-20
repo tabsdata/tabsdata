@@ -13,6 +13,9 @@ namespaces.
 
 from __future__ import annotations
 
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
+from pathlib import Path
 from typing import (
     Any,
     Awaitable,
@@ -28,11 +31,7 @@ from typing import (
     Sequence,
     Union,
 )
-from datetime import date, datetime, time, timedelta
-from decimal import Decimal
-from pathlib import Path
-from tabsdatak.tableframe.datetime import ExprDateTimeNameSpace
-from tabsdatak.tableframe.string import ExprStringNameSpace
+
 from tabsdatak.tableframe._typing import (
     ClosedInterval,
     FillNullStrategy,
@@ -45,6 +44,8 @@ from tabsdatak.tableframe._typing import (
     RoundMode,
     TemporalLiteral,
 )
+from tabsdatak.tableframe.datetime import ExprDateTimeNameSpace
+from tabsdatak.tableframe.string import ExprStringNameSpace
 
 class Expr:
     """A lazy column expression evaluated against a `TableFrame`.
