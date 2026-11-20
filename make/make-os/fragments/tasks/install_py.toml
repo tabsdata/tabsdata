@@ -44,7 +44,9 @@ script = [
     # debug "🚀 pip uninstall tabsdata --yes"
     # exec --fail-on-error pip uninstall tabsdata --yes
 
-    wheels = glob_array ./target/python/dist/tabsdata*.whl
+    wheel_version_text = readfile ${PROJECT_TABSDATA_ROOT_FOLDER}/assets/manifest/VERSION
+    wheel_version = trim ${wheel_version_text}
+    wheels = glob_array ./target/python/dist/tabsdata*-${wheel_version}-*.whl
     for wheel in ${wheels}
         debug "🚀 pip install ${wheel}"
         exec --fail-on-error pip install ${wheel}
@@ -104,7 +106,9 @@ script = [
             # debug "🚀 pip uninstall ${connector_package} --yes"
             # exec --fail-on-error pip uninstall ${connector_package} --yes
 
-            wheels = glob_array ./target/python/dist/${connector_wheel_package_name}*.whl
+            wheel_version_text = readfile ${PROJECT_TABSDATA_ROOT_FOLDER}/assets/manifest/VERSION
+            wheel_version = trim ${wheel_version_text}
+            wheels = glob_array ./target/python/dist/${connector_wheel_package_name}-${wheel_version}-*.whl
             for wheel in ${wheels}
                 debug "🚀 pip install ${wheel}"
                 exec --fail-on-error pip install ${wheel}
