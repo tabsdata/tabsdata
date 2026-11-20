@@ -1,0 +1,46 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+[tasks.__os__sizes]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    help = set false
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        if eq ${argument} "--help"
+            help = set true
+        end
+        if eq ${argument} "-h"
+            help = set true
+        end
+    end
+
+    if ${help}
+        info ""
+        info "📏 sizes — Check the size of the wheels built for publication."
+        info ""
+        info "   Fails when a wheel in a target/python/dist folder is over 200 MiB, or when"
+        info "   any file inside one takes over 100 MiB in the wheel (compressed or stored)."
+        info "   Run it after 'assembly'."
+        info ""
+        info "🛟 Usage:"
+        info "   cargo make sizes"
+        info ""
+        exit 0
+    end
+
+    ag_root_folder = get_env PROJECT_TABSDATA_AG_ROOT_FOLDER
+    if is_empty ${ag_root_folder}
+        exec --fail-on-error python ${SIZES_SCRIPT} ${PROJECT_TABSDATA_ROOT_FOLDER}
+    else
+        exec --fail-on-error python ${SIZES_SCRIPT} ${PROJECT_TABSDATA_ROOT_FOLDER} ${ag_root_folder}
+    end
+    ''']

@@ -102,6 +102,7 @@ WARP_TEST_RS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automa
 BRUSH_NATIVE_LIBS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/brush_native_libs.py", normalize = true }
 BUMP_VERSION_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/bump_version.py", normalize = true }
 CHECK_NATIVE_LIBS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/check_native_libs.py", normalize = true }
+SIZES_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/sizes.py", normalize = true }
 SERVE_BOOK_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/serve_book.py", normalize = true }
 SCAN_VERSION_SCRIPT ={ value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/scan_version.py", normalize = true }
 CLEAN_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/clean.py", normalize = true }

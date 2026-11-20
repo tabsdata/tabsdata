@@ -2639,6 +2639,16 @@ run_task = [
     ] }
 ]
 
+[tasks.sizes]
+plugin = "td-task-tracker"
+category = "10 - Bundle"
+description = "Check the size of the wheels built for publication, and of the files inside them"
+run_task = [
+    { name = [
+        "__os__sizes"
+    ] }
+]
+
 [tasks.install]
 plugin = "td-task-tracker"
 category = "10 - Bundle"
