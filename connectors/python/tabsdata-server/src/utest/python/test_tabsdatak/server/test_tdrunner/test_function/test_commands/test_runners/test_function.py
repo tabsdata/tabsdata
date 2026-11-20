@@ -1046,7 +1046,7 @@ def test_main_end_to_end_happy_path(
     assert e1["name"] == "my_table"
     assert e1["uri"] == my_table_file.as_uri()
     assert e1["stats"] == {
-        "column_count": len(pl.read_parquet_schema(my_table_file)),
+        "column_count": len(["id", "name", "marker"]),
         "row_count": 3,
         "schema_hash": e1["stats"]["schema_hash"],
         "data_bytes": my_table_file.stat().st_size,
