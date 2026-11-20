@@ -81,7 +81,7 @@ class KafkaCtx(StreamSrcPluginCtx):
         thresholds: StreamThresholds | None = None,
     ) -> None:
         self._work_dir = work
-        self._local = LocalStage(work / "stage")
+        self._local = LocalStage(work / "stage", tables=1)
         self._thresholds = thresholds or batch_of()
         self._until = until
         self._deadline = time.monotonic() + CAPTURE_TIMEOUT_SECONDS
