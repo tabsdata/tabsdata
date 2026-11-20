@@ -353,8 +353,7 @@ def build_scaffold(
         )
     params = _params(inputs or outputs, {name, *imports.names()})
     values = [
-        f"concat({param})" if many else param
-        for param, many in zip(params, lists)
+        f"concat({param})" if many else param for param, many in zip(params, lists)
     ]
     if kind == "transformer":
         values = [values[0]] * len(outputs)
