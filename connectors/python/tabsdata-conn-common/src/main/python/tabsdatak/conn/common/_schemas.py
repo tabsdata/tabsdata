@@ -133,21 +133,14 @@ class SlotSchemas:
         """An empty frame of the last schema `slot` served, or `None` when it
         served none.
 
-        It keeps the columns, columns rules and system columns inception of
-        `metadata`; its data is typed, so it takes no schema, format or
-        parse options.
+        It keeps the columns of `metadata`; its data is typed, so it takes no
+        schema, format or parse options.
         """
         schema = self.last(slot)
         if schema is None:
             return None
         described = (
-            None
-            if metadata is None
-            else FrameMetadata(
-                columns=metadata.columns,
-                rules=metadata.rules,
-                inception=metadata.inception,
-            )
+            None if metadata is None else FrameMetadata(columns=metadata.columns)
         )
         return LazyFrameInput(pl.LazyFrame(schema=schema), described)
 

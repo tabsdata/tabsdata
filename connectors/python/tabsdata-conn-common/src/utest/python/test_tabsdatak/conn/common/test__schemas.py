@@ -14,11 +14,9 @@ from tabsdatak.conn.common._schemas import KeptSchemas, SlotSchemas, schema_key
 from tabsdatak.conn.common.error import ConnStateException
 from tabsdatak.spi import (
     CsvParseOptions,
-    DropColumnsRule,
     FrameMetadata,
     LazyFrameInput,
     SourceFormat,
-    SystemColumnsInception,
 )
 
 SCHEMA = pl.Schema({
@@ -186,22 +184,15 @@ def test_an_empty_frame_takes_the_last_schema():
 def test_an_empty_frame_keeps_what_its_metadata_adds_and_is_typed():
     schemas, _ = kept()
     schemas.remember(0, pl.Schema({"a": pl.Int64, "b": pl.String}))
-    rules = (DropColumnsRule("b"),)
     metadata = FrameMetadata(
         pl.Schema({"x": pl.String}),
         format=SourceFormat.CSV,
         typed=False,
         parsing=CsvParseOptions(decimal_comma=True),
         columns={"@path": "s3://bucket/in"},
-        rules=rules,
-        inception=SystemColumnsInception.CREATE_MISSING,
     )
     table = schemas.empty(0, metadata)
-    assert table.metadata == FrameMetadata(
-        columns={"@path": "s3://bucket/in"},
-        rules=rules,
-        inception=SystemColumnsInception.CREATE_MISSING,
-    )
+    assert table.metadata == FrameMetadata(columns={"@path": "s3://bucket/in"})
 
 
 # --- kept in a state of its own -------------------------------------------------
