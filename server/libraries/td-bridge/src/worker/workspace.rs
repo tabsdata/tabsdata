@@ -236,6 +236,11 @@ mod tests_worker_log_files {
         assert_eq!(paths[5], PathBuf::from("fn_2.log"));
     }
 
+    fn set_modified(path: &Path, secs: u64) {
+        let modified = std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs);
+        std::fs::set_times(path, std::fs::FileTimes::new().set_modified(modified)).unwrap();
+    }
+
     #[test]
     fn test_sort_worker_log_files_by_parent_modified_time() {
         let temp = tdtestdir!();
@@ -247,10 +252,8 @@ mod tests_worker_log_files {
         let file2 = dir2.join("app.log");
         std::fs::write(&file1, "").unwrap();
         std::fs::write(&file2, "").unwrap();
-        let old_time = filetime::FileTime::from_unix_time(1000, 0);
-        let new_time = filetime::FileTime::from_unix_time(2000, 0);
-        filetime::set_file_mtime(&dir1, old_time).unwrap();
-        filetime::set_file_mtime(&dir2, new_time).unwrap();
+        set_modified(&dir1, 1000);
+        set_modified(&dir2, 2000);
         let mut paths = vec![file1.clone(), file2.clone()];
         sort_worker_log_files(&mut paths);
         assert_eq!(paths[0], file2);
@@ -284,10 +287,8 @@ mod tests_worker_log_files {
         for path in &paths {
             std::fs::write(path, "").unwrap();
         }
-        let old_time = filetime::FileTime::from_unix_time(1000, 0);
-        let new_time = filetime::FileTime::from_unix_time(2000, 0);
-        filetime::set_file_mtime(&old_dir, old_time).unwrap();
-        filetime::set_file_mtime(&new_dir, new_time).unwrap();
+        set_modified(&old_dir, 1000);
+        set_modified(&new_dir, 2000);
         sort_worker_log_files(&mut paths);
         assert_eq!(paths[0], new_dir.join("app.log"));
         assert_eq!(paths[1], new_dir.join("err.log"));

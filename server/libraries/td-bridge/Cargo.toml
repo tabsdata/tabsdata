@@ -79,6 +79,5 @@ tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 
 [dev-dependencies]
-filetime = { workspace = true }
 temp-env = { workspace = true, features = ["async_closure"] }
 
