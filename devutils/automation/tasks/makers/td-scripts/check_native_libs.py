@@ -3,14 +3,17 @@
 #
 
 import argparse
+import functools
 import importlib
 import importlib.util
 import json
 import os
 import platform
 import re
+import shutil
 import subprocess
 import sys
+from pathlib import Path
 from types import ModuleType
 
 from rich import box
@@ -120,6 +123,13 @@ WINDOWS_SYSTEM_DLLS = {
 
 WINDOWS_SYSTEM_PREFIXES = ("api-ms-win-",)
 
+READELF_NAMES = ("readelf", "llvm-readelf")
+
+HOMEBREW_READELF_KEGS = (
+    ("binutils", "readelf"),
+    ("llvm", "llvm-readelf"),
+)
+
 
 TD_PORTABLE_LINUX = os.getenv("TD_PORTABLE_LINUX", "") == "true"
 
@@ -226,20 +236,54 @@ def check_macho(filepath: str) -> list[LibInfo]:
     return libs
 
 
+@functools.cache
+def readelf_binary() -> str:
+    for name in READELF_NAMES:
+        found = shutil.which(name)
+        if found:
+            return found
+    brew = shutil.which("brew")
+    if brew:
+        for formula, name in HOMEBREW_READELF_KEGS:
+            result = subprocess.run(
+                [brew, "--prefix", formula],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=30,
+            )
+            if result.returncode != 0:
+                continue
+            candidate = Path(result.stdout.strip()) / "bin" / name
+            if candidate.is_file():
+                return str(candidate)
+    logger.error(
+        "⭕️ Neither readelf nor llvm-readelf is available, so ELF files cannot be"
+        " checked. Install binutils or LLVM ('brew install binutils' on macOS)."
+    )
+    sys.exit(1)
+
+
+def run_readelf(option: str, filepath: str) -> str:
+    result = subprocess.run(
+        [readelf_binary(), option, filepath],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+    )
+    if result.returncode != 0:
+        logger.error(
+            f"⭕️ readelf {option} failed on {filepath}: {result.stderr.strip()}"
+        )
+        sys.exit(1)
+    return result.stdout
+
+
 def check_elf(filepath: str) -> list[LibInfo]:
     libs = []
     try:
-        result = subprocess.run(
-            [
-                "readelf",
-                "-d",
-                filepath,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        for line in result.stdout.splitlines():
+        for line in run_readelf("-d", filepath).splitlines():
             if "(NEEDED)" not in line:
                 continue
             # Format: "  0x0000000000000001 (NEEDED)  Shared library: [libc.so.6]"
@@ -250,8 +294,9 @@ def check_elf(filepath: str) -> list[LibInfo]:
             lib_name = line[start + 1 : end]
             is_system = any(lib_name.startswith(s) for s in LINUX_SYSTEM_LIBS)
             libs.append(LibInfo(lib_name, is_static=False, is_system=is_system))
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
+    except subprocess.TimeoutExpired:
+        logger.error(f"⭕️ readelf timed out on {filepath}")
+        sys.exit(1)
     return libs
 
 
@@ -261,16 +306,12 @@ def parse_version(version: str) -> tuple[int, ...]:
 
 def required_symbol_versions(filepath: str, prefix: str) -> list[str]:
     try:
-        result = subprocess.run(
-            ["readelf", "--version-info", filepath],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return []
+        output = run_readelf("--version-info", filepath)
+    except subprocess.TimeoutExpired:
+        logger.error(f"⭕️ readelf timed out on {filepath}")
+        sys.exit(1)
     versions = []
-    for match in re.finditer(rf"Name: {prefix}([0-9.]+)", result.stdout):
+    for match in re.finditer(rf"Name: {prefix}([0-9.]+)", output):
         versions.append(match.group(1).rstrip("."))
     return versions
 
