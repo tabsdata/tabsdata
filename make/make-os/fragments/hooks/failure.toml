@@ -14,6 +14,16 @@ script = [
 
     os_family = os_family
 
+    dump_duckscript = get_env TD_DUMP_DUCKSCRIPT
+    if eq ${dump_duckscript} "true"
+        python = which python
+        if not is_empty ${python}
+            exec python ./make/make-os/libraries/failure.py ./target/make/notes
+        end
+    else
+        info "If the error above comes from duckscript code, run again with TD_DUMP_DUCKSCRIPT=true to print the script of the failed task, numbered as in the error line"
+    end
+
     make_with_banners = get_env TD_MAKE_WITH_BANNERS
     make_with_banners_empty = is_empty ${make_with_banners}
     make_with_banners_true = eq ${make_with_banners} "true"

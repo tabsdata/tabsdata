@@ -12,7 +12,25 @@ script ='''
     start_ms = current_time
 
     if is_empty ${td_skip_task}
+        td_note = set ""
+        td_make_run = get_env TD_MAKE_RUN
+        td_dump_duckscript = get_env TD_DUMP_DUCKSCRIPT
+        if not eq ${td_dump_duckscript} "true"
+            td_make_run = set ""
+        end
+        if not is_empty ${td_make_run}
+            td_note_level = get_env CARGO_MAKE_INTERNAL_RECURSION_LEVEL
+            if is_empty ${td_note_level}
+                td_note_level = set 0
+            end
+            td_note_task = replace ${task.name} ":" "_"
+            td_note = set "./target/make/notes/${td_make_run}-${td_note_level}-${start_ms}-${td_note_task}.json"
+            writefile ${td_note} ${task.as_json}
+        end
         cm_plugin_run_task
+        if not is_empty ${td_note}
+            rm ${td_note}
+        end
     else
         warn "🧨 Skipping task '${task.name}' as configured by environment variable '${td_skip_env}'"
     end

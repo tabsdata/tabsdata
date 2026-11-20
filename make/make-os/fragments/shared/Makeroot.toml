@@ -205,6 +205,13 @@ load_script = [
     end
 
     set_env ECHO_ENV_FILES "false"
+
+    td_make_run = get_env TD_MAKE_RUN
+    if is_empty ${td_make_run}
+        td_make_pid = pid
+        td_make_time = current_time
+        set_env TD_MAKE_RUN "${td_make_pid}x${td_make_time}"
+    end
     ''']
 
 skip_core_tasks = true
