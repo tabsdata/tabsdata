@@ -14,9 +14,10 @@ summary: >-
   does (pub-postgres-incremental). build_append_only_cdc_bronze stamps every
   new row as an insert at its event time; build_append_only_silver drops the
   bookkeeping and the rows repeated in the batch or in the previous silver
-  version. Each silver version holds only the new events, so consumers read
-  it at @NEW. Both transformers are registered in the orders_silver
-  collection.
+  version. Each bronze and silver version holds only the new events, so
+  consumers read them at @NEW, and a run with no new version writes no rows:
+  bronze takes the columns from orders@HEAD, silver from its own @HEAD. Both
+  transformers are registered in the orders_silver collection.
 """
 
 from tabsdatak._medallion.bronze.append_only_cdc import build_append_only_cdc_bronze
@@ -26,14 +27,17 @@ from tabsdatak.tableframe import datatypes
 
 
 @transformer(
-    input_tables=["orders_src/orders@NEW"],
+    input_tables=["orders_src/orders@NEW", "orders_src/orders@HEAD"],
     output_tables=["orders_event_bronze"],
 )
-def tfr_orders_event_bronze(orders: TableFramesSpec) -> TableFrameSpec:
+def tfr_orders_event_bronze(
+    orders: TableFramesSpec, orders_head: TableFrameSpec
+) -> TableFrameSpec:
     return build_append_only_cdc_bronze(
-        new=[frame for frame in orders or [] if frame is not None],
+        new=orders,
         pk=[{"order_id": datatypes.Int64}],
         event_ts_col="ordered_at",
+        head=orders_head,
     )
 
 

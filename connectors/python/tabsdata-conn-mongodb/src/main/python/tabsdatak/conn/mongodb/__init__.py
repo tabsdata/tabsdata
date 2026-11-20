@@ -20,7 +20,9 @@ Examples:
     .. code-block:: python
 
         @subscriber(
-            destination=MongoDBDest(collections_with_ids=[("users", "id")]),
+            destination=MongoDBDest(
+                collections_with_ids=[("users", "id")], if_collection_exists="replace"
+            ),
             input_tables=["mycoll/users"],
         )
         def publish(users: TableFrameSpec) -> TableFrameSpec:
@@ -134,7 +136,8 @@ class MongoDBDest(Dest):
             contain `.` or NUL, or start with `$`.
         if_collection_exists: `"append"` (default) leaves existing
             documents in place; `"replace"` drops the collection
-            first.
+            first, so an empty frame empties it. A slot returned as
+            `None` leaves its collection as it is.
         use_trxs: When true, each batch of `docs_per_trx` documents
             is wrapped in a MongoDB transaction (requires a replica
             set).
@@ -176,10 +179,10 @@ class MongoDBDest(Dest):
                 destination=MongoDBDest(
                     collections_with_ids=[("cap_append", None)],
                 ),
-                input_tables=["caps_input/cap_rows"],
+                input_tables=["caps_input/cap_rows@NEW"],
             )
-            def publish(rows: TableFrameSpec) -> TableFrameSpec:
-                return rows
+            def publish(rows: TableFramesSpec) -> TableFrameSpec:
+                return concat(rows)
 
         Upsert on a natural key -- `code` becomes each document's
         `_id`, so re-runs update the same documents instead of

@@ -25,8 +25,10 @@ function only references `AwsGlueDest`.
 Examples:
     .. code-block:: python
 
-        @subscriber(destination=AwsGlueDest(tables=["sales.orders"]),
-                    input_tables=["mycoll/orders"])
+        @subscriber(
+            destination=AwsGlueDest(tables=["sales.orders"], if_table_exists="replace"),
+            input_tables=["mycoll/orders"],
+        )
         def publish(orders: TableFrameSpec) -> TableFrameSpec:
             return orders
 """
@@ -247,7 +249,7 @@ class AwsGlueDest(Dest):
             `"replace"` empties the table and writes the batch, keeping
             the table and its columns. The files of the rows a replace
             removes stay in S3 until the table's old snapshots are
-            expired.
+            expired. A slot returned as `None` leaves its table as it is.
         schema_evolution: What a write does when the batch's columns differ from
             the table's, a replace included. `"strict"` (the default) refuses a
             batch with a column the table lacks, and one with a wider type
@@ -283,11 +285,11 @@ class AwsGlueDest(Dest):
         .. code-block:: python
 
             @subscriber(
-                input_tables=["mycoll/orders"],
+                input_tables=["mycoll/orders@NEW"],
                 destination=AwsGlueDest(tables=["sales.orders"]),
             )
-            def publish(orders: TableFrameSpec) -> TableFrameSpec:
-                return orders
+            def publish(orders: TableFramesSpec) -> TableFrameSpec:
+                return concat(orders)
 
         Overwrite a table on each run; the name leaves the database
         out, so the connection's `database` is used:
@@ -310,29 +312,29 @@ class AwsGlueDest(Dest):
         .. code-block:: python
 
             @subscriber(
-                input_tables=["mycoll/orders_v2"],
+                input_tables=["mycoll/orders_v2@NEW"],
                 destination=AwsGlueDest(
                     tables=["sales.orders"],
                     schema_evolution="update",
                 ),
             )
-            def evolve(orders: TableFrameSpec) -> TableFrameSpec:
-                return orders
+            def evolve(orders: TableFramesSpec) -> TableFrameSpec:
+                return concat(orders)
 
         Write two tables from one function, one output slot each:
 
         .. code-block:: python
 
             @subscriber(
-                input_tables=["mycoll/orders", "mycoll/customers"],
+                input_tables=["mycoll/orders@NEW", "mycoll/customers@NEW"],
                 destination=AwsGlueDest(
                     tables=["sales.orders", "sales.customers"],
                 ),
             )
             def publish(
-                orders: TableFrameSpec, customers: TableFrameSpec
+                orders: TableFramesSpec, customers: TableFramesSpec
             ) -> tuple[TableFrameSpec, TableFrameSpec]:
-                return orders, customers
+                return concat(orders), concat(customers)
 
         Query a written table from Amazon Athena:
 

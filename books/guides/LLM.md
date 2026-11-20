@@ -290,7 +290,8 @@ Specifically:
     input may be either `TableFrame` or `list[TableFrame]`.
   - `TableFrame` is shorthand for `TableFrame | None`
     (auto-nullable). For `list[TableFrame]` the list is required
-    but its elements may be `None`.
+    but its elements may be `None`. What a `None` or an empty frame
+    means, received or returned: `tdk docs show --name nothing-new`.
 * The return must be a fixed-length tuple of `TableFrame` of arity:
   - `len(output_tables)` for `@publisher`, `@stream_publisher`,
     `@transformer`.

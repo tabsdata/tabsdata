@@ -12,8 +12,8 @@ summary: >-
   watermark, so updates to existing rows are not picked up. The :since bind
   is seeded by initial_values on the first run; afterwards the value saved
   with ctx.set_attr is used. The watermark is read off the rows actually
-  published, and the query orders by it so paging never skips rows. An empty
-  batch publishes nothing and keeps the watermark.
+  published, and the query orders by it so paging never skips rows. A run
+  without new rows publishes an empty frame and keeps the watermark.
 """
 
 from tabsdatak.api import TableFrameSpec, TransactionCtx, publisher
@@ -35,7 +35,6 @@ def pub_postgres_incremental(
     if orders is None:
         return None
     top = orders.max_for("id")
-    if top is None:
-        return None
-    ctx.set_attr("since", int(top["id"]))
+    if top is not None:
+        ctx.set_attr("since", int(top["id"]))
     return orders

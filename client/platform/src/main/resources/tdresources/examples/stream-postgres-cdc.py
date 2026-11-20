@@ -33,4 +33,4 @@ from tabsdatak.tableframe.functions import concat
 def stream_postgres_cdc(
     customers: TableFramesSpec, orders: TableFramesSpec
 ) -> tuple[TableFrameSpec, TableFrameSpec]:
-    return concat(customers or []), concat(orders or [])
+    return concat(customers), concat(orders)

@@ -25,7 +25,8 @@ def main() -> None:
         path = root / connection_file
         document = yaml.load(path)
         document["spec"]["base_path"] = str((root / data_dir).resolve())
-        yaml.dump(document, path)
+        with path.open("w", encoding="utf-8") as stream:
+            yaml.dump(document, stream)
 
 
 if __name__ == "__main__":

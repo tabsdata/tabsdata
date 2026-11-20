@@ -25,8 +25,12 @@ function only references `StarRocksDest`.
 Examples:
     .. code-block:: python
 
-        @subscriber(destination=StarRocksDest(tables=["wld_country"]),
-                    input_tables=["mycoll/cities"])
+        @subscriber(
+            destination=StarRocksDest(
+                tables=["wld_country"], if_table_exists="replace"
+            ),
+            input_tables=["mycoll/cities"],
+        )
         def publish(rows: TableFrameSpec) -> TableFrameSpec:
             return rows
 `port` is a string-or-secret field; the plugin reads its parsed value
@@ -314,7 +318,8 @@ class StarRocksDest(Dest):
             special characters.
         if_table_exists: `"append"` (the default) issues
             `INSERT INTO`; `"replace"` issues `TRUNCATE` +
-            `INSERT INTO` against the existing table.
+            `INSERT INTO` against the existing table. A slot returned as
+            `None` leaves its table as it is.
         schema_evolution: What a write does when the batch's columns differ from
             the table's. `"strict"` (the default) refuses a batch with a column
             the table lacks or a wider type, except that a text column takes
@@ -361,10 +366,10 @@ class StarRocksDest(Dest):
                 destination=StarRocksDest(
                     tables=["wld_country"], if_table_exists="append"
                 ),
-                input_tables=["subs_tables/wld_country"],
+                input_tables=["subs_tables/wld_country@NEW"],
             )
-            def out_append(country: TableFrameSpec) -> TableFrameSpec:
-                return country
+            def out_append(country: TableFramesSpec) -> TableFrameSpec:
+                return concat(country)
 
         Replace truncates the target table, then reloads it:
 

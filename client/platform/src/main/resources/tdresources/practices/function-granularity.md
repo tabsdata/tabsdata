@@ -85,7 +85,8 @@ named `publish_<model>`.
   every input, so write the whole set each run: `if_table_exists="replace"`
   (or `"merge"` on a destination that has it), not `"append"`.
 - Return a frame for every slot, or `None` for all of them when any input is
-  missing; `None` in only some slots fails the run.
+  missing: `None` leaves a slot's table as it is, so `None` in only some
+  slots writes a set mixed with an older one.
 - Split only what is unrelated: tables no reader joins, tables bound for
   another system or schema, or large tables on very different schedules.
 

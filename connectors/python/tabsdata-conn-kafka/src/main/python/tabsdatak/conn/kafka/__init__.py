@@ -324,8 +324,10 @@ class KafkaStreamSrc(StreamSrc):
     schema, and a row whose values do not fit them is a dead letter.
 
     Used as the `source` of a `@stream_publisher`; that function
-    receives the batch as a list of frames. The emitted table name is
-    the `topic`.
+    receives the batch as a list of frames. A batch without messages
+    (as `batch_idle_secs` stages) hands a list holding one empty frame
+    with the columns last staged, or `[]` while none was staged. The
+    emitted table name is the `topic`.
 
     Every batch this source stages automatically carries a
     `@td.kafka.topic` column holding the topic the message was consumed

@@ -45,4 +45,4 @@ EVENT_SCHEMA = json.dumps({
     output_tables=["clickstream"],
 )
 def stream_kafka_topic(events: TableFramesSpec) -> TableFrameSpec:
-    return concat(events or [])
+    return concat(events)

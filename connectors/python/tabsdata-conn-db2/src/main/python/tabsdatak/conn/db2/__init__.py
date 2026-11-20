@@ -37,8 +37,10 @@ Examples:
         def ingest(cities: TableFrameSpec) -> TableFrameSpec:
             return cities
 
-        @subscriber(destination=Db2Dest(tables=["cap_rows"]),
-                    input_tables=["mycoll/cities"])
+        @subscriber(
+            destination=Db2Dest(tables=["cap_rows"], if_table_exists="replace"),
+            input_tables=["mycoll/cities"],
+        )
         def publish(cities: TableFrameSpec) -> TableFrameSpec:
             return cities
 A `@stream_publisher` receives the flushed batch as a list of frames.
@@ -337,7 +339,9 @@ class Db2Dest(Dest):
         tables: Target table names, qualified or bare (see
             `Db2TableNameSpec`); one input slot per table, in order.
         if_table_exists: `"append"` (default) adds rows; `"replace"`
-            truncates the table before inserting.
+            truncates the table before inserting, so an empty frame
+            empties it. A slot returned as `None` leaves its table as it
+            is.
         transactional: When `True` (default), wrap every table write
             in one transactional session.
         schema_evolution: What a write does when the batch's columns differ from
@@ -575,7 +579,10 @@ class Db2CdcStreamSrc(StreamSrc):
     tables); the ingester resolves the source via
     `ASN.IBMSNAP_REGISTER`. The decorated `@stream_publisher`
     function receives the flushed batch as a list of frames and must NOT
-    declare a `ctx` parameter.
+    declare a `ctx` parameter. A
+    table without changes in the batch hands a list holding one empty
+    frame with the columns last staged for it, or `[]` while none was
+    staged.
 
     Args:
         tables: Qualified `cd_schema.cd_table` CD table names, each listed once.

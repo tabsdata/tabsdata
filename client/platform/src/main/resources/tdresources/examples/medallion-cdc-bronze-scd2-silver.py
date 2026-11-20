@@ -45,7 +45,7 @@ from tabsdatak.tableframe.functions import concat
     output_tables=["customers_changes"],
 )
 def stream_customers_changes(changes: TableFramesSpec) -> TableFrameSpec:
-    return concat(changes or [])
+    return concat(changes)
 
 
 @transformer(
@@ -55,7 +55,7 @@ def stream_customers_changes(changes: TableFramesSpec) -> TableFrameSpec:
 def tfr_customers_bronze(changes: TableFramesSpec) -> TableFrameSpec:
     return build_cdc_bronze(
         full_commits=[],
-        cdc_commits=[frame for frame in changes or [] if frame is not None],
+        cdc_commits=changes,
         pk=[{"customer_id": datatypes.Int64}],
     )
 
@@ -63,31 +63,30 @@ def tfr_customers_bronze(changes: TableFramesSpec) -> TableFrameSpec:
 @transformer(
     input_tables=[
         "customers_bronze@NEW",
-        "customers_valid_raw@HEAD",
-        "customers_expired_raw@HEAD",
+        "customers_scd2_valid_raw@HEAD",
+        "customers_scd2_expired_raw@HEAD",
     ],
-    output_tables=["customers_valid_raw", "customers_expired_raw"],
-    trigger_by=TablesTrigger(tables=["customers_bronze"]),
+    output_tables=["customers_scd2_valid_raw", "customers_scd2_expired_raw"],
 )
-def tfr_customers_scd2(
+def tfr_customers_scd2_change_detect(
     bronze: TableFramesSpec,
     valid_head: TableFrameSpec,
     expired_head: TableFrameSpec,
 ) -> tuple[TableFrameSpec, TableFrameSpec]:
-    frames = [frame for frame in bronze or [] if frame is not None]
-    if not frames and valid_head is None:
-        return None, None
     return build_scd2_silver(
-        bronze=frames, valid_head=valid_head, expired_head=expired_head
+        bronze=bronze, valid_head=valid_head, expired_head=expired_head
     )
 
 
 @transformer(
-    input_tables=["customers_valid_raw", "customers_expired_raw"],
+    input_tables=[
+        "customers_scd2_valid_raw@HEAD",
+        "customers_scd2_expired_raw@HEAD",
+    ],
     output_tables=["customers_valid_silver", "customers_expired_silver"],
-    trigger_by=TablesTrigger(tables=["customers_valid_raw"]),
+    trigger_by=TablesTrigger(tables=["customers_scd2_valid_raw"]),
 )
-def tfr_customers_silver(
+def tfr_customers_scd2_cleanse(
     valid_raw: TableFrameSpec, expired_raw: TableFrameSpec
 ) -> tuple[TableFrameSpec, TableFrameSpec]:
     if valid_raw is None or expired_raw is None:

@@ -35,7 +35,7 @@ from tabsdatak.tableframe.functions import concat
     input_tables=["customers_cdc/customers_changes@NEW"],
 )
 def sub_snowflake(changes: TableFramesSpec) -> TableFrameSpec:
-    batch = concat(changes or [])
+    batch = concat(changes)
     if batch is None:
         return None
     batch = batch.rename({"@td.cdc.meta.op": "op"})

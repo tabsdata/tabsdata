@@ -8,10 +8,12 @@ kind: publisher
 connectors: [s3-file-in]
 tags: [file, parquet, glob, incremental, last-modified]
 summary: >-
-  Reads every Parquet object matching a glob in the last path segment.
-  initial_last_modified makes it incremental: the first run takes objects
-  modified since the cutoff and each later run only the newer ones. A run that
-  finds no new objects publishes nothing.
+  Reads the new Parquet objects matching a glob in the last path segment:
+  initial_last_modified makes the first run take the objects modified since
+  the cutoff and each later run only the newer ones. incremental stays at its
+  default (True), since each run adds to what was read before, so a run that
+  finds no new object publishes an empty frame with the last columns (None
+  before any object was read).
 """
 
 from datetime import datetime, timezone
@@ -29,4 +31,4 @@ from tabsdatak.tableframe.functions import concat
     output_tables=["events"],
 )
 def pub_s3_parquet_glob(events: TableFramesSpec) -> TableFrameSpec:
-    return concat(events or [])
+    return concat(events)

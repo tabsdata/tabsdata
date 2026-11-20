@@ -11,6 +11,7 @@ and a transformer with a ``SAMPLE`` runs on it. A parameter typed
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import subprocess
 import sys
 import typing
@@ -19,6 +20,7 @@ from unittest.mock import patch
 
 import pytest
 
+from tabsdatak.api import TransactionCtx
 from tabsdatak.cli._docs._catalog import build_catalog
 from tabsdatak.cli._examples import (
     PROJECT,
@@ -146,8 +148,56 @@ def test_transformer_runs_on_its_sample(module):
     assert any(output is not None for output in outputs)
 
 
+@pytest.mark.parametrize("module", list(_sampled()))
+def test_transformer_runs_without_new_versions(module):
+    (function,) = _functions(module)
+    hints = typing.get_type_hints(function.func)
+    frames = {
+        parameter: []
+        if _is_versions(hints.get(parameter))
+        else TableFrame.from_dict(columns)
+        for parameter, columns in module.SAMPLE.items()
+    }
+    result = function.func(**frames)
+    outputs = result if isinstance(result, tuple) else (result,)
+    assert len(outputs) == len(function.output_tables)
+    assert all(output is None or isinstance(output, TableFrame) for output in outputs)
+
+
 def test_most_transformers_carry_a_sample():
     assert len(list(_sampled())) >= 5
+
+
+def _publishers():
+    for example in SNIPPETS:
+        if example.kind in ("publisher", "stream_publisher"):
+            yield pytest.param(_module(example.path), id=example.name)
+
+
+class _Ctx:
+    def __init__(self):
+        self.attrs = {}
+
+    def set_attr(self, name, value):
+        self.attrs[name] = value
+
+
+@pytest.mark.parametrize("module", list(_publishers()))
+def test_publisher_takes_a_source_that_never_had_data(module):
+    (function,) = _functions(module)
+    hints = typing.get_type_hints(function.func)
+    ctx = _Ctx()
+    arguments = {
+        name: ctx
+        if hints.get(name) is TransactionCtx
+        else ([] if _is_versions(hints.get(name)) else None)
+        for name in inspect.signature(function.func).parameters
+    }
+    result = function.func(**arguments)
+    outputs = result if isinstance(result, tuple) else (result,)
+    assert len(outputs) == len(function.output_tables)
+    assert all(output is None or isinstance(output, TableFrame) for output in outputs)
+    assert ctx.attrs == {}
 
 
 def test_snippets_pass_ruff():

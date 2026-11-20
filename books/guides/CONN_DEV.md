@@ -257,6 +257,50 @@ annotation naming `LazyFrameInput` in any other shape, one naming bare
 `pl.LazyFrame`s, and one naming frames that does not resolve at
 runtime.
 
+#### Runs that find no new data
+
+An input whose entry yields no table reaches the function as `None`
+(`[]` for an array input). That is right before the source ever read
+data for it, and for a file source with `incremental=False` when
+nothing changed; otherwise a run with nothing new hands the function
+an empty frame with the columns it was last served, so its usual logic
+runs and the table gets a version with no rows. `SlotSchemas`
+(`tabsdatak.conn.common._schemas`) keeps the last schema of each input
+in the function's state and builds that frame:
+
+```python
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._schemas import SlotSchemas
+
+class _<Name>SrcPlugin(SrcPlugin[<Name>Conn, <Name>Src]):
+    def read_in(self, ctx, conn, src) -> list[Iterable[LazyFrameInput]]:
+        schemas = SlotSchemas.of(ctx)
+        return [self.tables(schemas, slot, entry) for slot, entry in enumerate(...)]
+
+    def tables(self, schemas, slot, entry) -> Iterator[LazyFrameInput]:
+        served = False
+        for table in ...:  # the tables read from entry
+            served = True
+            yield schemas.served(slot, table)
+        if not served:
+            empty = schemas.empty(slot)
+            if empty is not None:
+                yield empty
+```
+
+- `served` remembers the schema each table is served with, also when
+  its metadata is learnt while the frame streams.
+- `empty` gives an empty frame of the last schema, with the `columns`,
+  `rules` and `inception` of the metadata passed to it, or `None` when
+  the input never served one. An empty result whose columns the source
+  types itself (a described query, an sObject) is passed through
+  `served` as it is instead.
+- A file source honours its `incremental` option: with `False`, a path
+  that takes no new file yields nothing, since the data it read before
+  is still valid.
+
+The function contract these build: `tdk docs show --name nothing-new`.
+
 ### Destination handoff
 
 The third type argument of `DestPlugin` decides how a destination
@@ -297,7 +341,8 @@ class _<Name>DestPlugin(
 The runtime calls `write_out` on every run of the subscriber. A `None`
 entry means the subscriber returned `None` for that output: the plugin
 leaves its target as it is, and with every entry `None` it writes
-nothing.
+nothing. A frame with no rows is still written: the target gets no
+rows, and a write that replaces it empties it.
 
 `DestDef` refuses, when the connector is imported, a third argument
 other than `list[pl.LazyFrame | None]` (`Optional[pl.LazyFrame]` is the

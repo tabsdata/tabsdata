@@ -12,7 +12,10 @@ summary: >-
   replace. To mirror the current state of a table, subscribe to its latest
   version and write it with replace, which truncates and reloads the target
   in one transaction. A subscriber with one input runs whenever that table
-  gets a new version.
+  gets a new version. The table must hold its whole current state: one
+  holding a batch per version, as an incremental publisher's does, would
+  leave only the last batch, so mirror an accumulated table instead
+  (tfr-accumulate-batches).
 """
 
 from tabsdatak.api import TableFrameSpec, subscriber

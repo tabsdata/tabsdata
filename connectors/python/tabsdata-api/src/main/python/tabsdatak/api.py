@@ -49,23 +49,29 @@ from tabsdatak.tableframe import TableFrame
 #
 # Every input parameter or output element of a `@publisher` /
 # `@stream_publisher` / `@transformer` / `@subscriber` function
-# must be annotated as one of these aliases. They make the nullability
-# explicit:
+# must be annotated as one of these aliases:
 #
-#   * `TableFrameSpec`  -- a single TableFrame slot. The runtime
-#     may pass `None` (e.g. an upstream table did not produce a
-#     batch for this trigger), so the slot must accept `None`.
+#   * `TableFrameSpec`  -- a single TableFrame slot. A source slot that
+#     found no new data is an empty frame with the columns of the last
+#     run that had data, and `None` while no run has had data, unless
+#     the source types the columns itself (a SQL query, a Salesforce
+#     sObject). A table input is `None` while its table has no version
+#     with data yet.
 #
-#   * `TableFramesSpec` -- an array of TableFrame slots. The runtime
-#     may pass `None` for the whole list (the entire array slot is
-#     empty) and may pass `None` for individual elements of the list
-#     (some upstream tables had no batch), so both layers must accept
-#     `None`.
+#   * `TableFramesSpec` -- an array of TableFrame slots. A source slot
+#     follows the same rule, with `[]` for nothing; a file source with
+#     `incremental=False` hands `[]` for a path that takes no new file.
+#     A table input is `[]` when no version
+#     is in range (an `@NEW` read with no new version), and an element is
+#     `None` for a version from before the table had data.
 #
 # The return is a fixed-length `tuple` with one `TableFrameSpec`
 # slot per output table. As a single-output convenience, a function
 # that declares exactly one output table may return the lone
-# `TableFrameSpec` bare, without the enclosing 1-tuple.
+# `TableFrameSpec` bare, without the enclosing 1-tuple. An output
+# returned as `None` keeps its table's current data: the new version
+# stands for the previous one, and an `@NEW` reader receives that data
+# again. An empty frame is a version with no rows.
 TableFrameSpec: TypeAlias = TableFrame | None
 TableFramesSpec: TypeAlias = list[TableFrame | None] | None
 
@@ -419,7 +425,13 @@ def publisher(
     mode) or `TableFramesSpec` (array mode) -- plus an *optional*
     trailing `ctx: TransactionCtx`, and returns one `TableFrame` per output
     table (a lone output may be returned bare rather than as a 1-tuple).
-    A slot may be `None` when an upstream batch is absent.
+    When a run finds no new data, a source hands an empty frame with the
+    columns of the last run that had data: publishing it writes a version
+    with no rows. A file source with `incremental=False` hands nothing
+    instead (`[]`), meaning nothing changed: `concat` of it is `None`, and
+    returning `None` keeps the table's data. A slot is `None` (`[]` for a
+    list) while no run has had data for it, unless the source types the
+    columns itself (a SQL query, a Salesforce sObject).
 
     A publisher is one read of its source, and runs as one unit: its
     outputs commit in the same transaction or not at all.
@@ -479,7 +491,9 @@ def stream_publisher(
     (always array mode) plus an *optional* trailing
     `ctx: TransactionCtx`, and returns one `TableFrame` per output
     table. The function runs once per batch, in the transaction that
-    commits it, so `ctx` is that transaction's context.
+    commits it, so `ctx` is that transaction's context. A slot with no
+    data in the batch holds one empty frame with the columns of the last
+    batch that had data, and is `[]` while no batch has had data for it.
 
     Each batch is one unit: its outputs commit in the same transaction
     or not at all, so the tables of one stream advance together.
@@ -604,7 +618,16 @@ def transformer(
     takes one parameter per input table (`TableFrameSpec` or
     `TableFramesSpec`) plus an *optional* trailing `ctx: TransactionCtx`,
     and returns one `TableFrame` per output table. An input slot is
-    `None` while its table has no version with data yet.
+    `None` (an element, in a list slot) while its table has no version
+    with data yet.
+
+    Return an empty frame with the output's columns when there are no
+    rows to write. When an `@NEW` input brings no version, read the same
+    table at `@HEAD` too and run on its `clear()`, or return `None`
+    while it is `None`.
+    Returning `None` keeps the output's current data: its new version
+    stands for the previous one, and a reader of that output at `@NEW`
+    receives that data again.
 
     A transformer is one computation over the tables it lists, and runs
     as one unit: a run computes all its outputs, they commit in the
@@ -661,11 +684,17 @@ def subscriber(
     :categories: functions
 
     Reads `input_tables` and writes to `destination`. The function
-    takes one `TableFrameSpec` parameter per input table plus an
-    *optional* trailing `ctx: TransactionCtx`, and returns one `TableFrame`
-    per destination slot -- that return value is what gets written.
+    takes one parameter per input table (`TableFrameSpec`, or
+    `TableFramesSpec` for a read of several versions such as `@NEW`)
+    plus an *optional* trailing `ctx: TransactionCtx`, and returns one
+    `TableFrame` per destination slot -- that return value is what gets
+    written.
     Return `None` for a slot to leave its target as it is; with `None`
     in every slot, the destination writes nothing.
+
+    A destination appended to reads its tables at `@NEW`, so each
+    version is written once, even when several commit between two runs;
+    a destination replaced every run reads them at `@HEAD`.
 
     A subscriber hands all its slots to the destination in one write;
     a destination with a `transactional` option writes them in one
@@ -778,8 +807,8 @@ class TransactionCtx(TransactionCtxLegacy, ABC):
         invocations within the same flow.
 
         Connectors may reserve namespaces under this attribute store
-        for their own internal bookkeeping (`file-lastmod.*` is
-        the only one today). Writing to such names from user code
+        for their own internal bookkeeping (`file-lastmod.*` and
+        `@td.schema.*` today). Writing to such names from user code
         can corrupt connector state -- pick names that don't
         collide with these prefixes.
         """

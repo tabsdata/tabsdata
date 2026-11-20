@@ -79,7 +79,7 @@ def test_a_file_publisher_receives_every_file_of_a_slot():
             output_tables=["output"],
         )
         def load_events(output: TableFramesSpec) -> TableFrameSpec:
-            return concat(output or [])
+            return concat(output)
         """
     )
 
@@ -89,7 +89,7 @@ def test_a_stream_publisher_batches_its_frames():
     assert made.kind == "stream_publisher"
     assert "batch_max_secs=300," in made.source
     assert "def stream_kafka_topic_in(clicks: TableFramesSpec)" in made.source
-    assert "return concat(clicks or [])" in made.source
+    assert "return concat(clicks)" in made.source
 
 
 def test_a_transformer_binds_no_connector():
@@ -133,7 +133,7 @@ def test_an_input_of_several_versions_takes_a_list_slot(tmp_path):
         def transform(
             orders: TableFramesSpec, prices: TableFramesSpec, items: TableFrameSpec
         ) -> TableFrameSpec:
-            return concat(orders or [])
+            return concat(orders)
         """
     )
     path = tmp_path / "transform.py"
@@ -271,7 +271,7 @@ def test_scaffold_parameters_never_shadow_imports_or_the_function():
     stream = next(c.type for c in connectors() if c.kind == "stream_publisher")
     made = build_scaffold(None, stream, name="pub", outputs=["concat", "pub"])
     compile(made.source, "scaffold.py", "exec")
-    assert "concat(concat_2 or [])" in made.source
+    assert "concat(concat_2)" in made.source
     assert "pub_2: TableFramesSpec" in made.source
     made = build_scaffold("transformer", inputs=["class", "TableFrameSpec"])
     assert "class_2: TableFrameSpec, tableframespec" in made.source.replace("\n", " ")

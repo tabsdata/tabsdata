@@ -27,4 +27,4 @@ from tabsdatak.tableframe.functions import concat
 def pub_azure_json(
     orders: TableFramesSpec, returns: TableFramesSpec
 ) -> tuple[TableFrameSpec, TableFrameSpec]:
-    return concat(orders or []), concat(returns or [])
+    return concat(orders), concat(returns)

@@ -23,8 +23,10 @@ function only references `SnowflakeDest`.
 Examples:
     .. code-block:: python
 
-        @subscriber(destination=SnowflakeDest(tables=["cap_rows"]),
-                    input_tables=["mycoll/cities"])
+        @subscriber(
+            destination=SnowflakeDest(tables=["cap_rows"], if_table_exists="replace"),
+            input_tables=["mycoll/cities"],
+        )
         def publish(rows: TableFrameSpec) -> TableFrameSpec:
             return rows
 """
@@ -316,7 +318,8 @@ class SnowflakeDest(Dest):
             the existing schema is preserved);
             `"merge"` stages the rows and `MERGE`s them onto the
             target by the keys in `merge_cfg`, updating, deleting or
-            inserting each one.
+            inserting each one. A slot returned as `None` leaves its
+            table as it is.
         schema_evolution: What a write does when the batch's columns differ from
             the table's. `"strict"` (the default) refuses a batch with a column
             the table lacks or a wider type; `"update"` adds the column and
@@ -391,10 +394,10 @@ class SnowflakeDest(Dest):
                     tables=["cap_append"],
                     if_table_exists="append",
                 ),
-                input_tables=["caps_input/cap_rows"],
+                input_tables=["caps_input/cap_rows@NEW"],
             )
-            def load_append(rows: TableFrameSpec) -> TableFrameSpec:
-                return rows
+            def load_append(rows: TableFramesSpec) -> TableFrameSpec:
+                return concat(rows)
 
         Replace mode truncates the target before `COPY INTO`,
         preserving the existing schema on reload:
@@ -424,10 +427,10 @@ class SnowflakeDest(Dest):
                     schema_evolution="update",
                     dest_cfg={"snowflake.schema_evolution_engine": "iceberg"},
                 ),
-                input_tables=["caps_input/cap_changes"],
+                input_tables=["caps_input/cap_changes@NEW"],
             )
-            def load_merge(changes: TableFrameSpec) -> TableFrameSpec:
-                return changes
+            def load_merge(changes: TableFramesSpec) -> TableFrameSpec:
+                return concat(changes)
     """
 
     tables: SnowflakeTableNamesSpec

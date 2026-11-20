@@ -24,8 +24,10 @@ function only references `BigQueryDest`.
 Examples:
     .. code-block:: python
 
-        @subscriber(destination=BigQueryDest(tables=["`cap_rows`"]),
-                    input_tables=["mycoll/cities"])
+        @subscriber(
+            destination=BigQueryDest(tables=["`cap_rows`"], if_table_exists="replace"),
+            input_tables=["mycoll/cities"],
+        )
         def publish(rows: TableFrameSpec) -> TableFrameSpec:
             return rows
 """
@@ -336,7 +338,8 @@ class BigQueryDest(Dest):
             name in one backtick pair, e.g. `my-project.ds.t`.
         if_table_exists: `"append"` (the default) adds rows;
             `"replace"` empties the table and loads the batch;
-            `"merge"` merges rows.
+            `"merge"` merges rows. A slot returned as `None` leaves its
+            table as it is.
         schema_evolution: What a write does when the batch's columns differ from
             the table's, a replace included. `"strict"` (the default) refuses a
             batch with a column the table lacks or a wider type; `"update"` adds
@@ -425,10 +428,10 @@ class BigQueryDest(Dest):
                     if_table_exists="append",
                     schema_evolution="update",
                 ),
-                input_tables=["caps_input/cap_evo_v2"],
+                input_tables=["caps_input/cap_evo_v2@NEW"],
             )
-            def evolve(v2: TableFrameSpec) -> TableFrameSpec:
-                return v2
+            def evolve(v2: TableFramesSpec) -> TableFrameSpec:
+                return concat(v2)
 
         Merge mode merges incoming rows onto the target by the keys in `merge_cfg`:
 
@@ -445,10 +448,10 @@ class BigQueryDest(Dest):
                         )
                     ],
                 ),
-                input_tables=["caps_input/cap_merge_v2"],
+                input_tables=["caps_input/cap_merge_v2@NEW"],
             )
-            def merge(rows: TableFrameSpec) -> TableFrameSpec:
-                return rows
+            def merge(rows: TableFramesSpec) -> TableFrameSpec:
+                return concat(rows)
     """
 
     tables: BigQueryTableNamesSpec

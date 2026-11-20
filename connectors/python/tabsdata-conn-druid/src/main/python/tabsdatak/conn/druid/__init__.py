@@ -24,7 +24,9 @@ Examples:
     .. code-block:: python
 
         @subscriber(
-            destination=DruidDest(tables=["events"], time_column="ts"),
+            destination=DruidDest(
+                tables=["events"], time_column="ts", if_table_exists="replace"
+            ),
             input_tables=["mycoll/events"],
         )
         def publish(events: TableFrameSpec) -> TableFrameSpec:
@@ -340,7 +342,8 @@ class DruidDest(Dest):
             chars, not starting with `.` or `_`, and containing no
             `/`, backslash or NUL).
         if_table_exists: `"append"` (default) or `"replace"`
-            (overwrite the datasource).
+            (overwrite the datasource). A slot returned as `None` leaves
+            its datasource as it is.
         schema_evolution: `"update"`, the default and only policy: Druid
             cannot enforce a schema, so a datasource takes whatever columns
             a batch brings.

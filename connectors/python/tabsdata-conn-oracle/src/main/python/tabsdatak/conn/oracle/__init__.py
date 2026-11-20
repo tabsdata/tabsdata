@@ -26,8 +26,10 @@ Examples:
         def ingest(cities: TableFrameSpec) -> TableFrameSpec:
             return cities
 
-        @subscriber(destination=OracleDest(tables=["cap_rows"]),
-                    input_tables=["mycoll/cities"])
+        @subscriber(
+            destination=OracleDest(tables=["cap_rows"], if_table_exists="replace"),
+            input_tables=["mycoll/cities"],
+        )
         def publish(cities: TableFrameSpec) -> TableFrameSpec:
             return cities
 URI and credential fields accept `Secret` references. Cross-cutting
@@ -307,7 +309,9 @@ class OracleDest(Dest):
         tables: Target table names, qualified or bare (see
             `OracleTableNameSpec`); one input slot per table, in order.
         if_table_exists: `"append"` (default) adds rows; `"replace"`
-            truncates the table before inserting.
+            truncates the table before inserting, so an empty frame
+            empties it. A slot returned as `None` leaves its table as it
+            is.
         transactional: When `True` (default), wrap every table write
             in one transactional session.
         schema_evolution: What a write does when the batch's columns differ from

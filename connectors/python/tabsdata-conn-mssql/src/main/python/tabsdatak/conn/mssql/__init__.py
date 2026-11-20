@@ -26,8 +26,10 @@ Examples:
         def ingest(cities: TableFrameSpec) -> TableFrameSpec:
             return cities
 
-        @subscriber(destination=MSSQLDest(tables=["cap_rows"]),
-                    input_tables=["mycoll/cities"])
+        @subscriber(
+            destination=MSSQLDest(tables=["cap_rows"], if_table_exists="replace"),
+            input_tables=["mycoll/cities"],
+        )
         def publish(rows: TableFrameSpec) -> TableFrameSpec:
             return rows
 """
@@ -291,7 +293,9 @@ class MSSQLDest(Dest):
             `database.schema.table`); bracket-quote a part
             (`[name]`) to allow special characters.
         if_table_exists: `"append"` (the default) adds rows;
-            `"replace"` truncates the table before inserting.
+            `"replace"` truncates the table before inserting, so an empty
+            frame empties it. A slot returned as `None` leaves its table as
+            it is.
         transactional: When `True` (the default), wrap every table
             write in one transactional session.
         schema_evolution: What a write does when the batch's columns differ from

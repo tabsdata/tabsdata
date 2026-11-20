@@ -31,8 +31,10 @@ Examples:
         def ingest(cities: TableFrameSpec) -> TableFrameSpec:
             return cities
 
-        @subscriber(destination=DatabricksDest(tables=["cap_rows"]),
-                    input_tables=["mycoll/cities"])
+        @subscriber(
+            destination=DatabricksDest(tables=["cap_rows"], if_table_exists="replace"),
+            input_tables=["mycoll/cities"],
+        )
         def publish(rows: TableFrameSpec) -> TableFrameSpec:
             return rows
 """
@@ -428,7 +430,8 @@ class DatabricksDest(Dest):
         if_table_exists: `"append"` (the default) adds rows;
             `"replace"` empties the table and writes the batch, keeping the
             table and its columns.
-            `"merge"` merges rows.
+            `"merge"` merges rows. A slot returned as `None` leaves its
+            table as it is.
         schema_evolution: What a write does when the batch's columns differ from
             the table's, a replace included. `"strict"` (the default) refuses a
             batch with a column the table lacks or a wider type, before a replace
@@ -501,10 +504,10 @@ class DatabricksDest(Dest):
                     if_table_exists="append",
                     schema_evolution="update",
                 ),
-                input_tables=["caps_input/cap_evo_v2"],
+                input_tables=["caps_input/cap_evo_v2@NEW"],
             )
-            def evolve(rows: TableFrameSpec) -> TableFrameSpec:
-                return rows
+            def evolve(rows: TableFramesSpec) -> TableFrameSpec:
+                return concat(rows)
 
         Merge mode merges incoming rows onto the target by the keys in `merge_cfg`:
 
@@ -520,10 +523,10 @@ class DatabricksDest(Dest):
                         )
                     ],
                 ),
-                input_tables=["caps_input/cap_merge_v2"],
+                input_tables=["caps_input/cap_merge_v2@NEW"],
             )
-            def merge(rows: TableFrameSpec) -> TableFrameSpec:
-                return rows
+            def merge(rows: TableFramesSpec) -> TableFrameSpec:
+                return concat(rows)
     """
 
     tables: DatabricksTableNamesSpec

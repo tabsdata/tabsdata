@@ -6,12 +6,11 @@
 title: Split one table into several outputs
 kind: transformer
 connectors: []
-tags: [multi-output, split, none-output]
+tags: [multi-output, split]
 summary: >-
   Routes valid payments and rejected payments to separate tables, returning
-  one value per output table. An output returned as None records a version
-  without data, so readers keep the table's last data: that is how the
-  rejects table stays untouched when nothing was rejected.
+  one value per output table. Both are recomputed from all payments on every
+  run, so with nothing rejected the rejects table is empty.
 """
 
 from tabsdatak.api import TableFrameSpec, transformer
@@ -38,6 +37,4 @@ def multi_output_split(
     is_valid = (col("amount") > 0) & col("currency").is_not_null()
     valid = payments.filter(is_valid)
     rejected = payments.filter(~is_valid)
-    if rejected.max_for("payment_id") is None:
-        rejected = None
     return valid, rejected

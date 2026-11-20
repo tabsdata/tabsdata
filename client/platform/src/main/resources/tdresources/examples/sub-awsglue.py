@@ -32,4 +32,4 @@ from tabsdatak.tableframe.functions import concat
     ),
 )
 def sub_awsglue(orders: TableFramesSpec) -> TableFrameSpec:
-    return concat(orders or [])
+    return concat(orders)

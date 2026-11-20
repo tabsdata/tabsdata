@@ -10,7 +10,8 @@ tags: [dev, datagen, testing, chunked]
 summary: >-
   Emits in-line dataframes without any external system, handy for building
   and testing downstream functions. The second table is chunked: each run
-  emits the next rows and the slot is None once the frame is exhausted.
+  emits the next rows, and an empty frame with the same columns once the frame
+  is exhausted.
 """
 
 import polars as pl

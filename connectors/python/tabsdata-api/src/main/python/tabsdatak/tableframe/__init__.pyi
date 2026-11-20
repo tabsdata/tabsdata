@@ -1009,6 +1009,7 @@ class TableFrame(EngineFrame):
         Args:
             schema: Optional `{column: data type}` mapping giving the frame
                 its columns. Without it the frame has no columns either.
+                To keep a frame's columns, use its `clear()`.
 
         Returns:
             A new, empty `TableFrame`.

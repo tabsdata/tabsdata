@@ -33,7 +33,7 @@ from tabsdatak.tableframe.functions import concat
     output_tables=["products"],
 )
 def pub_gcs_csv(products: TableFramesSpec) -> TableFrameSpec:
-    frame = concat(products or [])
+    frame = concat(products)
     if frame is None:
         return None
     return frame.select("product_id", "name", "category", "price", "released")

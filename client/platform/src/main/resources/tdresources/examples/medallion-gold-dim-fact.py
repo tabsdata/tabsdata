@@ -17,10 +17,12 @@ summary: >-
   order to the customer version active when it happened and derives a date
   key; an order whose customer version is not in the history yet is dropped,
   since the join is inner and the orders are read once (@NEW).
+  build_fact_table adds them to fct_orders@HEAD, so the table holds every
+  fact.
 """
 
 from tabsdatak._medallion.gold.dim import build_type1_dim, build_type2_dim
-from tabsdatak._medallion.gold.fact import build_fact
+from tabsdatak._medallion.gold.fact import build_fact_table
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, TablesTrigger, transformer
 
 
@@ -49,16 +51,23 @@ def tfr_dim_customer_history(
 
 
 @transformer(
-    input_tables=["orders_silver/orders_event_silver@NEW", "dim_customer_history@HEAD"],
+    input_tables=[
+        "orders_silver/orders_event_silver@NEW",
+        "dim_customer_history@HEAD",
+        "fct_orders@HEAD",
+    ],
     output_tables=["fct_orders"],
     trigger_by=TablesTrigger(tables=["orders_silver/orders_event_silver"]),
 )
 def tfr_fct_orders(
-    orders: TableFramesSpec, customer_history: TableFrameSpec
+    orders: TableFramesSpec,
+    customer_history: TableFrameSpec,
+    fct_head: TableFrameSpec,
 ) -> TableFrameSpec:
     if customer_history is None:
         return None
-    return build_fact(
-        orders or [],
+    return build_fact_table(
+        orders,
         dim_versions=[(customer_history, ["customer_id"], "customer_version_sk")],
+        fact_head=fct_head,
     )

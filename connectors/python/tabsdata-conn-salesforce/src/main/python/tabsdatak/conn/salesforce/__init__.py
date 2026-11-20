@@ -284,6 +284,9 @@ class SalesforceReportSrc(Src):
     `src_cfg` key `tabsdata.src_metadata.drop` to `True` leaves them
     off.
 
+    A report that returns no rows still gives a table, an empty one with
+    the report's columns.
+
     Args:
         reports: Report ids or names, one output slot per entry
             (non-empty list).

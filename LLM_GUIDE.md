@@ -109,7 +109,14 @@ def load_users(batches: TableFramesSpec) -> TableFrameSpec: ...
   sources (`LocalFileSrc`, `S3Src`, `GCSSrc`, `AzureBlobSrc`) hand a
   `list[TableFrame]` per slot, because a path can glob several files.
 * The return is a fixed-length tuple with one `TableFrame` per output table; a
-  single output may be returned bare. `None` means "no new data".
+  single output may be returned bare. An empty frame writes a version with no
+  rows; `None` keeps the table's current data, which an `@NEW` reader
+  receives again. A publisher run that finds no new data hands an empty frame
+  with the last columns, or `[]` (nothing changed) from a file source with
+  `incremental=False`. A source input is `None` (`[]` for a list) before it
+  ever had data; a table input is `None` (a `None` element of a list) before
+  its table has data, and `@NEW` is `[]` with no new version
+  (`tdk docs show --name nothing-new`).
 * Decorate functions at module top level.
 
 ## Key Pattern: the connection lives on the collection
@@ -348,7 +355,8 @@ downstream of it that those new versions trigger.
 `tabsdatak.tableframe.functions`:
 - `col("name")` — reference a column in expressions
 - `lit(42)` — create a literal value in expressions
-- `concat([df1, df2])` — concatenate several TableFrames
+- `concat([df1, df2])` — concatenate several TableFrames, skipping `None`;
+  `None` when none is left
 
 ```python
 from tabsdatak.api import TableFrameSpec

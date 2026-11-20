@@ -12,4 +12,4 @@ from tabsdatak.tableframe.functions import concat
     output_tables=["persons"],
 )
 def qs_pub(inputs: TableFramesSpec) -> TableFrameSpec:
-    return concat(inputs or [])
+    return concat(inputs)

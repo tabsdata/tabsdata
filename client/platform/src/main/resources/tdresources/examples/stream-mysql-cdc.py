@@ -32,4 +32,4 @@ from tabsdatak.tableframe.functions import concat
 def stream_mysql_cdc(
     products: TableFramesSpec, inventory: TableFramesSpec
 ) -> tuple[TableFrameSpec, TableFrameSpec]:
-    return concat(products or []), concat(inventory or [])
+    return concat(products), concat(inventory)

@@ -26,8 +26,10 @@ function only references `ClickHouseDest`.
 Examples:
     .. code-block:: python
 
-        @subscriber(destination=ClickHouseDest(tables=["cap_rows"]),
-                    input_tables=["mycoll/cities"])
+        @subscriber(
+            destination=ClickHouseDest(tables=["cap_rows"], if_table_exists="replace"),
+            input_tables=["mycoll/cities"],
+        )
         def publish(rows: TableFrameSpec) -> TableFrameSpec:
             return rows
 `port` and `secure` are string-or-secret fields; the plugin reads
@@ -343,7 +345,8 @@ class ClickHouseDest(Dest):
             `database.table`); backtick-quote a part for special
             characters.
         if_table_exists: `"append"` (the default) adds rows;
-            `"replace"` empties the table and loads the batch.
+            `"replace"` empties the table and loads the batch. A slot
+            returned as `None` leaves its table as it is.
         schema_evolution: What a write does when the batch's columns differ from
             the table's, a replace included. `"strict"` (the default) refuses a
             batch with a column the table lacks or a wider type; `"update"` adds
@@ -416,10 +419,10 @@ class ClickHouseDest(Dest):
                     if_table_exists="append",
                     schema_evolution="update",
                 ),
-                input_tables=["caps_input/cap_evo_v2"],
+                input_tables=["caps_input/cap_evo_v2@NEW"],
             )
-            def evolve(rows: TableFrameSpec) -> TableFrameSpec:
-                return rows
+            def evolve(rows: TableFramesSpec) -> TableFrameSpec:
+                return concat(rows)
     """
 
     tables: ClickHouseTableNamesSpec

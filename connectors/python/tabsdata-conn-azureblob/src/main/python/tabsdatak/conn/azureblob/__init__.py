@@ -24,7 +24,7 @@ Examples:
         @publisher(source=AzureBlobSrc(paths=["parquet/*.parquet"]),
                    output_tables=["cities"])
         def ingest(cities: TableFramesSpec) -> TableFrameSpec:
-            return cities[0] if cities else None
+            return concat(cities)
 
         @subscriber(destination=AzureBlobDest(paths=["out.csv"]),
                     input_tables=["mycoll/cities"])
@@ -209,10 +209,12 @@ class AzureBlobSrc(Src):
             keys only), keyed by the `SrcFileFormat`. `EXCEL` takes
             `has_header` (default `True`); with `False` the first row is
             data and the columns are named `column_1`, `column_2`, ...
-        initial_last_modified: Optional cutoff for incremental
-            ingestion. The first run imports only files modified at or
-            after this timestamp; the cutoff then advances each run so
-            only newer files are re-imported.
+        initial_last_modified: Optional cutoff that makes each run take
+            only new files: the first run takes the files modified at or
+            after this timestamp, each later run only the files modified
+            since. Without it, every run takes every file a path matches.
+            `incremental` is separate: it says what a run that takes no
+            file hands.
         src_cfg: Optional connector config; supported keys are
             `tabsdata.file.chunk_size` and
             `tabsdata.src_metadata.drop`.
@@ -256,7 +258,23 @@ class AzureBlobSrc(Src):
               of the last run that had data for that path, or an empty list
               if no run has had data for it yet.
             * `False`: always an empty list; the previous data of that path
-              is still valid.
+              is still valid: `concat` of it is `None`, and returning `None`
+              keeps the table's data.
+
+    Examples:
+        Publish the new objects of a glob, folded with `concat`:
+
+        .. code-block:: python
+
+            @publisher(
+                source=AzureBlobSrc(
+                    paths=["events/*.parquet"],
+                    initial_last_modified=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                ),
+                output_tables=["events"],
+            )
+            def ingest(events: TableFramesSpec) -> TableFrameSpec:
+                return concat(events)
     """
 
     paths: SrcPathsSpec
@@ -305,7 +323,8 @@ class AzureBlobDest(Dest):
             segments (`//`). Globs are not allowed; the tokens
             `${EXEC_PLAN_ID}`, `${TRX_ID}` and `${TRIGGERED_ON}`
             are substituted at write time. Backslashes and NUL are not
-            allowed.
+            allowed. A slot returned as `None` writes no file; an empty
+            frame writes one without rows.
         format: Output format -- one of `AUTO`, `CSV`, `JSON`,
             `AVRO`, `PARQUET`. `AUTO` (the default) infers it from
             the file extension.
