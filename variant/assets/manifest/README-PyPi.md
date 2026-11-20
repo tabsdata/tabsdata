@@ -32,24 +32,28 @@ Copyright 2026 Tabsdata Inc.
 **From data request to resolution: hours, not months.**
 
 [Tabsdata](https://tabsdata.com/) is an AI-first data integration (ETL/ELT) platform for agentic
-data engineering, where the agent and the infrastructure are one system. Data pipelines are Python
-functions that declare the tables they read and the tables they write: **publishers** load files,
-databases, SaaS APIs and streams into versioned tables, **transformers** clean, join and reshape
-them, and **subscribers** deliver them to warehouses, databases, lakes and files. Orchestration,
-change data capture (CDC), lineage, data quality, versioning and a living semantic catalog are
-native to one server and one `tdk` CLI, so the agent sees every table, version, dependency and
-definition. Every table is versioned and immutable: a run commits a new version and never
-overwrites one, lineage is produced by execution itself, and a human approves every change.
+data engineering, built on a declarative publish-subscribe server for tables. Data pipelines are Python functions that declare the tables
+they read and the tables they write: **publishers** load files, databases, SaaS APIs and streams
+into versioned tables, **transformers** clean, join and reshape them, and **subscribers** deliver
+them to warehouses, databases, lakes and files. The server derives the dependency graph from those
+declarations and runs downstream functions when an upstream table gets a new version, with no
+pipeline to wire and no external scheduler. Change data capture (CDC), lineage, data quality,
+versioning and a living semantic catalog are native to one server and one `tdk` CLI, so the agent
+sees every table, version, dependency and definition. Every table is versioned and immutable: a run
+commits a new version and never overwrites one, and lineage is produced by execution itself. The
+agent does discovery, duplication checks, assembly and boilerplate; the engineer decides and
+approves every change before it propagates.
 
 Use Tabsdata when the work is data integration that will run again or must be auditable: loading a
 source into a warehouse on a schedule, keeping tables in sync on change, building bronze, silver and
 gold layers, delivering tables to Snowflake, BigQuery, Databricks, Postgres, S3 and others, and
-seeing what changed between runs or why a run failed. It complements the warehouse or lakehouse you
-have and does not replace it. It is not meant for a one-off look at a file or a single in-memory
+seeing what changed between runs or why a run failed. It lands beside the warehouse or lakehouse you
+have and does not replace it: the warehouse stays the center of gravity, Tabsdata delivers governed,
+versioned tables into it, and existing workloads are untouched. It is not meant for a one-off look at a file or a single in-memory
 transform; a script is enough there.
 
-It runs on a laptop and, in production, on Kubernetes (AWS EKS, Azure AKS, Google GKE), in your
-cloud, hybrid or fully on-premises. The `tabsdata` package on PyPI is Tabsdata Enterprise, built on
+The same function code runs on a laptop and, in production, on Kubernetes (AWS EKS, Azure AKS,
+Google GKE), in your cloud, hybrid or fully on-premises: data never leaves your network. The `tabsdata` package on PyPI is Tabsdata Enterprise, built on
 the Apache-licensed open source Tabsdata on GitHub. The full platform is free for self-supported
 deployments, with no feature gates. Your use of this product is subject to the terms of use
 available at https://tabsdata.com/license.

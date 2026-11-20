@@ -12,24 +12,24 @@ Copyright 2025 Tabsdata Inc.
     <a href="https://github.com/tabsdata/tabsdata">GitHub Repository</a>
 </div>
 
-# Tabsdata — Agentic Data Engineering
+# Tabsdata — Pub/Sub for Tables
 
 **From data request to resolution: hours, not months.**
 
-[Tabsdata](https://tabsdata.com/) is an **agentic data engineering platform** built on a **Pub/Sub for Tables** core. Publishers bring external data in as tables, transformers produce new tables from existing ones, and subscribers deliver tables to the systems that consume them. Every run produces a new immutable table version, and lineage is recorded by the execution itself.
+[Tabsdata](https://tabsdata.com/) is a data integration (ETL/ELT) platform built on a declarative **Pub/Sub for Tables** server. Python functions declare the tables they read and the tables they write, and the server handles the rest: loading, processing, storing and moving the data. **Publishers** bring data in from external systems and land it as tables, **transformers** read tables and produce new tables, and **subscribers** deliver tables to external destinations.
 
-An AI agent does the discovery, duplication checks, assembly, and testing of a dataflow; an engineer reviews and approves every change. Because the agent runs inside the same system that tracks every table, version, dependency, and definition, it works with full context and cannot break what it can't see. Coding agents such as Claude Code, Codex or Cursor use all of its functionality through the `tdk` CLI in their shell, so they can be guided through data engineering work on it as well.
+Tables are immutable and versioned. A function run does not mutate a table, it commits a new version, and each run is recorded against the table versions it read and wrote. Lineage and provenance are a product of execution rather than a separate metadata pass, so any table or run can be inspected as of any point in time.
 
-Tabsdata lands beside your stack: your warehouse stays the center of gravity, and Tabsdata delivers governed, versioned tables into it. Existing workloads and the tools that run them are untouched; new workloads run end to end on Tabsdata.
+Tabsdata lands beside your stack: your warehouse stays the center of gravity, and Tabsdata delivers versioned tables into it. Existing workloads and the tools that run them are untouched; new workloads run end to end on Tabsdata.
 
-Tables are manipulated with the [TableFrame API](https://docs.tabsdata.com/latest/api_ref/index.html) (built on [Polars](https://github.com/pola-rs/polars)), which supports selection, filtering, aggregation, and joins. Numerous connectors ship with the distribution, and new ones can be added through the Connector Plugin API.
+Tables are manipulated with the [TableFrame API](https://docs.tabsdata.com/2.4.0/api) (built on [Polars](https://github.com/pola-rs/polars)), which supports selection, filtering, aggregation, and joins. Numerous connectors ship with the distribution, and new ones can be added through the Connector Plugin API.
 
 # Tabsdata Binary Distribution
 
-Tabsdata binary distribution of the Enterprise Package (binary distribution) that is
-built on this Open Source foundation and contains more valued added features is
-available in [PyPi](https://pypi.org/project/tabsdata/) as a binary package for Linux,
-macOS and Windows.
+Tabsdata Enterprise is built on this open-source foundation and adds additional functionality
+such as AI integration (the built-in agent and the agent skills for coding agents) and the web UI.
+It is available on [PyPI](https://pypi.org/project/tabsdata/) as a binary
+package for Linux, macOS and Windows, free for self-supported deployments.
 
 To install and run the binary distribution use the following command:
 
