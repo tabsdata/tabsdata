@@ -43,15 +43,10 @@ on:
         description: "Action"
         required: true
         type: choice
-        options: ['build', 'release', 'assembly', 'explore', 'lock', 'wheels', 'wheels4whl', 'wheels4repo']
-        # build: standard build
-        # release: standard build without rust tests
-        # assembly: assembly and artifact publication only (no tests, no checks)
-        # explore: standard build only with rust tests
-        # lock: generate lock file (@deprecated)
-        # wheels: generate wheels only (no tests, no checks)
-        # wheels4whl: generate wheels to install directly
-        # wheels4repo: generate wheels to install from a local repository
+        options: ['build', 'test', 'wheels']
+        # build: end-to-end
+        # test: test only
+        # wheels: wheels only
         default: 'build'
       run_on_linux_x86_64:
         description: "Run on Ubuntu (x86_64)"
