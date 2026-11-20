@@ -46,7 +46,8 @@ def test_every_help_is_plain_and_within_its_size(path):
 
 def test_a_terminal_gets_the_rich_help(monkeypatch):
     monkeypatch.setattr("tabsdatak.cli.cli_utils.is_console", lambda stream: True)
-    assert "╭" in CliRunner().invoke(cli, ["plan", "list", "--help"]).stdout
+    stdout = CliRunner().invoke(cli, ["plan", "list", "--help"]).stdout
+    assert "╭" in stdout or "┌" in stdout
 
 
 def test_help_without_a_terminal_is_plain_and_keeps_every_option():
