@@ -16,6 +16,14 @@ from setuptools.command.build import build as _build
 from setuptools.command.editable_wheel import editable_wheel as _editable_wheel
 from setuptools.command.sdist import sdist as _sdist
 
+from tabsdatax.setup.common.config import (
+    BUILD_PROFILE_HEADER,
+    BUILD_TARGET_HEADER,
+    NO_BUILD_TARGET,
+    get_build_profile,
+    get_td_target,
+)
+
 try:
     from setuptools.command.bdist_wheel import bdist_wheel as _bdist_wheel
 except ImportError:
@@ -23,6 +31,25 @@ except ImportError:
 
 
 logger = logging.getLogger(__name__)
+
+METADATA_FILE = "METADATA"
+HEADERS_SEPARATOR = "\n\n"
+
+
+def build_headers() -> list[str]:
+    return [
+        f"{BUILD_PROFILE_HEADER}: {get_build_profile()}",
+        f"{BUILD_TARGET_HEADER}: {get_td_target() or NO_BUILD_TARGET}",
+    ]
+
+
+def stamp_metadata(distinfo_folder: str) -> None:
+    metadata_path = Path(distinfo_folder) / METADATA_FILE
+    content = metadata_path.read_text(encoding="utf-8")
+    headers, separator, body = content.partition(HEADERS_SEPARATOR)
+    stamped = "\n".join([headers.rstrip("\n"), *build_headers()])
+    tail = f"{separator}{body}" if separator else "\n"
+    metadata_path.write_text(f"{stamped}{tail}", encoding="utf-8")
 
 
 def create_custom_bdist_egg_class() -> type[_bdist_egg]:
@@ -74,6 +101,10 @@ def create_custom_bdist_wheel_class(
         def get_tag(self) -> tuple[str, str, str]:
             _, _, plat = super().get_tag()
             return python_version_tag, python_version_abi, get_platname_func()
+
+        def write_wheelfile(self, wheelfile_base: str, *arguments, **keywords) -> None:
+            super().write_wheelfile(wheelfile_base, *arguments, **keywords)
+            stamp_metadata(wheelfile_base)
 
         def run(self) -> None:
             build_dir = os.path.join(

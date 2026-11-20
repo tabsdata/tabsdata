@@ -8,8 +8,11 @@ import importlib.util
 import os
 import sys
 import zipfile
+from email.parser import HeaderParser
 from pathlib import Path
 from types import ModuleType
+
+from tabsdatax.setup.common.config import ASSEMBLY_PROFILE, BUILD_PROFILE_HEADER
 
 
 # noinspection DuplicatedCode
@@ -38,6 +41,8 @@ DIST_PATTERNS = (
     "connectors.ee/python/*/target/python/dist/*.whl",
 )
 
+METADATA_SUFFIX = ".dist-info/METADATA"
+
 
 def mib(size: int) -> str:
     return f"{size / MIB:.1f} MiB"
@@ -51,19 +56,33 @@ def final_wheels(roots: list[Path]) -> list[Path]:
     return sorted(found)
 
 
-def check_wheel(wheel: Path, entry_limit: int, wheel_limit: int) -> list[str]:
+def wheel_profile(archive: zipfile.ZipFile) -> str | None:
+    metadata_names = [
+        name for name in archive.namelist() if name.endswith(METADATA_SUFFIX)
+    ]
+    if not metadata_names:
+        return None
+    metadata = archive.read(metadata_names[0]).decode("utf-8")
+    return HeaderParser().parsestr(metadata).get(BUILD_PROFILE_HEADER)
+
+
+def check_wheel(
+    wheel: Path,
+    archive: zipfile.ZipFile,
+    entry_limit: int,
+    wheel_limit: int,
+) -> list[str]:
     errors: list[str] = []
     size = wheel.stat().st_size
     if size > wheel_limit:
         errors.append(f"wheel {wheel} is {mib(size)}, over {mib(wheel_limit)}")
-    with zipfile.ZipFile(wheel) as archive:
-        for info in archive.infolist():
-            if info.compress_size > entry_limit:
-                errors.append(
-                    f"{info.filename} in {wheel.name} takes {mib(info.compress_size)}"
-                    f" in the wheel ({mib(info.file_size)} unpacked),"
-                    f" over {mib(entry_limit)}"
-                )
+    for info in archive.infolist():
+        if info.compress_size > entry_limit:
+            errors.append(
+                f"{info.filename} in {wheel.name} takes {mib(info.compress_size)}"
+                f" in the wheel ({mib(info.file_size)} unpacked),"
+                f" over {mib(entry_limit)}"
+            )
     logger.info(f"{'❌' if errors else '✅'} {mib(size):>10}  {wheel.name}")
     return errors
 
@@ -71,8 +90,9 @@ def check_wheel(wheel: Path, entry_limit: int, wheel_limit: int) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Fail when a final wheel, or any file inside one (by the size it takes"
-            " in the wheel, compressed or stored), is over its limit."
+            "Fail when a final wheel of the assembly profile, or any file inside"
+            " one (by the size it takes in the wheel, compressed or stored), is"
+            " over its limit. Wheels of other profiles are skipped."
         )
     )
     parser.add_argument(
@@ -107,19 +127,32 @@ def main() -> int:
     entry_limit = args.entry_limit * MIB
     wheel_limit = args.wheel_limit * MIB
     logger.info(
-        f"📏 Checking {len(wheels)} wheel(s): files up to {mib(entry_limit)}"
-        f" inside a wheel, wheels up to {mib(wheel_limit)}"
+        f"📏 Checking the {ASSEMBLY_PROFILE} wheels among {len(wheels)}: files up"
+        f" to {mib(entry_limit)} inside a wheel, wheels up to {mib(wheel_limit)}"
     )
-    errors = [
-        error
-        for wheel in wheels
-        for error in check_wheel(wheel, entry_limit, wheel_limit)
-    ]
+    errors: list[str] = []
+    checked = 0
+    skipped = 0
+    for wheel in wheels:
+        with zipfile.ZipFile(wheel) as archive:
+            profile = wheel_profile(archive)
+            if profile is None:
+                errors.append(f"wheel {wheel} carries no {BUILD_PROFILE_HEADER}")
+                logger.info(f"❌ {'unstamped':>10}  {wheel.name}")
+            elif profile != ASSEMBLY_PROFILE:
+                skipped += 1
+                logger.info(f"⏭️ {profile:>10}  {wheel.name}")
+            else:
+                checked += 1
+                errors.extend(check_wheel(wheel, archive, entry_limit, wheel_limit))
     for error in errors:
         logger.error(f"❌ {error}")
     if errors:
         return 1
-    logger.info("✅ All wheels and the files inside them are within their limits")
+    logger.info(
+        f"✅ {checked} {ASSEMBLY_PROFILE} wheel(s) and the files inside them are"
+        f" within their limits; {skipped} wheel(s) of other profiles skipped"
+    )
     return 0
 
 
