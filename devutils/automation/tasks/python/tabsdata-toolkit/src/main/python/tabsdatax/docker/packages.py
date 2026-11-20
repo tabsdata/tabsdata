@@ -13,6 +13,7 @@ from tabsdatax.docker.constants import (
     NODE_LOCK_FILE,
     NODE_PACKAGE_FILE,
     NODE_PROJECT_FOLDER,
+    NODE_PROJECTS,
     PACKAGES_CONTEXT_FOLDER,
     PYTHON_REQUIREMENTS_DEVELOPMENT_NAME,
     PYTHON_REQUIREMENTS_DEVELOPMENT_RELATIVE,
@@ -66,20 +67,23 @@ def resolve_python_requirements(relative_path: str, label: str) -> Path:
     sys.exit(1)
 
 
-def resolve_node_files() -> tuple[Path, Path] | None:
+def resolve_node_files() -> dict[str, tuple[Path, Path]]:
     repositories_home = require_repositories_home()
     node_folder = repositories_home / NODE_PROJECT_FOLDER
     if not node_folder.is_dir():
-        return None
-    package_json = node_folder / NODE_PACKAGE_FILE
-    package_lock = node_folder / NODE_LOCK_FILE
-    if not package_json.is_file() or not package_lock.is_file():
-        log.warning(
-            f"{NODE_PROJECT_FOLDER} found at {node_folder} but {NODE_PACKAGE_FILE} or "
-            f"{NODE_LOCK_FILE} is missing; skipping node modules pre-install."
-        )
-        return None
-    return package_json, package_lock
+        return {}
+    found: dict[str, tuple[Path, Path]] = {}
+    for project in NODE_PROJECTS:
+        package_json = node_folder / project / NODE_PACKAGE_FILE
+        package_lock = node_folder / project / NODE_LOCK_FILE
+        if not package_json.is_file() or not package_lock.is_file():
+            log.warning(
+                f"{NODE_PROJECT_FOLDER}/{project} has no {NODE_PACKAGE_FILE} or "
+                f"{NODE_LOCK_FILE}; skipping its node modules pre-install."
+            )
+            continue
+        found[project] = (package_json, package_lock)
+    return found
 
 
 def collect_packages(image_name: str) -> dict[str, Path]:
@@ -99,9 +103,8 @@ def collect_packages(image_name: str) -> dict[str, Path]:
             PYTHON_REQUIREMENTS_PRODUCTION_NAME,
         ),
     }
-    node_files = resolve_node_files()
-    if node_files:
-        package_json, package_lock = node_files
-        packages[f"{PACKAGES_CONTEXT_FOLDER}/{NODE_PACKAGE_FILE}"] = package_json
-        packages[f"{PACKAGES_CONTEXT_FOLDER}/{NODE_LOCK_FILE}"] = package_lock
+    for project, (package_json, package_lock) in resolve_node_files().items():
+        folder = f"{PACKAGES_CONTEXT_FOLDER}/{project}"
+        packages[f"{folder}/{NODE_PACKAGE_FILE}"] = package_json
+        packages[f"{folder}/{NODE_LOCK_FILE}"] = package_lock
     return packages

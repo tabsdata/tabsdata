@@ -191,13 +191,13 @@ def get_custom_license(_m_name, m_license):
 
 
 UI_FLAVOUR_FOLDERS = [
-    os.path.join("..", "tabsdata-ui"),
-    os.path.join("..", "tabsdata-ui", "new-ui"),
+    os.path.join("..", "tabsdata-ui", "ui"),
+    os.path.join("..", "tabsdata-ui", "old-ui"),
 ]
 
 
 def ignore_package(name):
-    return name in ("tdui", "new-ui")
+    return name in ("tdui", "ui")
 
 
 def parse_package_name_version(node_package_key):

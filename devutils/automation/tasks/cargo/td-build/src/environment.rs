@@ -16,14 +16,12 @@ pub const ENV_VALUE_TD_UI_MODE_EXTERNAL: &str = "external";
 const ENV_TD_UI_DIR: &str = "TD_UI_DIR";
 const ENV_TD_UI_INDEX: &str = "TD_UI_INDEX";
 
-const ENV_TD_NEW_UI: &str = "TD_NEW_UI";
-const CFG_TD_NEW_UI: &str = "td_new_ui";
-
 const PARENT_FOLDER: &str = "..";
 
 const TABSDATA_UI_PROJECT_FOLDER: &str = "tabsdata-ui";
 const TARGET_FOLDER: &str = "target";
-const NEW_UI_FOLDER: &str = "new-ui";
+const BUILD_FOLDER: &str = "build";
+const UI_FOLDER: &str = "ui";
 
 const INDEX_HTML_FILE: &str = "index.html";
 
@@ -42,7 +40,9 @@ pub fn set_environment_variables() -> Result<(), Box<dyn Error>> {
     let ui_dir_path = find_workspace_root()
         .join(PARENT_FOLDER)
         .join(TABSDATA_UI_PROJECT_FOLDER)
-        .join(TARGET_FOLDER);
+        .join(TARGET_FOLDER)
+        .join(BUILD_FOLDER)
+        .join(UI_FOLDER);
     if enterprise {
         fs::create_dir_all(&ui_dir_path)?;
     }
@@ -64,21 +64,7 @@ pub fn set_environment_variables() -> Result<(), Box<dyn Error>> {
     println!("cargo:rustc-env={ENV_TD_UI_DIR}={ui_dir}");
     println!("cargo:rustc-env={ENV_TD_UI_INDEX}={ui_index}");
 
-    println!("cargo::rustc-check-cfg=cfg({CFG_TD_NEW_UI})");
-    if enterprise && env::var(ENV_TD_NEW_UI).is_ok_and(|value| value == "true") {
-        let new_ui_index_path = ui_dir_path.join(NEW_UI_FOLDER).join(INDEX_HTML_FILE);
-        if !new_ui_index_path.is_file() {
-            return Err(format!(
-                "{ENV_TD_NEW_UI} is 'true' but the new UI is not built: missing '{}'",
-                new_ui_index_path.display()
-            )
-            .into());
-        }
-        println!("cargo::rustc-cfg={CFG_TD_NEW_UI}");
-    }
-
     println!("cargo:rerun-if-env-changed={ENV_TD_UI_MODE}");
-    println!("cargo:rerun-if-env-changed={ENV_TD_NEW_UI}");
     if enterprise {
         println!("cargo:rerun-if-changed={ui_dir}");
         for entry in walk_ui_folder(&ui_dir_path) {

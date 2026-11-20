@@ -31,7 +31,7 @@ TABSDATA_EE = "tabsdata-ee"
 TABSDATA_AG = "tabsdata-ag"
 TABSDATA_UI = "tabsdata-ui"
 
-TABSDATA_UI_NPM_PROJECTS = (".", "new-ui")
+TABSDATA_UI_NPM_PROJECTS = ("ui", "old-ui")
 
 IGNORED_FOLDERS = {
     ".git",

@@ -77,6 +77,7 @@ PYTHON_REQUIREMENTS_PRODUCTION_RELATIVE = (
 )
 PYTHON_REQUIREMENTS_PRODUCTION_NAME = "tabsdata-requirements.txt"
 NODE_PROJECT_FOLDER = "tabsdata-ui"
+NODE_PROJECTS = ("ui", "old-ui")
 NODE_PACKAGE_FILE = "package.json"
 NODE_LOCK_FILE = "package-lock.json"
 PACKAGES_CONTEXT_FOLDER = "packages"
@@ -108,7 +109,8 @@ VOLUME_ROLES = {
         "sccache": "/root/.cache/sccache",
         "go-mod": "/root/go/pkg/mod",
         "go-build": "/root/.cache/go-build",
-        "ui-node-modules": "/workspace/tabsdata-ui/node_modules",
+        "ui-node-modules": "/workspace/tabsdata-ui/ui/node_modules",
+        "old-ui-node-modules": "/workspace/tabsdata-ui/old-ui/node_modules",
     },
     IMAGE_TABSDATA: {
         "tabsdata": "/root/.tabsdata",
@@ -136,7 +138,7 @@ PROJECT_OUTPUTS = {
     "tabsdata-os": TABSDATA_OS_OUTPUTS,
     "tabsdata-ee": TABSDATA_OS_OUTPUTS + TABSDATA_EE_OUTPUTS,
     "tabsdata-km": TABSDATA_KM_OUTPUTS,
-    "tabsdata-ui": ["dist"],
+    "tabsdata-ui": ["target"],
     "tabsdata": TABSDATA_OS_OUTPUTS,
     "kminus": TABSDATA_KM_OUTPUTS,
 }

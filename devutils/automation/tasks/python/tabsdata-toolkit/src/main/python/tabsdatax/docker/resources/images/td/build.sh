@@ -6,9 +6,12 @@
 
 set -e
 
-if [ -f /workspace/tabsdata-ui/package.json ] && [ ! -e /workspace/tabsdata-ui/node_modules/.package-lock.json ]; then
-    cd /workspace/tabsdata-ui && npm ci
-fi
+for project in ui old-ui; do
+    folder="/workspace/tabsdata-ui/${project}"
+    if [ -f "${folder}/package.json" ] && [ ! -e "${folder}/node_modules/.package-lock.json" ]; then
+        (cd "${folder}" && npm ci)
+    fi
+done
 
 case "$PROJECT" in
     tabsdata|tabsdata-os|tabsdata-ee)
