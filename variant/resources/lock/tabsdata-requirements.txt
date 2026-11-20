@@ -12,7 +12,7 @@ anyio==4.16.0
 archspec==0.2.7
 asn1crypto==1.5.1
 attrs==26.1.0
-authlib==1.9.8
+authlib==1.9.10
 avro==1.12.2
 azure-common==1.1.28
 azure-core==1.41.0
@@ -30,7 +30,7 @@ boto3-stubs==1.43.123
 botocore==1.43.127
 botocore-stubs==1.43.126
 build==1.6.1
-cachetools==8.0.0
+cachetools==8.0.2
 certifi==2026.10.23
 cffi==2.1.1 ; platform_python_implementation != 'PyPy'
 charset-normalizer==3.5.2
@@ -67,8 +67,8 @@ google-resumable-media==2.11.0
 googleapis-common-protos==1.76.0
 greenlet==3.5.6 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
 grpc-google-iam-v1==0.14.6
-grpcio==1.85.1
-grpcio-status==1.85.1
+grpcio==1.85.3
+grpcio-status==1.85.3
 grpcio-tools==1.85.1
 h11==0.16.0 ; sys_platform != 'emscripten'
 httpcore2==2.16.2 ; sys_platform != 'emscripten'

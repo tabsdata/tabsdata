@@ -6,7 +6,7 @@ agate==1.14.2
 agate-dbf==0.2.4
 agate-excel==0.4.3
 agate-sql==0.7.3
-annotated-doc==0.0.6
+annotated-doc==0.0.7
 annotated-types==0.8.0
 ansi2html==1.9.5
 anyio==4.16.0
@@ -22,7 +22,7 @@ boolean-py==5.0
 boto3==1.43.123
 botocore==1.43.127
 build==1.6.1
-cachecontrol==0.14.4
+cachecontrol==0.15.0
 cattrs==26.2.1
 certifi==2026.10.23
 cffi==2.1.1 ; platform_python_implementation != 'PyPy'
@@ -117,7 +117,7 @@ nab-markersets==0.0.30
 nab-project==0.0.30
 nab-provider==0.0.30
 nab-resolver==0.0.30
-nh3==0.3.7
+nh3==0.3.8
 numpy==2.5.4
 olefile==0.47
 openpyxl==3.1.5
@@ -170,7 +170,7 @@ pytest-reporter-html1==0.9.5
 pytest-timeout==2.4.0
 pytest-xdist==3.8.0
 python-dateutil==2.9.0.post0
-python-discovery==1.9.5
+python-discovery==1.9.6
 python-dotenv==1.2.4
 python-on-whales==0.81.0
 python-slugify==9.2.0
@@ -215,7 +215,7 @@ typing-extensions==4.16.0
 typing-inspection==0.4.5
 tzdata==2026.6 ; sys_platform == 'win32'
 tzlocal==5.4.5
-url-normalize==3.1.0
+url-normalize==4.0.0
 urllib3==2.8.0
 uvicorn==0.54.0
 virtualenv==21.15.2
