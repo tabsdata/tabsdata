@@ -132,6 +132,9 @@ class OracleSrcPlugin(SrcPlugin[OracleSrcConn, OracleSrc]):
         src: OracleSrc,
     ) -> list[Iterable[LazyFrameInput]]:
         # noinspection PyProtectedMember
+        from tabsdatak.conn.common._schemas import SlotSchemas
+
+        # noinspection PyProtectedMember
         from tabsdatak.conn.common.sql._engine import factory as factory
 
         # noinspection PyProtectedMember
@@ -167,6 +170,7 @@ class OracleSrcPlugin(SrcPlugin[OracleSrcConn, OracleSrc]):
                 failed=OracleErrorCode.ORACLE_6,
                 uri=read_cfg.conn.uri,
             ),
+            schemas=SlotSchemas.of(ctx),
             drop_metadata=cfg.drop_metadata,
         )
 

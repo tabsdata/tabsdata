@@ -355,10 +355,10 @@ class TestDatabricksTypeToArrow:
             "us"
         )
 
-    def test_unmapped_type_falls_back_to_string(self):
-        # Exotic types can't be rebuilt from the flat manifest; string keeps the
-        # empty result valid rather than failing the read.
-        assert _impl._databricks_type_to_arrow(_col("ARRAY")) == pa.string()
+    def test_unmapped_type_is_left_untyped(self):
+        # Exotic types can't be rebuilt from the flat manifest; the empty
+        # result then takes the columns the query last served.
+        assert _impl._databricks_type_to_arrow(_col("ARRAY")) == pa.null()
 
 
 # ---------------------------------------------------------------------------

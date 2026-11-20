@@ -18,6 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import polars as pl
 import pyarrow as pa
 import pytest
 
@@ -214,6 +215,46 @@ def _failing(error: Exception):
 
 def _drained(out) -> list[list]:
     return [list(slot) for slot in out]
+
+
+KEPT = {"@td.schema.0": '{"id": "Int64"}'}
+EMPTY = pa.table({"id": pa.array([], pa.int64())})
+ID_SCHEMA = pl.Schema({"id": pl.Int64})
+
+
+def _schemas_of(slot) -> list:
+    return [table.frame.collect().schema for table in slot]
+
+
+def test_src_plugin_keeps_the_schema_of_a_result_with_rows(monkeypatch, work_dir):
+    monkeypatch.setattr(impl, "read_all_queries", _results([pa.table({"id": [1]})]))
+    ctx = _Ctx(work_dir)
+    [slot] = plugin._DatabricksSrcPlugin().read_in(ctx, _src_conn(), _src())
+    assert [table.frame.collect().height for table in slot] == [1]
+    assert ctx._attributes == KEPT
+
+
+def test_src_plugin_gives_a_typed_result_without_rows_as_an_empty_table(
+    monkeypatch, work_dir
+):
+    monkeypatch.setattr(impl, "read_all_queries", _results([EMPTY]))
+    ctx = _Ctx(work_dir)
+    [slot] = plugin._DatabricksSrcPlugin().read_in(ctx, _src_conn(), _src())
+    assert _schemas_of(slot) == [ID_SCHEMA]
+    assert ctx._attributes == KEPT
+
+
+@pytest.mark.parametrize(
+    "attributes, tables", [({}, 0), (KEPT, 1)], ids=["never served", "served before"]
+)
+def test_src_plugin_gives_an_untyped_result_without_rows_the_last_schema(
+    monkeypatch, work_dir, attributes, tables
+):
+    untyped = pa.table({"tags": pa.array([], pa.null())})
+    monkeypatch.setattr(impl, "read_all_queries", _results([untyped]))
+    ctx = _Ctx(work_dir, attributes=dict(attributes))
+    [slot] = plugin._DatabricksSrcPlugin().read_in(ctx, _src_conn(), _src())
+    assert _schemas_of(slot) == [ID_SCHEMA] * tables
 
 
 def test_src_plugin_reads_nothing_until_iterated(monkeypatch, work_dir):

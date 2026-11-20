@@ -447,8 +447,9 @@ def _databricks_type_to_arrow(col) -> "pa.DataType":
 
     Covers the scalar / temporal / decimal types; anything exotic
     (``ARRAY`` / ``MAP`` / ``STRUCT`` / ``INTERVAL`` / ...) can't be
-    reconstructed from the flat manifest, so it falls back to
-    ``string`` with a warning rather than failing the whole read."""
+    reconstructed from the flat manifest, so it is left untyped (``null``),
+    with a warning: the result then takes the columns the query last
+    served."""
     import pyarrow as pa
 
     name = (col.type_name.value if col.type_name is not None else "STRING").upper()
@@ -480,10 +481,10 @@ def _databricks_type_to_arrow(col) -> "pa.DataType":
         )
     logger.warning(
         "databricks: unmapped column type %r for empty-result schema;"
-        " defaulting to string",
+        " leaving it untyped",
         name,
     )
-    return pa.string()
+    return pa.null()
 
 
 def _arrow_schema_from_manifest(response) -> "pa.Schema | None":

@@ -68,6 +68,12 @@ def decode_schema(slot: Slot, stored: object) -> pl.Schema | None:
     return schema or None
 
 
+def typed(schema: pl.Schema) -> bool:
+    """Whether `schema` tells the columns of a slot: it has some, and each
+    has a type, not the `Null` a source gives a column it could not type."""
+    return bool(schema) and all(dtype != pl.Null for dtype in schema.values())
+
+
 def served(table: LazyFrameInput, metadata: FrameMetadata | None) -> pl.Schema:
     if metadata is not None and metadata.schema is not None:
         return metadata.schema

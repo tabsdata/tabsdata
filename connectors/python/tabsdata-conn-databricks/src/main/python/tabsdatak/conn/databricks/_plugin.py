@@ -14,6 +14,9 @@ import polars as pl
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._dest import present
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._schemas import SlotSchemas, typed
 from tabsdatak.conn.common.error import ConnException
 
 # noinspection PyProtectedMember
@@ -171,10 +174,27 @@ def _inputs(
     index: int,
     metadata: FrameMetadata | None,
     host: str,
+    schemas: SlotSchemas,
 ) -> Iterator[LazyFrameInput]:
     try:
+        rows = 0
+        columns: pl.DataFrame | None = None
         for table in tables:
-            yield LazyFrameInput(pl.DataFrame(table).lazy(), metadata=metadata)
+            frame = pl.DataFrame(table)
+            if frame.height == 0:
+                if columns is None:
+                    columns = frame
+                continue
+            rows += frame.height
+            yield schemas.served(index, LazyFrameInput(frame.lazy(), metadata))
+        if rows == 0:
+            empty = (
+                schemas.served(index, LazyFrameInput(columns.lazy(), metadata))
+                if columns is not None and typed(columns.schema)
+                else schemas.empty(index, metadata)
+            )
+            if empty is not None:
+                yield empty
     except (DatabricksValidateException, DatabricksRuntimeException):
         raise
     except Exception as e:  # noqa: BLE001 -- runtime wrapper
@@ -221,6 +241,7 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrcConn, DatabricksSrc]):
             initial_values=resolve_initial_values(ctx, src.initial_values),
         )
         host = _convert(conn.host_url, str)
+        schemas = SlotSchemas.of(ctx)
         inputs: list[Iterable[LazyFrameInput]] = []
         for index, (query, tables) in enumerate(
             zip(read_cfg.queries, _impl.read_all_queries(read_cfg), strict=True)
@@ -229,7 +250,7 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrcConn, DatabricksSrc]):
             if not cfg.drop_metadata:
                 columns: MetadataSpec = {**sql_metadata(query, read_cfg.initial_values)}
                 metadata = FrameMetadata(columns=columns)
-            inputs.append(_inputs(tables, index, metadata, host))
+            inputs.append(_inputs(tables, index, metadata, host, schemas))
         return inputs
 
 

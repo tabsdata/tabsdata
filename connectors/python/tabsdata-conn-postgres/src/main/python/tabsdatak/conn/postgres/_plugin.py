@@ -132,6 +132,9 @@ class PostgresSrcPlugin(SrcPlugin[PostgresSrcConn, PostgresSrc]):
         src: PostgresSrc,
     ) -> list[Iterable[LazyFrameInput]]:
         # noinspection PyProtectedMember
+        from tabsdatak.conn.common._schemas import SlotSchemas
+
+        # noinspection PyProtectedMember
         from tabsdatak.conn.common.sql._engine import factory as factory
 
         # noinspection PyProtectedMember
@@ -170,6 +173,7 @@ class PostgresSrcPlugin(SrcPlugin[PostgresSrcConn, PostgresSrc]):
                 failed=PostgresErrorCode.POSTGRES_6,
                 uri=read_cfg.conn.uri,
             ),
+            schemas=SlotSchemas.of(ctx),
             drop_metadata=cfg.drop_metadata,
         )
 

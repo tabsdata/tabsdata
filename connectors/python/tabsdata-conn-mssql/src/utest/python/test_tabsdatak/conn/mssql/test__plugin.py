@@ -314,7 +314,7 @@ def test_read_in_uses_resolved_initial_values(work_dir, monkeypatch):
     captured: dict = {}
 
     class _FakeEngine:
-        def read(self, read_cfg, faults, *, drop_metadata=False):
+        def read(self, read_cfg, faults, *, schemas, drop_metadata):
             captured["initial_values"] = read_cfg.initial_values
             # One slot per query, as ``SqlReadEngine.read`` guarantees.
             return [[]]
@@ -333,11 +333,31 @@ def test_read_in_uses_resolved_initial_values(work_dir, monkeypatch):
     assert captured["initial_values"] == {"last_modified": "from-ctx"}
 
 
+def test_read_in_hands_the_engine_the_schemas_of_its_ctx(work_dir, monkeypatch):
+    captured: dict = {}
+
+    class _FakeEngine:
+        def read(self, read_cfg, faults, *, schemas, drop_metadata):
+            captured["schemas"] = schemas
+            return [[]]
+
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._engine import factory as _factory
+
+    monkeypatch.setattr(_factory, "get_read_engine", lambda *a, **kw: _FakeEngine())
+
+    ctx = CtxStub(work_dir)
+    src = MSSQLSrc(queries=["SELECT * FROM t"])
+    plugin.MSSQLSrcPlugin().read_in(ctx, _bare_src_conn(), src)
+    captured["schemas"].remember(0, pl.Schema({"a": pl.Int64}))
+    assert ctx.get_attr("@td.schema.0") == '{"a": "Int64"}'
+
+
 def test_read_in_hands_the_engine_its_error_codes(work_dir, monkeypatch):
     captured: dict = {}
 
     class _FakeEngine:
-        def read(self, read_cfg, faults, *, drop_metadata=False):
+        def read(self, read_cfg, faults, *, schemas, drop_metadata):
             captured["faults"] = faults
             captured["drop_metadata"] = drop_metadata
             return [[]]
@@ -364,7 +384,7 @@ def test_read_in_drops_metadata_when_src_cfg_asks(work_dir, monkeypatch):
     captured: dict = {}
 
     class _FakeEngine:
-        def read(self, read_cfg, faults, *, drop_metadata=False):
+        def read(self, read_cfg, faults, *, schemas, drop_metadata):
             captured["drop_metadata"] = drop_metadata
             return [[]]
 

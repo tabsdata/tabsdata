@@ -235,6 +235,11 @@ class Db2Src(Src):
     object when it has no binds). Setting the `src_cfg` key
     `tabsdata.src_metadata.drop` to `True` leaves them off.
 
+    A query that returns no rows still gives a table, an empty one. It has
+    the columns the query's result types or, when the result leaves any
+    column untyped, those of the last run that typed them all; when no run
+    did, the function gets `None` for it.
+
     Args:
         queries: SELECT statements; one output slot per query, in order.
         transactional: When `True` (default), run all queries inside

@@ -7,7 +7,6 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Sequence
-from dataclasses import replace
 from typing import Any, Callable, Mapping
 
 import polars as pl
@@ -21,6 +20,9 @@ from tabsdatak._handoff import RestartRead
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _config
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._schemas import SlotSchemas, typed
 from tabsdatak.conn.common.sql._engine.reader import (
     SqlReadCfg,
     SqlReadEngine,
@@ -50,9 +52,10 @@ class SqlAlchemyReadEngine(SqlReadEngine, ABC):
         cfg: SqlReadCfg,
         faults: SqlReadFaults,
         *,
+        schemas: SlotSchemas,
         drop_metadata: bool = False,
     ) -> list[Iterable[LazyFrameInput]]:
-        reading = Reading(cfg, self.loader(), faults, drop_metadata)
+        reading = Reading(cfg, self.loader(), faults, drop_metadata, schemas=schemas)
         return [reading.slot(index) for index in range(len(cfg.queries))]
 
 
@@ -63,11 +66,14 @@ class Reading:
         loader: ReadLoader,
         faults: SqlReadFaults,
         drop_metadata: bool,
+        *,
+        schemas: SlotSchemas,
     ) -> None:
         self.cfg = cfg
         self.loader = loader
         self.faults = faults
         self.drop_metadata = drop_metadata
+        self.schemas = schemas
         self.parameters: Mapping[str, Any] | None = cfg.initial_values or None
         self.chunk_size = _config.get_cfg(
             cfg.cfg,
@@ -128,6 +134,8 @@ class Reading:
         try:
             logger.info("sql-reader: reading query %d/%d", index + 1, total)
             chunks = 0
+            rows = 0
+            columns: pl.DataFrame | None = None
             for batch in self.loader(
                 connection=self.open(),
                 query=query,
@@ -136,9 +144,16 @@ class Reading:
                 parameters=self.parameters,
             ):
                 chunks += 1
-                yield self.table(batch, metadata)
-            if chunks == 0:
-                yield self.unknown(metadata)
+                if batch.height == 0:
+                    if columns is None:
+                        columns = batch
+                    continue
+                rows += batch.height
+                yield self.schemas.served(index, LazyFrameInput(batch.lazy(), metadata))
+            if rows == 0:
+                empty = self.empty(index, columns, metadata)
+                if empty is not None:
+                    yield empty
             logger.debug(
                 "sql-reader: query %d/%d produced %d chunk(s)",
                 index + 1,
@@ -158,21 +173,19 @@ class Reading:
             if not completed or index == total - 1:
                 self.close(completed)
 
-    def table(
-        self, batch: pl.DataFrame, metadata: FrameMetadata | None
-    ) -> LazyFrameInput:
-        if batch.height == 0 and any(
-            dtype == pl.Null for dtype in batch.schema.values()
-        ):
-            return self.unknown(metadata)
-        return LazyFrameInput(batch.lazy(), metadata=metadata)
-
-    @staticmethod
-    def unknown(metadata: FrameMetadata | None) -> LazyFrameInput:
-        return LazyFrameInput(
-            pl.LazyFrame(),
-            metadata=replace(metadata or FrameMetadata(), known=False),
-        )
+    def empty(
+        self,
+        index: int,
+        columns: pl.DataFrame | None,
+        metadata: FrameMetadata | None,
+    ) -> LazyFrameInput | None:
+        """The table of a query that returned no rows: of the columns its
+        result typed, or of the last ones the slot served when the result
+        has none or leaves some untyped; `None` when the slot never served
+        any."""
+        if columns is not None and typed(columns.schema):
+            return self.schemas.served(index, LazyFrameInput(columns.lazy(), metadata))
+        return self.schemas.empty(index, metadata)
 
 
 def _pandas_read(

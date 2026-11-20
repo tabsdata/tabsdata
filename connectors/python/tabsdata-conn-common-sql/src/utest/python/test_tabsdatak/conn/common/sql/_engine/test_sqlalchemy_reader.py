@@ -16,6 +16,8 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 from tabsdatak._handoff import RestartRead
 from tabsdatak.conn.common.types import DataType
 # noinspection PyProtectedMember
+from tabsdatak.conn.common._schemas import SlotSchemas
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine import constants as const
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine import sqlalchemy_reader as sar
@@ -115,7 +117,13 @@ def _rows(slot: Iterable[LazyFrameInput]) -> pl.DataFrame:
 
 
 def _read(engine: sar.SqlAlchemyReadEngine, cfg, **options) -> list[pl.DataFrame]:
-    return [_rows(slot) for slot in engine.read(cfg, FAULTS, **options)]
+    slots = engine.read(cfg, FAULTS, schemas=kept(), **options)
+    return [_rows(slot) for slot in slots]
+
+
+def kept(state: dict | None = None) -> SlotSchemas:
+    state = {} if state is None else state
+    return SlotSchemas(state.get, state.__setitem__)
 
 
 def _operational(msg: str) -> OperationalError:
@@ -167,6 +175,7 @@ def test_polars_chunking_yields_a_table_per_chunk(db_path):
             cfg={const.READ_CHUNK_SIZE_KEY: 1},
         ),
         FAULTS,
+        schemas=kept(),
     )
     frames = _frames(slot)
     assert len(frames) >= 4
@@ -236,49 +245,65 @@ def test_polars_empty_params_dict_is_treated_as_no_params(db_path):
 
 
 EMPTY_QUERY = "SELECT id, name FROM users WHERE id > 100"
+KEPT = {"@td.schema.0": '{"id": "Int64", "name": "String"}'}
+KEPT_SCHEMA = pl.Schema({"id": pl.Int64, "name": pl.String})
 
 
-def _empty(engine: sar.SqlAlchemyReadEngine, db_path, **options) -> LazyFrameInput:
-    [slot] = engine.read(_cfg(db_path, queries=[EMPTY_QUERY], **options), FAULTS)
-    [table] = list(slot)
-    return table
+def _empty(
+    engine: sar.SqlAlchemyReadEngine,
+    db_path,
+    state: dict | None = None,
+    **options,
+) -> list[LazyFrameInput]:
+    [slot] = engine.read(
+        _cfg(db_path, queries=[EMPTY_QUERY], **options),
+        FAULTS,
+        schemas=kept(state),
+    )
+    return list(slot)
 
 
 @pytest.mark.parametrize("engine", [sar.PolarsReadEngine, sar.PandasReadEngine])
-def test_a_query_without_rows_and_untyped_columns_yields_one_unknown_table(
+def test_a_query_without_rows_and_untyped_columns_takes_the_last_schema_served(
     db_path, engine
 ):
-    table = _empty(engine(), db_path)
-    assert table.frame.collect().shape == (0, 0)
-    assert table.metadata == FrameMetadata(
-        columns=sql_metadata(EMPTY_QUERY, None), known=False
-    )
+    [table] = _empty(engine(), db_path, dict(KEPT))
+    assert table.frame.collect().schema == KEPT_SCHEMA
+    assert table.frame.collect().height == 0
+    assert table.metadata == FrameMetadata(columns=sql_metadata(EMPTY_QUERY, None))
+
+
+@pytest.mark.parametrize("engine", [sar.PolarsReadEngine, sar.PandasReadEngine])
+def test_a_query_without_rows_untyped_and_never_served_yields_no_table(
+    db_path, engine
+):
+    assert _empty(engine(), db_path) == []
 
 
 @pytest.mark.parametrize("engine", [sar.PolarsReadEngine, sar.PandasReadEngine])
 def test_a_query_without_rows_and_typed_columns_yields_one_empty_typed_table(
     db_path, engine
 ):
-    table = _empty(
+    state: dict = {}
+    [table] = _empty(
         engine(),
         db_path,
+        state,
         schema_overrides=[{"id": DataType.INT, "name": DataType.STRING}],
     )
-    assert table.frame.collect().schema == pl.Schema({
-        "id": pl.Int64,
-        "name": pl.String,
-    })
+    assert table.frame.collect().schema == KEPT_SCHEMA
     assert table.frame.collect().height == 0
-    assert table.metadata.known
+    assert state == KEPT
 
 
 @pytest.mark.parametrize("engine", [sar.PolarsReadEngine, sar.PandasReadEngine])
-def test_a_query_without_rows_and_one_untyped_column_yields_an_unknown_table(
+def test_a_query_without_rows_and_one_untyped_column_takes_the_last_schema_served(
     db_path, engine
 ):
-    table = _empty(engine(), db_path, schema_overrides=[{"id": DataType.INT}])
-    assert table.frame.collect().shape == (0, 0)
-    assert not table.metadata.known
+    [table] = _empty(
+        engine(), db_path, dict(KEPT), schema_overrides=[{"id": DataType.STRING}]
+    )
+    assert table.frame.collect().schema == KEPT_SCHEMA
 
 
 def test_polars_types_a_query_without_rows_as_its_description_says(
@@ -292,31 +317,70 @@ def test_polars_types_a_query_without_rows_as_its_description_says(
         "dtypes",
         lambda *_: {"id": pl.Int32(), "name": pl.String()},
     )
-    table = _empty(sar.PolarsReadEngine(), db_path)
+    [table] = _empty(sar.PolarsReadEngine(), db_path)
     assert table.frame.collect_schema() == pl.Schema({
         "id": pl.Int32,
         "name": pl.String,
     })
-    assert table.metadata.known
 
 
-def test_a_dropped_metadata_still_tells_a_table_is_unknown(db_path):
+def test_a_dropped_metadata_takes_the_last_schema_without_metadata(db_path):
     [slot] = sar.PolarsReadEngine().read(
-        _cfg(db_path, queries=[EMPTY_QUERY]), FAULTS, drop_metadata=True
+        _cfg(db_path, queries=[EMPTY_QUERY]),
+        FAULTS,
+        schemas=kept(dict(KEPT)),
+        drop_metadata=True,
     )
-    assert [table.metadata for table in slot] == [FrameMetadata(known=False)]
+    [table] = list(slot)
+    assert table.frame.collect().schema == KEPT_SCHEMA
+    assert table.metadata is None
 
 
-def test_a_loader_yielding_nothing_yields_one_unknown_table(db_path):
+@pytest.mark.parametrize(
+    "state, expected",
+    [({}, []), (KEPT, [KEPT_SCHEMA])],
+    ids=["never served", "served before"],
+)
+def test_a_loader_yielding_nothing_takes_the_last_schema_served(
+    db_path, state, expected
+):
     def nothing(**_) -> Iterator[pl.DataFrame]:
         yield from ()
 
     reading = sar.Reading(
-        _cfg(db_path, queries=[EMPTY_QUERY]), nothing, FAULTS, drop_metadata=True
+        _cfg(db_path, queries=[EMPTY_QUERY]),
+        nothing,
+        FAULTS,
+        drop_metadata=True,
+        schemas=kept(dict(state)),
     )
-    [table] = list(reading.slot(0))
-    assert table.frame.collect().shape == (0, 0)
-    assert table.metadata == FrameMetadata(known=False)
+    assert [table.frame.collect().schema for table in reading.slot(0)] == expected
+
+
+def test_the_schema_of_a_query_with_rows_is_kept_for_later_runs(db_path):
+    state: dict = {}
+    [slot] = sar.PolarsReadEngine().read(
+        _cfg(db_path, queries=["SELECT id, name FROM users"]),
+        FAULTS,
+        schemas=kept(state),
+    )
+    assert _rows(slot).height == 4
+    assert state == KEPT
+
+
+def test_empty_batches_among_rows_add_no_table(db_path):
+    def batches(**_) -> Iterator[pl.DataFrame]:
+        yield pl.DataFrame({"id": [1]})
+        yield pl.DataFrame(schema={"id": pl.Int64})
+        yield pl.DataFrame({"id": [2]})
+
+    reading = sar.Reading(
+        _cfg(db_path), batches, FAULTS, drop_metadata=True, schemas=kept()
+    )
+    assert [table.frame.collect()["id"].to_list() for table in reading.slot(0)] == [
+        [1],
+        [2],
+    ]
 
 
 def test_pandas_single_query(db_path):
@@ -365,6 +429,7 @@ def test_every_table_carries_its_query_and_binds(db_path):
             cfg={const.READ_CHUNK_SIZE_KEY: 1},
         ),
         FAULTS,
+        schemas=kept(),
     )
     for query, slot in zip(queries, slots):
         expected = FrameMetadata(columns=sql_metadata(query, {"min_id": 0}))
@@ -377,6 +442,7 @@ def test_dropped_metadata_leaves_tables_without_metadata(db_path):
     [slot] = sar.PolarsReadEngine().read(
         _cfg(db_path, queries=["SELECT id FROM users"]),
         FAULTS,
+        schemas=kept(),
         drop_metadata=True,
     )
     assert [table.metadata for table in slot] == [None]
@@ -386,6 +452,7 @@ def test_reading_starts_only_when_iterated(db_path, engines):
     sar.PolarsReadEngine().read(
         _cfg(db_path, queries=["SELECT id FROM users", "SELECT id FROM orders"]),
         FAULTS,
+        schemas=kept(),
     )
     assert engines == []
 
@@ -397,6 +464,7 @@ def test_every_query_reads_through_one_engine_disposed_after_the_last(
     first, second = sar.PolarsReadEngine().read(
         _cfg(db_path, queries=["SELECT id FROM users", "SELECT id FROM orders"]),
         FAULTS,
+        schemas=kept(),
     )
     _frames(first)
     [engine] = engines
@@ -416,6 +484,7 @@ def test_an_abandoned_read_disposes_the_engine(db_path, engines, transactional):
             cfg={const.READ_CHUNK_SIZE_KEY: 1},
         ),
         FAULTS,
+        schemas=kept(),
     )
     tables = iter(slot)
     next(tables)
@@ -429,7 +498,9 @@ def test_an_unreachable_database_asks_for_a_restart(monkeypatch, tmp_path):
         raise _operational("connect failed")
 
     monkeypatch.setattr(_sqlite_helpers, "build_engine", unreachable)
-    [slot] = sar.PolarsReadEngine().read(_cfg(tmp_path / "x.db"), FAULTS)
+    [slot] = sar.PolarsReadEngine().read(
+        _cfg(tmp_path / "x.db"), FAULTS, schemas=kept()
+    )
     with pytest.raises(RestartRead) as raised:
         _frames(slot)
     assert isinstance(raised.value.cause, _Unreachable)
@@ -447,7 +518,7 @@ def test_a_connection_lost_after_some_tables_asks_for_a_restart(db_path, engines
         def loader(self):
             return loader
 
-    [slot] = Broken().read(_cfg(db_path), FAULTS)
+    [slot] = Broken().read(_cfg(db_path), FAULTS, schemas=kept())
     tables = iter(slot)
     assert next(tables).frame.collect()["id"].to_list() == [1]
     with pytest.raises(RestartRead):
@@ -466,7 +537,9 @@ def test_a_failed_query_reports_its_index(db_path, engines):
         def loader(self):
             return loader
 
-    first, second = Failing().read(_cfg(db_path, queries=["good", "bad"]), FAULTS)
+    first, second = Failing().read(
+        _cfg(db_path, queries=["good", "bad"]), FAULTS, schemas=kept()
+    )
     _frames(first)
     with pytest.raises(_Failed) as raised:
         _frames(second)
@@ -486,6 +559,7 @@ def test_a_failure_to_connect_disposes_the_engine(monkeypatch, tmp_path):
     [slot] = sar.PolarsReadEngine().read(
         _cfg(tmp_path / "x.db", transactional=False),
         FAULTS,
+        schemas=kept(),
     )
     with pytest.raises(_Failed):
         _frames(slot)

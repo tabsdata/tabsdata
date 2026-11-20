@@ -383,6 +383,12 @@ class DatabricksSrc(Src):
     object when it has no binds). Setting the `src_cfg` key
     `tabsdata.src_metadata.drop` to `True` leaves them off.
 
+    A query that returns no rows still gives a table, an empty one. It has
+    the columns the query's result types or, when the result has a column
+    of a type an empty result cannot tell (an array, map, struct or
+    interval), those of the last run that typed them all; when no run did,
+    the function gets `None` for it.
+
     Args:
         queries: SQL statements, one output slot per entry, run through
             the Statement Execution API.

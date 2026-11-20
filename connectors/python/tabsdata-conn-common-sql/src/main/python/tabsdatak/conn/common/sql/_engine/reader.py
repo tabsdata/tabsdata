@@ -9,6 +9,8 @@ from typing import Any, Mapping
 
 from sqlalchemy import Engine
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._schemas import SlotSchemas
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import CfgSpec
 from tabsdatak.error import ErrorCode, TabsdataException
@@ -51,5 +53,6 @@ class SqlReadEngine(ABC):
         cfg: SqlReadCfg,
         faults: SqlReadFaults,
         *,
+        schemas: SlotSchemas,
         drop_metadata: bool = False,
     ) -> list[Iterable[LazyFrameInput]]: ...
