@@ -130,7 +130,7 @@ def _unversioned(reference: str) -> str:
     return reference.split("@", 1)[0]
 
 
-def _triggers(info, inputs: list[str]) -> list[str]:
+def _triggers(info, inputs: list[str], outputs: list[str]) -> list[str]:
     from tabsdatak.api import AllTablesTrigger, CronTrigger, TablesTrigger
 
     trigger_by = getattr(info, "trigger_by", None)
@@ -139,7 +139,8 @@ def _triggers(info, inputs: list[str]) -> list[str]:
     if isinstance(trigger_by, CronTrigger):
         return [f"cron:{trigger_by.mask}"]
     if trigger_by is None or isinstance(trigger_by, AllTablesTrigger):
-        return [_unversioned(reference) for reference in inputs]
+        tables = dict.fromkeys(_unversioned(reference) for reference in inputs)
+        return [table for table in tables if table not in outputs]
     return []
 
 
@@ -164,12 +165,13 @@ def describe(info) -> dict:
     )
 
     inputs = _input_tables(info)
+    outputs = _output_tables(info)
     return {
         "name": getattr(info.func, "__name__", None),
         "kind": _kind(info),
         "inputs": inputs,
-        "outputs": _output_tables(info),
-        "triggers": _triggers(info, inputs),
+        "outputs": outputs,
+        "triggers": _triggers(info, inputs, outputs),
         "connector": _connector(info),
         "destination_options": destination_options(info),
     }
@@ -279,6 +281,8 @@ def _server_checks(
     missing = []
     for reference in function["inputs"]:
         owner, _, table = _unversioned(reference).rpartition("/")
+        if owner in ("", collection) and table in function["outputs"]:
+            continue
         if table not in tables_of(owner or collection):
             missing.append(reference)
     checks["inputs_exist"] = not missing

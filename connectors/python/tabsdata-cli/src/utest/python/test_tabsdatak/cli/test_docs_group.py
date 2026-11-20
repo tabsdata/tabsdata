@@ -65,6 +65,13 @@ def test_qualified_names_are_unique(catalog):
     assert len(names) == len(set(names))
 
 
+def test_a_connector_enum_lists_its_values_and_where_to_import_it(catalog):
+    entry = catalog.resolve("SrcFileFormat")
+    assert entry.kind == "enum"
+    assert "`SrcFileFormat.CSV`" in entry.summary
+    assert "`tabsdatak.conn.localfile`" in entry.description
+
+
 def test_bare_name_resolves_to_the_connector_class(catalog):
     entry = catalog.resolve("PostgresSrc")
     assert entry.qualified_name == "tabsdatak.conn.postgres.PostgresSrc"

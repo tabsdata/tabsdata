@@ -106,7 +106,7 @@ class DocEntry:
                     summary=member["summary"],
                     description=member["description"],
                     parameters=member["parameters"],
-                    see_also=[f"tdk docs {self.symbol}"],
+                    see_also=[f"tdk docs show --name {self.symbol}"],
                 )
         return None
 
@@ -243,7 +243,7 @@ def _connectors() -> list[DocEntry]:
     for entry in by_class.values():
         entry.see_also = [
             *_template_hints(entry.connection_types),
-            f"tdk docs {entry.extra['connection_class']}",
+            f"tdk docs show --name {entry.extra['connection_class']}",
         ]
     entries = list(by_class.values())
     for conn, bound in connections.items():
@@ -254,24 +254,53 @@ def _connectors() -> list[DocEntry]:
                 connection_types=sorted(bound["types"]),
                 see_also=[
                     *_template_hints(sorted(bound["types"])),
-                    *(f"tdk docs {name}" for name in sorted(bound["classes"])),
+                    *(
+                        f"tdk docs show --name {name}"
+                        for name in sorted(bound["classes"])
+                    ),
                 ],
                 extra={"role": "connection", "system": bound["system"]},
             )
         )
     import tabsdatak.conn.common.types as common_types
+    from tabsdatak.error import ErrorCode
 
     modules = {common_types.__name__: common_types}
     for cls in (*by_class, *connections):
         module = sys.modules.get(cls.__module__)
         if module is not None and is_tabsdatak(cls):
             modules[module.__name__] = module
+    enums: dict[type, list[str]] = {}
     for module_name in sorted(modules):
         for name, obj in public_names(modules[module_name]):
             if name.endswith("Spec"):
                 entries.append(
                     _spec_entry(modules[module_name], name, obj, "connectors")
                 )
+            elif (
+                isinstance(obj, type)
+                and issubclass(obj, enum.Enum)
+                and not issubclass(obj, ErrorCode)
+                and is_tabsdatak(obj)
+                and name == obj.__name__
+            ):
+                enums.setdefault(obj, []).append(module_name)
+    for cls, exporters in enums.items():
+        values = ", ".join(f"`{cls.__name__}.{member.name}`" for member in cls)
+        packages = ", ".join(f"`{module_name}`" for module_name in exporters)
+        summary = f"One of {values}."
+        entries.append(
+            DocEntry(
+                symbol=cls.__name__,
+                qualified_name=f"{exporters[0]}.{cls.__name__}",
+                category="connectors",
+                kind="enum",
+                signature=cls.__name__,
+                summary=summary,
+                description=f"{summary}\n\nImport it from {packages}.",
+                parameters=[],
+            )
+        )
     return sorted(entries, key=lambda e: (e.symbol, e.qualified_name))
 
 
@@ -436,7 +465,7 @@ def _errors() -> list[DocEntry]:
                     category="errors",
                     kind="error",
                     summary=definition.message_template,
-                    see_also=[f"tdk docs {_qualified(exception)}"],
+                    see_also=[f"tdk docs show --name {_qualified(exception)}"],
                     extra={
                         "enum": code_enum.__name__,
                         "exception": exception.__name__,

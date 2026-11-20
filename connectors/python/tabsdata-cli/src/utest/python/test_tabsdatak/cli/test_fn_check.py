@@ -106,6 +106,30 @@ def test_a_manual_only_function_declares_no_triggers(tmp_path):
     assert result["function"]["triggers"] == []
 
 
+def test_default_triggers_list_each_table_once_and_skip_own_outputs(tmp_path):
+    source = (
+        _TRANSFORMER
+        .replace(
+            "import TableFrameSpec, transformer",
+            "import TableFrameSpec, TableFramesSpec, transformer",
+        )
+        .replace(
+            'input_tables=["sales/orders@HEAD", "items"], output_tables=["out"]',
+            'input_tables=["sales/orders@NEW", "sales/orders@HEAD", "out@HEAD"], '
+            'output_tables=["out"]',
+        )
+        .replace(
+            "def clean(orders: TableFrameSpec, items: TableFrameSpec)",
+            "def clean(new: TableFramesSpec, orders: TableFrameSpec, "
+            "previous: TableFrameSpec)",
+        )
+    )
+    path = _write(tmp_path / "proj", source)
+    result = check_function(f"{path}::clean")
+    assert result["valid"] is True, result
+    assert result["function"]["triggers"] == ["sales/orders"]
+
+
 def test_a_syntax_error_is_reported_without_importing(tmp_path):
     path = _write(tmp_path, "def clean(:\n    pass\n")
     result = check_function(f"{path}::clean")
@@ -246,6 +270,15 @@ def test_server_checks_report_missing_inputs_conflicts_and_versions(tmp_path):
         "output_conflict",
         "python_version",
     ]
+
+
+def test_an_input_that_is_the_function_s_own_output_is_not_missing(tmp_path):
+    source = _TRANSFORMER.replace('"items"]', '"out@HEAD"]')
+    path = _write(tmp_path, source)
+    server = _server({"sales": {"orders": "pub"}, "c1": {}})
+    result = check_function(f"{path}::clean", server=server, collection="c1")
+    assert result["server_checks"]["inputs_exist"] is True
+    assert "input_missing" not in _codes(result)
 
 
 def test_the_registered_name_owns_its_outputs(tmp_path):
@@ -549,4 +582,3 @@ def test_the_check_table_says_nothing_of_a_destination_that_resolves_nothing(
 
     _check_table(_check_result({}))
     assert "Writes:" not in capsys.readouterr().out
-
