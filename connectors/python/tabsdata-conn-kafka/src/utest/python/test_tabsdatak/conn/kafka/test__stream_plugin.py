@@ -21,6 +21,9 @@ from tabsdatax.itest.fixture.functions.stream import LocalStage
 from tabsdatak.api import BatchThresholds, Secret, StreamThresholds
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common._schemas import KeptSchemas, schema_key
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common._stream import _plugin
 
 # noinspection PyProtectedMember
@@ -38,7 +41,7 @@ from tabsdatak.conn.kafka._stream_plugin import (
 from tabsdatak.conn.kafka.constants import KAFKA_META_TOPIC
 from tabsdatak.conn.kafka.error import KafkaErrorCode
 from tabsdatak.error import TabsdataException
-from tabsdatak.spi import FrameMetadata, StreamStageSrc
+from tabsdatak.spi import StreamStageSrc
 
 pytestmark = pytest.mark.kafka
 
@@ -94,11 +97,23 @@ def test_the_buffer_bytes_default_yields_to_the_source_config():
     assert cfg.buffer.max_bytes == 1024
 
 
-def test_an_empty_table_of_a_topic_holds_only_its_topic_column():
-    table = KafkaStreamSrcPlugin().empty(MagicMock(), "orders")
-    assert table.frame.collect().schema == pl.Schema({KAFKA_META_TOPIC: pl.String})
+def test_an_idle_topic_never_staged_stages_no_table():
+    run = MagicMock()
+    run.schemas = KeptSchemas()
+    assert KafkaStreamSrcPlugin().empty(run, "orders") is None
+
+
+def test_an_idle_topic_stages_an_empty_table_of_the_schema_it_was_staged_with():
+    run = MagicMock()
+    run.schemas = KeptSchemas({
+        schema_key("orders"): json.dumps({KAFKA_META_TOPIC: "String", "id": "Int64"})
+    })
+    table = KafkaStreamSrcPlugin().empty(run, "orders")
+    assert table.frame.collect().schema == pl.Schema({
+        KAFKA_META_TOPIC: pl.String,
+        "id": pl.Int64,
+    })
     assert table.frame.collect().height == 0
-    assert table.metadata == FrameMetadata(known=False)
 
 
 def test_run_config_defaults():

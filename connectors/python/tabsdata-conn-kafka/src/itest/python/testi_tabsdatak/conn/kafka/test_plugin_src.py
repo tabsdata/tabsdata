@@ -33,7 +33,6 @@ from testi_tabsdatak.conn.kafka.harness import (
 
 from tabsdatak.conn.kafka._serdes import JsonKafkaSerde
 from tabsdatak.conn.kafka.constants import KAFKA_META_TOPIC
-from tabsdatak.spi import FrameMetadata
 
 pytestmark = [
     pytest.mark.kafka,
@@ -165,7 +164,7 @@ def test_stream_src_plugin_schema_change_segregates_files(
 
 
 @redpanda_domain("redpanda")
-def test_stream_src_plugin_idle_batch_stages_one_empty_table_of_unknown_columns(
+def test_stream_src_plugin_idle_batch_of_a_topic_never_staged_stages_no_table(
     domain_redpanda: RedpandaDomain, tmp_path: Path
 ):
     domain = domain_redpanda
@@ -183,8 +182,37 @@ def test_stream_src_plugin_idle_batch_stages_one_empty_table_of_unknown_columns(
 
     assert ctx.satisfied
     [staged, *_] = committed_manifests(ctx)
-    assert [len(files) for files in staged.manifest] == [1]
-    [frame] = staged_frames(ctx)[:1]
-    assert frame.schema == pl.Schema({KAFKA_META_TOPIC: pl.String})
-    assert frame.height == 0
-    assert ctx.sent[0] == FrameMetadata(known=False)
+    assert [len(files) for files in staged.manifest] == [0]
+    assert ctx.sent == []
+
+
+def _idle_after_data(ctx: KafkaCtx) -> bool:
+    frames = staged_frames(ctx)
+    return any(frame.height for frame in frames) and frames[-1].height == 0
+
+
+@redpanda_domain("redpanda")
+def test_stream_src_plugin_idle_batch_after_data_stages_an_empty_table_of_its_schema(
+    domain_redpanda: RedpandaDomain, tmp_path: Path
+):
+    domain = domain_redpanda
+    messages = user_messages(2)
+    bus = broker(domain)
+    ctx = KafkaCtx(
+        work_dir(tmp_path),
+        until=_idle_after_data,
+        thresholds=idle_after(1),
+    )
+    with bus.fresh_topic() as topic:
+        bus.produce(topic, messages, JSON_VARIANT.producer_serde(bus, tmp_path))
+        conn, src = stream_src(
+            domain, topic=topic, variant=JSON_VARIANT, src_cfg=STREAM_CFG
+        )
+        run_plugin(ctx, conn, src)
+
+    assert ctx.satisfied
+    frames = staged_frames(ctx)
+    schema = next(frame.schema for frame in frames if frame.height)
+    assert KAFKA_META_TOPIC in schema
+    assert frames[-1].schema == schema
+    assert frames[-1].height == 0

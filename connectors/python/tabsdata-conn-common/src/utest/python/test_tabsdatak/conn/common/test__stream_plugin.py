@@ -11,6 +11,7 @@ from typing import Self
 
 import polars as pl
 import pytest
+from tabsdatax.itest.fixture.functions.stream import LocalStage
 
 # noinspection PyProtectedMember
 from tabsdatak.api import BatchThresholds, PollThresholds, StreamThresholds
@@ -22,6 +23,9 @@ from tabsdatak.conn.common._stream._config import StreamRunConfig
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._encoder import StreamEncoder
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._ledger import StageLedger
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._offset import StreamOffset
@@ -42,7 +46,7 @@ from tabsdatak.conn.common._stream._sentinels import BufferSentinel
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._signal import StopSignal
 from tabsdatak.conn.common.error import ConnErrorCode, ConnStreamException
-from tabsdatak.spi import FrameMetadata, LazyFrameInput
+from tabsdatak.spi import LazyFrameInput
 
 
 class FakeCtx:
@@ -292,19 +296,27 @@ def test_publish_empty_manifest_does_not_stage():
     assert disk.cleared == 0
 
 
-UNKNOWN = ({}, FrameMetadata(known=False))
-
-
-def test_a_due_heartbeat_stages_an_unknown_table_for_every_slot_with_the_offset():
+def test_a_due_heartbeat_stages_no_table_for_a_slot_never_staged():
     ctx = FakeCtx(active_values=[])
     disk = FakeDisk(manifest=[[], []], heartbeat=True)
     ingester = OwnedOffsetIngester()
     buffer = FakeBuffer()
 
     assert publish(ctx, disk, buffer, ingester) is True
-    assert ctx.staged == [([[UNKNOWN], [UNKNOWN]], {"offset": buffer.offset})]
+    assert ctx.staged == [([[], []], {"offset": buffer.offset})]
     assert ingester.acknowledged_offsets == [buffer.offset]
     assert disk.cleared == 1
+
+
+def test_a_due_heartbeat_stages_an_empty_table_of_the_schema_a_slot_was_staged_with():
+    ctx = FakeCtx(active_values=[], stream_state={schema_key("t1"): '{"id": "Int64"}'})
+    disk = FakeDisk(manifest=[[], []], heartbeat=True)
+    ingester = OwnedOffsetIngester()
+    buffer = FakeBuffer()
+
+    assert publish(ctx, disk, buffer, ingester) is True
+    [(tables, _)] = ctx.staged
+    assert tables == [[], [({"id": pl.Int64}, None)]]
 
 
 def test_publish_stages_an_empty_table_for_every_slot_without_files():
@@ -817,6 +829,22 @@ def test_a_run_keeps_the_schemas_its_stream_state_holds():
     state = {"offset": "staged", schema_key("t0"): '{"a": "Int64"}'}
     run = run_of(FakeCtx(active_values=[], stream_state=state), FakeIngester())
     assert run.schemas.last("t0") == pl.Schema({"a": pl.Int64})
+
+
+def test_a_slot_staged_earlier_in_the_run_gets_an_empty_table_of_that_schema(
+    tmp_path,
+):
+    run = run_of(FakeCtx(active_values=[]), FakeIngester())
+    ledger = StageLedger(ctx=LocalStage(tmp_path), slots=["t0"], schemas=run.schemas)
+    ledger.stage("t0", pl.LazyFrame({"id": [1], "name": ["a"]}))
+
+    table = Plugin().empty(run, "t0")
+
+    assert table.frame.collect().schema == pl.Schema({
+        "id": pl.Int64,
+        "name": pl.String,
+    })
+    assert table.frame.collect().height == 0
 
 
 def test_a_checkpoint_carries_the_schemas_the_stream_kept():

@@ -11,8 +11,6 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-import polars as pl
-
 from tabsdatak.api import StreamSrc, StreamThresholds
 from tabsdatak.conn.common._schemas import KeptSchemas
 from tabsdatak.conn.common._stream._config import StreamRunConfig
@@ -29,7 +27,6 @@ from tabsdatak.conn.common._stream.constants import MAX_RESTARTS_WITHOUT_STAGE
 from tabsdatak.conn.common.error import ConnErrorCode
 from tabsdatak.spi import (
     Conn,
-    FrameMetadata,
     LazyFrameInput,
     StreamSrcPlugin,
     StreamSrcPluginCtx,
@@ -178,8 +175,11 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
     def stage_state(self, run: StreamRun[R, O], offset: O) -> StreamStateSpec:
         return run.ingester.stage_state(offset)
 
-    def empty(self, run: StreamRun[R, O], slot: str) -> LazyFrameInput:
-        return LazyFrameInput(pl.LazyFrame(), FrameMetadata(known=False))
+    def empty(self, run: StreamRun[R, O], slot: str) -> LazyFrameInput | None:
+        """What a batch stages for a slot it has no data for: an empty table
+        of the last schema the slot was staged with, or nothing when it never
+        was."""
+        return run.schemas.empty(slot)
 
     def may_checkpoint(self, run: StreamRun[R, O]) -> bool:
         return not run.ctx.first_stage
@@ -312,7 +312,8 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
             return False
         for slot in ledger.unstaged():
             table = self.empty(run, slot)
-            ledger.stage(slot, table.frame, table.metadata)
+            if table is not None:
+                ledger.stage(slot, table.frame, table.metadata)
         offset = buffer_sentinel.offset
         ledger.publish(self.stage_state(run, offset))
         run.ingester.acknowledge_offset(offset)

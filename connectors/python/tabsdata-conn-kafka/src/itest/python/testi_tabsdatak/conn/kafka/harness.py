@@ -195,8 +195,9 @@ class KafkaCtx(StreamSrcPluginCtx):
                 self._state = dict(new_state)
                 self._tabsdata_owns_state = True
             else:
-                self._tabsdata_owns_state = False
-                new_state()
+                # The runtime keeps what the commit returns, if anything.
+                self._state = dict(new_state() or {})
+                self._tabsdata_owns_state = bool(self._state)
             return sent
 
     def scan(self, file):

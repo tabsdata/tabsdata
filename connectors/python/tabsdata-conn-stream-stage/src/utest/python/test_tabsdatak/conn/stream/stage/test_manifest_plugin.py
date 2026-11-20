@@ -148,15 +148,12 @@ def test_every_slot_reads_its_tables_in_order(stage, tmp_path):
     assert ids(read(stage, Ctx(tmp_path))) == [[[1], [2]], [[3]]]
 
 
-def test_a_slot_without_tables_reads_one_empty_table_of_unknown_columns(
-    stage, tmp_path
-):
+def test_a_slot_without_tables_reads_no_table(stage, tmp_path):
     first = parquet(stage, "a.parquet", [1])
     manifest(stage, "a", [[first], []], NOON)
-    [[full], [empty]] = read(stage, Ctx(tmp_path))
+    [[full], nothing] = read(stage, Ctx(tmp_path))
     assert full.frame.collect()["id"].to_list() == [1]
-    assert empty.frame.collect().shape == (0, 0)
-    assert empty.metadata == FrameMetadata(known=False)
+    assert nothing == []
 
 
 def test_a_landed_table_is_read_with_its_metadata(stage, tmp_path):
