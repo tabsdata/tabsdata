@@ -24,7 +24,7 @@ use td_objects::dxo::worker::{WorkerDB, WorkerUpdateDB};
 use td_objects::dxo::worker_input::function::WrittenTable;
 use td_objects::types::basic::{
     ExecutionId, FunctionId, HasData, LogicalFunctionRunId, LogicalFunctionRunStatus,
-    PhysicalFunctionRunId, PhysicalFunctionRunStatus, RowCount, SchemaChanged, TableName, WorkerId,
+    PhysicalFunctionRunId, PhysicalFunctionRunStatus, SchemaChanged, WorkerId,
 };
 use td_queries::{Queries, Reach};
 
@@ -47,8 +47,6 @@ pub(crate) enum UpdateStatusRunError {
     NoOpStatusUpdate = 4,
     #[error("Absorbed replay-attempt callback for terminal LFR [{0}] (status {1:?})")]
     ReplayCallbackAbsorbed(LogicalFunctionRunId, LogicalFunctionRunStatus) = 5,
-    #[error("Table '{0}' was written with {1} row(s) but no schema hash")]
-    RowsWithoutSchemaHash(TableName, RowCount) = 6,
 }
 
 #[instrument(
@@ -582,43 +580,45 @@ pub async fn update_table_data_version_status<M: Holds<ProjectLock>>(
                 .committed_data_before(&data_version.logical_table_data_version_id)
                 .await?;
 
-            if let Some(table_info) = table_info
-                && table_info.schema_hash.is_none()
-                && *table_info.row_count != 0
-            {
-                Err(UpdateStatusRunError::RowsWithoutSchemaHash(
-                    table_name.clone(),
-                    table_info.row_count,
-                ))?;
-            }
+            let update = if let Some(table_info) = table_info {
+                let schema_changed = match &latest_version_with_data {
+                    Some(prev) => SchemaChanged::from(
+                        prev.schema_hash.as_ref() != Some(&table_info.schema_hash),
+                    ),
+                    None => SchemaChanged::FALSE,
+                };
 
-            let prev = latest_version_with_data.as_ref();
-            let written = table_info.and_then(|info| match &info.schema_hash {
-                Some(hash) => Some((info, Some(hash.clone()), Some(info.column_count))),
-                None => prev.map(|p| (info, p.schema_hash.clone(), p.column_count)),
-            });
-
-            let update = match written {
-                Some((info, schema_hash, column_count)) => PhysicalTableDataVersionUpdateDB {
+                PhysicalTableDataVersionUpdateDB {
                     has_data: Some(HasData::TRUE),
-                    schema_changed: Some(SchemaChanged::from(
-                        prev.is_some_and(|p| p.schema_hash != schema_hash),
-                    )),
-                    column_count,
-                    row_count: Some(info.row_count),
-                    data_bytes: info.data_bytes,
-                    schema_hash,
+                    schema_changed: Some(schema_changed),
+                    column_count: Some(table_info.column_count),
+                    row_count: Some(table_info.row_count),
+                    data_bytes: table_info.data_bytes,
+                    schema_hash: Some(table_info.schema_hash.clone()),
                     with_data_table_data_version_id: Some(data_version.id.clone().into()),
-                },
-                None => PhysicalTableDataVersionUpdateDB {
+                }
+            } else if let Some(latest_version_with_data) = latest_version_with_data {
+                PhysicalTableDataVersionUpdateDB {
                     has_data: Some(HasData::FALSE),
                     schema_changed: Some(SchemaChanged::FALSE),
-                    column_count: prev.and_then(|p| p.column_count),
-                    row_count: prev.and_then(|p| p.row_count),
-                    data_bytes: prev.and_then(|p| p.data_bytes),
-                    schema_hash: prev.and_then(|p| p.schema_hash.clone()),
-                    with_data_table_data_version_id: prev.map(|p| p.id.clone().into()),
-                },
+                    column_count: latest_version_with_data.column_count,
+                    row_count: latest_version_with_data.row_count,
+                    data_bytes: latest_version_with_data.data_bytes,
+                    schema_hash: latest_version_with_data.schema_hash.clone(),
+                    with_data_table_data_version_id: Some(
+                        latest_version_with_data.id.clone().into(),
+                    ),
+                }
+            } else {
+                PhysicalTableDataVersionUpdateDB {
+                    has_data: Some(HasData::FALSE),
+                    schema_changed: Some(SchemaChanged::FALSE),
+                    column_count: None,
+                    row_count: None,
+                    data_bytes: None,
+                    schema_hash: None,
+                    with_data_table_data_version_id: None,
+                }
             };
 
             conn.table_data_versions()

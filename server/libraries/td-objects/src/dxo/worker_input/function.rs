@@ -246,8 +246,7 @@ pub struct FunctionOutput {
 pub struct TableInfo {
     pub column_count: ColumnCount,
     pub row_count: RowCount,
-    #[serde(default)]
-    pub schema_hash: Option<SchemaHash>,
+    pub schema_hash: SchemaHash,
     #[serde(default)]
     pub data_bytes: Option<ByteCount>,
 }
@@ -718,7 +717,7 @@ output:
                     info: TableInfo {
                         column_count: ColumnCount::try_from(1i64)?,
                         row_count: RowCount::try_from(2i64)?,
-                        schema_hash: Some(SchemaHash::try_from("hash")?),
+                        schema_hash: SchemaHash::try_from("hash")?,
                         data_bytes: None,
                     },
                 },
