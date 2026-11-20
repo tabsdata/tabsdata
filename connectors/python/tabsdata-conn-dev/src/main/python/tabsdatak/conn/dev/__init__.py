@@ -271,8 +271,8 @@ class DataGenSrc(Src):
                 return rows, narrow
 
         Chunked emission -- `chunk_size` emits the next N rows each run;
-        re-run to walk the frame, and the slot arrives as `None` once
-        exhausted:
+        re-run to walk the frame, and once it is exhausted the slot
+        arrives as an empty table of its columns:
 
         .. code-block:: python
 

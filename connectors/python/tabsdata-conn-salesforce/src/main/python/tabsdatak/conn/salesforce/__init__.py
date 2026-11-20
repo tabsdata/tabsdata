@@ -220,6 +220,11 @@ class SalesforceSrc(Src):
     Setting the `src_cfg` key `tabsdata.src_metadata.drop` to `True`
     leaves them off.
 
+    A query that returns no records still gives a table, an empty one. It
+    has the columns of the queried sObject when the query selects plain
+    fields of it, or else those of the last run that returned records;
+    when no run did, the function gets `None` for it.
+
     Args:
         queries: SOQL query list; today exactly one entry (one output
             slot). The list shape leaves room for future multi-query

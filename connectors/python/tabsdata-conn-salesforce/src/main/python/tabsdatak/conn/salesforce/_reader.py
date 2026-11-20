@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import gzip
+import itertools
 import json
 import logging
 import re
@@ -17,6 +18,8 @@ from typing import Any, Literal
 import polars as pl
 
 # noinspection PyProtectedMember
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._schemas import SlotSchemas
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.salesforce import (
     SalesforceReportSrc,
@@ -187,6 +190,7 @@ class Client:
 def read_soql_src(
     client: Client,
     src: SalesforceSrc,
+    schemas: SlotSchemas,
     drop_metadata: bool = False,
 ) -> list[Iterable[LazyFrameInput]]:
     """One input per SOQL query in ``src``, each holding the query's
@@ -194,6 +198,10 @@ def read_soql_src(
     the query it ran and the last-modified cutoff as metadata -- or no
     metadata at all when ``drop_metadata`` is set (the source's
     ``tabsdata.src_metadata.drop`` config key).
+
+    A query that returns no records gives an empty table of the columns of
+    the queried sObject when its fields are plain ones of it, or else of
+    the last columns the input served; with neither, no table.
 
     Updates ``src.initial_last_modified`` is *not* attempted -- offset
     state lives in the framework's initial-values surface, which the
@@ -207,16 +215,15 @@ def read_soql_src(
         if _SF_LAST_MODIFIED_TOKEN in query and initial_last_modified is None:
             raise SalesforceErrorCode.SALESFORCE_11.exception(query_index=i)
     return [
-        [
-            _soql_input(
-                client=client,
-                index=i,
-                query=_substituted(query, initial_last_modified),
-                include_deleted=src.include_deleted,
-                initial_last_modified=initial_last_modified,
-                drop_metadata=drop_metadata,
-            )
-        ]
+        _soql_inputs(
+            client=client,
+            index=i,
+            query=_substituted(query, initial_last_modified),
+            include_deleted=src.include_deleted,
+            initial_last_modified=initial_last_modified,
+            drop_metadata=drop_metadata,
+            schemas=schemas,
+        )
         for i, query in enumerate(src.queries)
     ]
 
@@ -231,7 +238,7 @@ def _substituted(query: str, initial_last_modified: datetime | None) -> str:
     )
 
 
-def _soql_input(
+def _soql_inputs(
     *,
     client: Client,
     index: int,
@@ -239,28 +246,11 @@ def _soql_input(
     include_deleted: bool,
     initial_last_modified: datetime | None,
     drop_metadata: bool,
-) -> LazyFrameInput:
-    # noinspection PyProtectedMember
-    from tabsdatak.conn.common.file._read._ndjson import AutoNdjson
-
-    sobjects = SObjects()
-    describe = Describer(client)
-
-    def opened() -> RecordLines:
-        logger.debug("Executing SOQL query %d: %s", index, query)
-        sf = client()
-        try:
-            records = sf.query_all_iter(query, include_deleted=include_deleted)
-        except Exception as e:
-            raise SalesforceErrorCode.SALESFORCE_10.exception(
-                cause=e,
-                query_index=index,
-            )
-        return RecordLines(records, index, sobjects)
-
-    lines = AutoNdjson().read(opened)
-    assert callable(lines.metadata)
-    folded = lines.metadata
+    schemas: SlotSchemas,
+) -> Iterator[LazyFrameInput]:
+    """The input of one SOQL query. Its first record is fetched before the
+    input is handed over, so a query without records is told from one with
+    them while nothing of it has landed yet."""
     columns: MetadataSpec | None = (
         None
         if drop_metadata
@@ -271,14 +261,75 @@ def _soql_input(
             ),
         }
     )
+    describe = Describer(client)
+    logger.debug("Executing SOQL query %d: %s", index, query)
+    records = _queried(client, index, query, include_deleted)
+    first = _next_record(records, index)
+    if first is None:
+        described = None if columns is None else FrameMetadata(columns=columns)
+        schema = queried_schema(query, describe)
+        if schema is not None:
+            yield schemas.served(
+                index, LazyFrameInput(pl.LazyFrame(schema=schema), described)
+            )
+            return
+        empty = schemas.empty(index, described)
+        if empty is not None:
+            yield empty
+        return
+    yield schemas.served(
+        index,
+        _soql_input(
+            records=itertools.chain([first], records),
+            index=index,
+            columns=columns,
+            describe=describe,
+        ),
+    )
+
+
+def _queried(
+    client: Client, index: int, query: str, include_deleted: bool
+) -> Iterator[dict]:
+    sf = client()
+    try:
+        return iter(sf.query_all_iter(query, include_deleted=include_deleted))
+    except Exception as e:
+        raise SalesforceErrorCode.SALESFORCE_10.exception(
+            cause=e,
+            query_index=index,
+        )
+
+
+def _next_record(records: Iterator[dict], index: int) -> dict | None:
+    try:
+        return next(records, None)
+    except Exception as e:
+        raise SalesforceErrorCode.SALESFORCE_10.exception(
+            cause=e,
+            query_index=index,
+        )
+
+
+def _soql_input(
+    *,
+    records: Iterator[dict],
+    index: int,
+    columns: MetadataSpec | None,
+    describe: Describer,
+) -> LazyFrameInput:
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.file._read._ndjson import AutoNdjson
+
+    sobjects = SObjects()
+    lines = AutoNdjson().read(lambda: RecordLines(records, index, sobjects))
+    assert callable(lines.metadata)
+    folded = lines.metadata
 
     def metadata() -> FrameMetadata:
         read = folded()
         if not read.schema:
-            schema = queried_schema(query, describe)
-            if schema is None:
-                return replace(read, columns=columns, known=False)
-            return replace(read, schema=schema, columns=columns)
+            return replace(read, columns=columns)
         schema = described_schema(read.schema, sobjects, describe)
         return replace(read, schema=schema, columns=columns)
 
@@ -478,6 +529,7 @@ def _last_modified_metadata(dt: datetime | None) -> str:
 def read_report_src(
     client: Client,
     src: SalesforceReportSrc,
+    schemas: SlotSchemas,
     drop_metadata: bool = False,
 ) -> list[Iterable[LazyFrameInput]]:
     """One input per Salesforce report in ``src``, each run only when the
@@ -486,12 +538,15 @@ def read_report_src(
     all when ``drop_metadata`` is set (the source's
     ``tabsdata.src_metadata.drop`` config key)."""
     return [
-        _report_inputs(
-            client=client,
-            index=i,
-            report=report,
-            src=src,
-            drop_metadata=drop_metadata,
+        (
+            schemas.served(i, table)
+            for table in _report_inputs(
+                client=client,
+                index=i,
+                report=report,
+                src=src,
+                drop_metadata=drop_metadata,
+            )
         )
         for i, report in enumerate(src.reports)
     ]

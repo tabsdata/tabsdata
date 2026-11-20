@@ -9,6 +9,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._schemas import SlotSchemas
 from tabsdatak.conn.salesforce import (
     SalesforceReportSrc,
     SalesforceSrc,
@@ -92,6 +94,7 @@ class _SalesforceSrcPlugin(SrcPlugin[SalesforceSrcConn, SalesforceSrc]):
         return _reader.read_soql_src(
             _reader.Client(conn, api_version=src.api_version),
             src,
+            SlotSchemas.of(ctx),
             drop_metadata=cfg.drop_metadata,
         )
 
@@ -115,6 +118,7 @@ class _SalesforceReportSrcPlugin(SrcPlugin[SalesforceSrcConn, SalesforceReportSr
         return _reader.read_report_src(
             _reader.Client(conn),
             src,
+            SlotSchemas.of(ctx),
             drop_metadata=cfg.drop_metadata,
         )
 

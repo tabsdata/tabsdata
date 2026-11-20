@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import io
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -58,10 +58,17 @@ pytestmark = pytest.mark.salesforce
 @dataclass
 class _Ctx:
     _work: Path
+    attrs: dict = field(default_factory=dict)
 
     @property
     def work_dir(self) -> Path:
         return self._work
+
+    def get_attr(self, key):
+        return self.attrs.get(key)
+
+    def set_attr(self, key, value) -> None:
+        self.attrs[key] = value
 
 
 def _src_ctx(work: Path) -> _Ctx:
@@ -499,9 +506,9 @@ def test_src_plugin_wraps_query_failure_as_salesforce_10(monkeypatch, work_dir):
     fake.query_all_iter_raise = RuntimeError("API explode")
     _patch_login(monkeypatch, fake)
     src = SalesforceSrc(queries=["SELECT Id FROM Account"])
-    [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    [slot] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
     with pytest.raises(SalesforceRuntimeException) as ei:
-        _served(table)
+        list(slot)
     assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_10
 
 
@@ -527,32 +534,45 @@ def test_src_plugin_surfaces_a_failed_login_when_reading(monkeypatch, work_dir):
 
     monkeypatch.setattr(reader, "login", login)
     src = SalesforceSrc(queries=["SELECT Id FROM Account"])
-    [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    [slot] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
     with pytest.raises(SalesforceRuntimeException) as ei:
-        _served(table)
+        list(slot)
     assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_9
 
 
-def test_src_plugin_handles_empty_result_set(monkeypatch, work_dir):
+KEPT = {"@td.schema.0": '{"Id": "String"}'}
+
+
+def test_src_plugin_hands_over_no_table_for_a_first_empty_result(monkeypatch, work_dir):
     _, _, src = _soql(monkeypatch, [])
-    [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
-    assert _served(table).shape == (0, 0)
-    assert not _metadata(table).known
+    [slot] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
+    assert list(slot) == []
 
 
-def _empty(monkeypatch, work_dir, query: str) -> tuple:
+def test_src_plugin_keeps_the_schema_of_the_records_it_hands_over(
+    monkeypatch, work_dir
+):
+    _, _, src = _soql(monkeypatch, [{"Id": "001"}])
+    ctx = _src_ctx(work_dir)
+    [[table]] = plugin._SalesforceSrcPlugin().read_in(ctx, _conn(), src)
+    _served(table)
+    assert ctx.attrs == KEPT
+
+
+def _empty(monkeypatch, work_dir, query: str, attrs: dict | None = None) -> tuple:
     fake = _FakeSF()
     fake.describes = {"Opportunity": OPPORTUNITY}
     _patch_login(monkeypatch, fake)
     src = SalesforceSrc(queries=[query])
-    [[table]] = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
-    return fake, table
+    ctx = _Ctx(work_dir, dict(attrs or {}))
+    [slot] = plugin._SalesforceSrcPlugin().read_in(ctx, _conn(), src)
+    return fake, list(slot)
 
 
 def test_an_empty_result_is_typed_as_its_object_describes_the_selected_fields(
     monkeypatch, work_dir
 ):
-    fake, table = _empty(
+    fake, [table] = _empty(
         monkeypatch,
         work_dir,
         "select amount, ID,\n closedate FROM Opportunity WHERE IsWon = true",
@@ -564,7 +584,6 @@ def test_an_empty_result_is_typed_as_its_object_describes_the_selected_fields(
         "CloseDate": pl.Date,
     })
     assert frame.height == 0
-    assert _metadata(table).known
     assert fake.described == ["Opportunity"]
 
 
@@ -589,12 +608,25 @@ def test_an_empty_result_is_typed_as_its_object_describes_the_selected_fields(
         "undescribable object",
     ],
 )
-def test_an_empty_result_whose_fields_cannot_be_typed_is_unknown(
+def test_an_empty_result_whose_fields_cannot_be_typed_takes_the_last_schema(
     monkeypatch, work_dir, query
 ):
-    _, table = _empty(monkeypatch, work_dir, query)
-    assert _served(table).shape == (0, 0)
-    assert not _metadata(table).known
+    _, [table] = _empty(monkeypatch, work_dir, query, KEPT)
+    frame = _served(table)
+    assert frame.schema == pl.Schema({"Id": pl.String})
+    assert frame.height == 0
+
+
+@pytest.mark.parametrize(
+    "query",
+    ["SELECT Id, Owner.Name FROM Opportunity", "SELECT Id FROM Undescribable"],
+    ids=["relationship", "undescribable object"],
+)
+def test_a_first_empty_result_whose_fields_cannot_be_typed_hands_over_no_table(
+    monkeypatch, work_dir, query
+):
+    _, tables = _empty(monkeypatch, work_dir, query)
+    assert tables == []
 
 
 def test_src_plugin_reports_soql_and_cutoff_as_metadata(monkeypatch, work_dir):
