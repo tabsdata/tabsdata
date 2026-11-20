@@ -12,7 +12,7 @@ mod primitives;
 
 pub use daos::dependency::Dependencies;
 pub use daos::execution::Executions;
-pub use daos::function_runs::{LogicalRuns, PhysicalRuns, Reach};
+pub use daos::function_runs::{LogicalRuns, PhysicalRuns};
 pub use daos::metrics::Metrics;
 #[cfg(feature = "td-test")]
 pub use daos::metrics::metrics_plan_sql;

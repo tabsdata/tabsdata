@@ -2,7 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use std::collections::HashMap;
+use crate::execution::holds::HoldEvaluator;
+use std::collections::{HashMap, HashSet};
 use td_database::access::{Holds, InProject, ProjectLock};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
@@ -239,7 +240,8 @@ pub fn build_logical_function_run_inputs(
     Ok(rows)
 }
 
-/// Flips to OnHold the plan's LFRs whose upstream inputs are Failed/OnHold.
+/// Flips to OnHold the plan's LFRs some Failed/OnHold run holds, round after
+/// round: a run held in one round holds its readers in the plan in the next.
 #[instrument(
     name = "execution.update_initial_function_run_status",
     skip_all,
@@ -250,20 +252,31 @@ pub fn build_logical_function_run_inputs(
 pub async fn update_initial_function_run_status(
     conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     execution: &ExecutionInsertDB,
+    mut runs: Vec<LogicalFunctionRunId>,
 ) -> Result<(), TdError> {
-    let lfr_ids = conn.logical_runs().blocked_ids(&execution.id).await?;
+    let mut evaluator = HoldEvaluator::default();
+    let mut on_hold_count = 0;
+    loop {
+        let held = evaluator.held(conn, &runs, &HashSet::new()).await?;
+        let (held, rest): (Vec<LogicalFunctionRunId>, Vec<LogicalFunctionRunId>) =
+            runs.into_iter().partition(|run| held.contains_key(run));
+        if held.is_empty() {
+            break;
+        }
+        conn.logical_runs()
+            .set_status(&held, LogicalFunctionRunStatus::OnHold)
+            .await?;
+        evaluator.mark_held();
+        on_hold_count += held.len();
+        runs = rest;
+    }
 
     debug!(
         execution_id = %execution.id,
-        on_hold_count = lfr_ids.len(),
+        on_hold_count = on_hold_count,
         "execution.initial_on_hold: {} LFR(s) start OnHold",
-        lfr_ids.len()
+        on_hold_count
     );
-
-    conn.logical_runs()
-        .set_status(&lfr_ids, LogicalFunctionRunStatus::OnHold)
-        .await?;
-
     Ok(())
 }
 

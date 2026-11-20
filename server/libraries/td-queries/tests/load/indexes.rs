@@ -235,14 +235,15 @@ const INDEX_CASES: &[IndexCase] = &[
     },
     IndexCase {
         index: "logical_function_run_inputs___logical_function_run_id___idx",
-        served_by: Queries(&["LogicalRuns::for_dispatch", "LogicalRuns::to_execute"]),
+        served_by: Queries(&[
+            "LogicalRuns::for_dispatch",
+            "LogicalRuns::to_execute",
+            "LogicalRuns::transactions_read_by",
+        ]),
     },
     IndexCase {
         index: "lfri___requirement_logical_table_data_version_id___idx",
-        served_by: Queries(&[
-            "LogicalRuns::blocked_ids",
-            "LogicalRuns::downstream_one_hop",
-        ]),
+        served_by: Queries(&["LogicalRuns::downstream_one_hop"]),
     },
     IndexCase {
         index: "logical_function_runs___collection_id__triggered_on__id___idx",
@@ -286,6 +287,7 @@ const INDEX_CASES: &[IndexCase] = &[
             "LogicalRuns::to_execute",
             "LogicalRuns::awaiting_commit",
             "LogicalRuns::done_beside_canceled",
+            "LogicalRuns::waiting_subscribers",
         ]),
     },
     IndexCase {
@@ -294,6 +296,8 @@ const INDEX_CASES: &[IndexCase] = &[
             "LogicalRuns::to_commit",
             "LogicalRuns::done_beside_canceled",
             "LogicalRuns::awaiting_commit",
+            "LogicalRuns::transactions_read_by",
+            "LogicalRuns::stuck_runs",
         ]),
     },
     IndexCase {

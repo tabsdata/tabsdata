@@ -340,8 +340,32 @@ pub const LOAD_CASES: &[LoadCase] = &[
         status: Status::Implemented,
     },
     LoadCase {
-        name: "lfr::blocked_ids",
-        covers: &["LogicalRuns::blocked_ids"],
+        name: "lfr::blocking_producers",
+        covers: &["LogicalRuns::blocking_producers"],
+        family: Family::Chain,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "lfr::awaited_transactions",
+        covers: &["LogicalRuns::awaited_transactions"],
+        family: Family::Chain,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "lfr::transactions_read_by",
+        covers: &["LogicalRuns::transactions_read_by"],
+        family: Family::Chain,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "lfr::stuck_runs",
+        covers: &["LogicalRuns::stuck_runs"],
+        family: Family::Chain,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "lfr::waiting_subscribers",
+        covers: &["LogicalRuns::waiting_subscribers"],
         family: Family::Chain,
         status: Status::Implemented,
     },
@@ -354,12 +378,6 @@ pub const LOAD_CASES: &[LoadCase] = &[
     LoadCase {
         name: "projects::draining",
         covers: &["Projects::draining"],
-        family: Family::Chain,
-        status: Status::Implemented,
-    },
-    LoadCase {
-        name: "lfr::blockers",
-        covers: &["LogicalRuns::blockers"],
         family: Family::Chain,
         status: Status::Implemented,
     },

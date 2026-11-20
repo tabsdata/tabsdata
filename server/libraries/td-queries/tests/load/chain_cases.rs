@@ -4,8 +4,9 @@
 
 //! Chain-family load cases (`LogicalRuns` / `PhysicalRuns` / `Executions` / `Dependencies`)
 //! over one seeded [`chain_dataset`] graph. Queries targeting
-//! in-flight/blocked rows legitimately return empty on the all-`Done` graph —
-//! the measured cost is the scan under the readiness predicate.
+//! in-flight/blocked rows legitimately return empty on a graph `Done` but for
+//! its subscribers — the measured cost is the scan under the readiness
+//! predicate.
 
 use std::time::Instant;
 
@@ -13,7 +14,7 @@ use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::crudl::ListParams;
 use td_objects::types::basic::AtTime;
-use td_queries::{Queries, Reach};
+use td_queries::Queries;
 
 use crate::harness::{record, seed};
 
@@ -93,15 +94,21 @@ async fn load_lfr_for_dispatch(db: TdPool) -> Result<(), TdError> {
 }
 
 #[td_test::test(db)]
-async fn load_lfr_blocked_ids(db: TdPool) -> Result<(), TdError> {
+async fn load_lfr_blocking_producers(db: TdPool) -> Result<(), TdError> {
     let (h, profile, _) = seed(&db).await?;
     let seeded = h.fr_ids.len();
     let t = Instant::now();
-    let rows = db.logical_runs().blocked_ids(&h.execs[0]).await?;
-    record("lfr::blocked_ids", profile, t, rows.len(), seeded);
+    let rows = db
+        .logical_runs()
+        .blocking_producers(&h.producer_lfrs)
+        .await?;
+    record("lfr::blocking_producers", profile, t, rows.len(), seeded);
     let t = Instant::now();
-    let rows = db.logical_runs().blockers(&h.producer_lfrs).await?;
-    record("lfr::blockers", profile, t, rows.len(), seeded);
+    let rows = db
+        .logical_runs()
+        .awaited_transactions(&h.producer_lfrs)
+        .await?;
+    record("lfr::awaited_transactions", profile, t, rows.len(), seeded);
     let t = Instant::now();
     let rows = db.logical_runs().of_deleted_functions().await?;
     record("lfr::of_deleted_functions", profile, t, rows.len(), seeded);
@@ -118,10 +125,38 @@ async fn load_lfr_downstream_one_hop(db: TdPool) -> Result<(), TdError> {
     let t = Instant::now();
     let rows = db
         .logical_runs()
-        .downstream_one_hop(&h.producer_lfrs, &[], Reach::Commit)
+        .downstream_one_hop(&h.producer_lfrs, &[])
         .await?;
     record("lfr::downstream_one_hop", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty(), "producers have downstream consumers");
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn load_lfr_transaction_steps(db: TdPool) -> Result<(), TdError> {
+    let (h, profile, _) = seed(&db).await?;
+    let seeded = h.fr_ids.len();
+    let t = Instant::now();
+    let rows = db
+        .logical_runs()
+        .transactions_read_by(&h.transaction_ids)
+        .await?;
+    record("lfr::transactions_read_by", profile, t, rows.len(), seeded);
+    assert!(
+        !rows.is_empty(),
+        "consumers read their producers' transactions"
+    );
+    let t = Instant::now();
+    let rows = db.logical_runs().stuck_runs(&h.transaction_ids).await?;
+    record("lfr::stuck_runs", profile, t, rows.len(), seeded);
+    assert!(!rows.is_empty(), "a held run keeps its transaction");
+    let t = Instant::now();
+    let rows = db.logical_runs().waiting_subscribers().await?;
+    record("lfr::waiting_subscribers", profile, t, rows.len(), seeded);
+    assert!(
+        !rows.is_empty(),
+        "subscribers wait on uncommitted transactions"
+    );
     Ok(())
 }
 

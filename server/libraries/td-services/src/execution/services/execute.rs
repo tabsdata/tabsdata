@@ -125,10 +125,11 @@ pub(crate) mod tests {
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, ConnectionKind, Decorator, Description, Enabled,
         ExecutionName, ExecutionStatus, FunctionName, FunctionOnly, FunctionRuntimeValues,
-        GroupName, InputIdx, LogicalFunctionRunStatus, LogicalTableDataVersionId,
-        OverrideDisabledTrigger, PhysicalFunctionRunId, PhysicalTableDataVersionId, ProjectId,
-        ProjectName, SkipIfRunning, TableName, TableNameDto, TransactionKey, TransactionStatus,
-        TriggeredOn, UserId, VersionPos, WorkerConfig, WorkerTypeDto,
+        GroupName, InputIdx, LogicalFunctionRunId, LogicalFunctionRunStatus,
+        LogicalTableDataVersionId, OverrideDisabledTrigger, PhysicalFunctionRunId,
+        PhysicalTableDataVersionId, ProjectId, ProjectName, SkipIfRunning, TableName, TableNameDto,
+        TransactionId, TransactionKey, TransactionStatus, TriggeredOn, UserId, VersionPos,
+        WorkerConfig, WorkerTypeDto,
     };
     use td_objects::types::basic::{CollectionIdName, ExternalUid, FunctionIdName, TableIdName};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
@@ -156,6 +157,123 @@ pub(crate) mod tests {
     async fn test_execute_single_function(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let _ = Box::pin(test_execute(db, p.project_id, true, false, true)).await?;
+        Ok(())
+    }
+
+    /// `parent_fn` reads `source_fn`'s table from an earlier plan, and its
+    /// child reads `parent_fn`'s from the same one: every input is in its
+    /// reader's transaction, whichever transaction wrote what it reads.
+    #[td_test::test(db)]
+    async fn test_an_input_is_in_the_transaction_of_its_run(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?.project_id;
+        let source_collection = db
+            .scoped(p)
+            .seed()
+            .collection(
+                &CollectionName::try_from("inputs_source")?,
+                &UserId::admin(),
+            )
+            .await?;
+        db.scoped(p)
+            .seed()
+            .function(
+                &source_collection,
+                &FunctionRegister {
+                    child_functions: None,
+                    name: FunctionName::try_from("source_fn")?,
+                    description: "d".try_into()?,
+                    bundle_id: BundleId::default(),
+                    snippet: "s".try_into()?,
+                    decorator: Decorator::Transformer,
+                    connector: None,
+                    connection: None,
+                    base_path: None,
+                    dependencies: None,
+                    triggers: None,
+                    tables: Some(vec![TableNameDto::try_from("source_table")?]),
+                    table_types: None,
+                    parent_tables: None,
+                    runtime_values: FunctionRuntimeValues::try_from("rv")?,
+                    reuse_frozen_tables: ReuseFrozen::FALSE,
+                    enabled: None,
+                    workers: None,
+                },
+            )
+            .await?;
+        create_collection(&db, p, "inputs_parent", None).await;
+        let parent = FunctionRegister {
+            dependencies: Some(vec![TableDependencyDto::try_from(
+                "inputs_source/source_table",
+            )?]),
+            triggers: Some(vec![TableTriggerDto::try_from(
+                "inputs_source/source_table",
+            )?]),
+            ..parent_with_child()?
+        };
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam {
+                    collection: CollectionIdName::from_str("inputs_parent")?,
+                },
+                parent,
+            )
+            .in_project(p);
+        Services::with_defaults(db.clone())
+            .register_function(request)
+            .await?;
+        let mut executions = Vec::new();
+        for (collection, function) in [
+            ("inputs_source", "source_fn"),
+            ("inputs_parent", "parent_fn"),
+        ] {
+            let response = execute_by_name(
+                &db,
+                p,
+                collection,
+                function,
+                FunctionOnly::FALSE,
+                OverrideDisabledTrigger::FALSE,
+            )
+            .await?;
+            executions.push(response.id);
+        }
+
+        let mut runs: HashMap<LogicalFunctionRunId, TransactionId> = HashMap::new();
+        let mut inputs: Vec<LogicalFunctionRunInputDB> = Vec::new();
+        for execution in &executions {
+            runs.extend(
+                db.scoped(p)
+                    .fetch_all::<LogicalFunctionRunDB>(execution)
+                    .await?
+                    .into_iter()
+                    .map(|lfr| (lfr.id.clone(), lfr.transaction_id.clone())),
+            );
+            inputs.extend(
+                db.scoped(p)
+                    .fetch_all::<LogicalFunctionRunInputDB>(execution)
+                    .await?,
+            );
+        }
+        let (mut same, mut other) = (0, 0);
+        for input in &inputs {
+            let own = &runs[&input.logical_function_run_id];
+            assert_eq!(&input.transaction_id, own, "{input:?}");
+            let Some(ltdv) = &input.requirement_logical_table_data_version_id else {
+                continue;
+            };
+            let read: LogicalTableDataVersionDB = db.scoped(p).timeline().fetch_one(ltdv).await?;
+            match read
+                .producer_logical_function_run_id
+                .as_ref()
+                .and_then(|producer| runs.get(producer))
+            {
+                Some(producer) if producer == own => same += 1,
+                Some(_) => other += 1,
+                None => {}
+            }
+        }
+        assert!(same > 0, "no input reads a table of its own transaction");
+        assert!(other > 0, "no input reads a table of another transaction");
         Ok(())
     }
 

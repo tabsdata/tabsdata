@@ -117,6 +117,7 @@ async fn seed_project_runs(
             "out",
             &[],
             Some(ended_on),
+            None,
             &mut graph,
         )
         .await?;
@@ -139,6 +140,7 @@ async fn seed_project_runs(
             "out",
             &[],
             Some(ended_on),
+            None,
             &mut graph,
         )
         .await?;
@@ -164,6 +166,7 @@ async fn make_function(
     name: &str,
     out_table: &str,
     dep_refs: &[&str],
+    decorator: Decorator,
 ) -> Result<FunctionDB, TdError> {
     let dependencies = if dep_refs.is_empty() {
         None
@@ -181,7 +184,7 @@ async fn make_function(
         description: "load fn".try_into()?,
         bundle_id: BundleId::default(),
         snippet: "snippet".try_into()?,
-        decorator: Decorator::Publisher,
+        decorator,
         connector: None,
         connection: None,
         base_path: None,
@@ -218,6 +221,8 @@ pub struct ChainHandle {
     /// First producer's transaction id, for building a fresh LFRI in the
     /// Default write cases.
     pub transaction_id: td_objects::types::basic::TransactionId,
+    /// Every unit's transactions, none committed.
+    pub transaction_ids: Vec<td_objects::types::basic::TransactionId>,
     /// The dataset's per-test project, for scoping field-less writes in cases.
     pub project_id: ProjectId,
     pub before_time: TriggeredOn,
@@ -235,10 +240,13 @@ struct Unit {
     ltdv: LogicalTableDataVersionInsertDB,
 }
 
-/// Build a chain graph: `units` independent collections, each with a producer
+/// Build a chain graph: `units` collections, each with a producer
 /// (publishes `src`) and a consumer (depends on `src` and consumes the
 /// producer's LTDV via an LFRI) — populating every table the chain queries
-/// scan.
+/// scan. Runs of [`LINKED_UNITS`] consecutive units chain their transactions:
+/// each producer after the first also reads the previous unit's consumer, and
+/// a subscriber reads the last one's, Scheduled in every other chain and on
+/// hold in the rest.
 /// A `team` user tag on every open table, collection and function, `a` on about
 /// half of them, so a tag selector has rows to match and rows to skip. A
 /// second pass leaves the tags of the rows the first one tagged.
@@ -279,6 +287,10 @@ async fn tag_tables(db: &TdPool) {
         .expect("tag tables and collections");
 }
 
+/// Units per chain of transactions in [`chain_dataset`]: a chain is
+/// `2 * LINKED_UNITS` transactions deep.
+const LINKED_UNITS: usize = 4;
+
 pub async fn chain_dataset(db: &TdPool, knobs: ChainKnobs) -> Result<ChainHandle, TdError> {
     let user = system_user()?;
     let project = test_projects(db, 1).await?.remove(0);
@@ -290,6 +302,8 @@ pub async fn chain_dataset(db: &TdPool, knobs: ChainKnobs) -> Result<ChainHandle
     let mut table_id: Option<TableId> = None;
     let mut collection_id: Option<td_objects::types::basic::CollectionId> = None;
     let mut transaction_id: Option<td_objects::types::basic::TransactionId> = None;
+    let mut transaction_ids = Vec::with_capacity(knobs.units * 2);
+    let mut previous_consumer: Option<LogicalTableDataVersionInsertDB> = None;
     let mut first: Option<(FunctionId, FunctionVersionId)> = None;
 
     let mut graph = RunGraph::default();
@@ -316,6 +330,7 @@ pub async fn chain_dataset(db: &TdPool, knobs: ChainKnobs) -> Result<ChainHandle
             "src",
             &[],
             None,
+            None,
             &mut graph,
         )
         .await?;
@@ -326,12 +341,43 @@ pub async fn chain_dataset(db: &TdPool, knobs: ChainKnobs) -> Result<ChainHandle
             "dst",
             &["src"],
             None,
+            None,
             &mut graph,
         )
         .await?;
         graph
             .lfris
             .push(build_lfri(&coll, &consumer, &producer.ltdv)?);
+        if let Some(previous) = previous_consumer.take()
+            && i % LINKED_UNITS != 0
+        {
+            graph.lfris.push(build_lfri(&coll, &producer, &previous)?);
+        }
+        transaction_ids.push(producer.transaction_id.clone());
+        transaction_ids.push(consumer.transaction_id.clone());
+        if i % LINKED_UNITS == LINKED_UNITS - 1 {
+            let status = if (i / LINKED_UNITS).is_multiple_of(2) {
+                LogicalFunctionRunStatus::Scheduled
+            } else {
+                LogicalFunctionRunStatus::OnHold
+            };
+            let subscriber = build_unit(
+                db,
+                &coll,
+                &format!("chain_s{s}_{i}"),
+                "out",
+                &["dst"],
+                None,
+                Some(status),
+                &mut graph,
+            )
+            .await?;
+            graph
+                .lfris
+                .push(build_lfri(&coll, &subscriber, &consumer.ltdv)?);
+            transaction_ids.push(subscriber.transaction_id.clone());
+        }
+        previous_consumer = Some(consumer.ltdv.clone());
 
         execs.push(producer.execution_id.clone());
         execs.push(consumer.execution_id.clone());
@@ -365,6 +411,7 @@ pub async fn chain_dataset(db: &TdPool, knobs: ChainKnobs) -> Result<ChainHandle
         table_id: table_id.expect("chain_dataset requires units >= 1"),
         collection_id: collection_id.expect("chain_dataset requires units >= 1"),
         transaction_id: transaction_id.expect("chain_dataset requires units >= 1"),
+        transaction_ids,
         project_id: pid,
         before_time: TriggeredOn::asserted(*AtTime::now()),
         at: AtTime::now(),
@@ -400,6 +447,7 @@ impl RunGraph {
 /// Register a function and its execution/transaction via the Seed API, then
 /// build its `Done` run graph (LFR, LTDV, and the bound PFR + PTDV that
 /// materialize them) into `graph` for deferred bulk insert.
+#[allow(clippy::too_many_arguments)]
 async fn build_unit(
     db: &TdPool,
     collection: &CollectionDB,
@@ -407,9 +455,14 @@ async fn build_unit(
     out_table: &str,
     dep_refs: &[&str],
     ended_on: Option<Ended<AtTime>>,
+    subscriber: Option<LogicalFunctionRunStatus>,
     graph: &mut RunGraph,
 ) -> Result<Unit, TdError> {
-    let func = make_function(db, collection, fn_name, out_table, dep_refs).await?;
+    let (decorator, status) = match subscriber {
+        Some(status) => (Decorator::Subscriber, status),
+        None => (Decorator::Transformer, LogicalFunctionRunStatus::Done),
+    };
+    let func = make_function(db, collection, fn_name, out_table, dep_refs, decorator).await?;
     let pid = collection.project_id;
     let exec = db.scoped(pid).seed().execution(&func).await?;
     let trx = db
@@ -428,7 +481,7 @@ async fn build_unit(
         trigger: Trigger::Manual,
         triggered_on: trx.triggered_on,
         triggered_by_id: trx.triggered_by_id,
-        status: LogicalFunctionRunStatus::Done,
+        status,
         group_id: collection.group_id,
     };
     let pfr_id = PhysicalFunctionRunId::new();
@@ -445,7 +498,7 @@ async fn build_unit(
         dispatched_on: None,
         started_on: None,
         ended_on: None,
-        status: PhysicalFunctionRunStatus::from(&LogicalFunctionRunStatus::Done),
+        status: PhysicalFunctionRunStatus::from(&status),
         function_version_patch_id: None,
         logical_function_run_id: lfr.id.clone(),
     };

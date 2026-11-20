@@ -36,6 +36,7 @@ use td_queries::Queries;
 
 pub(crate) mod cancellation;
 pub(crate) mod execution_version;
+pub(crate) mod holds;
 pub(crate) mod plan;
 pub(crate) mod release;
 pub(crate) mod settlement;
@@ -169,7 +170,11 @@ pub(crate) async fn execute(
         &logical_function_runs,
     )?;
     conn.chunked().insert(&inputs).await?;
-    update_initial_function_run_status(conn, &execution).await?;
+    let runs = logical_function_runs
+        .iter()
+        .map(|lfr| lfr.id.clone())
+        .collect();
+    update_initial_function_run_status(conn, &execution, runs).await?;
     let relations_info = fetch_relations_info(conn, &resolved_plan).await?;
 
     build_response(

@@ -24,7 +24,7 @@ use td_objects::types::basic::{
     Decorator, FunctionId, FunctionVersionId, LogicalFunctionRunId, LogicalFunctionRunStatus,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, TransactionId,
 };
-use td_queries::{Queries, Reach};
+use td_queries::Queries;
 use tracing::{debug, warn};
 
 fn unfinished(lfr: &LogicalFunctionRunDB) -> bool {
@@ -148,7 +148,7 @@ async fn cancel_closure(
         let exclude: Vec<LogicalFunctionRunId> = reached.keys().cloned().collect();
         let downstream_ids: Vec<LogicalFunctionRunId> = conn
             .logical_runs()
-            .downstream_one_hop(&from, &exclude, Reach::Data)
+            .downstream_one_hop(&from, &exclude)
             .await?;
         if !downstream_ids.is_empty() {
             let downstream: Vec<FunctionRunDBWithNames> = conn

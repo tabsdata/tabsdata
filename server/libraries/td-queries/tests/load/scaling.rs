@@ -49,8 +49,8 @@ use td_objects::types::basic::{
     VersionPos,
 };
 use td_objects::types::visible_projects::VisibleProjects;
+use td_queries::Queries;
 use td_queries::test_utils::{begin_locked, derive_metrics_facts, topology_write};
-use td_queries::{Queries, Reach};
 
 type Ptdv = PhysicalTableDataVersionDB;
 
@@ -189,13 +189,34 @@ async fn time_chain_queries(
     );
     let _ = timed!(
         out,
-        "lfr::blocked_ids",
-        (db).logical_runs().blocked_ids(&h.execs[0]).await?
+        "lfr::blocking_producers",
+        (db).logical_runs()
+            .blocking_producers(&h.producer_lfrs)
+            .await?
     );
     let _ = timed!(
         out,
-        "lfr::blockers",
-        (db).logical_runs().blockers(&h.producer_lfrs).await?
+        "lfr::awaited_transactions",
+        (db).logical_runs()
+            .awaited_transactions(&h.producer_lfrs)
+            .await?
+    );
+    let _ = timed!(
+        out,
+        "lfr::transactions_read_by",
+        (db).logical_runs()
+            .transactions_read_by(&h.transaction_ids)
+            .await?
+    );
+    let _ = timed!(
+        out,
+        "lfr::stuck_runs",
+        (db).logical_runs().stuck_runs(&h.transaction_ids).await?
+    );
+    let _ = timed!(
+        out,
+        "lfr::waiting_subscribers",
+        (db).logical_runs().waiting_subscribers().await?
     );
     let _ = timed!(
         out,
@@ -206,7 +227,7 @@ async fn time_chain_queries(
         out,
         "lfr::downstream_one_hop",
         (db).logical_runs()
-            .downstream_one_hop(&h.producer_lfrs, &[], Reach::Commit)
+            .downstream_one_hop(&h.producer_lfrs, &[])
             .await?
     );
     let _ = timed!(

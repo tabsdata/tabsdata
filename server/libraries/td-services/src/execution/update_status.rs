@@ -3,6 +3,7 @@
 //
 
 use crate::execution::cancellation::function_stops;
+use crate::execution::holds::HoldEvaluator;
 use itertools::Itertools;
 use std::collections::HashSet;
 use ta_services::ctx_service::{Message, ReqCtx};
@@ -26,9 +27,9 @@ use td_objects::types::basic::{
     ExecutionId, FunctionId, HasData, LogicalFunctionRunId, LogicalFunctionRunStatus,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, SchemaChanged, WorkerId,
 };
-use td_queries::{Queries, Reach};
+use td_queries::Queries;
 
-use crate::execution::release::release_readers_of;
+use crate::execution::release::release_unblocked;
 use crate::execution::settlement::commit_done_transactions;
 
 use tracing::{debug, instrument};
@@ -318,10 +319,10 @@ pub(crate) async fn without_attempt_in_flight(
         .collect())
 }
 
-/// The `ids` a recover may reschedule. An OnHold run stays on hold while an
-/// upstream run that is Failed or OnHold is neither among them nor already
-/// `recovered`: rescheduling it would only wait on that failure. A run left on
-/// hold keeps its own readers on hold, to a fixpoint.
+/// The `ids` a recover may reschedule. An OnHold run stays on hold while
+/// something holds it other than those runs or the `recovered` ones:
+/// rescheduling it would only wait on that failure. A run left on hold keeps
+/// holding what it holds, to a fixpoint.
 async fn recoverable(
     conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
     runs: &[LogicalFunctionRunDB],
@@ -337,20 +338,20 @@ async fn recoverable(
     if on_hold.is_empty() {
         return Ok(ids);
     }
-    let blockers = conn.logical_runs().blockers(&on_hold).await?;
+    let mut evaluator = HoldEvaluator::default();
     loop {
-        let held: Vec<LogicalFunctionRunId> = blockers
+        let candidates: Vec<LogicalFunctionRunId> = on_hold
             .iter()
-            .filter(|(run, upstream)| {
-                kept.contains(run) && !kept.contains(upstream) && !recovered.contains(upstream)
-            })
-            .map(|(run, _)| run.clone())
+            .filter(|run| kept.contains(*run))
+            .cloned()
             .collect();
+        let not_blocking: HashSet<LogicalFunctionRunId> = kept.union(recovered).cloned().collect();
+        let held = evaluator.held(conn, &candidates, &not_blocking).await?;
         if held.is_empty() {
             break;
         }
-        for run in held {
-            kept.remove(&run);
+        for run in held.keys() {
+            kept.remove(run);
         }
     }
     if kept.len() < ids.len() {
@@ -426,12 +427,12 @@ pub async fn update_function_run_status(
             .collect();
         commit_done_transactions(conn, &execution_ids).await?;
 
-        let healed: Vec<LogicalFunctionRunId> = logical_function_runs
+        let healed = logical_function_runs
             .iter()
-            .filter(|f| f.status == LogicalFunctionRunStatus::Failed && updated_set.contains(&f.id))
-            .map(|f| f.id.clone())
-            .collect();
-        release_readers_of(conn, &healed).await?;
+            .any(|f| f.status == LogicalFunctionRunStatus::Failed && updated_set.contains(&f.id));
+        if healed {
+            release_unblocked(conn).await?;
+        }
     }
 
     let downstream_status = match status {
@@ -445,6 +446,9 @@ pub async fn update_function_run_status(
         && !lfr_ids.is_empty()
     {
         cascade_downstream_status(msgs, conn, &lfr_ids, &downstream_status).await?;
+    }
+    if status == LogicalFunctionRunStatus::ReScheduled {
+        release_unblocked(conn).await?;
     }
 
     Ok(())
@@ -466,12 +470,21 @@ async fn cascade_downstream_status(
     starting: &[LogicalFunctionRunId],
     status: &LogicalFunctionRunStatus,
 ) -> Result<(), TdError> {
-    let reach = if *status == LogicalFunctionRunStatus::Yanked {
-        Reach::Data
-    } else {
-        Reach::Commit
-    };
-    let downstream_ids = bfs_downstream_lfrs(&mut *conn, starting, reach).await?;
+    cascade_over_data(msgs, conn, starting, status).await?;
+    if *status == LogicalFunctionRunStatus::OnHold {
+        hold_waiting_subscribers(msgs, conn).await?;
+    }
+    Ok(())
+}
+
+/// Sets `status` on the runs reading what `starting` wrote, transitively.
+async fn cascade_over_data(
+    msgs: &mut ReqCtx,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
+    starting: &[LogicalFunctionRunId],
+    status: &LogicalFunctionRunStatus,
+) -> Result<(), TdError> {
+    let downstream_ids = bfs_downstream_lfrs(&mut *conn, starting).await?;
     if downstream_ids.is_empty() {
         return Ok(());
     }
@@ -508,6 +521,35 @@ async fn cascade_downstream_status(
     Ok(())
 }
 
+/// Puts on hold the subscribers that have not started and wait for a
+/// transaction that cannot commit, with their readers. One pass finds them
+/// all: a subscriber behind one put on hold here is behind the same stuck
+/// transaction.
+async fn hold_waiting_subscribers(
+    msgs: &mut ReqCtx,
+    conn: &mut DomainConnection<Apiserver, InProject, impl Holds<ProjectLock>>,
+) -> Result<(), TdError> {
+    let waiting = conn.logical_runs().waiting_subscribers().await?;
+    let held = HoldEvaluator::default()
+        .held(conn, &waiting, &HashSet::new())
+        .await?;
+    let held: Vec<LogicalFunctionRunId> = waiting
+        .into_iter()
+        .filter(|run| held.contains_key(run))
+        .collect();
+    if held.is_empty() {
+        return Ok(());
+    }
+    conn.logical_runs()
+        .set_status(&held, LogicalFunctionRunStatus::OnHold)
+        .await?;
+    debug!(
+        held_count = held.len(),
+        "execution.cascade_status: held subscriber(s) waiting for a stuck transaction"
+    );
+    cascade_over_data(msgs, conn, &held, &LogicalFunctionRunStatus::OnHold).await
+}
+
 /// BFS over the logic dependency graph from `starting`. Each iteration
 /// runs a one-hop downstream query against the current frontier, threading
 /// the visited set in as a SQL `NOT IN` exclusion so already-walked LFRs
@@ -517,7 +559,6 @@ async fn cascade_downstream_status(
 async fn bfs_downstream_lfrs<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     starting: &[LogicalFunctionRunId],
-    reach: Reach,
 ) -> Result<Vec<LogicalFunctionRunId>, TdError> {
     let starting_set: HashSet<LogicalFunctionRunId> = starting.iter().cloned().collect();
     let mut visited: HashSet<LogicalFunctionRunId> = starting_set.clone();
@@ -527,7 +568,7 @@ async fn bfs_downstream_lfrs<S: SeesProjectRows, M: AccessMode>(
         let exclude: Vec<LogicalFunctionRunId> = visited.iter().cloned().collect();
         let next: Vec<LogicalFunctionRunId> = conn
             .logical_runs()
-            .downstream_one_hop(&frontier, &exclude, reach)
+            .downstream_one_hop(&frontier, &exclude)
             .await?;
         let mut new_frontier = Vec::new();
         for id in next {
