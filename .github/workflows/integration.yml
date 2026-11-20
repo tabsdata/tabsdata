@@ -48,6 +48,26 @@ on:
         # test: test only
         # wheels: wheels only
         default: 'build'
+      test_python:
+        description: "Test python (action test)"
+        required: false
+        type: boolean
+        default: true
+      test_rust:
+        description: "Test rust (action test)"
+        required: false
+        type: boolean
+        default: true
+      test_go:
+        description: "Test go (action test)"
+        required: false
+        type: boolean
+        default: true
+      test_typescript:
+        description: "Test typescript (action test)"
+        required: false
+        type: boolean
+        default: true
       run_on_linux_x86_64:
         description: "Run on Ubuntu (x86_64)"
         required: false
@@ -110,6 +130,7 @@ jobs:
         working-directory: .
     outputs:
       permit_workflow: ${{ steps.check-label.outputs.permit_workflow }}
+      test_languages: ${{ steps.check-label.outputs.test_languages }}
     timeout-minutes: ${{ fromJson(needs.cap-job.outputs.job_timeout) }}
 
     steps:
@@ -119,7 +140,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           check_skip_ci_label() {
-            local PR_LABEL_LIST
             PR_LABEL_LIST=$(gh pr view ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --json labels --jq '.labels[].name' 2>/dev/null || echo "")
             echo "Pull request labels: ${PR_LABEL_LIST}"
             if echo "${PR_LABEL_LIST}" | grep -q "^skip-ci$"; then
@@ -145,6 +165,14 @@ jobs:
               echo "✅ Ready. 🙂 PR does not contain label 'skip-ci'. Running workflow."
               echo "permit_workflow=true" >> $GITHUB_ENV
               echo "permit_workflow=true" >> $GITHUB_OUTPUT
+              TEST_LANGUAGES=$(echo "${PR_LABEL_LIST}" | sed -n -E 's/^test-only-(python|rust|go|typescript)$/\1/p' | paste -sd, -)
+              for UNKNOWN_LABEL in $(echo "${PR_LABEL_LIST}" | grep '^test-only-' | grep -v -E '^test-only-(python|rust|go|typescript)$'); do
+                echo "⚠️ Ignoring unknown label '${UNKNOWN_LABEL}': use test-only-python, test-only-rust, test-only-go or test-only-typescript"
+              done
+              if [[ -n "${TEST_LANGUAGES}" ]]; then
+                echo "🧪 Labels test-only-* found: running action 'test' on: ${TEST_LANGUAGES}"
+              fi
+              echo "test_languages=${TEST_LANGUAGES}" >> $GITHUB_OUTPUT
             fi
           fi
 
@@ -173,6 +201,7 @@ jobs:
         working-directory: .
     outputs:
       runner_action: ${{ steps.set-outputs.outputs.runner_action }}
+      test_languages: ${{ steps.set-outputs.outputs.test_languages }}
       run_on_linux_x86_64: ${{ steps.set-outputs.outputs.run_on_linux_x86_64 }}
       run_on_linux_arm_64: ${{ steps.set-outputs.outputs.run_on_linux_arm_64 }}
       run_on_macos_x86_64: ${{ steps.set-outputs.outputs.run_on_macos_x86_64 }}
@@ -224,11 +253,42 @@ jobs:
           echo "run_on_windows_arm_64=$expr_run_on_windows_arm_64" >> $GITHUB_ENV
           echo "run_on_windows_arm_64=$expr_run_on_windows_arm_64" >> $GITHUB_OUTPUT
 
+          runner_action="${{ inputs.runner_action || 'build' }}"
+          test_languages=""
+          if [[ "$(normalize_boolean "${{ github.event.inputs.test_python }}" "true")" == "true" ]]; then
+            test_languages="${test_languages},python"
+          fi
+          if [[ "$(normalize_boolean "${{ github.event.inputs.test_rust }}" "true")" == "true" ]]; then
+            test_languages="${test_languages},rust"
+          fi
+          if [[ "$(normalize_boolean "${{ github.event.inputs.test_go }}" "true")" == "true" ]]; then
+            test_languages="${test_languages},go"
+          fi
+          if [[ "$(normalize_boolean "${{ github.event.inputs.test_typescript }}" "true")" == "true" ]]; then
+            test_languages="${test_languages},typescript"
+          fi
+          test_languages="${test_languages#,}"
+
+          label_test_languages="${{ needs.permit-job.outputs.test_languages }}"
+          if [[ "${{ github.event_name }}" == "pull_request" && -n "${label_test_languages}" ]]; then
+            runner_action="test"
+            test_languages="${label_test_languages}"
+          fi
+          if [[ "${runner_action}" == "test" && -z "${test_languages}" ]]; then
+            echo "❌ Action 'test' needs at least one language to test."
+            exit 1
+          fi
+          echo "runner_action=${runner_action}" >> $GITHUB_ENV
+          echo "runner_action=${runner_action}" >> $GITHUB_OUTPUT
+          echo "test_languages=${test_languages}" >> $GITHUB_ENV
+          echo "test_languages=${test_languages}" >> $GITHUB_OUTPUT
+
       - name: Show Outputs
         id: show-outputs
         run: |
           echo "Workflow Outputs:"
           echo "- runner_action: ${{ steps.set-outputs.outputs.runner_action }}"
+          echo "- test_languages: ${{ steps.set-outputs.outputs.test_languages }}"
           echo "- run_on_linux_x86_64: ${{ steps.set-outputs.outputs.run_on_linux_x86_64 }}"
           echo "- run_on_linux_arm_64: ${{ steps.set-outputs.outputs.run_on_linux_arm_64 }}"
           echo "- run_on_macos_x86_64: ${{ steps.set-outputs.outputs.run_on_macos_x86_64 }}"
@@ -254,7 +314,8 @@ jobs:
       anchor_tag: ${{ inputs.anchor_tag }}
       td_product: "open source"
       runner_mode: "integration"
-      runner_action: ${{ inputs.runner_action || 'build' }}
+      runner_action: ${{ needs.describe-job.outputs.runner_action }}
+      test_languages: ${{ needs.describe-job.outputs.test_languages }}
       run_on_linux_x86_64: ${{ needs.describe-job.outputs.run_on_linux_x86_64 }}
       run_on_linux_arm_64: ${{ needs.describe-job.outputs.run_on_linux_arm_64 }}
       run_on_macos_x86_64: ${{ needs.describe-job.outputs.run_on_macos_x86_64 }}

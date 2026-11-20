@@ -47,6 +47,26 @@ on:
         # test: test only
         # wheels: wheels only
         default: 'build'
+      test_python:
+        description: "Test python (action test)"
+        required: false
+        type: boolean
+        default: true
+      test_rust:
+        description: "Test rust (action test)"
+        required: false
+        type: boolean
+        default: true
+      test_go:
+        description: "Test go (action test)"
+        required: false
+        type: boolean
+        default: true
+      test_typescript:
+        description: "Test typescript (action test)"
+        required: false
+        type: boolean
+        default: true
       run_on_linux_x86_64:
         description: "Run on Ubuntu (x86_64)"
         required: false
@@ -109,6 +129,7 @@ jobs:
         working-directory: .
     outputs:
       runner_action: ${{ steps.set-outputs.outputs.runner_action }}
+      test_languages: ${{ steps.set-outputs.outputs.test_languages }}
       run_on_linux_x86_64: ${{ steps.set-outputs.outputs.run_on_linux_x86_64 }}
       run_on_linux_arm_64: ${{ steps.set-outputs.outputs.run_on_linux_arm_64 }}
       run_on_macos_x86_64: ${{ steps.set-outputs.outputs.run_on_macos_x86_64 }}
@@ -180,11 +201,36 @@ jobs:
             echo "run_on_windows_arm_64=$expr_run_on_windows_arm_64" >> $GITHUB_OUTPUT
           fi
 
+          runner_action="${{ inputs.runner_action || 'build' }}"
+          test_languages=""
+          if [[ "$(normalize_boolean "${{ github.event.inputs.test_python }}" "true")" == "true" ]]; then
+            test_languages="${test_languages},python"
+          fi
+          if [[ "$(normalize_boolean "${{ github.event.inputs.test_rust }}" "true")" == "true" ]]; then
+            test_languages="${test_languages},rust"
+          fi
+          if [[ "$(normalize_boolean "${{ github.event.inputs.test_go }}" "true")" == "true" ]]; then
+            test_languages="${test_languages},go"
+          fi
+          if [[ "$(normalize_boolean "${{ github.event.inputs.test_typescript }}" "true")" == "true" ]]; then
+            test_languages="${test_languages},typescript"
+          fi
+          test_languages="${test_languages#,}"
+          if [[ "${runner_action}" == "test" && -z "${test_languages}" ]]; then
+            echo "❌ Action 'test' needs at least one language to test."
+            exit 1
+          fi
+          echo "runner_action=${runner_action}" >> $GITHUB_ENV
+          echo "runner_action=${runner_action}" >> $GITHUB_OUTPUT
+          echo "test_languages=${test_languages}" >> $GITHUB_ENV
+          echo "test_languages=${test_languages}" >> $GITHUB_OUTPUT
+
       - name: Show Outputs
         id: show-outputs
         run: |
           echo "Workflow Outputs:"
           echo "- runner_action: ${{ steps.set-outputs.outputs.runner_action }}"
+          echo "- test_languages: ${{ steps.set-outputs.outputs.test_languages }}"
           echo "- run_on_linux_x86_64: ${{ steps.set-outputs.outputs.run_on_linux_x86_64 }}"
           echo "- run_on_linux_arm_64: ${{ steps.set-outputs.outputs.run_on_linux_arm_64 }}"
           echo "- run_on_macos_x86_64: ${{ steps.set-outputs.outputs.run_on_macos_x86_64 }}"
@@ -208,7 +254,8 @@ jobs:
       anchor_tag: ${{ inputs.anchor_tag }}
       td_product: "open source"
       runner_mode: "release"
-      runner_action: ${{ inputs.runner_action || 'build' }}
+      runner_action: ${{ needs.describe-job.outputs.runner_action }}
+      test_languages: ${{ needs.describe-job.outputs.test_languages }}
       run_on_linux_x86_64: ${{ needs.describe-job.outputs.run_on_linux_x86_64 }}
       run_on_linux_arm_64: ${{ needs.describe-job.outputs.run_on_linux_arm_64 }}
       run_on_macos_x86_64: ${{ needs.describe-job.outputs.run_on_macos_x86_64 }}
