@@ -236,6 +236,22 @@ class TableFrame(EngineFrame):
         if u_subset is None:
             u_subset = self._user_columns()
         u_kwargs = unwrap(kwargs)
+        if isinstance(u_subset, (list, tuple)) and not u_subset:
+            import polars as pl
+
+            keep = u_kwargs.get("keep", "any")
+            return compute(
+                "unique",
+                (self,),
+                {},
+                call=lambda lf: (
+                    lf.tail(1)
+                    if keep == "last"
+                    else lf.filter(pl.len() == 1)
+                    if keep == "none"
+                    else lf.head(1)
+                ),
+            )
         return compute(
             "unique", (self,), {}, call=lambda lf: lf.unique(u_subset, **u_kwargs)
         )

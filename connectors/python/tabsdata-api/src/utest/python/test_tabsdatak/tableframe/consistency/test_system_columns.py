@@ -158,6 +158,36 @@ def test_drop_nulls_counts_the_user_columns_only(engine):
 
 
 @pytest.mark.parametrize("engine", ENGINES)
+@pytest.mark.parametrize(
+    ("height", "keep", "expected"),
+    [
+        (3, "any", 1),
+        (3, "first", 1),
+        (3, "last", 1),
+        (3, "none", 0),
+        (1, "none", 1),
+        (0, "any", 0),
+    ],
+)
+def test_unique_without_user_columns_keeps_one_row(engine, height, keep, expected):
+    frame = _versioned({"v": list(range(height))}, 0, "V1", {"file": "a.csv"})
+    bare = frame.drop("v")
+    assert bare._user_columns() == []
+    assert _collect(bare.unique(keep=keep), engine).height == expected
+    assert _collect(frame.unique(subset=[], keep=keep), engine).height == expected
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_unique_without_user_columns_keeps_the_kept_row_whole(engine):
+    frame = _versioned({"v": [1, 2, 3]}, 0, "V1", {"file": "a.csv"})
+    first = _collect(frame.drop("v").unique(keep="first"), engine)
+    last = _collect(frame.drop("v").unique(keep="last"), engine)
+    assert first["$td.row"].to_list() == [0]
+    assert last["$td.row"].to_list() == [2]
+    assert first[FILE].to_list() == ["a.csv"]
+
+
+@pytest.mark.parametrize("engine", ENGINES)
 def test_fill_null_and_cast_keep_every_row_aligned(engine):
     from tabsdatak.tableframe import datatypes as dt
 
