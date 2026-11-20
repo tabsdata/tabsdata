@@ -99,8 +99,19 @@ on:
         default: false
 
 jobs:
+  trunk-job:
+    name: Trunk Job
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the trunk of tabsdata-ci
+        uses: tabsdata/tabsdata-ci/.github/actions/check@b2.4
+
   cap-job:
     name: Cap Job
+    needs:
+      - trunk-job
     permissions: write-all
     runs-on: ubuntu-latest
     outputs:
@@ -297,7 +308,7 @@ jobs:
       - permit-job
       - describe-job
     if: ${{ needs.permit-job.outputs.permit_workflow == 'true' }}
-    uses: tabsdata/tabsdata-ci/.github/workflows/make.yml@main
+    uses: tabsdata/tabsdata-ci/.github/workflows/make.yml@b2.4
     secrets:
       TOKEN_GITHUB_AOINOKIMI: ${{ secrets.TOKEN_GITHUB_AOINOKIMI }}
       TOKEN_ONEPASSWORD_TABSDATA: ${{ secrets.TOKEN_ONEPASSWORD_TABSDATA }}
