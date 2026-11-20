@@ -27,6 +27,9 @@ from tabsdatax.itest.fixture.functions.stream import LocalStage
 from tabsdatak.api import BatchThresholds, Secret, StreamThresholds
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common._schemas import KeptSchemas
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._ledger import StageLedger
 
 # noinspection PyProtectedMember
@@ -1157,7 +1160,7 @@ def _armed(monkeypatch, tmp_path, *, staged: int, moved: int) -> tuple:
         ctx=ctx, ingester=bi, cfg=CdcRunConfig(), stop_signal=StopSignal()
     )
     run.staged = _identified(staged)
-    ledger = StageLedger(ctx=ctx, slots=["public.t"])
+    ledger = StageLedger(ctx=ctx, slots=["public.t"], schemas=KeptSchemas())
     ledger.write("public.t", pa.table({"id": [4]}))
     buffer = BufferSentinel(
         ledger=ledger,

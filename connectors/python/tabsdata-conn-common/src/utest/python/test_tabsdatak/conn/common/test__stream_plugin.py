@@ -14,6 +14,7 @@ import pytest
 
 # noinspection PyProtectedMember
 from tabsdatak.api import BatchThresholds, PollThresholds, StreamThresholds
+from tabsdatak.conn.common._schemas import schema_key
 from tabsdatak.conn.common._stream import _plugin
 
 # noinspection PyProtectedMember
@@ -810,6 +811,27 @@ def test_a_source_kept_checkpoint_invokes_the_state_callable():
     assert acknowledged == ["done"]
     assert ctx.checkpoints == []
     assert run.staged.mark == "moved"
+
+
+def test_a_run_keeps_the_schemas_its_stream_state_holds():
+    state = {"offset": "staged", schema_key("t0"): '{"a": "Int64"}'}
+    run = run_of(FakeCtx(active_values=[], stream_state=state), FakeIngester())
+    assert run.schemas.last("t0") == pl.Schema({"a": pl.Int64})
+
+
+def test_a_checkpoint_carries_the_schemas_the_stream_kept():
+    ctx = FakeCtx(
+        active_values=[],
+        first_stage=False,
+        stream_state={"offset": "staged", schema_key("t0"): '{"a": "Int64"}'},
+    )
+    run = run_of(ctx, OwnedOffsetIngester())
+
+    Plugin().checkpoint(run, FakeOffset("moved"))
+
+    ((state),) = ctx.checkpoints
+    assert state["offset"].mark == "moved"
+    assert state[schema_key("t0")] == '{"a": "Int64"}'
 
 
 def test_there_is_no_checkpoint_before_a_first_stage():

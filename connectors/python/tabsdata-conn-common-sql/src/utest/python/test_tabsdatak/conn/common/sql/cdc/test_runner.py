@@ -22,6 +22,7 @@ from tabsdatax.itest.fixture.functions.stream import LocalStage
 
 # noinspection PyProtectedMember
 from tabsdatak.api import BatchThresholds, PollThresholds, StreamThresholds
+from tabsdatak.conn.common._schemas import KeptSchemas
 from tabsdatak.conn.common._stream import _plugin
 
 # noinspection PyProtectedMember
@@ -436,6 +437,7 @@ def _loaded(monkeypatch, tmp_path, *, ctx, loader_raises=False, window_end=None)
         ingester=ingester,
         cfg=_cfg(initial_load=True),
         large_column_policy=object(),
+        schemas=KeptSchemas(),
     )
     return result, offset, ingester
 
@@ -450,7 +452,11 @@ def test_initial_load_stages_once_with_offset_and_flag(monkeypatch, tmp_path):
     assert ids(tables) == [[[1, 2]]]
     # The resume offset and the "load done" flag are persisted together,
     # so a crash cannot leave one without the other.
-    assert state == {"cdc.offset": "o", CDC_INITIAL_LOAD_STATE_KEY: False}
+    assert state == {
+        "cdc.offset": "o",
+        CDC_INITIAL_LOAD_STATE_KEY: False,
+        "@td.schema.s.t": '{"id": "Int64"}',
+    }
     assert ingester.acknowledged_offsets == [offset]
 
 
@@ -489,6 +495,7 @@ def test_initial_load_requires_a_tabsdata_owned_offset(monkeypatch, tmp_path):
             ingester=ingester,
             cfg=_cfg(initial_load=True),
             large_column_policy=object(),
+            schemas=KeptSchemas(),
         )
     assert ctx.staged == []
 
@@ -554,7 +561,11 @@ def test_the_load_is_staged_with_what_deduplication_keeps(monkeypatch, tmp_path)
     )
     ((tables, state),) = ctx.staged
     assert ids(tables) == [[[1], [2]]]
-    assert state == {"cdc.offset": "end", CDC_INITIAL_LOAD_STATE_KEY: False}
+    assert state == {
+        "cdc.offset": "end",
+        CDC_INITIAL_LOAD_STATE_KEY: False,
+        "@td.schema.s.t": '{"id": "Int64"}',
+    }
     # Where the window's read left the stream, which a window ending at a
     # binlog position, no resumable offset, needs.
     assert ingester.stage_state_arg is reached
@@ -632,6 +643,7 @@ def _read(monkeypatch, tmp_path, ingester, limit):
         large_column_policy=_Identity(),
         window_end=end,
         stop_signal=StopSignal(),
+        schemas=KeptSchemas(),
     )
     return manifest, buffer, end
 

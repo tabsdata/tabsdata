@@ -13,6 +13,9 @@ import pytest
 from tabsdatax.itest.fixture.functions.stream import LocalStage
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common._schemas import KeptSchemas
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._ledger import StageLedger
 from tabsdatak.spi import FrameMetadata, LazyFrameInput
 
@@ -36,7 +39,7 @@ def ids(stage: LocalStage, ledger: StageLedger) -> list[list[list[int]]]:
 
 
 def test_a_new_ledger_holds_no_data(stage):
-    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b"])
+    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b"], schemas=KeptSchemas())
     assert (ledger.has_data, ledger.has_files, ledger.rows, ledger.bytes) == (
         False,
         False,
@@ -47,14 +50,14 @@ def test_a_new_ledger_holds_no_data(stage):
 
 
 def test_a_written_table_is_sent_to_its_slot(stage):
-    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b"])
+    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b"], schemas=KeptSchemas())
     ledger.write("s.b", table(1, 2, 3))
     assert ids(stage, ledger) == [[], [[1, 2, 3]]]
     assert ledger.has_files
 
 
 def test_the_slots_without_files_are_unstaged(stage):
-    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b", "s.c"])
+    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b", "s.c"], schemas=KeptSchemas())
     assert ledger.unstaged() == ["s.a", "s.b", "s.c"]
     ledger.write("s.b", table(1))
     assert ledger.unstaged() == ["s.a", "s.c"]
@@ -68,20 +71,20 @@ def test_a_frame_is_staged_with_its_metadata(stage, monkeypatch):
     monkeypatch.setattr(
         stage, "send", lambda tables: sent.append(tables) or send(tables)
     )
-    ledger = StageLedger(ctx=stage, slots=["s.a"])
+    ledger = StageLedger(ctx=stage, slots=["s.a"], schemas=KeptSchemas())
     metadata = FrameMetadata(known=False)
     ledger.stage("s.a", pl.LazyFrame(), metadata)
     assert [table.metadata for [tables] in sent for table in tables] == [metadata]
 
 
 def test_a_lazy_frame_is_staged_as_it_is(stage):
-    ledger = StageLedger(ctx=stage, slots=["s.a"])
+    ledger = StageLedger(ctx=stage, slots=["s.a"], schemas=KeptSchemas())
     ledger.stage("s.a", pl.LazyFrame({"id": [4, 5]}))
     assert ids(stage, ledger) == [[[4, 5]]]
 
 
 def test_rows_and_bytes_count_what_the_stage_wrote(stage):
-    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b"])
+    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b"], schemas=KeptSchemas())
     ledger.write("s.a", table(1, 2))
     ledger.write("s.b", table(3))
     assert ledger.has_data
@@ -92,7 +95,7 @@ def test_rows_and_bytes_count_what_the_stage_wrote(stage):
 
 
 def test_the_manifest_is_positional_by_slot_with_empty_slots(stage):
-    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b", "s.c"])
+    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b", "s.c"], schemas=KeptSchemas())
     ledger.write("s.c", table(1))
     ledger.write("s.a", table(2))
     ledger.write("s.c", table(3))
@@ -100,25 +103,48 @@ def test_the_manifest_is_positional_by_slot_with_empty_slots(stage):
 
 
 def test_the_manifest_is_a_copy(stage):
-    ledger = StageLedger(ctx=stage, slots=["s.a"])
+    ledger = StageLedger(ctx=stage, slots=["s.a"], schemas=KeptSchemas())
     ledger.write("s.a", table(1))
     ledger.manifest()[0].clear()
     assert len(ledger.manifest()[0]) == 1
 
 
 def test_publishing_stages_what_was_sent_with_the_state_and_forgets_it(stage):
-    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b"])
+    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b"], schemas=KeptSchemas())
     ledger.write("s.a", table(1, 2))
     ledger.publish({"offset": 7})
     ((batch),) = stage.published
     assert [len(files) for files in batch.tables] == [1, 0]
-    assert batch.state == {"offset": 7}
+    assert batch.state == {"offset": 7, "@td.schema.s.a": '{"id": "Int64"}'}
     assert ledger.manifest() == [[], []]
     assert (ledger.has_data, ledger.rows, ledger.bytes) == (False, 0, 0)
 
 
+def test_a_commit_of_an_offset_the_source_owns_returns_the_schemas_staged(stage):
+    acknowledged: list[int] = []
+    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b"], schemas=KeptSchemas())
+    ledger.write("s.a", table(1))
+    ledger.publish(lambda: acknowledged.append(7))
+    ((batch),) = stage.published
+    assert batch.state() == {"@td.schema.s.a": '{"id": "Int64"}'}
+    assert acknowledged == [7]
+
+
+def test_the_schemas_of_earlier_batches_stay_in_the_state(stage):
+    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b"], schemas=KeptSchemas())
+    ledger.write("s.a", table(1))
+    ledger.publish({"offset": 1})
+    ledger.write("s.b", pa.table({"name": ["x"]}))
+    ledger.publish({"offset": 2})
+    assert stage.published[-1].state == {
+        "offset": 2,
+        "@td.schema.s.a": '{"id": "Int64"}',
+        "@td.schema.s.b": '{"name": "String"}',
+    }
+
+
 def test_clearing_forgets_the_tables_and_the_counts(stage):
-    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b"])
+    ledger = StageLedger(ctx=stage, slots=["s.a", "s.b"], schemas=KeptSchemas())
     ledger.write("s.a", table(1, 2))
     ledger.clear()
     assert ledger.manifest() == [[], []]
@@ -126,7 +152,7 @@ def test_clearing_forgets_the_tables_and_the_counts(stage):
 
 
 def test_discarding_unstages_what_the_ledger_sent_and_forgets_it(stage, tmp_path):
-    ledger = StageLedger(ctx=stage, slots=["s.a"])
+    ledger = StageLedger(ctx=stage, slots=["s.a"], schemas=KeptSchemas())
     ledger.write("s.a", table(1))
     ledger.discard()
     assert stage.pending == [[]]
@@ -136,7 +162,7 @@ def test_discarding_unstages_what_the_ledger_sent_and_forgets_it(stage, tmp_path
 
 
 def test_discarding_leaves_what_others_sent(stage):
-    ledger = StageLedger(ctx=stage, slots=["s.a"])
+    ledger = StageLedger(ctx=stage, slots=["s.a"], schemas=KeptSchemas())
     other = stage.send([[LazyFrameInput(pl.LazyFrame({"id": [9]}))]])
     ledger.write("s.a", table(1))
     ledger.discard()
@@ -147,7 +173,7 @@ def test_the_staged_line_keeps_the_wording_the_performance_suite_reads(stage, ca
     # tabsdata-dt's performance suite (xp-tool/suites/performance/scripts/
     # cdc_throughput.py) reads this line off the stream worker's log to count
     # the rows and bytes staged. Rewording it breaks that check.
-    ledger = StageLedger(ctx=stage, slots=["s.a"])
+    ledger = StageLedger(ctx=stage, slots=["s.a"], schemas=KeptSchemas())
     ledger.write("s.a", table(1, 2, 3))
 
     [record] = [r for r in caplog.records if r.name == LEDGER_LOGGER]

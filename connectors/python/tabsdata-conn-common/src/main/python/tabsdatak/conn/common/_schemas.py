@@ -22,17 +22,18 @@ written.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 import polars as pl
 
+from tabsdatak.api import BasicDictSpec
 from tabsdatak.common._storage.landed import (
     StoredMetadataError,
     decode_dtype,
     encode_dtype,
 )
 from tabsdatak.conn.common.error import ConnErrorCode
-from tabsdatak.spi import FrameMetadata, LazyFrameInput
+from tabsdatak.spi import FrameMetadata, LazyFrameInput, StreamStateSpec
 
 SCHEMA_KEY_PREFIX = "@td.schema."
 
@@ -143,3 +144,35 @@ class SlotSchemas:
             )
         )
         return LazyFrameInput(pl.LazyFrame(schema=schema), described)
+
+
+class KeptSchemas(SlotSchemas):
+    """The slot schemas of a source that keeps a state of its own, such as a
+    stream source: read from that state once, kept in memory as they change,
+    and carried into every state the source commits, which replaces the
+    last one as a whole.
+    """
+
+    def __init__(self, state: Mapping[str, object] | None = None) -> None:
+        self.kept: dict[str, str] = {
+            key: value
+            for key, value in (state or {}).items()
+            if key.startswith(SCHEMA_KEY_PREFIX)
+        }
+        super().__init__(self.kept.get, self.kept.__setitem__)
+
+    def carried(self, state: StreamStateSpec) -> StreamStateSpec:
+        """`state` with the schemas kept so far: added to it when it is a
+        state, or to what it returns when it commits an offset the source
+        owns."""
+        if not self.kept:
+            return state
+        kept = dict(self.kept)
+        if not callable(state):
+            return {**state, **kept}
+        commit = state
+
+        def committed() -> BasicDictSpec:
+            return {**(commit() or {}), **kept}
+
+        return committed

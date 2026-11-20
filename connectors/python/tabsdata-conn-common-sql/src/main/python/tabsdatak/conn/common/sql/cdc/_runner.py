@@ -41,6 +41,7 @@ import polars as pl
 from tabsdatak.api import StreamSrc
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common._schemas import KeptSchemas
 from tabsdatak.conn.common._stream._config import StreamRunConfig
 
 # noinspection PyProtectedMember
@@ -138,6 +139,7 @@ def _load_initially(
     ingester: CdcIngester,
     cfg: CdcRunConfig,
     large_column_policy: LargeColumnPolicy,
+    schemas: KeptSchemas,
 ) -> tuple[CdcOffset, _PendingLoad | None]:
     """Snapshot the tracked tables, and stage them as a single batch when
     the snapshot is a point in time.
@@ -156,7 +158,7 @@ def _load_initially(
             session=session.engine,
             cdc_format=cfg.cdc_format,
         )
-        ledger = StageLedger(ctx=ctx, slots=tracked_tables)
+        ledger = StageLedger(ctx=ctx, slots=tracked_tables, schemas=schemas)
         chunk_sentinel = ChunkSentinel(
             ledger=ledger,
             max_rows=cfg.buffer.max_rows,
@@ -177,7 +179,7 @@ def _load_initially(
 
     if window_end is not None:
         return offset, _PendingLoad(manifest=ledger.manifest(), window_end=window_end)
-    _publish_load(ctx, ingester, offset)
+    _publish_load(ctx, ingester, offset, schemas)
     logger.info("Initial load staged")
     return offset, None
 
@@ -186,11 +188,12 @@ def _publish_load(
     ctx: StreamSrcPluginCtx,
     ingester: CdcIngester,
     offset: CdcOffset,
+    schemas: KeptSchemas,
 ) -> None:
     state = ingester.stage_state(offset)
     if not isinstance(state, dict):
         raise SqlCdcErrorCode.CDC_21.exception(ingester=type(ingester).__name__)
-    ctx.stage(None, {**state, CDC_INITIAL_LOAD_STATE_KEY: False})
+    ctx.stage(None, schemas.carried({**state, CDC_INITIAL_LOAD_STATE_KEY: False}))
     ingester.acknowledge_offset(offset)
 
 
@@ -204,11 +207,12 @@ def _read_window(
     large_column_policy: LargeColumnPolicy,
     window_end: CdcOffset,
     stop_signal: StopSignal,
+    schemas: KeptSchemas,
 ) -> list[list[StageFileStats]] | None:
     """The changes committed while the load read the tables, per output
     slot: read by the ingester's own poll, bounded at `window_end`, and sent
     as the stream sends them. ``None`` when a signal stops the read."""
-    ledger = StageLedger(ctx=ctx, slots=tracked_tables)
+    ledger = StageLedger(ctx=ctx, slots=tracked_tables, schemas=schemas)
     buffer_sentinel = BufferSentinel(
         ledger=ledger,
         encoder=CdcEncoder(cfg.cdc_format, tracked_tables),
@@ -244,6 +248,7 @@ def _stage_initial_load(
     cfg: CdcRunConfig,
     pending: _PendingLoad,
     window: list[list[StageFileStats]],
+    schemas: KeptSchemas,
 ) -> None:
     """Publish the load with the window's changes that still apply to it, at
     the window's end, as one batch. The window is read back from the stage to
@@ -258,7 +263,7 @@ def _stage_initial_load(
         schemas={table: registry.version(table, 0) for table in tracked_tables},
         cdc_format=cfg.cdc_format,
     )
-    ledger = StageLedger(ctx=ctx, slots=tracked_tables)
+    ledger = StageLedger(ctx=ctx, slots=tracked_tables, schemas=schemas)
     replaced: list[StageFileStats] = []
     for table, files in zip(tracked_tables, window, strict=True):
         deduplicated = reduced.get(table)
@@ -272,7 +277,7 @@ def _stage_initial_load(
     # Where the window's read left the stream, not the window's end itself:
     # an end that is no resumable offset (a binlog position) bounds the read,
     # and the offset is what the read reached up to it.
-    _publish_load(ctx, ingester, ingester.base_offset())
+    _publish_load(ctx, ingester, ingester.base_offset(), schemas)
     logger.info(
         "Initial load staged, with the changes of %d table(s) deduplicated",
         len(reduced),
@@ -349,6 +354,7 @@ class CdcPlugin[C: Conn, SS: StreamSrc](
             ingester=run.ingester,
             cfg=run.cfg,
             large_column_policy=run.large_column_policy,
+            schemas=run.schemas,
         )
         run.ingester.seed_offset(offset)
 
@@ -371,6 +377,7 @@ class CdcPlugin[C: Conn, SS: StreamSrc](
             large_column_policy=run.large_column_policy,
             window_end=run.pending_load.window_end,
             stop_signal=run.stop_signal,
+            schemas=run.schemas,
         )
         if window is None:
             logger.info("Interrupted while reading the initial load window")
@@ -382,6 +389,7 @@ class CdcPlugin[C: Conn, SS: StreamSrc](
             cfg=run.cfg,
             pending=run.pending_load,
             window=window,
+            schemas=run.schemas,
         )
         return True
 

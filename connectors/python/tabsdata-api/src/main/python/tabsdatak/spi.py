@@ -412,10 +412,11 @@ _ARBITRARY = ConfigDict(arbitrary_types_allowed=True)
 # Commit callback for the case where the *external* system owns the
 # resume offset. Hand it to `StreamSrcPluginCtx.stage` and the
 # runtime invokes it when it commits the staged batch, so the plugin can
-# advance/ack the source (e.g. `lambda: external.commit()`). Tabsdata
-# keeps no state in this case, so `StreamSrcPluginCtx.stream_state`
-# reads back `None`.
-CommitStateFn: TypeAlias = Callable[[], None]
+# advance/ack the source (e.g. `lambda: external.commit()`). What it
+# returns is the state Tabsdata keeps besides the offset, replayed via
+# `StreamSrcPluginCtx.stream_state`: a `BasicDictSpec`, or `None` to
+# keep none.
+CommitStateFn: TypeAlias = Callable[[], BasicDictSpec | None]
 
 # What `StreamSrcPluginCtx.stage` accepts as a batch's new resume
 # state:
@@ -423,7 +424,8 @@ CommitStateFn: TypeAlias = Callable[[], None]
 #     state *Tabsdata* owns; the runtime persists it (atomically with the
 #     staged batch) and replays it on the next run via
 #     `StreamSrcPluginCtx.stream_state`; or
-#   * a `CommitStateFn` -- the *external* system owns the offset.
+#   * a `CommitStateFn` -- the *external* system owns the offset; the
+#     state it returns, if any, is persisted and replayed the same way.
 StreamStateSpec: TypeAlias = Union[BasicDictSpec, CommitStateFn]
 
 
@@ -488,14 +490,14 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
     @property
     @abstractmethod
     def stream_state(self) -> BasicDictSpec | None:
-        """The per-flow resume state persisted by the most recent
-        `BasicDictSpec` handed to `stage`.
+        """The per-flow resume state persisted by the most recent commit:
+        the `BasicDictSpec` handed to `stage` or `checkpoint`, or the one
+        the `CommitStateFn` handed to `stage` returned.
 
-        `None` when the last commit handed `stage` a
-        `CommitStateFn` callable (a `lambda`) instead of a
-        `BasicDictSpec` -- i.e. the *external* system owns the offset
-        and Tabsdata keeps no state. Distinguish "first run" (nothing
-        staged yet) via `first_stage`, not by this being `None`."""
+        Empty when that `CommitStateFn` returned `None` -- the *external*
+        system owns the offset and Tabsdata keeps nothing besides it.
+        `None` when nothing was committed yet; distinguish "first run"
+        (nothing staged yet) via `first_stage`."""
 
     @property
     @abstractmethod
@@ -556,9 +558,10 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
                 each is a list of parquet files under `work_dir`. `None`
                 to send nothing.
             new_state: The new resume state -- a `BasicDictSpec` the
-                runtime persists, or a `CommitStateFn` it invokes for
-                its side effect (external system owns the offset). `None`
-                to send without publishing.
+                runtime persists, or a `CommitStateFn` it invokes to
+                commit the offset the external system owns, persisting
+                the state it returns, if any. `None` to send without
+                publishing.
 
         Returns:
             When it sends `LazyFrameInput` tables, the `StageFileStats` of the

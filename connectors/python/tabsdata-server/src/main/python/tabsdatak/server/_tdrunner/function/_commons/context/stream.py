@@ -228,8 +228,13 @@ class StreamSourceContext(FromFlowRequestCtx, StreamSrcPluginCtx):
         else:
             # The external system commits first: if it fails, no marker is
             # saved and the next start seeds again (at least once).
-            new_state()
-            self.save({}, manifest.batch)
+            kept = new_state()
+            if kept is not None and not isinstance(kept, dict):
+                raise TypeError(
+                    f"Cannot keep a {type(kept).__name__} as the state besides "
+                    f"the offset the external system owns; return a dict, or None"
+                )
+            self.save(dict(kept or {}), manifest.batch)
 
     def scan(self, file: StageFileStats) -> pl.LazyFrame:
         self.lock(StageForm.FRAMES)

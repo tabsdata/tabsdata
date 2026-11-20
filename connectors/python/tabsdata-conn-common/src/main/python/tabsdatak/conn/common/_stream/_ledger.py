@@ -10,6 +10,7 @@ from collections.abc import Iterable
 import polars as pl
 import pyarrow as pa
 
+from tabsdatak.conn.common._schemas import KeptSchemas
 from tabsdatak.spi import (
     FrameMetadata,
     LazyFrameInput,
@@ -22,8 +23,15 @@ logger = logging.getLogger(__name__)
 
 
 class StageLedger:
-    def __init__(self, *, ctx: StreamSrcPluginCtx, slots: Iterable[str]):
+    def __init__(
+        self,
+        *,
+        ctx: StreamSrcPluginCtx,
+        slots: Iterable[str],
+        schemas: KeptSchemas,
+    ):
         self._ctx = ctx
+        self._schemas = schemas
         self._positions = {slot: position for position, slot in enumerate(slots)}
         self._staged: list[list[StageFileStats]] = [[] for _ in self._positions]
         self._rows: int = 0
@@ -63,7 +71,7 @@ class StageLedger:
     ) -> None:
         position = self._positions[slot]
         tables: list[list[LazyFrameInput] | None] = [None] * len(self._positions)
-        tables[position] = [LazyFrameInput(frame, metadata)]
+        tables[position] = [self._schemas.served(slot, LazyFrameInput(frame, metadata))]
         for stats in self._ctx.stage(tables)[position]:
             self._staged[position].append(stats)
             self._rows += stats.rows
@@ -77,7 +85,7 @@ class StageLedger:
         return [list(files) for files in self._staged]
 
     def publish(self, new_state: StreamStateSpec) -> None:
-        self._ctx.stage(None, new_state)
+        self._ctx.stage(None, self._schemas.carried(new_state))
         self.clear()
 
     def clear(self) -> None:

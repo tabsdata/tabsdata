@@ -261,6 +261,23 @@ def test_an_external_commit_runs_before_the_marker_is_saved(tmp_path):
     assert context.stream_state == {}
 
 
+def test_the_state_an_external_commit_returns_is_kept(tmp_path):
+    context = make_context(tmp_path)
+    context.stage(
+        [[work_file(tmp_path, "data.parquet")]], lambda: {"@td.schema.t": "{}"}
+    )
+    assert saved(tmp_path)["state"] == {"@td.schema.t": "{}"}
+    assert context.stream_state == {"@td.schema.t": "{}"}
+    assert make_context(tmp_path).stream_state == {"@td.schema.t": "{}"}
+
+
+def test_an_external_commit_that_returns_no_dict_saves_no_marker(tmp_path):
+    context = make_context(tmp_path)
+    with pytest.raises(TypeError, match="Cannot keep a list"):
+        context.stage([[work_file(tmp_path, "data.parquet")]], lambda: ["offset"])
+    assert not (tmp_path / "stage" / STREAM_STATE_FILE).exists()
+
+
 def test_a_failed_external_commit_saves_no_marker(tmp_path):
     context = make_context(tmp_path)
 

@@ -16,6 +16,9 @@ from tabsdatax.itest.fixture.functions.stream import LocalStage
 from tabsdatak._api import BATCH_FLOOR_SECS
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common._schemas import KeptSchemas
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._encoder import StreamEncoder
 
 # noinspection PyProtectedMember
@@ -59,7 +62,7 @@ def stage(tmp_path: Path) -> LocalStage:
 
 @pytest.fixture
 def ledger(stage: LocalStage) -> StageLedger:
-    return StageLedger(ctx=stage, slots=["s.a", "s.b"])
+    return StageLedger(ctx=stage, slots=["s.a", "s.b"], schemas=KeptSchemas())
 
 
 def disk(

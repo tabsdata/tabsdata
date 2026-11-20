@@ -14,6 +14,7 @@ from typing import Any
 import polars as pl
 
 from tabsdatak.api import StreamSrc, StreamThresholds
+from tabsdatak.conn.common._schemas import KeptSchemas
 from tabsdatak.conn.common._stream._config import StreamRunConfig
 from tabsdatak.conn.common._stream._encoder import StreamEncoder
 from tabsdatak.conn.common._stream._ingester import StreamIngester
@@ -51,6 +52,10 @@ class StreamRun[R, O: StreamOffset]:
     slots: list[str] = field(default_factory=list)
     staged: O | None = None
     restarts: int = 0
+    schemas: KeptSchemas = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.schemas = KeptSchemas(self.ctx.stream_state)
 
 
 def snapshot[O: StreamOffset](offset: O) -> O:
@@ -226,7 +231,7 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
             if not self.before_stream(run):
                 interrupted = True
                 return
-            ledger = StageLedger(ctx=ctx, slots=run.slots)
+            ledger = StageLedger(ctx=ctx, slots=run.slots, schemas=run.schemas)
             encoder = self.build_encoder(run)
             thresholds = run.thresholds
             buffer_sentinel = BufferSentinel(
@@ -365,7 +370,7 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
         if isinstance(state, dict):
             if not self.may_checkpoint(run):
                 return False
-            run.ctx.checkpoint(state)
+            run.ctx.checkpoint(run.schemas.carried(state))
         else:
             state()
         run.staged = snapshot(offset)

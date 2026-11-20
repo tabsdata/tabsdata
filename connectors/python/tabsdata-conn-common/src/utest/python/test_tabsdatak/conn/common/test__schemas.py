@@ -10,7 +10,7 @@ import polars as pl
 import pytest
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._schemas import SlotSchemas, schema_key
+from tabsdatak.conn.common._schemas import KeptSchemas, SlotSchemas, schema_key
 from tabsdatak.conn.common.error import ConnStateException
 from tabsdatak.spi import (
     CsvParseOptions,
@@ -202,3 +202,63 @@ def test_an_empty_frame_keeps_what_its_metadata_adds_and_is_typed():
         rules=rules,
         inception=SystemColumnsInception.CREATE_MISSING,
     )
+
+
+# --- kept in a state of its own -------------------------------------------------
+
+
+def test_kept_schemas_are_read_from_the_state_once():
+    state = {"offset": 3, schema_key("t"): '{"a": "Int64"}'}
+    schemas = KeptSchemas(state)
+    state[schema_key("t")] = '{"b": "String"}'
+    assert schemas.kept == {schema_key("t"): '{"a": "Int64"}'}
+    assert schemas.last("t") == pl.Schema({"a": pl.Int64})
+
+
+def test_no_state_keeps_no_schema():
+    assert KeptSchemas(None).last("t") is None
+
+
+def test_a_state_is_carried_with_the_schemas_kept():
+    schemas = KeptSchemas({"offset": 3})
+    schemas.remember("t", pl.Schema({"a": pl.Int64}))
+    assert schemas.carried({"offset": 4}) == {
+        "offset": 4,
+        schema_key("t"): '{"a": "Int64"}',
+    }
+
+
+def test_a_state_carries_the_schemas_as_they_were_when_carried():
+    schemas = KeptSchemas()
+    schemas.remember("t", pl.Schema({"a": pl.Int64}))
+    carried = schemas.carried(lambda: None)
+    schemas.remember("t", pl.Schema({"b": pl.String}))
+    assert carried() == {schema_key("t"): '{"a": "Int64"}'}
+
+
+@pytest.mark.parametrize(
+    "returned", [None, {"session": "s"}], ids=["nothing", "a state"]
+)
+def test_a_commit_of_a_source_owned_offset_returns_the_schemas_kept(returned):
+    commits: list[str] = []
+    schemas = KeptSchemas()
+    schemas.remember("t", pl.Schema({"a": pl.Int64}))
+
+    def commit():
+        commits.append("committed")
+        return returned
+
+    carried = schemas.carried(commit)
+    assert commits == []
+    assert carried() == {**(returned or {}), schema_key("t"): '{"a": "Int64"}'}
+    assert commits == ["committed"]
+
+
+def test_without_schemas_kept_a_state_is_carried_as_it_is():
+    def commit():
+        return None
+
+    schemas = KeptSchemas({"offset": 3})
+    state = {"offset": 4}
+    assert schemas.carried(state) is state
+    assert schemas.carried(commit) is commit
