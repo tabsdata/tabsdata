@@ -34,6 +34,9 @@ from tabsdatak.server._tdrunner.function._commons.error.command import (
 from tabsdatak.server._tdrunner.function._commons.manifests.stage import (
     MANIFEST_PREFIX,
 )
+from tabsdatak.server._tdrunner.function._commons.storage import (
+    stage as stage_module,
+)
 from tabsdatak.server._tdrunner.function._commons.storage.stage import (
     FILES_FOLDER,
     MANIFESTS_FOLDER,
@@ -414,6 +417,26 @@ def test_sending_with_a_state_publishes_the_sent_and_the_new_tables(tmp_path):
     (manifest,) = manifests(tmp_path)
     folder = f"{FILES_FOLDER}/{batch(manifest)}"
     assert published(manifest) == [[f"{folder}/0.0.t", f"{folder}/0.1.t"]]
+
+
+def test_a_batch_is_flushed_before_its_manifest_and_that_before_the_state(
+    tmp_path, monkeypatch
+):
+    flushed: list[Path] = []
+    monkeypatch.setattr(stage_module, "flush", flushed.append)
+    monkeypatch.setattr(stage_module, "FLUSH_FOLDERS", False)
+    context = make_context(tmp_path, tables=2)
+    context.stage([[frame(1)], [frame(2)]], {"offset": 7})
+    (manifest,) = manifests(tmp_path)
+    folder = tmp_path / "stage" / FILES_FOLDER / batch(manifest)
+    assert flushed == [
+        folder / "0.0.t",
+        folder / "0.0.m",
+        folder / "1.0.t",
+        folder / "1.0.m",
+        manifest,
+        tmp_path / "stage" / STREAM_STATE_FILE,
+    ]
 
 
 def test_publishing_with_nothing_sent_publishes_an_empty_batch(tmp_path):

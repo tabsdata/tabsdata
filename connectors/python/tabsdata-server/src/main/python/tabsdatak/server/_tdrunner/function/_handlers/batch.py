@@ -180,6 +180,12 @@ class StageBatch:
 
     def publish(self) -> StageManifest:
         tables = [[file.path for file in files] for files in self.files]
+        self.storage.sync(
+            name
+            for paths in tables
+            for path in paths
+            for name in LandedPair.of(path).names
+        )
         manifest = self.open().with_tables(tables)
         manifest.write(self.storage)
         self.reset()

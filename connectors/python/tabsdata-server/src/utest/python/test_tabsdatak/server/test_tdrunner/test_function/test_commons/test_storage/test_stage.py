@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import errno
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,9 @@ from obstore.store import MemoryStore
 from tabsdatak.common._storage.transfer import OBJECT_STORES
 from tabsdatak.server._tdrunner.function._commons.document.message.request import (
     Location,
+)
+from tabsdatak.server._tdrunner.function._commons.storage import (
+    stage as stage_module,
 )
 from tabsdatak.server._tdrunner.function._commons.storage.stage import (
     FILES_FOLDER,
@@ -87,3 +91,96 @@ def test_next_names_the_entry_after_the_offset(stage):
 
 def test_next_in_an_empty_folder_is_none(stage):
     assert stage.next("manifests", None) is None
+
+
+@pytest.fixture
+def flushed(monkeypatch) -> list[Path]:
+    paths: list[Path] = []
+    monkeypatch.setattr(stage_module, "flush", paths.append)
+    return paths
+
+
+def test_a_local_write_flushes_the_file_and_every_folder_up_to_the_stage(
+    tmp_path, flushed, monkeypatch
+):
+    monkeypatch.setattr(stage_module, "FLUSH_FOLDERS", True)
+    root = tmp_path / "stage"
+    Stage(Location(uri=root.as_uri())).write("manifests/one.json", "[]")
+    assert flushed == [
+        root / "manifests" / "one.json",
+        tmp_path,
+        root,
+        root / "manifests",
+    ]
+
+
+def test_a_local_upload_flushes_what_it_uploaded(tmp_path, flushed):
+    source = tmp_path / "a.parquet"
+    source.write_text("data")
+    root = tmp_path / "stage"
+    Stage(Location(uri=root.as_uri())).upload(source, "files/1/a.parquet")
+    assert flushed[0] == root / "files" / "1" / "a.parquet"
+
+
+def test_folders_are_not_flushed_where_they_cannot_be_opened(
+    tmp_path, flushed, monkeypatch
+):
+    monkeypatch.setattr(stage_module, "FLUSH_FOLDERS", False)
+    root = tmp_path / "stage"
+    Stage(Location(uri=root.as_uri())).write("stream-state.json", "{}")
+    assert flushed == [root / "stream-state.json"]
+
+
+def test_an_object_store_flushes_nothing(tmp_path, flushed, monkeypatch):
+    memory = MemoryStore()
+    monkeypatch.setattr(OBJECT_STORES, "store", lambda root, options: memory)
+    Stage(Location(uri=(tmp_path / "stage").as_uri())).write("stream-state.json", "{}")
+    assert flushed == []
+
+
+@pytest.mark.parametrize("code", [errno.EINVAL, errno.ENOTSUP])
+def test_a_folder_the_filesystem_cannot_flush_is_left_unflushed(
+    tmp_path, monkeypatch, code
+):
+    monkeypatch.setattr(stage_module, "FLUSH_FOLDERS", True)
+
+    def flush(path: Path) -> None:
+        if path.is_dir():
+            raise OSError(code, "cannot flush a folder")
+
+    monkeypatch.setattr(stage_module, "flush", flush)
+    stage = Stage(Location(uri=(tmp_path / "stage").as_uri()))
+    stage.write("stream-state.json", "{}")
+    assert stage.read("stream-state.json") == "{}"
+
+
+def test_a_folder_that_fails_to_flush_otherwise_fails_the_write(tmp_path, monkeypatch):
+    monkeypatch.setattr(stage_module, "FLUSH_FOLDERS", True)
+
+    def flush(path: Path) -> None:
+        if path.is_dir():
+            raise OSError(errno.EIO, "disk failure")
+
+    monkeypatch.setattr(stage_module, "flush", flush)
+    stage = Stage(Location(uri=(tmp_path / "stage").as_uri()))
+    with pytest.raises(OSError, match="disk failure"):
+        stage.write("stream-state.json", "{}")
+
+
+def test_a_file_that_fails_to_flush_fails_the_write(tmp_path, monkeypatch):
+    def flush(path: Path) -> None:
+        raise OSError(errno.EIO, "disk failure")
+
+    monkeypatch.setattr(stage_module, "flush", flush)
+    stage = Stage(Location(uri=(tmp_path / "stage").as_uri()))
+    with pytest.raises(OSError, match="disk failure"):
+        stage.write("stream-state.json", "{}")
+
+
+def test_flush_runs_on_this_platform(tmp_path):
+    file = tmp_path / "a.json"
+    file.write_text("{}", encoding="utf-8")
+    stage_module.flush(file)
+    if stage_module.FLUSH_FOLDERS:
+        stage_module.flush(tmp_path)
+    assert file.read_text(encoding="utf-8") == "{}"
