@@ -22,7 +22,7 @@ Tables are immutable and versioned. A function run does not mutate a table, it c
 
 Tabsdata lands beside your stack: your warehouse stays the center of gravity, and Tabsdata delivers versioned tables into it. Existing workloads and the tools that run them are untouched; new workloads run end to end on Tabsdata.
 
-Tables are manipulated with the [TableFrame API](https://docs.tabsdata.com/2.4.0/api) (built on [Polars](https://github.com/pola-rs/polars)), which supports selection, filtering, aggregation, and joins. Numerous connectors ship with the distribution, and new ones can be added through the Connector Plugin API.
+Tables are manipulated with the [TableFrame API](https://docs.tabsdata.com/2.4.1/api) (built on [Polars](https://github.com/pola-rs/polars)), which supports selection, filtering, aggregation, and joins. Numerous connectors ship with the distribution, and new ones can be added through the Connector Plugin API.
 
 # Tabsdata Binary Distribution
 
@@ -39,8 +39,8 @@ pip install tabsdata
 
 ## Tabsdata Binary Distribution Documentation
 
-* [User Guide](https://docs.tabsdata.com/2.4.0/guide)
-* [API Reference](https://docs.tabsdata.com/2.4.0/api)
+* [User Guide](https://docs.tabsdata.com/2.4.1/guide)
+* [API Reference](https://docs.tabsdata.com/2.4.1/api)
 
 # Building tabsdata from Source
 

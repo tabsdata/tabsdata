@@ -2258,7 +2258,7 @@ dependencies = [
 
 [[package]]
 name = "td-apiforge"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -2269,7 +2269,7 @@ dependencies = [
 
 [[package]]
 name = "td-attach"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "darling",
  "proc-macro-crate",
@@ -2280,7 +2280,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2299,7 +2299,7 @@ dependencies = [
 
 [[package]]
 name = "td-macros"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "td-build",
 ]
@@ -2377,7 +2377,7 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "tm-error"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "quote",
  "syn 3.0.10",
@@ -2385,7 +2385,7 @@ dependencies = [
 
 [[package]]
 name = "tm-objects"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "darling",
  "heck",
@@ -2397,7 +2397,7 @@ dependencies = [
 
 [[package]]
 name = "tm-pyo3"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "quote",
  "syn 3.0.10",
@@ -2405,7 +2405,7 @@ dependencies = [
 
 [[package]]
 name = "tm-services"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2414,7 +2414,7 @@ dependencies = [
 
 [[package]]
 name = "tm-test"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -2424,7 +2424,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "quote",
  "rand",
@@ -2435,9 +2435,9 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "1.2.1+spec-1.1.0"
+version = "1.2.2+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5755c51863cdac711f1956baf8eb9588e060755f7d3c4c979e70ea1e1f32cd7"
+checksum = "5426cb1b964690d913f6c5c1a1ae0b42f428ec506bb4d452876d7a209c9bca3b"
 dependencies = [
  "indexmap",
  "serde_core",
@@ -2459,9 +2459,9 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.25.19+spec-1.1.0"
+version = "0.25.20+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd43688c4858d7264ae1cf9a9f874a67c3feb74a883b1cd7bebd6a4ea8307218"
+checksum = "e76360e201d6dbd6583e17795ba71a88f47365a9139c8450a7979c32303b8e73"
 dependencies = [
  "indexmap",
  "toml_datetime",
@@ -2471,9 +2471,9 @@ dependencies = [
 
 [[package]]
 name = "toml_parser"
-version = "1.1.5+spec-1.1.0"
+version = "1.1.6+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "baa693a8032d7e1cada7d0041e96126df243179ff061456783ac7f12bda4744c"
+checksum = "e6769c452d71ba30696c6b37770c439a9cc9110f47f7d5cdbeda79840ef5ea31"
 dependencies = [
  "winnow",
 ]
@@ -2587,9 +2587,9 @@ dependencies = [
 
 [[package]]
 name = "walkdir"
-version = "2.5.0"
+version = "2.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
+checksum = "b42e295b7452c4604982280d8586001fcad9b8b201cac67bca9771e7a7475403"
 dependencies = [
  "same-file",
  "winapi-util",

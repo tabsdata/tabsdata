@@ -2,4 +2,4 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-tabsdata-common==2.4.0
+tabsdata-common==2.4.1

@@ -24,7 +24,7 @@ botocore==1.43.127
 build==1.6.1
 cachecontrol==0.15.0
 cattrs==26.2.1
-certifi==2026.10.23
+certifi==2026.11.20
 cffi==2.1.1 ; platform_python_implementation != 'PyPy'
 charset-normalizer==3.5.2
 check-manifest==0.51
@@ -33,7 +33,7 @@ colorama==0.4.6
 colorlog==6.12.0
 configurator==3.2.0
 contourpy==1.4.0
-coverage==7.17.3
+coverage==7.17.4
 cryptography==50.0.2
 csvkit==2.2.0
 cycler==0.12.1
@@ -219,7 +219,7 @@ url-normalize==4.0.0
 urllib3==2.8.0
 uvicorn==0.54.0
 virtualenv==21.15.2
-watchdog==7.1.0
+watchdog==7.1.1
 wcwidth==0.9.4
 wheel==0.48.0
 wheel-filename==2.1.0

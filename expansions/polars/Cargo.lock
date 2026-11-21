@@ -1257,9 +1257,9 @@ checksum = "723f03dfba28f1949cae68c6ac89a1e77f753c38c0acfceeefec77578a1c357a"
 
 [[package]]
 name = "form_urlencoded"
-version = "1.2.2"
+version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
+checksum = "afa489199eaffb1211795df1c6236ce1ad0d41a6fa45250add73e3b02420f06e"
 dependencies = [
  "percent-encoding",
 ]
@@ -3074,9 +3074,9 @@ dependencies = [
 
 [[package]]
 name = "json5"
-version = "1.3.7"
+version = "1.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0348cde6df2b507ba3c3753beba226baba8567af588d6568cdb9877f02c75b60"
+checksum = "6c1d229cedc4e210dd2e2a6cdc59e36ce28e7338fb69367d0d2566e26de7d599"
 dependencies = [
  "serde",
  "ucd-trie",
@@ -6041,7 +6041,7 @@ dependencies = [
 
 [[package]]
 name = "ta-tableframe"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "td-build",
  "td-common",
@@ -6056,7 +6056,7 @@ checksum = "8c447be3a2abfa84b2d91680c56600bd6b2873866de27b36ec911be705e291da"
 
 [[package]]
 name = "td-attach"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "darling 0.24.1",
  "proc-macro-crate",
@@ -6067,7 +6067,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6086,7 +6086,7 @@ dependencies = [
 
 [[package]]
 name = "td-common"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "bytes",
  "chrono",
@@ -6142,7 +6142,7 @@ dependencies = [
 
 [[package]]
 name = "td-error"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "anyhow",
  "derive_builder",
@@ -6155,7 +6155,7 @@ dependencies = [
 
 [[package]]
 name = "td-security"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "argon2",
  "derive_builder",
@@ -6168,7 +6168,7 @@ dependencies = [
 
 [[package]]
 name = "te-tableframe"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "ta-tableframe",
 ]
@@ -6274,7 +6274,7 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "tm-error"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "quote",
  "syn 3.0.10",
@@ -6282,7 +6282,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "quote",
  "rand 0.10.4",
@@ -6356,9 +6356,9 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "1.2.1+spec-1.1.0"
+version = "1.2.2+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5755c51863cdac711f1956baf8eb9588e060755f7d3c4c979e70ea1e1f32cd7"
+checksum = "5426cb1b964690d913f6c5c1a1ae0b42f428ec506bb4d452876d7a209c9bca3b"
 dependencies = [
  "indexmap",
  "serde_core",
@@ -6380,9 +6380,9 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.25.19+spec-1.1.0"
+version = "0.25.20+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd43688c4858d7264ae1cf9a9f874a67c3feb74a883b1cd7bebd6a4ea8307218"
+checksum = "e76360e201d6dbd6583e17795ba71a88f47365a9139c8450a7979c32303b8e73"
 dependencies = [
  "indexmap",
  "toml_datetime",
@@ -6392,9 +6392,9 @@ dependencies = [
 
 [[package]]
 name = "toml_parser"
-version = "1.1.5+spec-1.1.0"
+version = "1.1.6+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "baa693a8032d7e1cada7d0041e96126df243179ff061456783ac7f12bda4744c"
+checksum = "e6769c452d71ba30696c6b37770c439a9cc9110f47f7d5cdbeda79840ef5ea31"
 dependencies = [
  "winnow",
 ]
@@ -6542,7 +6542,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "ty-expansions"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "ta-tableframe",
  "td-build",
@@ -6552,7 +6552,7 @@ dependencies = [
 
 [[package]]
 name = "ty-tableframe"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "chrono",
  "dashmap",
@@ -6593,7 +6593,7 @@ checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 
 [[package]]
 name = "tz-tableframe"
-version = "2.4.0"
+version = "2.4.1"
 dependencies = [
  "chrono",
  "polars",
@@ -6794,9 +6794,9 @@ checksum = "6d49784317cd0d1ee7ec5c716dd598ec5b4483ea832a2dced265471cc0f690ae"
 
 [[package]]
 name = "url"
-version = "2.5.8"
+version = "2.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed"
+checksum = "f00cd2407bb42c0ef17be88d4cf020f5cceffd121665bac9b8b9493a369b3b1a"
 dependencies = [
  "form_urlencoded",
  "idna",
@@ -6969,9 +6969,9 @@ dependencies = [
 
 [[package]]
 name = "walkdir"
-version = "2.5.0"
+version = "2.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
+checksum = "b42e295b7452c4604982280d8586001fcad9b8b201cac67bca9771e7a7475403"
 dependencies = [
  "same-file",
  "winapi-util",
@@ -7510,18 +7510,18 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.63"
+version = "0.8.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5fe1f8f1b06191a00962174c61aa5005e0bb391a6d80d07e24d115c01a92ed8"
+checksum = "ed43f3060383c64b000f3c630550aebdfa9d3b76d48de32390483dd2cc7e0865"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.63"
+version = "0.8.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "863ad3ac83293fb4d740aedbfdc9240dd8d1a50c1099acd76ce80ce7c7230c7f"
+checksum = "a5cbd820fe3e35fb38c83b6dc7e6b1618bc46e0cd10073ae94e8d52dc468d8b9"
 dependencies = [
  "proc-macro2",
  "quote",
