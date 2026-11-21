@@ -6,9 +6,6 @@ import math
 import os
 from enum import StrEnum
 
-PYTEST_WORKERINPUT = "workerinput"
-PYTEST_PLUGIN_XDIST = "xdist"
-PYTEST_OPTION_NUMPROCESSES = "numprocesses"
 PYTEST_ATTRIBUTE_REPRCRASH = "reprcrash"
 
 TDX_HARVESTER_FOLDER_OPT = "--tdx-harvester-folder"
@@ -21,8 +18,15 @@ TDX_HARVESTER_FOLDER_DEF = os.path.join(
     "harvester",
 )
 
+TDX_HARVESTER_KEEP_OPT = "--tdx-harvester-keep"
+TDX_HARVESTER_KEEP_ARG = "tdx_harvester_keep"
+TDX_HARVESTER_KEEP_DEF = 10
 
-PYTEST_XDIST_WORKER = "PYTEST_XDIST_WORKER"
+# Set by the harvesting process to its session; a pytest that starts with it
+# set runs inside that session and records nothing.
+TDX_HARVESTER_SESSION_ENV = "TDX_HARVESTER_SESSION"
+# The key under which an xdist worker gets its session folder.
+TDX_HARVESTER_SESSION_INPUT = "tdx_harvester_session"
 
 SUDO_REFRESH_INTERVAL_SECONDS = 4 * 60
 SUDO_REFRESH_TIMEOUT_SECONDS = 5

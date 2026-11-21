@@ -4,7 +4,7 @@
 
 """FixtureTracker — fixture scope, lifecycle state, and test countdown.
 
-At collection time, inspects every test item's ``fixturenames`` to build
+At collection time, inspects every collected test's fixtures to build
 a map of fixture → {scope, total tests using it}.  During execution,
 hooks update lifecycle state (setup/active/teardown/done) and decrement
 the remaining-test counter as results come in.
@@ -15,8 +15,7 @@ and within each scope alphabetically.
 
 from __future__ import annotations
 
-import pytest
-
+from tabsdatax.pytesting.plugins.harvester.internal.collection import CollectedTest
 from tabsdatax.pytesting.plugins.harvester.internal.constants import (
     FIXTURE_SCOPE_ORDER,
     FixtureLifecycle,
@@ -72,44 +71,28 @@ class FixtureTracker:
         # In-memory counters: name → {remaining, passed, failed, skipped}
         self._counts: dict[str, dict[str, int]] = {}
 
-    def register_all(self, items: list[pytest.Item]) -> None:
-        """Build fixture-to-test mapping from collected items."""
+    def register_all(self, tests: list[CollectedTest]) -> None:
+        """Build fixture-to-test mapping from the collected tests."""
         fixture_counts: dict[str, int] = {}
         fixture_scopes: dict[str, str] = {}
-
         autouse_fixtures: set[str] = set()
 
-        for item in items:
-            if not isinstance(item, pytest.Function):
-                continue
+        for test in tests:
             item_fixtures = set()
-            for fname in item.fixturenames:
-                if fname.startswith("_") or fname in _BUILTIN_FIXTURES:
+            for fixture in test.fixtures:
+                if fixture.name.startswith("_") or fixture.name in _BUILTIN_FIXTURES:
                     continue
-
-                # Resolve fixturedef once per fixture name
-                if fname not in fixture_scopes:
-                    try:
-                        fixturedefs = item.session._fixturemanager.getfixturedefs(
-                            fname, item
-                        )
-                        if fixturedefs:
-                            fdef = fixturedefs[-1]
-                            scope = fdef.scope or "function"
-                            fixture_scopes[fname] = str(scope)
-                            if getattr(fdef, "_autouse", False):
-                                autouse_fixtures.add(fname)
-                    except Exception:
-                        fixture_scopes[fname] = "function"
-
-                item_fixtures.add(fname)
-                fixture_counts[fname] = fixture_counts.get(fname, 0) + 1
+                fixture_scopes[fixture.name] = fixture.scope
+                if fixture.autouse:
+                    autouse_fixtures.add(fixture.name)
+                item_fixtures.add(fixture.name)
+                fixture_counts[fixture.name] = fixture_counts.get(fixture.name, 0) + 1
 
             if not item_fixtures:
                 item_fixtures.add(FIXTURE_NONE)
                 fixture_counts[FIXTURE_NONE] = fixture_counts.get(FIXTURE_NONE, 0) + 1
 
-            self._test_fixtures[item.nodeid] = item_fixtures
+            self._test_fixtures[test.nodeid] = item_fixtures
 
         # Emit fixture registrations to writer and init in-memory counters
         for fname, count in fixture_counts.items():
@@ -143,20 +126,6 @@ class FixtureTracker:
                     ).to_dict(),
                 )
             )
-
-    def on_deselected(self, items: list[pytest.Item]) -> None:
-        """Subtract deselected items from fixture counts."""
-        for item in items:
-            fixtures = self._test_fixtures.pop(item.nodeid, set())
-            for fname in fixtures:
-                c = self._counts.get(fname)
-                if c is None:
-                    continue
-                c["total"] = max(0, c["total"] - 1)
-                c["remaining"] = max(0, c["remaining"] - 1)
-                self._writer.enqueue(
-                    MetaMessage(kind="fixture", key=fname, payload=dict(c))
-                )
 
     def on_setup(self, fixturedef, request) -> None:
         """Called from ``pytest_fixture_setup`` — before setup runs."""

@@ -7,7 +7,7 @@
 Uses WAL mode for concurrent reads (monitor) while workers write.
 Each process (controller + workers) opens its own connection.
 
-The database lives in the harvester folder as ``harvester.db``.
+The database lives in the session's folder as ``_meta_database.db``.
 """
 
 from __future__ import annotations
@@ -31,8 +31,8 @@ def db_path(harvester_folder: str) -> str:
 def get_connection(harvester_folder: str) -> sqlite3.Connection:
     """Get or create a thread-local SQLite connection with WAL mode.
 
-    Detects when the DB file has been replaced (e.g. by ``shutil.rmtree``
-    at session start) and reconnects so readers never use a stale handle.
+    Detects when the DB file has been replaced or deleted (a pruned
+    session) and reconnects so readers never use a stale handle.
     """
     path = db_path(harvester_folder)
     conn = getattr(_local, "conn", None)
@@ -131,18 +131,6 @@ def init_db(harvester_folder: str) -> None:
             on test_records (status);
     """)
     conn.commit()
-
-
-def reset_db(harvester_folder: str) -> None:
-    """Drop and recreate all tables (called at session start)."""
-    conn = get_connection(harvester_folder)
-    conn.executescript("""
-        drop table if exists fixture_events;
-        drop table if exists test_completions;
-        drop table if exists test_records;
-    """)
-    conn.commit()
-    init_db(harvester_folder)
 
 
 TEST_RECORD_COLUMNS = frozenset({

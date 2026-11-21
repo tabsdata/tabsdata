@@ -3,8 +3,16 @@
 #
 
 """Pytest plugin that monitors test execution by persisting per-test rows in
-SQLite and session-level metadata (phases, fixtures, markers, plugins) to
-``_meta_state.json`` for the Textual dashboard.
+SQLite (``_meta_database.db``) and session-level metadata (phases, fixtures,
+markers, plugins) to ``_meta_state.json`` for the Textual dashboard.
+
+Each session writes to a folder of its own, ``<base>/<UTC stamp>-<pid>``,
+whose name the session header prints; ``tdx-harvester-monitor <session>``
+follows it. The controller (or the only process, without xdist) creates the
+folder and hands it to the xdist workers. A pytest started from inside a
+harvested session (pytester, a subprocess) records nothing, so it never
+touches the session around it; neither does one on GitHub Actions
+(``TD_ON_GA=true``).
 
 This module is a thin hook dispatcher.  Each hook delegates to the
 appropriate tracker in ``internal/``.
@@ -15,7 +23,7 @@ appropriate tracker in ``internal/``.
 
     pytest_addoption                Register configs & options.
             ↓
-    pytest_configure                Initial plugin configuration & state.
+    pytest_configure                Session folder, trackers, writer.
             ↓
     pytest_sessionstart             Session begins.
             ↓
@@ -52,22 +60,29 @@ appropriate tracker in ``internal/``.
     Failed (Teardown)
 """
 
+from __future__ import annotations
+
 import os
-import shutil
 import time
+from pathlib import Path
 
 import pytest
 
+from tabsdatax.pytesting.plugins.harvester.internal.collection import (
+    CollectedTest,
+    describe,
+    read_collection,
+    write_collection,
+)
 from tabsdatax.pytesting.plugins.harvester.internal.components import ComponentTracker
 from tabsdatax.pytesting.plugins.harvester.internal.constants import (
-    PYTEST_OPTION_NUMPROCESSES,
-    PYTEST_PLUGIN_XDIST,
-    PYTEST_WORKERINPUT,
-    PYTEST_XDIST_WORKER,
     TDX_HARVESTER_FOLDER_ARG,
-    TDX_HARVESTER_FOLDER_DEF,
-    TDX_HARVESTER_FOLDER_ENV,
     TDX_HARVESTER_FOLDER_OPT,
+    TDX_HARVESTER_KEEP_ARG,
+    TDX_HARVESTER_KEEP_DEF,
+    TDX_HARVESTER_KEEP_OPT,
+    TDX_HARVESTER_SESSION_ENV,
+    TDX_HARVESTER_SESSION_INPUT,
     SessionPhase,
     TestStatus,
 )
@@ -79,7 +94,6 @@ from tabsdatax.pytesting.plugins.harvester.internal.database import (
     record_fixture_teardown_end,
     record_test_completion,
     record_test_running,
-    reset_db,
     upsert_test_final,
 )
 from tabsdatax.pytesting.plugins.harvester.internal.extensions import PluginTracker
@@ -92,37 +106,20 @@ from tabsdatax.pytesting.plugins.harvester.internal.helpers import (
 )
 from tabsdatax.pytesting.plugins.harvester.internal.markers import MarkerTracker
 from tabsdatax.pytesting.plugins.harvester.internal.phases import PhaseTracker
+from tabsdatax.pytesting.plugins.harvester.internal.sessions import (
+    base_folder,
+    create_session,
+    prune_sessions,
+)
 from tabsdatax.pytesting.plugins.harvester.internal.writer import (
     MetaMessage,
     MetaWriter,
 )
 
-# ──────────────────────────────────────────────────────────────────────
-# Module-level state (each process — controller and workers — gets its
-# own copy, which is exactly what we need for xdist).
-# ──────────────────────────────────────────────────────────────────────
-g_harvester_folder: str | None = None
-g_is_xdist_controller: bool = False
-g_config: pytest.Config | None = None
-g_collected: int = 0
-g_completed: int = 0
-
-# Tracker config attribute keys
-_CFG_WRITER = "_tdx_meta_writer"
-_CFG_PHASE_TRACKER = "_tdx_phase_tracker"
-_CFG_FIXTURE_TRACKER = "_tdx_fixture_tracker"
-_CFG_MARKER_TRACKER = "_tdx_marker_tracker"
-_CFG_COMPONENT_TRACKER = "_tdx_component_tracker"
-_CFG_PLUGIN_TRACKER = "_tdx_plugin_tracker"
-
-
-def _get(config: pytest.Config, attr: str, default=None):
-    return getattr(config, attr, default)
-
-
-# ──────────────────────────────────────────────────────────────────────
-# Hook implementations
-# ──────────────────────────────────────────────────────────────────────
+PLUGIN_NAME = "tdx-harvester-session"
+# Nobody watches a dashboard on GitHub Actions, so its runs harvest nothing.
+TD_ON_GA_ENV = "TD_ON_GA"
+DESCRIBING_WORKER = "gw0"
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -131,413 +128,300 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         TDX_HARVESTER_FOLDER_OPT,
         dest=TDX_HARVESTER_FOLDER_ARG,
         default=None,
-        help="Folder where the harvester database and metadata are written. "
-        "Falls back to ${TDX_HARVESTER_FOLDER_ENV}, "
+        help="Folder holding a folder per harvested session. "
+        "Falls back to $TDX_HARVESTER_FOLDER, "
         "then $HOME/.tabsdatax/pytest/harvester.",
     )
+    group.addoption(
+        TDX_HARVESTER_KEEP_OPT,
+        dest=TDX_HARVESTER_KEEP_ARG,
+        type=int,
+        default=TDX_HARVESTER_KEEP_DEF,
+        help="How many earlier, finished sessions to keep. "
+        f"Default: {TDX_HARVESTER_KEEP_DEF}.",
+    )
 
 
+def on_github_actions() -> bool:
+    return os.environ.get(TD_ON_GA_ENV) == "true"
+
+
+def distributed(config: pytest.Config) -> bool:
+    return (
+        not config.getoption("collectonly")
+        and config.getoption("dist", "no") != "no"
+        and bool(config.getoption("tx", None))
+    )
+
+
+@pytest.hookimpl(trylast=True)
 def pytest_configure(config: pytest.Config) -> None:
-    """Initialize harvester folder, writer, and all trackers.
-
-    Module globals ``g_harvester_folder`` and ``g_is_xdist_controller``
-    are set here — each process (controller + workers) gets its own copy.
-    """
-    global g_harvester_folder, g_is_xdist_controller, g_config, g_collected, g_completed
-    g_completed = 0
-
-    harvester_folder = config.getoption(
-        TDX_HARVESTER_FOLDER_ARG,
-        default=None,
-    ) or os.environ.get(TDX_HARVESTER_FOLDER_ENV)
-    if not harvester_folder:
-        harvester_folder = TDX_HARVESTER_FOLDER_DEF
-    harvester_folder = os.path.abspath(harvester_folder)
-
-    is_worker = hasattr(config, PYTEST_WORKERINPUT)
-    xdist_active = (
-        is_worker
-        or config.pluginmanager.has_plugin(PYTEST_PLUGIN_XDIST)
-        and getattr(config.option, PYTEST_OPTION_NUMPROCESSES, None) is not None
-    )
-    g_is_xdist_controller = xdist_active and not is_worker
-
-    if not is_worker:
-        if os.path.exists(harvester_folder):
-            shutil.rmtree(harvester_folder)
-    os.makedirs(harvester_folder, exist_ok=True)
-
-    g_harvester_folder = harvester_folder
-    g_config = config
-
-    # Initialize SQLite database (controller resets, workers just init)
-    if not is_worker:
-        reset_db(harvester_folder)
-    else:
-        init_db(harvester_folder)
-
-    # Only the controller (or non-xdist main process) manages _meta.json.
-    # Workers only write per-test JSON files via the module globals above.
-    if not is_worker:
-        meta_path = os.path.join(harvester_folder, "_meta_state.json")
-        writer = MetaWriter(meta_path, fresh=True)
-        writer.start()
-        setattr(config, _CFG_WRITER, writer)
-
-        # Store controller PID and start time so the monitor can detect
-        # session restarts and show elapsed time
-        writer.enqueue(
-            MetaMessage(
-                kind="full_sync",
-                payload={
-                    "pid": os.getpid(),
-                    "session_start_ts": time.time(),
-                },
-            )
-        )
-
-        phase_tracker = PhaseTracker(writer)
-        phase_tracker.enter_phase(SessionPhase.CONFIGURE)
-        setattr(config, _CFG_PHASE_TRACKER, phase_tracker)
-
-        fixture_tracker = FixtureTracker(writer)
-        setattr(config, _CFG_FIXTURE_TRACKER, fixture_tracker)
-
-        marker_tracker = MarkerTracker(writer)
-        setattr(config, _CFG_MARKER_TRACKER, marker_tracker)
-
-        component_tracker = ComponentTracker(writer)
-        setattr(config, _CFG_COMPONENT_TRACKER, component_tracker)
-
-        plugin_tracker = PluginTracker(writer)
-        plugin_tracker.snapshot(config.pluginmanager)
-        setattr(config, _CFG_PLUGIN_TRACKER, plugin_tracker)
-
-
-def pytest_sessionstart(session: pytest.Session) -> None:
-    phase_tracker: PhaseTracker | None = _get(session.config, _CFG_PHASE_TRACKER)
-    if phase_tracker:
-        phase_tracker.transition(SessionPhase.SESSION_START)
-
-    writer: MetaWriter | None = _get(session.config, _CFG_WRITER)
-    if writer:
-        writer.enqueue(
-            MetaMessage(
-                kind="full_sync",
-                payload={"session_start_ts": time.time()},
-            )
-        )
-
-
-# noinspection PyUnusedLocal
-def pytest_collection_modifyitems(
-    config: pytest.Config,
-    items: list[pytest.Item],
-) -> None:
-    """Register fixtures and markers, write collected count."""
-    global g_collected
-
-    if not g_harvester_folder or not items:
+    workerinput = getattr(config, "workerinput", None)
+    if workerinput is not None:
+        folder = workerinput.get(TDX_HARVESTER_SESSION_INPUT)
+        if folder:
+            harvester = Harvester(config, Path(folder), worker=True)
+            config.pluginmanager.register(harvester, PLUGIN_NAME)
         return
-
-    phase_tracker: PhaseTracker | None = _get(config, _CFG_PHASE_TRACKER)
-    if phase_tracker:
-        phase_tracker.transition(SessionPhase.COLLECTION)
-
-    g_collected = len(items)
-    writer: MetaWriter | None = _get(config, _CFG_WRITER)
-    if writer:
-        writer.enqueue(
-            MetaMessage(
-                kind="full_sync",
-                payload={"collected": g_collected},
-            )
-        )
-
-    fixture_tracker: FixtureTracker | None = _get(config, _CFG_FIXTURE_TRACKER)
-    if fixture_tracker:
-        fixture_tracker.register_all(items)
-
-    marker_tracker: MarkerTracker | None = _get(config, _CFG_MARKER_TRACKER)
-    if marker_tracker:
-        marker_tracker.register_all(items)
-
-    component_tracker: ComponentTracker | None = _get(config, _CFG_COMPONENT_TRACKER)
-    if component_tracker:
-        component_tracker.register_all(items)
-
-
-def pytest_deselected(items: list[pytest.Item]) -> None:
-    """Adjust tracker counts when tests are excluded by filters (-m, -k)."""
-    global g_collected
-
-    if not g_config:
+    if os.environ.get(TDX_HARVESTER_SESSION_ENV) or on_github_actions():
         return
-
-    marker_tracker: MarkerTracker | None = _get(g_config, _CFG_MARKER_TRACKER)
-    if marker_tracker:
-        marker_tracker.on_deselected(items)
-
-    fixture_tracker: FixtureTracker | None = _get(g_config, _CFG_FIXTURE_TRACKER)
-    if fixture_tracker:
-        fixture_tracker.on_deselected(items)
-
-    component_tracker: ComponentTracker | None = _get(g_config, _CFG_COMPONENT_TRACKER)
-    if component_tracker:
-        component_tracker.on_deselected(items)
-
-    g_collected = max(0, g_collected - len(items))
-    writer: MetaWriter | None = _get(g_config, _CFG_WRITER)
-    if writer:
-        writer.enqueue(
-            MetaMessage(
-                kind="full_sync",
-                payload={"collected": g_collected},
-            )
-        )
+    base = base_folder(config.getoption(TDX_HARVESTER_FOLDER_ARG))
+    folder = create_session(base)
+    prune_sessions(base, config.getoption(TDX_HARVESTER_KEEP_ARG), folder.name)
+    os.environ[TDX_HARVESTER_SESSION_ENV] = folder.name
+    harvester = Harvester(config, folder, worker=False, controller=distributed(config))
+    config.pluginmanager.register(harvester, PLUGIN_NAME)
 
 
-@pytest.hookimpl(wrapper=True)
-def pytest_fixture_setup(fixturedef, request):
-    # Tracker updates (controller only)
-    fixture_tracker: FixtureTracker | None = _get(request.config, _CFG_FIXTURE_TRACKER)
-    if fixture_tracker:
-        fixture_tracker.on_setup(fixturedef, request)
+class Harvester:
+    """The hooks of one harvested pytest process: the xdist controller or
+    the only process (``worker=False``), or an xdist worker."""
 
-    # DB write (works on both controller and workers)
-    fname = fixturedef.argname
-    scope = str(fixturedef.scope or "function")
-    worker = os.environ.get(PYTEST_XDIST_WORKER, "")
-    if g_harvester_folder:
-        record_fixture_setup_start(g_harvester_folder, fname, scope, worker)
+    def __init__(
+        self,
+        config: pytest.Config,
+        folder: Path,
+        worker: bool,
+        controller: bool = False,
+    ) -> None:
+        self.config = config
+        self.folder = str(folder)
+        self.session = folder.name
+        self.worker = worker
+        self.controller = controller
+        self.worker_id = os.environ.get("PYTEST_XDIST_WORKER", "")
+        self.collected = 0
+        self.completed = 0
+        self.writer: MetaWriter | None = None
+        self.phases: PhaseTracker | None = None
+        self.fixtures: FixtureTracker | None = None
+        self.markers: MarkerTracker | None = None
+        self.components: ComponentTracker | None = None
+        self.plugins: PluginTracker | None = None
 
-    t0 = time.time()
-    try:
-        result = yield
-    finally:
-        duration = time.time() - t0
-        if fixture_tracker:
-            fixture_tracker.on_setup_complete(fixturedef, request)
-        if g_harvester_folder:
-            record_fixture_setup_end(g_harvester_folder, fname, scope, duration, worker)
-
-    return result
-
-
-_torn_down: set[str] = set()
-
-
-def pytest_fixture_post_finalizer(fixturedef, request) -> None:
-    # For non-function-scoped fixtures, pytest calls this hook for every test
-    # that uses the fixture, not just when the fixture is actually torn down.
-    # Only record the first teardown per fixture per process.
-    fname = fixturedef.argname
-    scope = str(fixturedef.scope or "function")
-    if scope != "function":
-        key = f"{fname}:{scope}"
-        if key in _torn_down:
+        init_db(self.folder)
+        if worker:
             return
-        # Only count as torn down if the cached result was invalidated.
-        cached = getattr(fixturedef, "cached_result", None)
-        if cached is not None:
+
+        self.writer = MetaWriter(
+            os.path.join(self.folder, "_meta_state.json"), fresh=True
+        )
+        self.writer.start()
+        self.writer.enqueue(
+            MetaMessage(
+                kind="full_sync",
+                payload={"pid": os.getpid(), "session_start_ts": time.time()},
+            )
+        )
+        self.phases = PhaseTracker(self.writer)
+        self.phases.enter_phase(SessionPhase.CONFIGURE)
+        self.fixtures = FixtureTracker(self.writer)
+        self.markers = MarkerTracker(self.writer)
+        self.components = ComponentTracker(self.writer)
+        self.plugins = PluginTracker(self.writer)
+        self.plugins.snapshot(config.pluginmanager)
+
+    def _sync(self, **payload) -> None:
+        if self.writer:
+            self.writer.enqueue(MetaMessage(kind="full_sync", payload=payload))
+
+    def pytest_report_header(self, config: pytest.Config) -> list[str]:
+        if self.worker:
+            return []
+        line = f"harvester session: {self.session} (tdpytest {self.session})"
+        reporter = config.pluginmanager.getplugin("terminalreporter")
+        if reporter is None:
+            return [line]
+        return [reporter._tw.markup(line, purple=True, bold=True)]
+
+    @pytest.hookimpl(optionalhook=True)
+    def pytest_configure_node(self, node) -> None:
+        node.workerinput[TDX_HARVESTER_SESSION_INPUT] = self.folder
+
+    @pytest.hookimpl(optionalhook=True)
+    def pytest_xdist_node_collection_finished(self, node, ids: list[str]) -> None:
+        # Under xdist only the workers collect; the first one describes its
+        # tests in the session folder before it reports them here.
+        if self.collected or node.gateway.id != DESCRIBING_WORKER:
             return
-        _torn_down.add(key)
+        tests = read_collection(self.folder)
+        if tests is None:
+            return
+        self._register(tests)
 
-    # Tracker updates (controller only)
-    fixture_tracker: FixtureTracker | None = _get(request.config, _CFG_FIXTURE_TRACKER)
-    if fixture_tracker:
-        fixture_tracker.on_teardown(fixturedef, request)
+    def pytest_sessionstart(self, session: pytest.Session) -> None:
+        if self.phases:
+            self.phases.transition(SessionPhase.SESSION_START)
+        self._sync(session_start_ts=time.time())
 
-    # DB write (works on both controller and workers)
-    worker = os.environ.get(PYTEST_XDIST_WORKER, "")
-    if g_harvester_folder:
-        record_fixture_teardown_end(g_harvester_folder, fname, scope, worker)
+    @pytest.hookimpl(trylast=True)
+    def pytest_collection_modifyitems(
+        self,
+        config: pytest.Config,
+        items: list[pytest.Item],
+    ) -> None:
+        """Register the tests left once -m and -k have deselected theirs."""
+        if self.worker:
+            if self.worker_id == DESCRIBING_WORKER:
+                write_collection(self.folder, describe(items))
+            return
+        if not self.controller:
+            self._register(describe(items))
 
+    def _register(self, tests: list[CollectedTest]) -> None:
+        if self.phases:
+            self.phases.transition(SessionPhase.COLLECTION)
+        self.collected = len(tests)
+        self._sync(collected=self.collected)
+        if self.fixtures:
+            self.fixtures.register_all(tests)
+        if self.markers:
+            self.markers.register_all(tests)
+        if self.components:
+            self.components.register_all(tests)
 
-@pytest.hookimpl(tryfirst=True)
-def pytest_runtest_logstart(nodeid: str, location: tuple) -> None:
-    """Insert a ``Running`` row in test_records when a test starts.
-
-    Skipped on the xdist controller to avoid orphan rows — under xdist this
-    hook fires on the controller for every dispatched test, but only workers
-    actually run them.
-    """
-    if g_is_xdist_controller:
-        return
-
-    if not g_harvester_folder:
-        return
-
-    worker = os.environ.get(PYTEST_XDIST_WORKER, "")
-    record_test_running(
-        g_harvester_folder,
-        nodeid=nodeid,
-        file=location[0],
-        line=location[1],
-        function=location[2],
-        status=str(TestStatus.RUNNING),
-        start=time.time(),
-        worker=worker,
-    )
-
-
-@pytest.hookimpl(wrapper=True)
-def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo):
-    """Update the test's database row after each phase (setup / call / teardown).
-
-    Called up to three times per test item.  Each invocation records the phase
-    duration, captures any error or skip information, and transitions the row's
-    status column to the outcome status (Passed / Failed (Setup) / Failed
-    (Execution) / Failed (Teardown) / Skipped / Unknown).
-    """
-    report = yield
-
-    nodeid = item.nodeid
-
-    if not g_harvester_folder:
-        return report
-
-    phase_tracker: PhaseTracker | None = _get(item.config, _CFG_PHASE_TRACKER)
-    if phase_tracker:
-        phase_tracker.ensure(SessionPhase.RUN)
-
-    if g_is_xdist_controller:
-        return report
-
-    match call.when:
-        case "setup":
-            handle_setup(g_harvester_folder, nodeid, call, report)
-        case "call":
-            handle_call(g_harvester_folder, nodeid, call, report)
-        case "teardown":
-            handle_teardown(g_harvester_folder, nodeid, call, report)
-        case _:
-            handle_unknown(g_harvester_folder, nodeid, call, report)
-
-    return report
-
-
-def _notify_trackers_on_result(
-    config: pytest.Config,
-    nodeid: str,
-    report: pytest.TestReport,
-) -> None:
-    """Notify fixture and marker trackers about a test result,
-    and update cumulative duration counters."""
-    if report.skipped:
-        outcome = "skipped"
-    elif report.failed:
-        outcome = "failed"
-    else:
-        outcome = "passed"
-
-    marker_tracker: MarkerTracker | None = _get(config, _CFG_MARKER_TRACKER)
-    if marker_tracker:
-        marker_tracker.on_test_result(nodeid, outcome)
-
-    fixture_tracker: FixtureTracker | None = _get(config, _CFG_FIXTURE_TRACKER)
-    if fixture_tracker:
-        fixture_tracker.on_test_complete(nodeid, outcome)
-
-    component_tracker: ComponentTracker | None = _get(config, _CFG_COMPONENT_TRACKER)
-    if component_tracker:
-        component_tracker.on_test_result(nodeid, outcome)
-
-    # Record test completion in DB for averages and distribution.
-    # Only on controller / non-xdist to avoid double-counting
-    # (under xdist, workers also fire logreport).
-    is_worker = bool(os.environ.get(PYTEST_XDIST_WORKER))
-    if (
-        g_harvester_folder
-        and not is_worker
-        and outcome in ("passed", "failed", "skipped")
-    ):
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(self, fixturedef, request):
+        if self.fixtures:
+            self.fixtures.on_setup(fixturedef, request)
+        name = fixturedef.argname
+        scope = str(fixturedef.scope or "function")
+        record_fixture_setup_start(self.folder, name, scope, self.worker_id)
+        started = time.time()
         try:
-            component = ""
-            if component_tracker:
-                component = component_tracker.get_component(nodeid)
+            return (yield)
+        finally:
+            if self.fixtures:
+                self.fixtures.on_setup_complete(fixturedef, request)
+            record_fixture_setup_end(
+                self.folder, name, scope, time.time() - started, self.worker_id
+            )
+
+    def pytest_fixture_post_finalizer(self, fixturedef, request) -> None:
+        # pytest calls this once per actual teardown of the fixture, whatever
+        # its scope.
+        if self.fixtures:
+            self.fixtures.on_teardown(fixturedef, request)
+        record_fixture_teardown_end(
+            self.folder,
+            fixturedef.argname,
+            str(fixturedef.scope or "function"),
+            self.worker_id,
+        )
+
+    @pytest.hookimpl(tryfirst=True)
+    def pytest_runtest_logstart(self, nodeid: str, location: tuple) -> None:
+        """Insert a ``Running`` row in test_records when a test starts.
+
+        Skipped on the xdist controller, which gets this hook for every test
+        a worker starts: the worker records it.
+        """
+        if self.controller:
+            return
+        record_test_running(
+            self.folder,
+            nodeid=nodeid,
+            file=location[0],
+            line=location[1],
+            function=location[2],
+            status=str(TestStatus.RUNNING),
+            start=time.time(),
+            worker=self.worker_id,
+        )
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_runtest_makereport(self, item: pytest.Item, call: pytest.CallInfo):
+        """Update the test's database row after each phase (setup / call /
+        teardown): its duration, any error or skip, and its status."""
+        report = yield
+        if self.phases:
+            self.phases.ensure(SessionPhase.RUN)
+        if self.controller:
+            return report
+        match call.when:
+            case "setup":
+                handle_setup(self.folder, item.nodeid, call, report)
+            case "call":
+                handle_call(self.folder, item.nodeid, call, report)
+            case "teardown":
+                handle_teardown(self.folder, item.nodeid, call, report)
+            case _:
+                handle_unknown(self.folder, item.nodeid, call, report)
+        return report
+
+    def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
+        """Update the marker, fixture and component counters, on the
+        controller or the only process: under xdist the controller gets
+        every result here, while makereport runs only on the workers."""
+        if self.worker:
+            return
+        if self.phases:
+            self.phases.ensure(SessionPhase.RUN)
+        counts = report.when == "call" or (
+            report.when == "setup" and (report.failed or report.skipped)
+        )
+        if not counts:
+            return
+        self._record_result(report)
+        self.completed += 1
+        if self.phases and 0 < self.collected <= self.completed:
+            self.phases.transition(SessionPhase.REPORTING)
+
+    def _record_result(self, report: pytest.TestReport) -> None:
+        nodeid = report.nodeid
+        if report.skipped:
+            outcome = "skipped"
+        elif report.failed:
+            outcome = "failed"
+        else:
+            outcome = "passed"
+        if self.markers:
+            self.markers.on_test_result(nodeid, outcome)
+        if self.fixtures:
+            self.fixtures.on_test_complete(nodeid, outcome)
+        component = ""
+        if self.components:
+            self.components.on_test_result(nodeid, outcome)
+            component = self.components.get_component(nodeid)
+        try:
             record_test_completion(
-                g_harvester_folder,
-                nodeid,
-                outcome,
-                report.duration,
-                "",  # controller doesn't have a worker id
-                component,
+                self.folder, nodeid, outcome, report.duration, "", component
             )
         except Exception:
             pass
-
-        status_from_outcome = {
-            "passed": str(TestStatus.PASSED),
-            "failed": str(TestStatus.FAILED_EXECUTION),
-            "skipped": str(TestStatus.SKIPPED),
+        if not self.controller or record_exists(self.folder, nodeid):
+            return
+        status = {
+            "passed": TestStatus.PASSED,
+            "failed": TestStatus.FAILED_EXECUTION,
+            "skipped": TestStatus.SKIPPED,
+        }[outcome]
+        now = time.time()
+        fields = {
+            "start": now - (report.duration or 0.0),
+            "stop": now,
+            "duration_call": report.duration or 0.0,
         }
-        if g_is_xdist_controller and not record_exists(g_harvester_folder, nodeid):
-            try:
-                now = time.time()
-                fields = {
-                    "start": now - (report.duration or 0.0),
-                    "stop": now,
-                    "duration_call": report.duration or 0.0,
-                }
-                if outcome == "skipped" and getattr(report, "longrepr", None):
-                    fields["skip_reason"] = str(report.longrepr)
-                upsert_test_final(
-                    g_harvester_folder,
-                    nodeid,
-                    status_from_outcome[outcome],
-                    **fields,
-                )
-            except Exception:
-                pass
+        if outcome == "skipped" and getattr(report, "longrepr", None):
+            fields["skip_reason"] = str(report.longrepr)
+        try:
+            upsert_test_final(self.folder, nodeid, str(status), **fields)
+        except Exception:
+            pass
 
+    def pytest_sessionfinish(self, session: pytest.Session, exitstatus: int) -> None:
+        if self.phases:
+            self.phases.transition(SessionPhase.SESSION_FINISH)
 
-def pytest_runtest_logreport(report: pytest.TestReport) -> None:
-    """Called on every process when a test report is available.
-
-    On the controller (xdist) this is the only hook that receives test
-    results — ``pytest_runtest_makereport`` only fires on workers.
-    On non-xdist this fires after ``pytest_runtest_makereport``.
-
-    We use this as the single place to update marker/fixture counters
-    and ensure the RUN phase is active.
-    """
-    global g_completed
-
-    # Ensure we're in RUN phase on first test report
-    if g_config is not None:
-        phase_tracker: PhaseTracker | None = _get(g_config, _CFG_PHASE_TRACKER)
-        if phase_tracker:
-            phase_tracker.ensure(SessionPhase.RUN)
-
-    # Count test results from the "call" phase, plus setup failures/skips
-    # (setup failures/skips mean the test never reaches "call")
-    should_count = report.when == "call" or (
-        report.when == "setup" and (report.failed or report.skipped)
-    )
-    if should_count and g_config is not None:
-        _notify_trackers_on_result(g_config, report.nodeid, report)
-        # Transition to Reporting when all tests complete
-        g_completed += 1
-        if g_collected > 0 and g_completed >= g_collected:
-            _pt = _get(g_config, _CFG_PHASE_TRACKER)
-            if _pt:
-                _pt.transition(SessionPhase.REPORTING)
-
-
-def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    phase_tracker: PhaseTracker | None = _get(session.config, _CFG_PHASE_TRACKER)
-    if phase_tracker:
-        phase_tracker.transition(SessionPhase.SESSION_FINISH)
-
-
-def pytest_unconfigure(config: pytest.Config) -> None:
-    phase_tracker: PhaseTracker | None = _get(config, _CFG_PHASE_TRACKER)
-    if phase_tracker:
-        phase_tracker.transition(SessionPhase.UNCONFIGURE)
-        phase_tracker.finish_all()
-
-    writer: MetaWriter | None = _get(config, _CFG_WRITER)
-    if writer:
-        writer.flush()
-        writer.stop()
+    def pytest_unconfigure(self, config: pytest.Config) -> None:
+        if self.phases:
+            self.phases.transition(SessionPhase.UNCONFIGURE)
+            self.phases.finish_all()
+        if self.writer:
+            self.writer.flush()
+            self.writer.stop()
+        if (
+            not self.worker
+            and os.environ.get(TDX_HARVESTER_SESSION_ENV) == self.session
+        ):
+            del os.environ[TDX_HARVESTER_SESSION_ENV]

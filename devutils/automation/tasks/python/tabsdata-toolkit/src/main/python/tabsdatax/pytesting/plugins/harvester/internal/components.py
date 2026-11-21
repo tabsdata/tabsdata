@@ -16,17 +16,14 @@ up (grandparent of ``utest``).  Known names are mapped:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
 
+from tabsdatax.pytesting.plugins.harvester.internal.collection import CollectedTest
 from tabsdatax.pytesting.plugins.harvester.internal.helpers import normalize_nodeid
 from tabsdatax.pytesting.plugins.harvester.internal.schema import ComponentState
 from tabsdatax.pytesting.plugins.harvester.internal.writer import (
     MetaMessage,
     MetaWriter,
 )
-
-if TYPE_CHECKING:
-    import pytest
 
 COMPONENT_UNKNOWN = "unknown"
 
@@ -74,13 +71,13 @@ class ComponentTracker:
         """Return the component name for a test nodeid."""
         return self._test_components.get(normalize_nodeid(nodeid), COMPONENT_UNKNOWN)
 
-    def register_all(self, items: list[pytest.Item]) -> None:
-        """Build component-to-test mapping from collected items."""
+    def register_all(self, tests: list[CollectedTest]) -> None:
+        """Build component-to-test mapping from the collected tests."""
         component_counts: dict[str, int] = {}
 
-        for item in items:
-            component = extract_component(str(item.fspath))
-            self._test_components[item.nodeid] = component
+        for test in tests:
+            component = extract_component(test.path)
+            self._test_components[test.nodeid] = component
             component_counts[component] = component_counts.get(component, 0) + 1
 
         for name, count in component_counts.items():
@@ -100,21 +97,6 @@ class ComponentTracker:
                         pending=count,
                     ).to_dict(),
                 )
-            )
-
-    def on_deselected(self, items: list[pytest.Item]) -> None:
-        """Subtract deselected items from component counts."""
-        for item in items:
-            component = self._test_components.pop(item.nodeid, None)
-            if component is None:
-                continue
-            c = self._counts.get(component)
-            if c is None:
-                continue
-            c["total"] = max(0, c["total"] - 1)
-            c["pending"] = max(0, c["pending"] - 1)
-            self._writer.enqueue(
-                MetaMessage(kind="component", key=component, payload=dict(c))
             )
 
     def on_test_result(self, nodeid: str, outcome: str) -> None:

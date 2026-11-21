@@ -4,25 +4,20 @@
 
 """MarkerTracker — marker-to-test progress tracking.
 
-At collection time, iterates ``item.iter_markers()`` to build a map
+At collection time, reads each collected test's markers to build a map
 of marker → total tests.  As test results arrive, counters are
 updated and pushed to the writer.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
+from tabsdatax.pytesting.plugins.harvester.internal.collection import CollectedTest
 from tabsdatax.pytesting.plugins.harvester.internal.helpers import normalize_nodeid
 from tabsdatax.pytesting.plugins.harvester.internal.schema import MarkerState
 from tabsdatax.pytesting.plugins.harvester.internal.writer import (
     MetaMessage,
     MetaWriter,
 )
-
-if TYPE_CHECKING:
-    import pytest
-
 
 MARKER_NONE = "(none)"
 
@@ -45,17 +40,17 @@ class MarkerTracker:
         # In-memory counters: name → {total, passed, failed, skipped, pending}
         self._counts: dict[str, dict[str, int]] = {}
 
-    def register_all(self, items: list[pytest.Item]) -> None:
-        """Build marker-to-test mapping from collected items."""
+    def register_all(self, tests: list[CollectedTest]) -> None:
+        """Build marker-to-test mapping from the collected tests."""
         marker_counts: dict[str, int] = {}
 
-        for item in items:
-            item_markers = {marker.name for marker in item.iter_markers()}
+        for test in tests:
+            item_markers = set(test.markers)
             if not item_markers:
                 item_markers.add(MARKER_NONE)
             for name in item_markers:
                 marker_counts[name] = marker_counts.get(name, 0) + 1
-            self._test_markers[item.nodeid] = item_markers
+            self._test_markers[test.nodeid] = item_markers
 
         for name, count in marker_counts.items():
             self._counts[name] = {
@@ -75,20 +70,6 @@ class MarkerTracker:
                     ).to_dict(),
                 )
             )
-
-    def on_deselected(self, items: list[pytest.Item]) -> None:
-        """Subtract deselected items from marker counts."""
-        for item in items:
-            markers = self._test_markers.pop(item.nodeid, set())
-            for name in markers:
-                c = self._counts.get(name)
-                if c is None:
-                    continue
-                c["total"] = max(0, c["total"] - 1)
-                c["pending"] = max(0, c["pending"] - 1)
-                self._writer.enqueue(
-                    MetaMessage(kind="marker", key=name, payload=dict(c))
-                )
 
     def on_test_result(self, nodeid: str, outcome: str) -> None:
         """Update marker counters for a completed test.

@@ -6,7 +6,7 @@
 
 Replaces the previous Rich Live monitor with a scrollable, flicker-free
 Textual application.  Reads ``_meta_state.json`` and the SQLite database
-from the harvester folder on a polling interval.
+from the folder of the session it follows on a polling interval.
 
 Tables:
   1. Session Phases
@@ -41,8 +41,6 @@ from tabsdatax.pytesting.plugins.harvester.internal.constants import (
     SESSION_PHASES_ORDERED,
     SUDO_REFRESH_INTERVAL_SECONDS,
     SUDO_REFRESH_TIMEOUT_SECONDS,
-    TDX_HARVESTER_FOLDER_DEF,
-    TDX_HARVESTER_FOLDER_ENV,
     Emoji,
     TestStatus,
 )
@@ -75,6 +73,10 @@ from tabsdatax.pytesting.plugins.harvester.internal.database import (
     query_tests_per_minute,
 )
 from tabsdatax.pytesting.plugins.harvester.internal.schema import MetaState
+from tabsdatax.pytesting.plugins.harvester.internal.sessions import (
+    base_folder,
+    list_sessions,
+)
 
 # ---------------------------------------------------------------------------
 # Stack frame / py-spy support
@@ -1236,12 +1238,13 @@ class HarvesterDashboard(App):
 # ---------------------------------------------------------------------------
 @click.command(context_settings=dict(help_option_names=["-h", "--help"]))
 @click.version_option()
+@click.argument("session", required=False)
 @click.option(
     "-f",
     "--folder",
     default=None,
-    help="Harvester directory (default: $TDX_HARVESTER_FOLDER or "
-    "~/.tabsdatax/pytest/harvester).",
+    help="Folder holding the harvested sessions (default: $TDX_HARVESTER_FOLDER "
+    "or ~/.tabsdatax/pytest/harvester).",
 )
 @click.option(
     "-i",
@@ -1271,25 +1274,40 @@ class HarvesterDashboard(App):
     help="Show node id details for failed tests.",
 )
 def main(
+    session: str | None,
     folder: str | None,
     interval: int,
     trace: bool,
     nospy: bool,
     details: bool,
 ):
-    """Monitor running pytest tests with a scrollable Textual dashboard.
+    """Monitor the pytest session SESSION with a scrollable Textual dashboard.
+
+    SESSION is required: the id a harvested pytest run prints in its header
+    (harvester session: <id>). Without it, or with an unknown one, the monitor
+    lists the sessions it can follow.
 
     \b
     Tips:
-      Initial sudo for py-spy: sudo -v && tdx-harvester-monitor  (Linux/macOS)
+      Initial sudo for py-spy: sudo -v && tdx-harvester-monitor <session>  (Linux/macOS)
       py-spy on Windows:       run from an elevated terminal
-      Scrollable output:       tdx-harvester-monitor --nospy
+      Scrollable output:       tdx-harvester-monitor <session> --nospy
     """
-    harvester_folder = folder or os.environ.get(
-        TDX_HARVESTER_FOLDER_ENV,
-        TDX_HARVESTER_FOLDER_DEF,
-    )
-    harvester_folder = os.path.abspath(harvester_folder)
+    base = base_folder(folder)
+    sessions = list_sessions(base)
+    if session not in sessions:
+        if session:
+            click.echo(f"There is no harvested session {session} in {base}.", err=True)
+        else:
+            click.echo("Name the session to monitor.", err=True)
+        if sessions:
+            click.echo("Sessions, oldest first:", err=True)
+            for name in sessions:
+                click.echo(f"  {name}", err=True)
+        else:
+            click.echo(f"There are no harvested sessions in {base}.", err=True)
+        sys.exit(2)
+    harvester_folder = str(base / session)
 
     use_py_spy = not nospy and has_py_spy()
     if not nospy and not use_py_spy:
