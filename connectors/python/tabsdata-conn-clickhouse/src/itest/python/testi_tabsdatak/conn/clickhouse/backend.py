@@ -131,6 +131,34 @@ class ClickHouseStore(SqlStore):
             column_names=["id", "name"],
         )
 
+    def create_table(self, table: str, body: str) -> None:
+        """Create ``table`` from the DDL that follows its name, replacing any
+        table of that name."""
+        fqn = self._fqn(table)
+        self._client.command(f"DROP TABLE IF EXISTS {fqn}")
+        self._client.command(f"CREATE TABLE {fqn} {body}")
+
+    def insert(self, table: str, rows: list[dict]) -> None:
+        self._client.insert(
+            table=table,
+            database=self._database,
+            data=[list(row.values()) for row in rows],
+            column_names=list(rows[0]),
+        )
+
+    def show_create(self, table: str) -> str:
+        result = self._client.query(f"SHOW CREATE TABLE {self._fqn(table)}")
+        return result.result_rows[0][0]
+
+    def table_names(self, prefix: str) -> list[str]:
+        rows = self._client.query(
+            "SELECT name FROM system.tables "
+            "WHERE database = {db:String} AND startsWith(name, {prefix:String}) "
+            "ORDER BY name",
+            parameters={"db": self._database, "prefix": prefix},
+        ).result_rows
+        return [row[0] for row in rows]
+
     def count(self, table: str) -> int:
         query = f"SELECT count() FROM {self._fqn(table)}"
         return self._client.query(query).result_rows[0][0]

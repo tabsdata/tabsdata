@@ -355,8 +355,8 @@ class ClickHouseDest(Dest):
             `database.table`); backtick-quote a part for special
             characters.
         if_table_exists: `"append"` (the default) adds rows;
-            `"replace"` empties the table and loads the batch. A slot
-            returned as `None` leaves its table as it is.
+            `"replace"` swaps in a table holding only the batch (see
+            Replace). A slot returned as `None` leaves its table as it is.
         schema_evolution: What a write does when the batch's columns differ from
             the table's, a replace included. `"strict"` (the default) refuses a
             batch with a column the table lacks or a wider type; `"update"` adds
@@ -392,6 +392,37 @@ class ClickHouseDest(Dest):
                 REPLACE PARTITION, exact and atomic, but each touched partition
                 is rewritten. Which one to use is still to be defined.
 
+    Replace:
+        A replace loads the batch into `<table>__td_swap`, a copy of the
+        table's whole definition (engine, partitioning, sorting key,
+        settings) with the batch's schema evolution applied, and swaps it in
+        with `EXCHANGE TABLES` once every table of the subscriber loaded.
+        Readers see the old rows until then, and a load that fails leaves
+        every table as it was. Each table swaps atomically, but they swap one
+        after another: a failure between two leaves some tables replaced,
+        which the next successful run makes whole. A table that does not
+        exist yet is created and loaded directly.
+
+        - The database must use the `Atomic`, `Shared` (ClickHouse Cloud) or
+          `Replicated` engine, and the user needs `CREATE TABLE` and
+          `DROP TABLE` on it. The connector adds no `ON CLUSTER`.
+        - `<table>__td_swap` is the connector's: a replace drops any table
+          with that name.
+        - The old table is dropped with `SYNC` after the swap. ClickHouse
+          Cloud still keeps a dropped table for 8 hours by default (see
+          `UNDROP TABLE`), so each replace holds a copy of the old rows until
+          then.
+        - Rows other writers insert into the table during a replace, and
+          changes they make to its definition, are lost. Grants and row
+          policies follow the table's name.
+        - Materialized views and dictionaries that read the table behave as
+          ClickHouse handles `EXCHANGE TABLES`
+          (https://clickhouse.com/docs/sql-reference/statements/exchange).
+
+        An insert, append or replace, that spans more partitions than the
+        session's `max_partitions_per_insert_block` runs with that limit
+        raised to its partition count.
+
     Note:
         ClickHouse 24.8 has no time-of-day and no interval type, so a `Time`
         column becomes a `DateTime64` on the sentinel date **1970-01-01**
@@ -403,7 +434,7 @@ class ClickHouseDest(Dest):
 
     Examples:
         Write a table with the `replace` disposition -- the first run
-        creates it, later runs empty it and reload it (row count stays):
+        creates it, later runs swap in the new batch (row count stays):
 
         .. code-block:: python
 

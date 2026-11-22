@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import re
 
@@ -30,11 +31,15 @@ from tabsdatak.conn.clickhouse._results import BulkLoadResult
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._statuses import BulkLoadStatus
 from tabsdatak.conn.clickhouse._validation import CLICKHOUSE_FQN_DEF, quote_column
+from tabsdatak.conn.clickhouse.error import ClickHouseErrorCode
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._validation import complete_levels, fqn, unfqn
 
 logger = logging.getLogger(__name__)
+
+SWAP_SUFFIX = "__td_swap"
+SWAPPABLE_ENGINES = frozenset({"Atomic", "Shared", "Replicated"})
 
 
 # --- Type conversion: PyArrow -> ClickHouse ------------------------
@@ -265,9 +270,11 @@ class ClickHouseDialect(Dialect):
     ``azureBlobStorage``) for ``INSERT INTO ... SELECT`` ingestion.
 
     ClickHouse does not support multi-statement transactions, so each
-    table is loaded independently. A failure after some tables have
-    been loaded leaves those tables with new data; recovery is to
-    re-run in REPLACE mode.
+    table is loaded independently. An append that fails after some tables
+    have been loaded leaves those tables with new data. A replace loads
+    swap tables and exchanges them only once every load succeeded; a
+    failure between two exchanges leaves some tables replaced, which the
+    next successful run makes whole.
     """
 
     def __init__(
@@ -442,24 +449,53 @@ class ClickHouseDialect(Dialect):
         return delta
 
     def apply_schema_delta(self, load_mode: LoadMode, table_name: str, delta) -> None:
-        """Apply a SchemaDelta by rendering and executing ClickHouse
-        ALTER statements."""
+        """Apply a SchemaDelta to ``table_name`` by rendering and executing
+        ClickHouse ALTER statements; the delta may have been computed
+        against another table, such as the one a swap table copies."""
         # noinspection PyProtectedMember
         from tabsdatak.conn.clickhouse._iceberg import (
             render_clickhouse_sql,
         )
 
-        stmts = render_clickhouse_sql(delta)
+        stmts = render_clickhouse_sql(
+            dataclasses.replace(delta, table_name=self._fqn(table_name))
+        )
         for stmt in stmts:
             logger.info("Schema evolution on '%s': %s", table_name, stmt)
             self._client.command(stmt)
 
-    # --- Data operations ---------------------------------------------
+    # --- Swap operations ---------------------------------------------
 
-    def truncate_table(self, load_mode: LoadMode, table_name: str) -> None:
-        fq = self._fqn(table_name)
-        self._client.command(f"TRUNCATE TABLE IF EXISTS {fq}")
-        logger.debug("Truncated table: %s", fq)
+    def check_swappable(self, load_mode: LoadMode, table_name: str) -> None:
+        db, _ = self._fqn_parts(table_name)
+        result = self._client.query(
+            "SELECT engine FROM system.databases WHERE name = {db:String}",
+            parameters={"db": db},
+        )
+        engine = result.result_rows[0][0] if result.result_rows else ""
+        if engine not in SWAPPABLE_ENGINES:
+            raise ClickHouseErrorCode.CLICKHOUSE_13.exception(
+                database=db, engine=engine
+            )
+
+    def swap_table_name(self, table_name: str) -> str:
+        db, tbl = self._fqn_parts(table_name)
+        return fqn([db, f"{tbl}{SWAP_SUFFIX}"], CLICKHOUSE_FQN_DEF)
+
+    def copy_table(self, load_mode: LoadMode, table_name: str, source: str) -> None:
+        self._client.command(
+            f"CREATE TABLE {self._fqn(table_name)} AS {self._fqn(source)}"
+        )
+
+    def exchange_tables(self, load_mode: LoadMode, table_name: str, other: str) -> None:
+        self._client.command(
+            f"EXCHANGE TABLES {self._fqn(table_name)} AND {self._fqn(other)}"
+        )
+
+    def drop_table(self, load_mode: LoadMode, table_name: str) -> None:
+        self._client.command(f"DROP TABLE IF EXISTS {self._fqn(table_name)} SYNC")
+
+    # --- Data operations ---------------------------------------------
 
     def bulk_load(
         self,
@@ -481,15 +517,51 @@ class ClickHouseDialect(Dialect):
         """
         fq = self._fqn(table_name)
         named = ", ".join(fqn([column], CLICKHOUSE_FQN_DEF) for column in columns)
+        partition_key = self._partition_key(table_name)
         for ref in staged_file_refs:
             table_fn = self._cloud_storage.clickhouse_table_function(ref)
-            sql = f"INSERT INTO {fq} ({named}) SELECT {named} FROM {table_fn}"
+            settings = self._partition_settings(partition_key, table_fn)
+            sql = f"INSERT INTO {fq} ({named}) SELECT {named} FROM {table_fn}{settings}"
             logger.debug("Executing INSERT INTO")
             self._client.command(sql)
             logger.debug("Inserted data into %s from %s", fq, ref)
         return BulkLoadResult(status=BulkLoadStatus.COMPLETED)
 
     # --- Internal helpers --------------------------------------------
+
+    def _partition_key(self, table_name: str) -> str:
+        db, tbl = self._fqn_parts(table_name)
+        result = self._client.query(
+            "SELECT partition_key FROM system.tables "
+            "WHERE database = {db:String} AND name = {tbl:String}",
+            parameters={"db": db, "tbl": tbl},
+        )
+        return result.result_rows[0][0] if result.result_rows else ""
+
+    def _partition_settings(self, partition_key: str, table_fn: str) -> str:
+        """The ``SETTINGS`` clause that lets one insert of ``table_fn`` span
+        as many partitions as it holds, when that is more than the session
+        allows; empty otherwise."""
+        if not partition_key:
+            return ""
+        # Best effort: a partition key over a column the batch lacks cannot be
+        # evaluated over the staged file, and the insert then runs under the
+        # session's limit.
+        try:
+            count = self._client.query(
+                f"SELECT uniqExact({partition_key}) FROM {table_fn}"
+            ).result_rows[0][0]
+            limit = self._client.query(
+                "SELECT getSetting('max_partitions_per_insert_block')"
+            ).result_rows[0][0]
+        except Exception:  # noqa: BLE001
+            logger.debug(
+                "Could not count the partitions of %s", table_fn, exc_info=True
+            )
+            return ""
+        if limit == 0 or count <= limit:
+            return ""
+        return f" SETTINGS max_partitions_per_insert_block = {count}"
 
     def _get_raw_columns(self, table_name: str) -> list[tuple[str, str]]:
         """Return ``[(name, type_string), ...]`` from ``system.columns``."""

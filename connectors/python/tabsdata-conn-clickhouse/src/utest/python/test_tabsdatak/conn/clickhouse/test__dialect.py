@@ -27,6 +27,10 @@ from tabsdatak.conn.clickhouse._dialect import (
     clickhouse_fqn,
     clickhouse_fqn_parts,
 )
+from tabsdatak.conn.clickhouse.error import (
+    ClickHouseErrorCode,
+    ClickHouseRuntimeException,
+)
 
 
 pytestmark = pytest.mark.clickhouse
@@ -112,15 +116,29 @@ class _CapturingClient:
         self.queries: list[tuple[str, dict]] = []
         self._table_exists = False
         self._columns_rows: list = []
+        self._engine: str | None = "Atomic"
+        self._partition_key = ""
+        self._partitions: int | Exception = 0
+        self._limit = 100
 
     def command(self, sql: str) -> None:
         self.commands.append(sql)
 
     def query(self, sql: str, parameters: dict | None = None):
         self.queries.append((sql, dict(parameters or {})))
-        # Stubbed responses for the two query patterns the dialect uses.
+        # Stubbed responses for the query patterns the dialect uses.
         result = MagicMock()
-        if "system.tables" in sql:
+        if "system.databases" in sql:
+            result.result_rows = [] if self._engine is None else [[self._engine]]
+        elif "partition_key" in sql:
+            result.result_rows = [[self._partition_key]]
+        elif "uniqExact" in sql:
+            if isinstance(self._partitions, Exception):
+                raise self._partitions
+            result.result_rows = [[self._partitions]]
+        elif "getSetting" in sql:
+            result.result_rows = [[self._limit]]
+        elif "system.tables" in sql:
             result.result_rows = [[1 if self._table_exists else 0]]
         elif "system.columns" in sql:
             result.result_rows = self._columns_rows
@@ -257,20 +275,77 @@ class TestDialectAlterTable:
         assert ts.table_name == "`weird db`.`weird tbl`"
 
 
-class TestDialectTruncateTable:
-    def test_truncate_uses_fqn(self, captured_client):
+class TestDialectSwap:
+    @pytest.mark.parametrize(
+        "name,swap",
+        [
+            ("users", "`analytics`.`users__td_swap`"),
+            ("warehouse.events", "`warehouse`.`events__td_swap`"),
+            ("`we``ird`", "`analytics`.`we``ird__td_swap`"),
+        ],
+    )
+    def test_the_swap_table_sits_next_to_its_table(self, captured_client, name, swap):
         d = ClickHouseDialect(_config("analytics"), MagicMock())
-        d.truncate_table(MagicMock(), "users")
+        assert d.swap_table_name(name) == swap
+        d.copy_table(MagicMock(), d.swap_table_name(name), name)
         assert captured_client.commands == [
-            "TRUNCATE TABLE IF EXISTS `analytics`.`users`"
+            f"CREATE TABLE {swap} AS {clickhouse_fqn(name, 'analytics')}"
         ]
 
-    def test_truncate_qualified_name(self, captured_client):
+    def test_exchange_and_drop_use_fqn(self, captured_client):
         d = ClickHouseDialect(_config("analytics"), MagicMock())
-        d.truncate_table(MagicMock(), "warehouse.events")
+        d.exchange_tables(MagicMock(), "users__td_swap", "users")
+        d.drop_table(MagicMock(), "warehouse.events")
         assert captured_client.commands == [
-            "TRUNCATE TABLE IF EXISTS `warehouse`.`events`"
+            "EXCHANGE TABLES `analytics`.`users__td_swap` AND `analytics`.`users`",
+            "DROP TABLE IF EXISTS `warehouse`.`events` SYNC",
         ]
+
+    @pytest.mark.parametrize("engine", ["Atomic", "Shared", "Replicated"])
+    def test_databases_that_exchange_are_swappable(self, captured_client, engine):
+        captured_client._engine = engine
+        d = ClickHouseDialect(_config("analytics"), MagicMock())
+        d.check_swappable(MagicMock(), "warehouse.events")
+        sql, params = captured_client.queries[0]
+        assert "system.databases" in sql
+        assert params == {"db": "warehouse"}
+
+    @pytest.mark.parametrize("engine", ["Ordinary", "Lazy", "MySQL", None])
+    def test_other_databases_are_refused(self, captured_client, engine):
+        captured_client._engine = engine
+        d = ClickHouseDialect(_config("analytics"), MagicMock())
+        with pytest.raises(ClickHouseRuntimeException) as ei:
+            d.check_swappable(MagicMock(), "users")
+        assert ei.value.api_error is ClickHouseErrorCode.CLICKHOUSE_13
+
+    def test_a_delta_applies_to_the_table_named_not_the_one_it_came_from(
+        self, captured_client
+    ):
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.common.sql._schema.delta import (
+            Action,
+            SchemaChange,
+            SchemaDelta,
+        )
+
+        d = ClickHouseDialect(_config("analytics"), MagicMock())
+        delta = SchemaDelta(
+            table_name="`analytics`.`users`",
+            changes=[
+                SchemaChange(
+                    action=Action.ADD_COLUMN,
+                    column="extra",
+                    safe=True,
+                    detail={"type": "String", "nullable": True},
+                )
+            ],
+        )
+        d.apply_schema_delta(MagicMock(), "users__td_swap", delta)
+        assert captured_client.commands
+        assert all(
+            "`analytics`.`users__td_swap`" in command
+            for command in captured_client.commands
+        )
 
 
 class TestDialectBulkLoad:
@@ -309,6 +384,42 @@ class TestDialectBulkLoad:
             "INSERT INTO `analytics`.`users` (`name`, `id`, `we``ird`) "
             "SELECT `name`, `id`, `we``ird` FROM s3('x', 'Parquet')"
         ]
+
+    @pytest.mark.parametrize(
+        "key,partitions,limit,settings",
+        [
+            ("", 500, 100, ""),
+            ("toYYYYMM(day)", 50, 100, ""),
+            ("toYYYYMM(day)", 100, 100, ""),
+            (
+                "toYYYYMM(day)",
+                150,
+                100,
+                " SETTINGS max_partitions_per_insert_block = 150",
+            ),
+            ("(toYYYYMM(day), id)", 150, 0, ""),
+            ("toYYYYMM(day)", RuntimeError("no column day"), 100, ""),
+        ],
+    )
+    def test_an_insert_spanning_more_partitions_than_allowed_raises_the_limit(
+        self, captured_client, key, partitions, limit, settings
+    ):
+        captured_client._partition_key = key
+        captured_client._partitions = partitions
+        captured_client._limit = limit
+        cloud = MagicMock()
+        cloud.clickhouse_table_function.return_value = "s3('x', 'Parquet')"
+        d = ClickHouseDialect(_config("analytics"), cloud)
+        d.bulk_load(MagicMock(), "users", ["ref1"], ["id"])
+        assert captured_client.commands == [
+            "INSERT INTO `analytics`.`users` (`id`) SELECT `id` FROM "
+            f"s3('x', 'Parquet'){settings}"
+        ]
+        if key:
+            assert (
+                f"SELECT uniqExact({key}) FROM s3('x', 'Parquet')",
+                {},
+            ) in captured_client.queries
 
 
 class TestDialectSystemQueries:

@@ -3,9 +3,10 @@
 #
 
 """Tests for ``_bulk_loader.py`` phase orchestration -- focused on the
-``if_table_exists='replace'`` contract: the target is kept, evolved like an
-append, and emptied only once every table took the batch's schema. ``append``
-never empties it.
+``if_table_exists='replace'`` contract: an existing table is never touched
+before the swap. It is copied to a swap table, which takes the batch's schema
+evolution and its rows, and is exchanged with it only once every table loaded.
+``append`` evolves and loads the table itself.
 """
 
 from __future__ import annotations
@@ -25,6 +26,10 @@ from tabsdatak.conn.clickhouse._cloud_storage import CloudStorage, StagedFile
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._modes import WriteMode
+from tabsdatak.conn.clickhouse.error import (
+    ClickHouseErrorCode,
+    ClickHouseRuntimeException,
+)
 from tabsdatak.conn.common.file._store import FileStore
 
 # noinspection PyProtectedMember
@@ -45,8 +50,20 @@ class _RecordingDialect:
         self.calls: list[str] = []
         self.schemas: list = []
 
-    def truncate_tables(self, load_mode, table_names):
-        self.calls.append("truncate_tables")
+    def check_swappable(self, load_mode, table_name):
+        self.calls.append(f"check_swappable {table_name}")
+
+    def swap_table_name(self, table_name):
+        return f"{table_name}__td_swap"
+
+    def drop_table(self, load_mode, table_name):
+        self.calls.append(f"drop_table {table_name}")
+
+    def copy_table(self, load_mode, table_name, source):
+        self.calls.append(f"copy_table {table_name} {source}")
+
+    def exchange_tables(self, load_mode, table_name, other):
+        self.calls.append(f"exchange_tables {table_name} {other}")
 
     def compute_evolution_delta(self, load_mode, table_name, arrow_schema, nulls):
         self.calls.append("compute_evolution_delta")
@@ -139,6 +156,7 @@ class _Evolving(_RecordingDialect):
         super().__init__(exists=True)
         self._changes = changes
         self.applied: list[SchemaChange] = []
+        self.evolved: list[str] = []
 
     def compute_evolution_delta(self, load_mode, table_name, arrow_schema, nulls):
         return SchemaDelta(
@@ -147,6 +165,7 @@ class _Evolving(_RecordingDialect):
 
     def apply_schema_delta(self, load_mode, table_name, delta):
         self.applied.extend(delta.changes)
+        self.evolved.append(table_name)
 
 
 _DROPPED = SchemaChange(action=Action.DROP_COLUMN, column="score", safe=True)
@@ -273,71 +292,177 @@ def test_update_adds_a_new_column(tmp_path):
     assert dialect.applied == [_ADDED]
 
 
-def test_replace_creates_a_missing_table_then_truncates(tmp_path):
+_SWAP = "users__td_swap"
+_PREPARED = [
+    "check_swappable users",
+    f"drop_table {_SWAP}",
+    f"copy_table {_SWAP} users",
+]
+
+
+def test_replace_creates_a_missing_table_and_loads_it_directly(tmp_path):
     dialect = _RecordingDialect(exists=False)
     loader = _loader(tmp_path, dialect, WriteMode.REPLACE)
-    loader.phase_validate_and_prepare(_staged(loader))
-    assert dialect.calls == ["table_exists", "create_table", "truncate_tables"]
+    _, swaps = loader.phase_validate_and_prepare(_staged(loader))
+    assert dialect.calls == ["table_exists", "create_table"]
+    assert swaps == {}
 
 
-def test_replace_evolves_an_existing_table_then_truncates_it(tmp_path):
+def test_replace_copies_an_existing_table_to_its_swap_table(tmp_path):
     dialect = _RecordingDialect(exists=True)
     loader = _loader(tmp_path, dialect, WriteMode.REPLACE)
-    loader.phase_validate_and_prepare(_staged(loader))
-    assert dialect.calls == [
-        "table_exists",
-        "compute_evolution_delta",
-        "truncate_tables",
-    ]
+    _, swaps = loader.phase_validate_and_prepare(_staged(loader))
+    assert dialect.calls == ["table_exists", "compute_evolution_delta", *_PREPARED]
+    assert swaps == {"users": _SWAP}
 
 
-def test_replace_under_strict_refuses_a_new_column_before_truncating(tmp_path):
-    dialect = _Evolving([_ADDED])
-    loader = _loader(tmp_path, dialect, WriteMode.REPLACE, STRICT)
-    with pytest.raises(SqlCommonRuntimeException):
-        loader.phase_validate_and_prepare(_staged(loader))
-    assert "truncate_tables" not in dialect.calls
-
-
-def test_replace_under_update_adds_a_new_column_then_truncates(tmp_path):
-    dialect = _Evolving([_ADDED])
+@pytest.mark.parametrize("change", [_ADDED, _widened()])
+def test_replace_under_update_evolves_the_swap_table_only(tmp_path, change):
+    dialect = _Evolving([change])
     loader = _loader(tmp_path, dialect, WriteMode.REPLACE, UPDATE)
-    loader.phase_validate_and_prepare(_staged(loader))
-    assert dialect.applied == [_ADDED]
-    assert dialect.calls[-1] == "truncate_tables"
+    loader.phase_validate_and_prepare(_staged_ids(loader, [1, 2**40]))
+    assert dialect.applied == [change]
+    assert dialect.evolved == [_SWAP]
 
 
-def test_replace_under_strict_takes_integers_their_column_holds_then_truncates(
-    tmp_path,
-):
+def test_replace_under_strict_takes_integers_their_column_holds(tmp_path):
     dialect = _Evolving([_widened()])
     loader = _loader(tmp_path, dialect, WriteMode.REPLACE, STRICT)
     loader.phase_validate_and_prepare(_staged_ids(loader, [1, 2]))
     assert dialect.applied == []
-    assert dialect.calls[-1] == "truncate_tables"
+    assert dialect.calls[-3:] == _PREPARED
 
 
-def test_replace_under_strict_refuses_an_overflow_before_truncating(tmp_path):
-    dialect = _Evolving([_widened()])
+@pytest.mark.parametrize(
+    "change,ids", [(_ADDED, [1, 2]), (_widened(), [1, 2**40])], ids=["new", "overflow"]
+)
+def test_replace_under_strict_refuses_before_touching_any_table(tmp_path, change, ids):
+    dialect = _Evolving([change])
     loader = _loader(tmp_path, dialect, WriteMode.REPLACE, STRICT)
-    with pytest.raises(SqlCommonRuntimeException, match="SQL_COMMON_10"):
-        loader.phase_validate_and_prepare(_staged_ids(loader, [1, 2**40]))
-    assert "truncate_tables" not in dialect.calls
+    with pytest.raises(SqlCommonRuntimeException):
+        loader.phase_validate_and_prepare(_staged_ids(loader, ids))
+    assert dialect.calls == ["table_exists"]
 
 
-def test_replace_under_update_widens_then_truncates(tmp_path):
-    dialect = _Evolving([_widened()])
-    loader = _loader(tmp_path, dialect, WriteMode.REPLACE, UPDATE)
-    loader.phase_validate_and_prepare(_staged_ids(loader, [1, 2**40]))
-    assert dialect.applied == [_widened()]
-    assert dialect.calls[-1] == "truncate_tables"
+def test_append_evolves_the_table_itself(tmp_path):
+    dialect = _Evolving([_ADDED])
+    loader = _loader(tmp_path, dialect, WriteMode.APPEND, UPDATE)
+    _, swaps = loader.phase_validate_and_prepare(_staged(loader))
+    assert dialect.evolved == ["users"]
+    assert dialect.calls == ["table_exists"]
+    assert swaps == {}
 
 
-def test_append_does_not_truncate(tmp_path):
-    dialect = _RecordingDialect(exists=False)
-    loader = _loader(tmp_path, dialect, WriteMode.APPEND)
-    loader.phase_validate_and_prepare(_staged(loader))
-    assert "truncate_tables" not in dialect.calls
+class _Unswappable(_RecordingDialect):
+    def check_swappable(self, load_mode, table_name):
+        raise ClickHouseErrorCode.CLICKHOUSE_13.exception(
+            database="analytics", engine="Ordinary"
+        )
+
+
+def test_replace_refuses_a_database_that_cannot_exchange_before_creating(tmp_path):
+    dialect = _Unswappable(exists=True)
+    loader = _loader(tmp_path, dialect, WriteMode.REPLACE)
+    with pytest.raises(ClickHouseRuntimeException) as ei:
+        loader.phase_validate_and_prepare(_staged(loader))
+    assert ei.value.api_error is ClickHouseErrorCode.CLICKHOUSE_13
+    assert dialect.calls == ["table_exists", "compute_evolution_delta"]
+
+
+def _two_tables(loader: CloudStagedBulkLoader) -> dict[str, list[StagedFile]]:
+    return loader.phase_upload({
+        "users": [("0.parquet", ROWS)],
+        "orders": [("1.parquet", ROWS)],
+    })
+
+
+class _CopyRefused(_RecordingDialect):
+    def copy_table(self, load_mode, table_name, source):
+        super().copy_table(load_mode, table_name, source)
+        if source == "orders":
+            raise RuntimeError("copy refused")
+
+
+def test_a_failed_preparation_drops_the_swap_tables_it_made(tmp_path):
+    dialect = _CopyRefused(exists=True)
+    loader = _loader(tmp_path, dialect, WriteMode.REPLACE)
+    with pytest.raises(RuntimeError, match="copy refused"):
+        loader.phase_validate_and_prepare(_two_tables(loader))
+    assert dialect.calls[-2:] == [
+        "copy_table orders__td_swap orders",
+        f"drop_table {_SWAP}",
+    ]
+
+
+def test_a_failed_replace_load_drops_the_swap_tables_and_swaps_nothing(tmp_path):
+    dialect = _RecordingDialect(exists=True)
+    loader = _loader(tmp_path, dialect, WriteMode.REPLACE)
+    with pytest.raises(RuntimeError, match="load refused"):
+        loader.load({"users": [("0.parquet", ROWS)]})
+    assert dialect.calls[-1] == f"drop_table {_SWAP}"
+    assert not any(call.startswith("exchange_tables") for call in dialect.calls)
+
+
+class _Loading(_RecordingDialect):
+    def __init__(self, exists: bool):
+        super().__init__(exists)
+        self.loaded: list = []
+
+    def bulk_load_tables(self, load_mode, items):
+        self.calls.append("bulk_load_tables")
+        self.loaded.extend(items)
+        return []
+
+    def is_bulk_load_async(self):
+        return False
+
+
+def _loading_loader(tmp_path, dialect, write_mode: WriteMode):
+    loader = _loader(tmp_path, dialect, write_mode)
+    loader.check_bulk_load_results = lambda items, results: None
+    return loader
+
+
+def test_replace_swaps_every_table_after_every_load_then_drops_the_old_ones(
+    tmp_path,
+):
+    dialect = _Loading(exists=True)
+    loader = _loading_loader(tmp_path, dialect, WriteMode.REPLACE)
+    loader.load({"users": [("0.parquet", ROWS)], "orders": [("1.parquet", ROWS)]})
+    assert [table for table, _, _ in dialect.loaded] == [_SWAP, "orders__td_swap"]
+    assert dialect.calls[dialect.calls.index("bulk_load_tables") :] == [
+        "bulk_load_tables",
+        f"exchange_tables {_SWAP} users",
+        "exchange_tables orders__td_swap orders",
+        f"drop_table {_SWAP}",
+        "drop_table orders__td_swap",
+    ]
+
+
+class _DropRefusedAfterSwap(_Loading):
+    def drop_table(self, load_mode, table_name):
+        super().drop_table(load_mode, table_name)
+        if any(call.startswith("exchange_tables") for call in self.calls):
+            raise RuntimeError("drop refused")
+
+
+def test_a_failed_drop_after_the_swap_only_warns(tmp_path, caplog):
+    dialect = _DropRefusedAfterSwap(exists=True)
+    loader = _loading_loader(tmp_path, dialect, WriteMode.REPLACE)
+    loader.load({"users": [("0.parquet", ROWS)]})
+    assert f"Could not drop swap table '{_SWAP}'" in caplog.text
+
+
+def test_append_loads_the_table_itself_and_swaps_nothing(tmp_path):
+    dialect = _Loading(exists=True)
+    loader = _loading_loader(tmp_path, dialect, WriteMode.APPEND)
+    loader.load({"users": [("0.parquet", ROWS)]})
+    assert [table for table, _, _ in dialect.loaded] == ["users"]
+    assert dialect.calls == [
+        "table_exists",
+        "compute_evolution_delta",
+        "bulk_load_tables",
+    ]
 
 
 def test_a_failed_load_still_cleans_up_and_a_failed_cleanup_is_ignored(tmp_path):

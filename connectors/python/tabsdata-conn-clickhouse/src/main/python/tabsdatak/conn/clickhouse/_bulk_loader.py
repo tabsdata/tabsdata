@@ -8,9 +8,10 @@ import logging
 import re
 import time
 from decimal import Decimal
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 import polars as pl
+import pyarrow as pa
 import pyarrow.parquet as pq
 
 # noinspection PyProtectedMember
@@ -142,14 +143,16 @@ class CloudStagedBulkLoader:
         logger.info("Starting cloud-staged bulk load")
         try:
             staged_files = self.phase_upload(tables)
-            columns = self.phase_validate_and_prepare(staged_files)
+            columns, swaps = self.phase_validate_and_prepare(staged_files)
             self.phase_bulk_load(
                 {
                     table: [staged.ref for staged in files]
                     for table, files in staged_files.items()
                 },
                 columns,
+                swaps,
             )
+            self.phase_swap(swaps)
         finally:
             self.phase_cleanup()
         logger.info("Cloud-staged bulk load complete")
@@ -173,63 +176,72 @@ class CloudStagedBulkLoader:
 
     def phase_validate_and_prepare(
         self, staged_files: dict[str, list[StagedFile]]
-    ) -> dict[str, list[str]]:
-        """Phase 2 -- Validate all tables against their staged files'
-        footers and prepare them (create/evolve), before any load. Returns
-        each table's staged column names."""
+    ) -> tuple[dict[str, list[str]], dict[str, str]]:
+        """Phase 2 -- Validate every table against its staged files'
+        footers, then prepare it: create a missing table and evolve an
+        existing one. 'replace' leaves an existing table as it is: it copies
+        it to a swap table and evolves that. Nothing is created or changed
+        until every table is validated. Returns each table's staged column
+        names, and the swap table of each replaced table."""
         logger.info("Phase 2: Validate & Prepare")
         columns: dict[str, list[str]] = {}
+        missing: dict[str, pa.Schema] = {}
+        deltas: dict[str, SchemaDelta] = {}
         for table_name, files in staged_files.items():
             footers = [self.cloud_storage.footer(staged.key) for staged in files]
-            columns[table_name] = self.validate_and_prepare_table(table_name, footers)
+            # All files of a table share its schema.
+            arrow_schema = footers[0].schema.to_arrow_schema()
+            columns[table_name] = list(arrow_schema.names)
+            if self.dialect.table_exists(self.load_mode, table_name):
+                deltas[table_name] = self.evolution(
+                    table_name, arrow_schema, self._detect_nullability(footers), footers
+                )
+            else:
+                missing[table_name] = arrow_schema
 
-        # 'replace' keeps every table and empties it only once all of them took
-        # the batch's schema, so a refusal leaves their rows in place.
-        if self.write_mode == WriteMode.REPLACE:
-            table_names = list(staged_files.keys())
-            logger.debug("Truncating tables for replace: %s", table_names)
-            self.dialect.truncate_tables(self.load_mode, table_names)
+        replacing = self.write_mode == WriteMode.REPLACE
+        if replacing:
+            for table_name in deltas:
+                self.dialect.check_swappable(self.load_mode, table_name)
 
-        logger.info("Phase 2 complete: all tables validated and prepared.")
-        return columns
-
-    def validate_and_prepare_table(
-        self, table_name: str, footers: list[pq.FileMetaData]
-    ) -> list[str]:
-        """Validate and prepare a single table, returning the staged column
-        names."""
-        # Read schema from the first file (all files for the same table
-        # share the same schema).
-        arrow_schema = footers[0].schema.to_arrow_schema()
-
-        if not self.dialect.table_exists(self.load_mode, table_name):
+        for table_name, arrow_schema in missing.items():
             logger.debug("Creating table: %s", table_name)
             self.dialect.create_table(self.load_mode, table_name, arrow_schema)
-        else:
-            self.evolve(
-                table_name,
-                arrow_schema,
-                self._detect_nullability(footers),
-                footers,
-            )
-        return list(arrow_schema.names)
 
-    def evolve(
+        swaps: dict[str, str] = {}
+        try:
+            for table_name, delta in deltas.items():
+                target = table_name
+                if replacing:
+                    target = self.dialect.swap_table_name(table_name)
+                    self.dialect.drop_table(self.load_mode, target)
+                    self.dialect.copy_table(self.load_mode, target, table_name)
+                    swaps[table_name] = target
+                if delta.changes:
+                    self.dialect.apply_schema_delta(self.load_mode, target, delta)
+                    logger.info("clickhouse: evolved the schema of table %r", target)
+        except Exception:
+            self._drop_swaps(swaps.values())
+            raise
+
+        logger.info("Phase 2 complete: all tables validated and prepared.")
+        return columns, swaps
+
+    def evolution(
         self,
         table_name: str,
-        arrow_schema,
+        arrow_schema: pa.Schema,
         column_nulls: dict[str, bool | None],
-        footers: list[pq.FileMetaData] | None = None,
-    ) -> None:
+        footers: list[pq.FileMetaData],
+    ) -> SchemaDelta:
+        """The changes the batch makes to ``table_name``'s schema, refused
+        when its schema evolution does not allow them."""
         delta = self.dialect.compute_evolution_delta(
             self.load_mode, table_name, arrow_schema, column_nulls
         )
         if self.schema_evolution == STRICT:
             delta = _fitting_numbers(delta, footers)
-        delta = governed(delta, self.schema_evolution)
-        if delta.changes:
-            self.dialect.apply_schema_delta(self.load_mode, table_name, delta)
-            logger.info("clickhouse: evolved the schema of table %r", table_name)
+        return governed(delta, self.schema_evolution)
 
     @staticmethod
     def _detect_nullability(
@@ -279,13 +291,20 @@ class CloudStagedBulkLoader:
     # --- Phase 3: Bulk Load ------------------------------------------
 
     def phase_bulk_load(
-        self, staged_files: dict[str, list[str]], columns: dict[str, list[str]]
+        self,
+        staged_files: dict[str, list[str]],
+        columns: dict[str, list[str]],
+        swaps: dict[str, str],
     ) -> None:
         """Phase 3 -- Bulk load all staged files into their target
-        tables. Uses dialect batch methods and handles transactions and
-        async polling."""
+        tables, or a replaced table's swap table. Uses dialect batch methods
+        and handles transactions and async polling. A failure drops the swap
+        tables, leaving every replaced table as it was."""
         logger.info("Phase 3: Bulk Load")
-        items = [(table, refs, columns[table]) for table, refs in staged_files.items()]
+        items = [
+            (swaps.get(table, table), refs, columns[table])
+            for table, refs in staged_files.items()
+        ]
         try:
             if self.dialect.supports_transactions():
                 self.dialect.begin_transaction()
@@ -306,6 +325,7 @@ class CloudStagedBulkLoader:
                     logger.info("Rollback complete")
                 except Exception:
                     logger.error("Rollback failed")
+            self._drop_swaps(swaps.values())
             raise
         logger.info("Phase 3 complete: all tables loaded.")
 
@@ -356,19 +376,45 @@ class CloudStagedBulkLoader:
                 result.rows_loaded,
             )
 
-    # --- Phase 4: Cleanup --------------------------------------------
+    # --- Phase 4: Swap -----------------------------------------------
+
+    def phase_swap(self, swaps: dict[str, str]) -> None:
+        """Phase 4 -- Exchange each replaced table with its loaded swap
+        table, then drop the swap tables, which now hold the old rows. Each
+        exchange is atomic, but not the set of them: a failure between two
+        leaves some tables replaced until the next successful run."""
+        if not swaps:
+            return
+        logger.info("Phase 4: Swap")
+        for table_name, swap in swaps.items():
+            self.dialect.exchange_tables(self.load_mode, swap, table_name)
+        self._drop_swaps(swaps.values())
+        logger.info("Phase 4 complete: all replaced tables swapped.")
+
+    def _drop_swaps(self, swaps: Iterable[str]) -> None:
+        for swap in swaps:
+            try:
+                self.dialect.drop_table(self.load_mode, swap)
+            except Exception:
+                logger.warning(
+                    "Could not drop swap table %r (the next replace drops it)",
+                    swap,
+                    exc_info=True,
+                )
+
+    # --- Phase 5: Cleanup --------------------------------------------
 
     def phase_cleanup(self) -> None:
-        """Phase 4 -- Clean up staged files if the dialect does not
+        """Phase 5 -- Clean up staged files if the dialect does not
         auto-cleanup."""
         if self.dialect.supports_auto_cleanup():
-            logger.info("Phase 4: Skipped (dialect supports auto-cleanup).")
+            logger.info("Phase 5: Skipped (dialect supports auto-cleanup).")
             return
 
-        logger.info("Phase 4: Cleanup")
+        logger.info("Phase 5: Cleanup")
         try:
             self.cloud_storage.delete(self.upload_id)
-            logger.info("Phase 4 complete.")
+            logger.info("Phase 5 complete.")
         except Exception:
             logger.warning(
                 "Cleanup failed (non-fatal, will be retried on next run)",

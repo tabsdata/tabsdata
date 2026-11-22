@@ -99,11 +99,29 @@ class Dialect(ABC):
         for table_name, delta in items:
             self.apply_schema_delta(load_mode, table_name, delta)
 
-    # --- Data operations (single-table, abstract) --------------------
+    # --- Swap operations (single-table, abstract) --------------------
 
     @abstractmethod
-    def truncate_table(self, load_mode: LoadMode, table_name: str) -> None:
-        """Remove every row of a table, keeping it, if it exists."""
+    def check_swappable(self, load_mode: LoadMode, table_name: str) -> None:
+        """Refuse a table whose database cannot exchange tables."""
+
+    @abstractmethod
+    def swap_table_name(self, table_name: str) -> str:
+        """The name of the table a replace of ``table_name`` loads into."""
+
+    @abstractmethod
+    def copy_table(self, load_mode: LoadMode, table_name: str, source: str) -> None:
+        """Create an empty table with ``source``'s whole definition."""
+
+    @abstractmethod
+    def exchange_tables(self, load_mode: LoadMode, table_name: str, other: str) -> None:
+        """Swap the names of two tables, atomically."""
+
+    @abstractmethod
+    def drop_table(self, load_mode: LoadMode, table_name: str) -> None:
+        """Drop a table, if it exists, and wait until it is gone."""
+
+    # --- Data operations (single-table, abstract) --------------------
 
     @abstractmethod
     def bulk_load(
@@ -120,10 +138,6 @@ class Dialect(ABC):
         raise NotImplementedError("Dialect does not support async bulk loads")
 
     # --- Data operations (batch) -------------------------------------
-
-    def truncate_tables(self, load_mode: LoadMode, table_names: list[str]) -> None:
-        for name in table_names:
-            self.truncate_table(load_mode, name)
 
     def bulk_load_tables(
         self,

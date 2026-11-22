@@ -90,3 +90,9 @@ class ClickHouseErrorCode(ErrorCode):
         " through Google's own S3-compatible endpoint, so a custom endpoint"
         " would write the parquet where ClickHouse cannot read it",
     )  # GCSLocation.validate()
+    CLICKHOUSE_13 = ErrorDef(
+        ClickHouseRuntimeException,
+        "if_table_exists='replace' needs a database with the Atomic, Shared or"
+        " Replicated engine, to exchange tables; database {database!r} uses"
+        " {engine!r}",
+    )  # ClickHouseDialect.check_swappable
