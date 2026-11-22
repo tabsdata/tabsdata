@@ -428,13 +428,14 @@ class ApiErrorCode(ErrorCode):
     # that enforced it.
     API_24 = ErrorDef(
         ApiInitException,
-        "not a valid table name (1-64 chars, must start with a letter, "
-        "alphanumeric and underscore only): {value!r}",
+        "not a valid table name (1-64 chars, alphanumeric and underscore only, "
+        "starting with a letter, or with an underscore for a private table): "
+        "{value!r}",
     )  # TableNameSpec
     API_25 = ErrorDef(
         ApiInitException,
-        "not a valid collection-qualified table name (<identifier> or "
-        "<identifier>/<identifier>, no whitespace): {value!r}",
+        "not a valid collection-qualified table name (<table> or "
+        "<collection>/<table>, no whitespace): {value!r}",
     )  # CollTableNameSpec
     API_26 = ErrorDef(
         ApiInitException,

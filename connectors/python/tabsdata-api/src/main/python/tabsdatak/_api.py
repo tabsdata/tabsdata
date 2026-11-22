@@ -483,15 +483,21 @@ class ValueConstraints:
 # ---------------------------------------------------------------------------
 
 
-# --- Identifier (table name): 1-64 chars, alphanumeric + underscore,
+# --- Identifier (collection name): 1-64 chars, alphanumeric + underscore,
 # --- must start with a letter.
 _IDENTIFIER_RE_STR = r"^[A-Za-z][A-Za-z0-9_]{0,63}$"
 _IDENTIFIER_RE = re.compile(_IDENTIFIER_RE_STR)
 
-# --- Collection-qualified table name: <identifier> or
-# --- <identifier>/<identifier>, no whitespace.
+# --- Table name: as an identifier, or starting with an underscore, which
+# --- makes the table private to its collection (the server's
+# --- TableName.is_private).
+_TABLE_IDENTIFIER_RE_STR = r"^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+_TABLE_IDENTIFIER_RE = re.compile(_TABLE_IDENTIFIER_RE_STR)
+
+# --- Collection-qualified table name: <table> or <collection>/<table>,
+# --- no whitespace.
 _COLL_IDENTIFIER_RE_STR = (
-    r"^[A-Za-z][A-Za-z0-9_]{0,63}(?:/[A-Za-z][A-Za-z0-9_]{0,63})?$"
+    r"^(?:[A-Za-z][A-Za-z0-9_]{0,63}/)?[A-Za-z_][A-Za-z0-9_]{0,63}$"
 )
 _COLL_IDENTIFIER_RE = re.compile(_COLL_IDENTIFIER_RE_STR)
 
@@ -544,7 +550,7 @@ def _is_coll_table_versions_name(value: str) -> bool:
     versions = match.group("versions")
     if collection is not None and not _IDENTIFIER_RE.fullmatch(collection):
         return False
-    if not _IDENTIFIER_RE.fullmatch(table):
+    if not _TABLE_IDENTIFIER_RE.fullmatch(table):
         return False
     if versions is not None:
         versions_match = VERSIONS_REGEX.search(versions)
@@ -608,7 +614,7 @@ def _cron_refusal(value: str) -> str | None:
 
 
 TABLE_NAME_VALIDATION = ValueConstraints(
-    Rule.matches(_IDENTIFIER_RE_STR, ApiErrorCode.API_24)
+    Rule.matches(_TABLE_IDENTIFIER_RE_STR, ApiErrorCode.API_24)
 )
 COLL_TABLE_NAME_VALIDATION = ValueConstraints(
     Rule.matches(_COLL_IDENTIFIER_RE_STR, ApiErrorCode.API_25)

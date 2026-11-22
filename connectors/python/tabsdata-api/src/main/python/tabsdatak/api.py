@@ -77,7 +77,8 @@ TableFramesSpec: TypeAlias = list[TableFrame | None] | None
 
 
 # Output-table name in the local flow. Must match the per-flow
-# table-name pattern (alphanumerics, underscores, leading letter).
+# table-name pattern (alphanumerics, underscores, leading letter, or a
+# leading underscore for a table private to its collection).
 TableNameSpec: TypeAlias = Annotated[str, _api.TABLE_NAME_VALIDATION]
 TableNamesSpec: TypeAlias = Annotated[list[TableNameSpec], _api.NON_EMPTY_LIST_FIELD]
 

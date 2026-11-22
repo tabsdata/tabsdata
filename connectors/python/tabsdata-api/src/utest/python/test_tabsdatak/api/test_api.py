@@ -166,6 +166,19 @@ def test_tables_trigger_rejects_invalid_name_with_api_11():
     assert excinfo.value.api_error is ApiErrorCode.API_3
 
 
+def test_tables_trigger_accepts_private_tables():
+    t = m.TablesTrigger(tables=["_users", "src/_orders"])
+    assert t.tables == ["_users", "src/_orders"]
+
+
+@pytest.mark.parametrize("name", ["_src/orders", "src/_orders-1"])
+def test_tables_trigger_rejects_a_private_collection_or_a_bad_private_table(name):
+    with pytest.raises(ApiException) as excinfo:
+        m.TablesTrigger(tables=[name])
+    assert excinfo.value.api_error is ApiErrorCode.API_3
+    assert str(ApiErrorCode.API_25) in str(excinfo.value)
+
+
 def test_all_tables_trigger_constructs_with_no_args():
     t = m.AllTablesTrigger()
     assert isinstance(t, m.Trigger)
@@ -498,7 +511,7 @@ def test_api_validation_error_carries_tag_and_cause():
 
 @pytest.mark.parametrize(
     "name",
-    ["t1", "foo_bar", "A", "a_1_b", "X" * 64],
+    ["t1", "foo_bar", "A", "a_1_b", "X" * 64, "_foo", "_" + "X" * 63],
 )
 def test_table_name_accepts_valid_identifier(name):
     src = _src()
@@ -507,7 +520,7 @@ def test_table_name_accepts_valid_identifier(name):
 
 @pytest.mark.parametrize(
     "name",
-    ["", "1foo", "foo bar", "foo-bar", "X" * 65, "_foo"],
+    ["", "1foo", "foo bar", "foo-bar", "X" * 65, "_foo-bar", "_" + "X" * 64],
 )
 def test_table_name_rejects_invalid(name):
     src = _src()
@@ -518,11 +531,21 @@ def test_table_name_rejects_invalid(name):
             return (t1,)
 
     assert excinfo.value.api_error is ApiErrorCode.API_17
+    assert str(ApiErrorCode.API_24) in str(excinfo.value)
 
 
 @pytest.mark.parametrize(
     "name",
-    ["foo", "foo_bar", "ns/table", "ns_1/table_2"],
+    [
+        "foo",
+        "foo_bar",
+        "ns/table",
+        "ns_1/table_2",
+        "_foo",
+        "ns/_table",
+        "_foo@HEAD",
+        "ns/_table@NEW",
+    ],
 )
 def test_coll_table_name_accepts_valid(name):
     m.transformer(input_tables=[name], output_tables=["out"])
@@ -530,7 +553,7 @@ def test_coll_table_name_accepts_valid(name):
 
 @pytest.mark.parametrize(
     "name",
-    ["foo/bar/baz", "ns / table", "/table", "ns/", "1foo/bar"],
+    ["foo/bar/baz", "ns / table", "/table", "ns/", "1foo/bar", "_ns/table"],
 )
 def test_coll_table_name_rejects_invalid(name):
     with pytest.raises(ApiException) as excinfo:
