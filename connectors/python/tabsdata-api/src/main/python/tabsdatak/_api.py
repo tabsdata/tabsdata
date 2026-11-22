@@ -574,7 +574,9 @@ def _is_coll_table_versions_name(value: str) -> bool:
 def reads_several_versions(reference: str) -> bool:
     """Whether a ``[collection/]table[@versions]`` input reference can hand
     its function more than one version of the table: ``NEW`` (every version
-    since the function's previous run), a ``v..v`` range or a ``v,v`` list.
+    since the function's previous run; on its first run, every version; each
+    version goes to one run, and a cancelled run's versions go to the next
+    one), a ``v..v`` range or a ``v,v`` list.
     Such an input fills a list slot (``TableFramesSpec``); a single slot
     cannot hold more than one."""
     match = VERSIONED_TABLE_REGEX.match(reference)

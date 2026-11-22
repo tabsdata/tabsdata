@@ -160,6 +160,8 @@ class MSSQLDestConn(Conn):
 
     :categories: destination
 
+    The database and schema must already exist.
+
     Field-identical to `MSSQLSrcConn` but a distinct class; source and
     destination connections are separate types and cannot be used in
     place of one another. See `MSSQLSrcConn` for the field meanings.
@@ -287,6 +289,13 @@ class MSSQLDest(Dest):
 
     :categories: destination
 
+    A table the connector creates gets its column types from the returned
+    frame, with every column nullable and no primary key. To choose keys,
+    indexes or partitioning, create the table before the first run;
+    `"replace"` keeps its definition. `if_table_exists` applies to every
+    table in `tables`; to replace some tables and append to others, use two
+    subscribers.
+
     Args:
         tables: Target table names, one write slot per entry. Each is a
             1-, 2- or 3-part name (`table`, `schema.table` or
@@ -335,9 +344,9 @@ class MSSQLDest(Dest):
                 other destination.
 
     Note:
-        Column types are picked only when the target table is created (with
-        `"replace"`, or `"append"` to a missing table); writing into an existing
-        table uses that table's columns. A tz-aware `Datetime` becomes a
+        Column types are picked only when the connector creates a missing table;
+        writing into an existing table, with `"append"` or `"replace"`, uses that
+        table's columns. A tz-aware `Datetime` becomes a
         `DATETIMEOFFSET`, so SQL Server is the one target that keeps the offset
         rather than storing the value naive. See `TYPE_MAPPING.md` in
         `tabsdata-conn-common-sql` for the full matrix.

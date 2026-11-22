@@ -306,6 +306,8 @@ class MySQLDestConn(Conn):
 
     :categories: destination
 
+    The database must already exist.
+
     Attribute-identical to `MySQLSrcConn` but a distinct class; source
     and destination connections are separate types and cannot be used in
     place of one another. See `MySQLSrcConn` for the field meanings.
@@ -430,6 +432,13 @@ class MySQLDest(Dest):
 
     :categories: destination
 
+    A table the connector creates gets its column types from the returned
+    frame, with every column nullable and no primary key. To choose keys,
+    indexes or partitioning, create the table before the first run;
+    `"replace"` keeps its definition. `if_table_exists` applies to every
+    table in `tables`; to replace some tables and append to others, use two
+    subscribers.
+
     Args:
         tables: Target table names, qualified or bare (see
             `MySQLTableNameSpec`); one input slot per table, in order.
@@ -476,9 +485,9 @@ class MySQLDest(Dest):
                 other destination.
 
     Note:
-        Column types are picked only when the target table is created (with
-        `"replace"`, or `"append"` to a missing table); writing into an existing
-        table uses that table's columns. MySQL caps `DECIMAL` scale at 30, so a
+        Column types are picked only when the connector creates a missing table;
+        writing into an existing table, with `"append"` or `"replace"`, uses that
+        table's columns. MySQL caps `DECIMAL` scale at 30, so a
         finer source scale is truncated. A tz-aware `Datetime` loses its offset
         (stored naive). See `TYPE_MAPPING.md` in `tabsdata-conn-common-sql` for
         the full matrix.
@@ -594,6 +603,12 @@ class MySQLCdcStreamSrc(StreamSrc):
     table without changes in the batch hands a list holding one empty
     frame with the columns last staged for it, or `[]` while none was
     staged.
+
+    When a stream batch closes, it is staged for processing, and at that
+    point its binlog position is saved with it. The staged batch is then
+    scheduled for processing, which may not start right away because a
+    previous batch may still be processing; its table version is written
+    when that processing ends.
 
     Args:
         tables: Qualified `schema.table` names to track, each listed once.

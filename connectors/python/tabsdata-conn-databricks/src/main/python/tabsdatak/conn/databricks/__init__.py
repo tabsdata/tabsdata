@@ -329,6 +329,8 @@ class DatabricksDestConn(Conn):
 
     :categories: destination
 
+    The catalog, schema and volume must already exist.
+
     Field-identical to `DatabricksSrcConn` but a distinct class; source
     and destination connections are separate types and cannot be used in
     place of one another. See `DatabricksSrcConn` for the field

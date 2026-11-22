@@ -258,6 +258,8 @@ class StarRocksDestConn(Conn):
 
     :categories: destination
 
+    The database and every destination table must already exist.
+
     Registered on a collection; the runtime resolves it and hands it to
     the plugin at run time. Each string field accepts a plain string or
     a `Secret`; the plugin reads parsed values through the `_host` /

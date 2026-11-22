@@ -238,6 +238,9 @@ class SnowflakeDestConn(Conn):
 
     :categories: destination
 
+    The database and schema must already exist; a named stage is created
+    when missing.
+
     Registered on a collection; the runtime resolves it and hands it to
     the plugin at run time. Each string field accepts a plain string or
     a `Secret`. `role` / `database` / `schema` / `warehouse`

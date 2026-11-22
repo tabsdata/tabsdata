@@ -197,6 +197,12 @@ class BatchThresholds:
     least one of `max_secs`, `max_rows` and `max_bytes` is set, so data
     never waits forever.
 
+    When a stream batch closes, it is staged for processing, and at that
+    point the source's position (such as the Kafka offsets) is committed.
+    The staged batch is then scheduled for processing, which may not start
+    right away because a previous batch may still be processing. Its table
+    version is written when that processing ends.
+
     Args:
         min_secs: Shortest interval between two batches, 60 by default and
             never less.
@@ -505,6 +511,16 @@ def stream_publisher(
     The batch thresholds bound the batches the function receives, the
     same way for every stream source (see `BatchThresholds`): at least one
     of `batch_max_secs`, `batch_max_rows` and `batch_max_bytes` is required.
+    When a stream batch closes, it is staged for processing, and at that
+    point the source's position (such as the Kafka offsets) is committed.
+    The staged batch is then scheduled for processing, which may not start
+    right away because a previous batch may still be processing. Its table
+    version is written when that processing ends.
+
+    The stream starts consuming as soon as the function is registered. To
+    register the functions that read its tables first, register it with
+    `tdk fn register --disabled`, and start it with `tdk stream enable`
+    once they are in place.
 
     Args:
         source: The `StreamSrc` to consume.
@@ -644,7 +660,11 @@ def transformer(
             same-collection table; `@versions` selects a version, a
             `v..v` range, a comma-separated list, or `NEW`). A range, a
             list or `NEW` hands over one `TableFrame` per version, so its
-            parameter must be a `TableFramesSpec`.
+            parameter must be a `TableFramesSpec`. `NEW` is every version
+            committed since the function's previous run, oldest first, and
+            every version the table has on the function's first run. Each
+            version is delivered to one run: a recovered run keeps its
+            versions, and a cancelled run's versions go to the next run.
         output_tables: Non-empty list of local table names to emit, one
             per return slot (valid table names, see `publisher`).
         trigger_by: When the function runs on its own:

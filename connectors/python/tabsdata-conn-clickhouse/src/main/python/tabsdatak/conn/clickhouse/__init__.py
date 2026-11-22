@@ -299,7 +299,8 @@ class ClickHouseDestConn(Conn):
             / `GCSLocation`) where parquet is staged before ingest.
         database: The default database (a ClickHouse identifier: a
             letter or underscore, then letters, digits and underscores).
-            Defaults to `"default"`.
+            Defaults to `"default"`. It must already exist: the connector
+            does not create databases.
         secure: `true` for HTTPS, `false` for HTTP (boolean as
             text). Defaults to `"false"`.
         entity_whitelist: Optional list of regex patterns narrowing
@@ -338,6 +339,15 @@ class ClickHouseDest(Dest):
     """ClickHouse destination for `@subscriber` -- one output slot per table.
 
     :categories: destination
+
+    A missing table is created on the first write as
+    `ENGINE = MergeTree() ORDER BY tuple()`, with no sorting or primary
+    key, every scalar column `Nullable(...)` and dates as `Date32`. To get
+    a sorting or primary key, partitions or non-nullable columns, create
+    the table before the first run: the connector inserts into an existing
+    table by column name, and `"replace"` truncates it, keeping its
+    definition. `if_table_exists` applies to every table in `tables`; to
+    replace some tables and append to others, use two subscribers.
 
     Args:
         tables: Target table names (non-empty), one write slot per

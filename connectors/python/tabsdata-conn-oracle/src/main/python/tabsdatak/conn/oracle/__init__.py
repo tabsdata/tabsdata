@@ -177,6 +177,8 @@ class OracleDestConn(Conn):
 
     :categories: destination
 
+    The schema must already exist.
+
     Attribute-identical to `OracleSrcConn` but a distinct class; source
     and destination connections are separate types and cannot be used in
     place of one another. See `OracleSrcConn` for the field meanings.
@@ -305,6 +307,13 @@ class OracleDest(Dest):
 
     :categories: destination
 
+    A table the connector creates gets its column types from the returned
+    frame, with every column nullable and no primary key. To choose keys,
+    indexes or partitioning, create the table before the first run;
+    `"replace"` keeps its definition. `if_table_exists` applies to every
+    table in `tables`; to replace some tables and append to others, use two
+    subscribers.
+
     Args:
         tables: Target table names, qualified or bare (see
             `OracleTableNameSpec`); one input slot per table, in order.
@@ -351,9 +360,9 @@ class OracleDest(Dest):
                 other destination.
 
     Note:
-        Column types are picked only when the target table is created (with
-        `"replace"`, or `"append"` to a missing table); writing into an existing
-        table uses that table's columns. Oracle needs three substitutions:
+        Column types are picked only when the connector creates a missing table;
+        writing into an existing table, with `"append"` or `"replace"`, uses that
+        table's columns. Oracle needs three substitutions:
         `Float32` / `Float64` become `BINARY_FLOAT` / `BINARY_DOUBLE`, and `Time`
         is stored as a `TIMESTAMP` on 1970-01-01, since Oracle has no
         time-of-day type -- it reads back carrying that date. A tz-aware

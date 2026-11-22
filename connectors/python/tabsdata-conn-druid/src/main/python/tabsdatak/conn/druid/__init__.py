@@ -348,10 +348,9 @@ class DruidDest(Dest):
             cannot enforce a schema, so a datasource takes whatever columns
             a batch brings.
         time_column: Name of the row-level timestamp column Druid uses
-            as its primary `__time` field at ingest. Druid requires a
-            time column on every datasource; if the rows carry none,
-            leave unset and the ingestion spec falls back to the
-            current ingest time.
+            as its primary `__time` field at ingest. Druid requires a time
+            column on every datasource; if the rows carry none, leave unset
+            and every row gets `__time` `2000-01-01T00:00:00Z`.
         segment_granularity: Druid segment grain -- one of `ALL`
             (default), `NONE`, `SECOND`, `MINUTE`,
             `FIFTEEN_MINUTE`, `THIRTY_MINUTE`, `HOUR`,

@@ -43,8 +43,13 @@ Bootstrap servers, SASL credentials and schema-registry URL / region /
 names accept a plain string or a `Secret`. Rollover thresholds and
 the logging level live in `KafkaStreamSrc.src_cfg`.
 
-Delivery is at least once. The consumer group's offsets are
-acknowledged on the broker only once a batch is staged; a partition a
+Delivery is at least once. When a stream batch closes, it is staged for
+processing (from then on it will be processed), and at that point the
+consumer group's offsets are committed on the broker. The staged batch
+is then scheduled for processing, which may not start right away
+because a previous batch may still be processing; its table version is
+written when that processing ends. Consumer lag at zero means staged,
+not loaded. A partition a
 rebalance takes away is staged and acknowledged before it is handed
 over; and a consumer that loses its partitions restarts by itself from
 the last acknowledged offset, dropping what it had not staged. A
@@ -348,7 +353,10 @@ class KafkaStreamSrc(StreamSrc):
             refuses, or whose values do not fit the types of their table
             (the envelope then carries the decoded `record`). Without it
             such a message stops the stream. A broker error is never a
-            dead letter.
+            dead letter. Dead letters are written at least once: when a
+            batch is read again after a restart, its dead letters are sent
+            again. Deduplicate on the source `topic`, `partition` and
+            `offset` carried in the envelope.
         src_cfg: Optional connector config over the keys
             `tabsdata.kafka.poll.max_secs` (how long one poll waits for
             messages, default 2), `tabsdata.kafka.poll.idle_secs` (how
