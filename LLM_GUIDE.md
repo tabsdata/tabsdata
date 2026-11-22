@@ -349,6 +349,24 @@ that read its new table versions wait for a trigger of their own. The
 enterprise edition also runs, in the same execution plan, every function
 downstream of it that those new versions trigger.
 
+Only triggers order the functions of an execution plan. A function reads a
+table in the version the same plan writes only when the table's writer runs
+before it through triggers, directly or further upstream. Otherwise it reads
+the table's version from before the plan, without waiting for the write, and
+its run still commits. The default `trigger_by` triggers on every input, so
+every input is read in the same plan's version; with `TablesTrigger`, list
+every input the function must read in that version:
+```python
+# `orders` and `customers` are both written in the same plan.
+@transformer(
+    input_tables=["orders", "customers"],
+    output_tables=["orders_by_tier"],
+    trigger_by=TablesTrigger(tables=["orders"]),  # reads the previous `customers`
+)
+def orders_by_tier(orders: TableFrameSpec, customers: TableFrameSpec) -> TableFrameSpec:
+    return orders.join(customers, on="customer_id")
+```
+
 ## TableFrame
 
 `TableFrame` wraps a Polars LazyFrame. Expression helpers live in

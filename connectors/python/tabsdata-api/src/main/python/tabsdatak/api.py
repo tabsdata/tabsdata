@@ -141,7 +141,10 @@ class TablesTrigger(Trigger):
     Args:
         tables: `[collection/]table` references to watch; they need not
             be inputs of the function. An empty list never fires: the
-            function runs only when run manually.
+            function runs only when run manually. An input not listed
+            does not order the function's run: when the same execution
+            plan writes it, and its writer is not upstream of a listed
+            table, the function reads its version from before the plan.
     """
 
     tables: CollTableNamesSpec
@@ -665,6 +668,9 @@ def transformer(
             every version the table has on the function's first run. Each
             version is delivered to one run: a recovered run keeps its
             versions, and a cancelled run's versions go to the next run.
+            `HEAD` is resolved when the execution plan starts; see
+            `trigger_by` for the inputs read in the version the same plan
+            writes.
         output_tables: Non-empty list of local table names to emit, one
             per return slot (valid table names, see `publisher`).
         trigger_by: When the function runs on its own:
@@ -675,6 +681,15 @@ def transformer(
               those tables only, inputs or not.
             * `CronTrigger(mask=...)`: on the schedule only.
             * `TablesTrigger(tables=[])`: never; only when run manually.
+
+            Only triggers order the functions of an execution plan. An
+            input gets the version written in the same plan only when its
+            writer runs before the function through triggers, directly or
+            further upstream; otherwise the function reads the input's
+            version from before the plan, without waiting for the write.
+            The default triggers on every input, so every input is read in
+            the same plan's version; with `TablesTrigger`, list every input
+            the function must read in that version.
         on_tables: Optional list of `OnTablesAction` side-effects.
 
     Returns:
@@ -730,8 +745,9 @@ def subscriber(
             fixes the number of return slots.
         input_tables: Non-empty list of `[collection/]table[@versions]`
             references to ship (same form as `transformer`).
-        trigger_by: When the function runs on its own; the same options
-            as `transformer`, by default on a new version of any input
+        trigger_by: When the function runs on its own; the same options,
+            and the same rule for which input versions it reads, as
+            `transformer`, by default on a new version of any input
             table.
 
     Returns:

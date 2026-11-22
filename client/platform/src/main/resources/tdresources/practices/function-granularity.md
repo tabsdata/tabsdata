@@ -98,7 +98,7 @@ named `publish_<model>`.
   not fewer runs.
 - Only triggers order the functions of a run. A function that reads tables
   written by different functions gets this run's version only of the tables
-  that trigger it, and the previous version of the others: leave `trigger_by`
-  out, or list every table it must read fresh.
+  written upstream of it through its triggers, and the previous version of
+  the others: leave `trigger_by` out, or list every table it must read fresh.
 - In the enterprise edition a transaction spans the collection by default, so
   one function's failure still holds back the rest of its collection's commit.
