@@ -24,7 +24,10 @@ from testi_tabsdatak.conn.common.sql.plugin_io import work_dir
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse import ClickHouseDest, _plugin as plugin
-from tabsdatak.conn.clickhouse.error import ClickHouseRuntimeException
+from tabsdatak.conn.clickhouse.error import (
+    ClickHouseErrorCode,
+    ClickHouseRuntimeException,
+)
 
 pytestmark = pytest.mark.clickhouse
 
@@ -110,7 +113,7 @@ def test_a_failed_replace_leaves_every_table_as_it_was(
     for table in (loads, refuses):
         db.insert(table, [{"id": 1, "v": "old"}])
     try:
-        with pytest.raises(ClickHouseRuntimeException):
+        with pytest.raises(ClickHouseRuntimeException) as ei:
             _replace(
                 domain_clickhouse,
                 domain_s3,
@@ -120,6 +123,7 @@ def test_a_failed_replace_leaves_every_table_as_it_was(
                     refuses: pl.LazyFrame({"id": [500], "v": ["new"]}),
                 },
             )
+        assert ei.value.api_error is ClickHouseErrorCode.CLICKHOUSE_6
         for table in (loads, refuses):
             assert db.read_table(table).to_dicts() == [{"id": 1, "v": "old"}]
         assert db.table_names(prefix) == [loads, refuses]

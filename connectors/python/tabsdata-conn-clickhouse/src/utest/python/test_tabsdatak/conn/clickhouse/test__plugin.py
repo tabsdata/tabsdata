@@ -172,13 +172,13 @@ def test_dest_plugin_raises_clickhouse_4_on_tables_slots_mismatch(work_dir):
 # ---------------------------------------------------------------------------
 
 
-class _StubDatabaseError(Exception):
-    """Class-named ``DatabaseError`` so ``_is_connection_error``
-    classifies it as a connect failure without importing the real
+class _StubOperationalError(Exception):
+    """Class-named ``OperationalError`` so ``_is_connection_error``
+    classifies it as a lost connection without importing the real
     ``clickhouse_connect`` package."""
 
 
-_StubDatabaseError.__name__ = "DatabaseError"
+_StubOperationalError.__name__ = "OperationalError"
 
 
 def test_dest_plugin_wraps_connection_failure_as_clickhouse_5(
@@ -186,7 +186,7 @@ def test_dest_plugin_wraps_connection_failure_as_clickhouse_5(
     work_dir,
 ):
     def boom(*_a, **_kw):
-        raise _StubDatabaseError("connect fail")
+        raise _StubOperationalError("connect fail")
 
     monkeypatch.setattr(impl, "write_via_bulk_loader", boom)
 
@@ -347,18 +347,21 @@ def test_clickhouse_dest_cardinality_uses_tables_length():
 
 @pytest.mark.parametrize(
     "name",
-    [
-        "DatabaseError",
-        "OperationalError",
-        "InterfaceError",
-        "ConnectionError",
-    ],
+    ["OperationalError", "InterfaceError", "ConnectionError"],
 )
 def test_is_connection_error_recognises_known_names(name):
     cls = type(name, (Exception,), {})
     assert plugin._is_connection_error(cls()) is True
+    assert plugin._is_connection_error(type("Sub", (cls,), {})()) is True
 
 
 def test_is_connection_error_rejects_other_names():
     assert plugin._is_connection_error(RuntimeError()) is False
     assert plugin._is_connection_error(ValueError()) is False
+    assert plugin._is_connection_error(ConnectionRefusedError()) is True
+
+
+def test_a_statement_the_server_refuses_is_not_a_connection_error():
+    from clickhouse_connect.driver.exceptions import DatabaseError
+
+    assert plugin._is_connection_error(DatabaseError("constraint")) is False

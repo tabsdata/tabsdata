@@ -135,11 +135,6 @@ class _ClickHouseDestPlugin(
             raise
         except Exception as e:  # noqa: BLE001 -- runtime wrapper
             host = _convert(conn.host, str)
-            # Heuristic: connect-class failures from
-            # clickhouse-connect raise ``DatabaseError`` or
-            # similar; we surface the connection-failure code
-            # when a known clickhouse-connect connection error
-            # bubbles up, otherwise the generic bulk-load code.
             if _is_connection_error(e):
                 raise ClickHouseErrorCode.CLICKHOUSE_5.exception(
                     cause=e,
@@ -152,20 +147,18 @@ class _ClickHouseDestPlugin(
 
 
 def _is_connection_error(exc: BaseException) -> bool:
-    """Best-effort classification of a clickhouse-connect failure.
+    """Whether a failure after connecting lost the connection.
 
-    ``clickhouse_connect`` raises ``DatabaseError`` for connect /
-    handshake failures; we look at the exception name rather than
-    importing the package eagerly so the conn-clickhouse package
-    stays cheap to import.
+    ``clickhouse_connect`` raises ``OperationalError`` (or a subclass) when it
+    cannot reach the server, and a plain ``DatabaseError`` for any statement the
+    server refuses, which is a load failure. A failure while connecting is
+    already ``CLICKHOUSE_5``. The class names are matched, rather than the
+    classes imported, so the package stays cheap to import.
     """
-    name = type(exc).__name__
-    return name in {
-        "DatabaseError",
-        "OperationalError",
-        "InterfaceError",
-        "ConnectionError",
-    }
+    return any(
+        cls.__name__ in {"OperationalError", "InterfaceError", "ConnectionError"}
+        for cls in type(exc).__mro__
+    )
 
 
 CLICKHOUSE_DEST = DestDef(

@@ -275,6 +275,18 @@ class TestDialectAlterTable:
         assert ts.table_name == "`weird db`.`weird tbl`"
 
 
+def test_a_failure_to_connect_is_clickhouse_5(monkeypatch):
+    def refuse(**_kw):
+        raise RuntimeError("authentication failed")
+
+    monkeypatch.setitem(
+        sys.modules, "clickhouse_connect", types.SimpleNamespace(get_client=refuse)
+    )
+    with pytest.raises(ClickHouseRuntimeException) as ei:
+        ClickHouseDialect(_config("analytics"), MagicMock())
+    assert ei.value.api_error is ClickHouseErrorCode.CLICKHOUSE_5
+
+
 class TestDialectSwap:
     @pytest.mark.parametrize(
         "name,swap",

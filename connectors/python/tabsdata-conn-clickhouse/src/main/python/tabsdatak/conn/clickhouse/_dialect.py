@@ -294,14 +294,17 @@ class ClickHouseDialect(Dialect):
         self._config = config
         self._cloud_storage = cloud_storage
         self._db = config.database
-        self._client = clickhouse_connect.get_client(
-            host=config.host,
-            port=config.port,
-            database=config.database,
-            username=config.username,
-            password=config.password,
-            secure=config.secure,
-        )
+        try:
+            self._client = clickhouse_connect.get_client(
+                host=config.host,
+                port=config.port,
+                database=config.database,
+                username=config.username,
+                password=config.password,
+                secure=config.secure,
+            )
+        except Exception as e:
+            raise ClickHouseErrorCode.CLICKHOUSE_5.exception(cause=e, host=config.host)
 
     # --- FQN helpers -------------------------------------------------
 

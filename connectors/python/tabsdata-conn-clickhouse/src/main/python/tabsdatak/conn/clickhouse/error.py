@@ -56,7 +56,7 @@ class ClickHouseErrorCode(ErrorCode):
     CLICKHOUSE_5 = ErrorDef(
         ClickHouseRuntimeException,
         "ClickHouse destination connection failed (host={host})",
-    )  # _ClickHouseDestPlugin.write_out: client connect failure
+    )  # ClickHouseDialect / _ClickHouseDestPlugin.write_out: connection failure
     CLICKHOUSE_6 = ErrorDef(
         ClickHouseRuntimeException,
         "ClickHouse bulk load failed (table={table})",
