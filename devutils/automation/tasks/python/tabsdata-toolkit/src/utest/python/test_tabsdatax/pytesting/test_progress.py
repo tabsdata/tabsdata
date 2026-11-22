@@ -12,7 +12,7 @@ pytestmark = [pytest.mark.unit]
 
 EXAMPLE = "tabsdatax/pytesting/plugins/progress/outcomes.py"
 FINAL = (
-    "tests 7 | done 7 (100%) | running 0 | passed 4 | failed 1 | error 1 | "
+    "tests 7 | done 7 (100%) | running 0 | pending 0 | passed 4 | failed 1 | error 1 | "
     "skipped 1 | *"
 )
 

@@ -44,6 +44,7 @@ COLORS = {
     "subtests passed": "green",
     "subtests failed": "red",
     "running": "cyan",
+    "pending": "purple",
 }
 DEFAULT_COLOR = "yellow"
 
@@ -55,7 +56,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         action="store_true",
         default=False,
         help="Replace the progress dots with one live line of counters "
-        "(tests, done, running and each outcome) and print each failure "
+        "(tests, done, running, pending and each outcome) and print each failure "
         "as it happens.",
     )
 
@@ -247,12 +248,14 @@ class ProgressReporter:
         total = self._session.testscollected if self._session else 0
         done = self._finished
         running = 0 if final else max(0, self._started - self._finished)
+        pending = max(0, total - self._started)
         elapsed = time.monotonic() - self._begin
         percent = done * 100 // total if total else 100
         segments: list[tuple[str, str | None, bool]] = [
             (f"tests {total}", None, True),
             (f"done {done} ({percent}%)", None, True),
             (f"running {running}", COLORS["running"], True),
+            (f"pending {pending}", COLORS["pending"], True),
         ]
         for key, count in self._counts().items():
             if count or key in ALWAYS_SHOWN:
