@@ -72,6 +72,6 @@ types-PyYAML==6.0.12.20261030
 tzlocal==5.4.5
 uvicorn==0.54.0
 virtualenv==21.15.2
-wcwidth==0.9.4
+wcwidth==0.9.5
 wheel-inspect==1.8.0
 wheel==0.48.0
