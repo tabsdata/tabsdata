@@ -114,7 +114,7 @@ class CloudStagedBulkLoader:
         dialect: Dialect,
         write_mode: WriteMode,
         schema_evolution: SchemaEvolution,
-        upload_id: str,
+        staging_folder: str,
         poll_interval: float = 5.0,
         poll_timeout: float = 1800.0,
     ):
@@ -122,13 +122,12 @@ class CloudStagedBulkLoader:
         self.dialect = dialect
         self.write_mode = write_mode
         self.schema_evolution = schema_evolution
-        self.upload_id = upload_id
+        self.staging_folder = staging_folder
         self.poll_interval = poll_interval
         self.poll_timeout = poll_timeout
         self.load_mode = LoadMode(
             write_mode=write_mode,
             schema_evolution=schema_evolution,
-            upload_id=upload_id,
         )
 
     # --- Main entry point --------------------------------------------
@@ -137,10 +136,13 @@ class CloudStagedBulkLoader:
         """Execute the full cloud-staged bulk loading pattern.
 
         ``tables`` maps each table name to the ``(filename, frame)`` pairs
-        staged for it. The staged files are cleaned up however the load
-        ends.
+        staged for it, under ``staging_folder``. The folder is cleared before
+        the upload, of whatever a failed earlier run left there, and again
+        however the load ends. It must be the loader's own: two loads into
+        one folder at once would delete each other's files.
         """
         logger.info("Starting cloud-staged bulk load")
+        self.clear_staging()
         try:
             staged_files = self.phase_upload(tables)
             columns, swaps = self.phase_validate_and_prepare(staged_files)
@@ -167,7 +169,9 @@ class CloudStagedBulkLoader:
         logger.info("Phase 1: Upload to Storage")
         staged_files: dict[str, list[StagedFile]] = {}
         for table_name, frames in tables.items():
-            staged_files[table_name] = self.cloud_storage.upload(self.upload_id, frames)
+            staged_files[table_name] = self.cloud_storage.upload(
+                self.staging_folder, frames
+            )
         total = sum(len(files) for files in staged_files.values())
         logger.info("Phase 1 complete: all files staged (%d).", total)
         return staged_files
@@ -410,11 +414,17 @@ class CloudStagedBulkLoader:
         if self.dialect.supports_auto_cleanup():
             logger.info("Phase 5: Skipped (dialect supports auto-cleanup).")
             return
-
         logger.info("Phase 5: Cleanup")
+        self.clear_staging()
+        logger.info("Phase 5 complete.")
+
+    def clear_staging(self) -> None:
+        """Delete every file under the staging folder. A failure is only
+        logged: the next run clears the folder again."""
+        if self.dialect.supports_auto_cleanup():
+            return
         try:
-            self.cloud_storage.delete(self.upload_id)
-            logger.info("Phase 5 complete.")
+            self.cloud_storage.delete(self.staging_folder)
         except Exception:
             logger.warning(
                 "Cleanup failed (non-fatal, will be retried on next run)",

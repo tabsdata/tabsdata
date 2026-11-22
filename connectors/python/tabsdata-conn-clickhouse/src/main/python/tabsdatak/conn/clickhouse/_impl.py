@@ -117,6 +117,8 @@ class ClickHouseWriteCfg:
     target_tables: list[str]
     if_table_exists: str  # "append" | "replace"
     schema_evolution: str
+    function_id: str
+    transaction_id: str
 
 
 def write_via_bulk_loader(
@@ -126,8 +128,11 @@ def write_via_bulk_loader(
     """Drive the private :class:`CloudStagedBulkLoader` for ClickHouse.
 
     ``tables[i]`` is staged as Parquet and loaded into
-    ``cfg.target_tables[i]`` via the connection's staging location.
-    The caller is expected to have validated the lengths match.
+    ``cfg.target_tables[i]`` via the connection's staging location, as
+    ``<function_id>/<transaction_id>_<i>.parquet``. The function's folder is
+    its own, and two runs of one function never overlap, so clearing it
+    touches no other load. The caller is expected to have validated the
+    lengths match.
     """
     # noinspection PyProtectedMember
     from tabsdatak.conn.clickhouse._bulk_loader import (
@@ -136,9 +141,6 @@ def write_via_bulk_loader(
 
     # noinspection PyProtectedMember
     from tabsdatak.conn.clickhouse._dialect import ClickHouseDialect
-
-    # noinspection PyProtectedMember
-    from tabsdatak.conn.clickhouse._id import new_upload_id
 
     # noinspection PyProtectedMember
     from tabsdatak.conn.clickhouse._modes import WriteMode
@@ -151,22 +153,16 @@ def write_via_bulk_loader(
         WriteMode.REPLACE if cfg.if_table_exists == "replace" else WriteMode.APPEND
     )
 
-    # Time-ordered, lexicographically sortable per-load namespace
-    # -- the GCS / S3 / Azure delete() sweep uses ``upload_id <=
-    # up_to_id`` to clean up files from this run and orphans from
-    # any earlier ones; that's only meaningful for UUIDv7-shaped
-    # ids.
-    upload_id = new_upload_id()
-
     loader = CloudStagedBulkLoader(
         cloud_storage=cloud_storage,
         dialect=dialect,
         write_mode=write_mode,
         schema_evolution=cfg.schema_evolution,
-        upload_id=upload_id,
+        staging_folder=cfg.function_id,
     )
 
     table_frames: dict[str, list[tuple[str, pl.LazyFrame]]] = {}
     for position, (name, frame) in enumerate(zip(cfg.target_tables, tables)):
-        table_frames.setdefault(name, []).append((f"{position}.parquet", frame))
+        filename = f"{cfg.transaction_id}_{position}.parquet"
+        table_frames.setdefault(name, []).append((filename, frame))
     loader.load(table_frames)

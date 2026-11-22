@@ -22,4 +22,3 @@ class LoadMode:
 
     write_mode: WriteMode
     schema_evolution: SchemaEvolution
-    upload_id: str

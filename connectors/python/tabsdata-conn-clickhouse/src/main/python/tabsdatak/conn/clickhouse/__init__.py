@@ -297,6 +297,11 @@ class ClickHouseDestConn(Conn):
         credentials: `UserPassword` (user + password).
         staging: A `CloudLocation` (`S3Location` / `AzBlobLocation`
             / `GCSLocation`) where parquet is staged before ingest.
+            Each subscriber stages in a folder of its own,
+            `<base_path>/<function id>/`, one
+            `<transaction id>_<n>.parquet` per table, and empties that
+            folder before and after every load; nothing else under
+            `base_path` is touched.
         database: The default database (a ClickHouse identifier: a
             letter or underscore, then letters, digits and underscores).
             Defaults to `"default"`. It must already exist: the connector

@@ -233,7 +233,7 @@ def test_cfg_obstore_keys_reach_the_storage():
     assert storage.staged_ref("k") == "http://minio:9000/my-bucket/k"
 
 
-def test_the_cleanup_sweep_deletes_only_the_older_uploads(tmp_path):
+def test_the_cleanup_deletes_only_its_own_folder(tmp_path):
     import polars as pl
 
     from tabsdatak.conn.common.file._store import FileStore
@@ -252,12 +252,13 @@ def test_the_cleanup_sweep_deletes_only_the_older_uploads(tmp_path):
         )
     )
     frame = pl.LazyFrame({"id": [1]})
-    for upload_id in ["0001", "0002", "0003"]:
-        storage.upload(upload_id, [("x.parquet", frame)])
-    storage.delete("0002")
+    storage.upload("fn1", [("t1_0.parquet", frame), ("t1_1.parquet", frame)])
+    storage.upload("fn10", [("t2_0.parquet", frame)])
+    storage.upload("fn2", [("t3_0.parquet", frame)])
+    storage.delete("fn1")
     left = sorted(
         path.relative_to(tmp_path).as_posix()
         for path in tmp_path.rglob("*")
         if path.is_file()
     )
-    assert left == ["staging/0003/x.parquet"]
+    assert left == ["staging/fn10/t2_0.parquet", "staging/fn2/t3_0.parquet"]

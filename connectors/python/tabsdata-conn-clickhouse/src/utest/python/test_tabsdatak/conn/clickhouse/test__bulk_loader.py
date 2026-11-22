@@ -102,8 +102,8 @@ class _LocalStorage(CloudStorage):
     def staged_ref(self, key: str) -> str:
         return f"ref:{key}"
 
-    def delete(self, up_to_id: str) -> None:
-        self.deleted.append(up_to_id)
+    def delete(self, folder: str) -> None:
+        self.deleted.append(folder)
         raise OSError("storage unavailable")
 
 
@@ -121,7 +121,7 @@ def _loader(
         dialect=dialect,
         write_mode=write_mode,
         schema_evolution=evolution,
-        upload_id="u1",
+        staging_folder="fn1",
     )
 
 
@@ -129,12 +129,12 @@ def _staged(loader: CloudStagedBulkLoader) -> dict[str, list[StagedFile]]:
     return loader.phase_upload({"users": [("0.parquet", ROWS)]})
 
 
-def test_frames_are_staged_under_the_upload_id(tmp_path):
+def test_frames_are_staged_under_the_staging_folder(tmp_path):
     loader = _loader(tmp_path, _RecordingDialect(exists=False), WriteMode.APPEND)
     assert _staged(loader) == {
-        "users": [StagedFile("ref:stage/u1/0.parquet", "stage/u1/0.parquet")]
+        "users": [StagedFile("ref:stage/fn1/0.parquet", "stage/fn1/0.parquet")]
     }
-    assert pl.read_parquet(tmp_path / "stage" / "u1" / "0.parquet").equals(
+    assert pl.read_parquet(tmp_path / "stage" / "fn1" / "0.parquet").equals(
         ROWS.collect()
     )
 
@@ -465,11 +465,13 @@ def test_append_loads_the_table_itself_and_swaps_nothing(tmp_path):
     ]
 
 
-def test_a_failed_load_still_cleans_up_and_a_failed_cleanup_is_ignored(tmp_path):
+def test_the_folder_is_cleared_before_and_after_a_failed_load_and_failures_ignored(
+    tmp_path,
+):
     loader = _loader(tmp_path, _RecordingDialect(exists=False), WriteMode.APPEND)
     with pytest.raises(RuntimeError, match="load refused"):
         loader.load({"users": [("0.parquet", ROWS)]})
-    assert loader.cloud_storage.deleted == ["u1"]
+    assert loader.cloud_storage.deleted == ["fn1", "fn1"]
 
 
 def test_the_load_names_the_staged_columns(tmp_path):
@@ -486,4 +488,4 @@ def test_the_load_names_the_staged_columns(tmp_path):
     loader = _loader(tmp_path, _Loading(exists=False), WriteMode.APPEND)
     loader.check_bulk_load_results = lambda items, results: None
     loader.load({"users": [("0.parquet", ROWS)]})
-    assert loaded == [("users", ["ref:stage/u1/0.parquet"], ["id", "name"])]
+    assert loaded == [("users", ["ref:stage/fn1/0.parquet"], ["id", "name"])]

@@ -36,21 +36,22 @@ from tabsdatak.conn.common.types import cloud_full_path, normalize_dir_path
 logger = logging.getLogger(__name__)
 
 
-def _make_key(base_path: str, upload_id: str, filename: str) -> str:
-    """Build the object key ``<base_path>/<upload_id>/<filename>`` with no
+def _make_key(base_path: str, folder: str, filename: str) -> str:
+    """Build the object key ``<base_path>/<folder>/<filename>`` with no
     leading slash -- S3 / GCS / Azure object keys are never slash-rooted
-    (an empty ``base_path`` collapses to ``"<upload_id>/<filename>"``)."""
-    return cloud_full_path(base_path, f"{upload_id}/{filename}")
+    (an empty ``base_path`` collapses to ``"<folder>/<filename>"``)."""
+    return cloud_full_path(base_path, f"{folder}/{filename}")
 
 
-# ClickHouse's list APIs (S3 ``list_objects_v2`` ``Prefix``, Azure
-# ``name_starts_with``, GCS ``list_blobs`` ``prefix``) expect the
-# ``base_path`` prefix spelled with a trailing "/" and no leading one, so
-# that only objects staged under it match (and it lines up with the keys
-# ``_make_key`` produces). An empty ``base_path`` yields "" (whole
-# container).
-def _list_prefix(base_path: str) -> str:
-    return normalize_dir_path(base_path, lead_separator=False, back_separator=True)
+# The list APIs (S3 ``list_objects_v2`` ``Prefix``, Azure
+# ``name_starts_with``, GCS ``list_blobs`` ``prefix``) expect the folder
+# spelled with a trailing "/" and no leading one, so that only objects
+# staged under it match (and it lines up with the keys ``_make_key``
+# produces).
+def _folder_prefix(base_path: str, folder: str) -> str:
+    return normalize_dir_path(
+        cloud_full_path(base_path, folder), lead_separator=False, back_separator=True
+    )
 
 
 # --- Generic CloudStorage --------------------------------------------
@@ -87,14 +88,14 @@ class CloudStorage(ABC):
         """The reference the dialect loads the object at ``key`` from."""
 
     def upload(
-        self, upload_id: str, frames: list[tuple[str, pl.LazyFrame]]
+        self, folder: str, frames: list[tuple[str, pl.LazyFrame]]
     ) -> list[StagedFile]:
         """Write each ``(filename, frame)`` as Parquet under
-        ``<base_path>/<upload_id>/<filename>``, in order."""
+        ``<base_path>/<folder>/<filename>``, in order."""
         store = self.store()
         staged = []
         for filename, frame in frames:
-            key = _make_key(self.base_path, upload_id, filename)
+            key = _make_key(self.base_path, folder, filename)
             logger.debug("Staging %s at %s", filename, store.uri(key))
             writer = store.open_writer(key)
             frame.sink_parquet(writer)
@@ -111,20 +112,18 @@ class CloudStorage(ABC):
             source.close()
 
     @abstractmethod
-    def delete(self, up_to_id: str) -> None:
-        """Delete all staged files with upload_id <= ``up_to_id``.
-        Uses lexicographic ordering of the IDs."""
+    def delete(self, folder: str) -> None:
+        """Delete every file staged under ``<base_path>/<folder>/``."""
 
-    def _sweep(self, up_to_id: str) -> int:
+    def _sweep(self, folder: str) -> int:
         import obstore
 
         store = self.store()
-        prefix = _list_prefix(self.base_path)
+        prefix = _folder_prefix(self.base_path, folder)
         swept = [
             meta["path"]
-            for batch in obstore.list(store.store(), prefix=prefix or None)
+            for batch in obstore.list(store.store(), prefix=prefix)
             for meta in batch
-            if meta["path"][len(prefix) :].split("/")[0] <= up_to_id
         ]
         store.delete(swept)
         return len(swept)
@@ -135,11 +134,11 @@ class S3Storage(CloudStorage):
 
     Upload path layout::
 
-        s3://<bucket>/<base_path>/<upload_id>/<filename>
+        s3://<bucket>/<base_path>/<folder>/<filename>
 
     Returned staged file refs are HTTPS URLs of the form::
 
-        https://<bucket>.s3.<region>.amazonaws.com/<base_path>/<upload_id>/<filename>
+        https://<bucket>.s3.<region>.amazonaws.com/<base_path>/<folder>/<filename>
 
     or, with a custom endpoint in the options, ``<endpoint>/<bucket>/<key>``
     (``<scheme>://<bucket>.<host>/<key>`` when virtual-hosted style is on).
@@ -176,11 +175,9 @@ class S3Storage(CloudStorage):
             return f"{address.scheme}://{self._config.bucket}.{address.netloc}/{key}"
         return f"{endpoint.rstrip('/')}/{self._config.bucket}/{key}"
 
-    def delete(self, up_to_id: str) -> None:
-        swept = self._sweep(up_to_id)
-        logger.debug(
-            "Deleted %d staged S3 object(s) with upload_id <= %s", swept, up_to_id
-        )
+    def delete(self, folder: str) -> None:
+        swept = self._sweep(folder)
+        logger.debug("Deleted %d staged S3 object(s) under %s", swept, folder)
 
 
 class GCSStorage(CloudStorage):
@@ -189,11 +186,11 @@ class GCSStorage(CloudStorage):
 
     Upload path layout::
 
-        gs://<bucket>/<base_path>/<upload_id>/<filename>
+        gs://<bucket>/<base_path>/<folder>/<filename>
 
     Returned staged file refs are HTTPS URLs::
 
-        https://storage.googleapis.com/<bucket>/<base_path>/<upload_id>/<filename>
+        https://storage.googleapis.com/<bucket>/<base_path>/<folder>/<filename>
     """
 
     _ENDPOINT = "https://storage.googleapis.com"
@@ -243,43 +240,21 @@ class GCSStorage(CloudStorage):
     def staged_ref(self, key: str) -> str:
         return f"{self._ENDPOINT}/{self._config.bucket}/{key}"
 
-    def delete(self, up_to_id: str) -> None:
-        """Delete every staged object with ``upload_id <= up_to_id``.
-
-        Relies on ``upload_id`` being a base32hex-encoded UUIDv7 so
-        lexicographic order matches creation time (see
-        :func:`tabsdatak.conn.clickhouse._id.new_upload_id`). The
-        per-test cleanup therefore also clears any orphaned files
-        from older runs.
-        """
+    def delete(self, folder: str) -> None:
         bucket = self._client().bucket(self._config.bucket)
-        prefix = _list_prefix(self._config.base_path)
-
-        file_blobs = []
-        deleted_upload_ids: set[str] = set()
-        for blob in bucket.list_blobs(prefix=prefix):
-            relative = blob.name[len(prefix) :]
-            file_upload_id = relative.split("/")[0]
-            if file_upload_id <= up_to_id:
-                file_blobs.append(blob)
-                deleted_upload_ids.add(file_upload_id)
-
-        for blob in file_blobs:
+        prefix = _folder_prefix(self._config.base_path, folder)
+        blobs = list(bucket.list_blobs(prefix=prefix))
+        for blob in blobs:
             blob.delete()
-
         # HNS buckets keep folder objects that ``list_blobs`` doesn't
         # see; deleting the underlying files leaves these as orphans
-        # unless explicitly removed via ``storage_control_v2``. On a
-        # flat (non-HNS) bucket the API returns ``NotFound`` and we
-        # silently move on.
-        folder_count = self._delete_hns_folders(prefix, deleted_upload_ids)
+        # unless explicitly removed via ``storage_control_v2``.
+        folders = self._delete_hns_folder(prefix)
         logger.debug(
-            "Deleted %d staged GCS object(s) with upload_id <= %s",
-            len(file_blobs) + folder_count,
-            up_to_id,
+            "Deleted %d staged GCS object(s) under %s", len(blobs) + folders, folder
         )
 
-    def _delete_hns_folders(self, prefix: str, upload_ids: set[str]) -> int:
+    def _delete_hns_folder(self, prefix: str) -> int:
         try:
             from google.cloud import storage_control_v2
         except ImportError:
@@ -288,22 +263,18 @@ class GCSStorage(CloudStorage):
         sc_client = storage_control_v2.StorageControlClient(
             credentials=self._credentials()
         )
-        count = 0
-        for upload_id in upload_ids:
-            folder_name = f"{prefix}{upload_id}".rstrip("/")
-            folder_resource = sc_client.folder_path(
-                project="_",
-                bucket=self._config.bucket,
-                folder=folder_name,
+        folder_resource = sc_client.folder_path(
+            project="_",
+            bucket=self._config.bucket,
+            folder=prefix.rstrip("/"),
+        )
+        try:
+            sc_client.delete_folder(
+                request=storage_control_v2.DeleteFolderRequest(name=folder_resource)
             )
-            try:
-                sc_client.delete_folder(
-                    request=storage_control_v2.DeleteFolderRequest(name=folder_resource)
-                )
-                count += 1
-            except Exception:  # noqa: BLE001 -- flat bucket
-                pass
-        return count
+        except Exception:  # noqa: BLE001 -- a flat bucket, or no folder
+            return 0
+        return 1
 
 
 class AzureStorage(CloudStorage):
@@ -311,11 +282,11 @@ class AzureStorage(CloudStorage):
 
     Upload path layout::
 
-        <container>/<base_path>/<upload_id>/<filename>
+        <container>/<base_path>/<folder>/<filename>
 
     Returned staged file refs are blob paths (not full HTTPS URLs)::
 
-        <base_path>/<upload_id>/<filename>
+        <base_path>/<folder>/<filename>
     """
 
     def __init__(self, config: AzureConfig) -> None:
@@ -344,11 +315,9 @@ class AzureStorage(CloudStorage):
     def staged_ref(self, key: str) -> str:
         return key
 
-    def delete(self, up_to_id: str) -> None:
-        swept = self._sweep(up_to_id)
-        logger.debug(
-            "Deleted %d staged Azure blob(s) with upload_id <= %s", swept, up_to_id
-        )
+    def delete(self, folder: str) -> None:
+        swept = self._sweep(folder)
+        logger.debug("Deleted %d staged Azure blob(s) under %s", swept, folder)
 
 
 # --- ClickHouse-aware cloud storage ----------------------------------

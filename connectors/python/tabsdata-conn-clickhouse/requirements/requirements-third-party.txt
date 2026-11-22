@@ -9,4 +9,3 @@ google-cloud-storage-control==1.17.0
 obstore==0.12.1
 polars==2.1.0
 pyarrow==26.0.0
-uuid6==2025.0.1

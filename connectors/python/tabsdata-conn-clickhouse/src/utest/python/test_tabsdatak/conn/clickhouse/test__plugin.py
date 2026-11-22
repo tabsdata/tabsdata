@@ -51,6 +51,8 @@ pytestmark = pytest.mark.clickhouse
 @dataclass
 class _Ctx:
     _work: Path
+    function_id: str = "fn1"
+    transaction_id: str = "trx1"
 
     def work_dir(self) -> Path:
         return self._work
@@ -278,6 +280,8 @@ def test_dest_plugin_dispatches_to_bulk_loader(monkeypatch, work_dir):
     assert captured["cfg"].target_tables == ["users", "orders"]
     assert captured["cfg"].if_table_exists == "replace"
     assert captured["cfg"].schema_evolution == "update"
+    assert captured["cfg"].function_id == "fn1"
+    assert captured["cfg"].transaction_id == "trx1"
 
 
 def test_dest_plugin_leaves_the_table_of_a_none_slot_untouched(monkeypatch, work_dir):

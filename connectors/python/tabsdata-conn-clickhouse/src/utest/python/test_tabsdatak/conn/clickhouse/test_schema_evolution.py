@@ -113,7 +113,7 @@ def _written_with(dest: ClickHouseDest) -> str:
 
     with patch("tabsdatak.conn.clickhouse._impl.write_via_bulk_loader", _capture):
         _ClickHouseDestPlugin().write_out(
-            None, MagicMock(), dest, [pl.LazyFrame({"id": [1]})]
+            MagicMock(), MagicMock(), dest, [pl.LazyFrame({"id": [1]})]
         )
     return captured["cfg"].schema_evolution
 

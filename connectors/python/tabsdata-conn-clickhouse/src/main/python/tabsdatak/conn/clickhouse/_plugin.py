@@ -120,6 +120,8 @@ class _ClickHouseDestPlugin(
             target_tables=target_tables,
             if_table_exists=dest.if_table_exists,
             schema_evolution=dest._evolution().schema_evolution,
+            function_id=ctx.function_id,
+            transaction_id=ctx.transaction_id,
         )
 
         try:
