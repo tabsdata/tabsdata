@@ -11,7 +11,7 @@ annotated-types==0.8.0
 ansi2html==1.9.5
 anyio==4.16.0
 archspec==0.2.7
-argcomplete==3.7.2
+argcomplete==3.8.0
 ast-serialize==0.13.1
 attrs==26.1.0
 azure-core==1.41.0
@@ -220,7 +220,7 @@ urllib3==2.8.0
 uvicorn==0.54.0
 virtualenv==21.15.2
 watchdog==7.1.1
-wcwidth==0.9.4
+wcwidth==0.9.5
 wheel==0.48.0
 wheel-filename==2.1.0
 wheel-inspect==1.8.0
