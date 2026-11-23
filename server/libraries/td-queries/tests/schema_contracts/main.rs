@@ -6,3 +6,4 @@
 
 mod project_scoping;
 mod schema_consistency;
+mod status_codes;

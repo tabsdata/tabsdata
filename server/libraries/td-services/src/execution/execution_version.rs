@@ -110,7 +110,7 @@ pub async fn external_uid_holder(
     let lfr: Option<LogicalFunctionRunDB> =
         conn.fetch_optional(and!(&existing.id, function_id)).await?;
     let outcome = match lfr.map(|lfr| lfr.status) {
-        Some(LogicalFunctionRunStatus::Canceled | LogicalFunctionRunStatus::Yanked) => {
+        Some(status) if status.is_discarded() => {
             conn.update::<ExecutionExternalUidReleaseDB>(
                 &ExecutionExternalUidReleaseDB::released(),
                 &existing.id,

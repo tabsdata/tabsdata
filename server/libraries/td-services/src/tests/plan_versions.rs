@@ -3,7 +3,8 @@
 //
 
 //! A plan resolves each input edge for the function reading it: new
-//! versions are those since that function's own previous run.
+//! versions are those since that function's own previous run that was not
+//! cancelled.
 
 use crate::Services;
 use crate::execution::plan::versions::resolve_execution_plan_versions;
@@ -19,18 +20,24 @@ use td_execution::ExecutionPlan;
 use td_execution::VersionResolver;
 use td_execution::graph::TopologyGraph;
 use td_execution::topology::ProjectTopology;
+use td_objects::and;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionRequest};
-use td_objects::dxo::function::FunctionParam;
+use td_objects::dxo::function::{FunctionParam, FunctionRegister};
 use td_objects::dxo::graph::{GraphDependency, GraphEdge, GraphNode, TableNode};
-use td_objects::dxo::logical::LogicalFunctionRunInsertDB;
-use td_objects::dxo::transaction::TransactionDB;
+use td_objects::dxo::logical::{
+    LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunInsertDB,
+    LogicalTableDataVersionDB,
+};
+use td_objects::dxo::table::TableDB;
+use td_objects::dxo::transaction::{TransactionDB, TransactionParam};
 use td_objects::types::basic::{
     AccessTokenId, AtTime, CollectionIdName, CollectionName, DependencyPos, ExecutionId,
-    FunctionIdName, LogicalFunctionRunId, LogicalFunctionRunStatus, OverrideDisabledTrigger,
-    SelfDependency, SkipIfRunning, Trigger, UserId,
+    FunctionIdName, LogicalFunctionRunId, LogicalFunctionRunStatus, LogicalTableDataVersionId,
+    OverrideDisabledTrigger, ProjectId, SelfDependency, SkipIfRunning, TableName, Trigger, UserId,
 };
+use td_objects::types::composed::TableDependencyDto;
 use td_objects::types::table_ref::Versions;
 use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
@@ -184,5 +191,120 @@ async fn test_new_versions_resolve_per_reading_function(db: TdPool) -> Result<()
     }
     compared.sort();
     assert_eq!(compared, vec![1, 2]);
+    Ok(())
+}
+
+async fn execute(db: &TdPool, project: ProjectId, function: &str) -> Result<ExecutionId, TdError> {
+    let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+        .create(
+            (
+                CollectionParam {
+                    collection: CollectionIdName::from_str("c")?,
+                },
+                FunctionParam {
+                    function: FunctionIdName::from_str(function)?,
+                },
+            ),
+            ExecutionRequest {
+                name: None,
+                function_only: true.into(),
+                override_disabled_trigger: OverrideDisabledTrigger::default(),
+                skip_if_running: SkipIfRunning::default(),
+                external_uid: None,
+            },
+        )
+        .in_project(project);
+    Ok(Services::with_defaults(db.clone())
+        .execute_function(request)
+        .await?
+        .data
+        .id)
+}
+
+async fn only_run(
+    db: &TdPool,
+    project: ProjectId,
+    execution: &ExecutionId,
+) -> Result<LogicalFunctionRunDB, TdError> {
+    let mut runs: Vec<LogicalFunctionRunDB> = db.scoped(project).fetch_all(execution).await?;
+    assert_eq!(runs.len(), 1, "a function-only plan runs one function");
+    Ok(runs.remove(0))
+}
+
+#[td_test::test(db)]
+async fn test_new_versions_of_a_cancelled_run_go_to_the_next_plan(
+    db: TdPool,
+) -> Result<(), TdError> {
+    let p = db.seed().test_project().await?;
+    let collection = db
+        .scoped(p.project_id)
+        .seed()
+        .collection(&CollectionName::try_from("c")?, &UserId::admin())
+        .await?;
+    db.scoped(p.project_id)
+        .seed()
+        .function(&collection, &register("producer", None))
+        .await?;
+    let consumer = FunctionRegister {
+        dependencies: Some(vec![TableDependencyDto::try_from("producer_t0@NEW")?]),
+        triggers: Some(vec![]),
+        ..register("consumer", None)
+    };
+    db.scoped(p.project_id)
+        .seed()
+        .function(&collection, &consumer)
+        .await?;
+    let table: TableDB = db
+        .scd2()
+        .fetch_first(and!(
+            &collection.collection_id,
+            &TableName::try_from("producer_t0")?
+        ))
+        .await?
+        .expect("producer_t0 is registered");
+
+    execute(&db, p.project_id, "producer").await?;
+    execute(&db, p.project_id, "consumer").await?;
+    let second = execute(&db, p.project_id, "producer").await?;
+    let cancelled = execute(&db, p.project_id, "consumer").await?;
+    let cancelled = only_run(&db, p.project_id, &cancelled).await?;
+    let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
+        TransactionParam {
+            transaction: cancelled.transaction_id.clone(),
+        },
+        (),
+    );
+    Services::with_defaults(db.clone())
+        .transaction_cancel(request)
+        .await?;
+    let third = execute(&db, p.project_id, "producer").await?;
+    let next = execute(&db, p.project_id, "consumer").await?;
+    let next = only_run(&db, p.project_id, &next).await?;
+
+    let inputs: Vec<LogicalFunctionRunInputDB> = db
+        .scoped(p.project_id)
+        .chunked()
+        .fetch_all(std::slice::from_ref(&next.id), ())
+        .await?;
+    let pinned: Vec<LogicalTableDataVersionId> = inputs
+        .iter()
+        .filter_map(|i| i.requirement_logical_table_data_version_id.clone())
+        .collect();
+    let mut read_from: Vec<ExecutionId> = db
+        .scoped(p.project_id)
+        .timeline()
+        .chunked()
+        .fetch_all::<LogicalTableDataVersionDB>(&pinned, ())
+        .await?
+        .into_iter()
+        .filter(|v| v.base.table_id == table.table_id)
+        .map(|v| v.base.execution_id)
+        .collect();
+    read_from.sort();
+    assert_eq!(
+        read_from,
+        vec![second, third],
+        "the consumer's next run takes the versions its cancelled run held"
+    );
     Ok(())
 }

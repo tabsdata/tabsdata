@@ -52,7 +52,7 @@ pub enum Workers {
 /// from F once its retry is due, or stops. A stage trigger that exits D while
 /// it should run has failed. A trigger never started has no workload, so it
 /// stops at once.
-const WORKER_TRANSITIONS: &[(&str, &[(&str, &str)])] = &[
+pub const WORKER_TRANSITIONS: &[(&str, &[(&str, &str)])] = &[
     ("F", &[("RR", "R"), ("RR", "F"), ("R", "D"), ("R", "F")]),
     (
         "CT",

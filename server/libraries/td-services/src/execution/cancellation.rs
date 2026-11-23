@@ -27,15 +27,6 @@ use td_objects::types::basic::{
 use td_queries::Queries;
 use tracing::{debug, warn};
 
-fn unfinished(lfr: &LogicalFunctionRunDB) -> bool {
-    !matches!(
-        lfr.status,
-        LogicalFunctionRunStatus::Committed
-            | LogicalFunctionRunStatus::Canceled
-            | LogicalFunctionRunStatus::Yanked
-    )
-}
-
 /// What a cancel did: the runs it cancelled, with how it reached each, and
 /// the stops of their workers to send once the unit of work commits.
 pub struct Cancelled {
@@ -103,8 +94,11 @@ async fn cancel_closure(
     let mut reached: HashMap<LogicalFunctionRunId, (FunctionRunDBWithNames, CancelReason)> =
         HashMap::new();
     let mut lifted: HashSet<TransactionId> = HashSet::new();
-    let mut frontier: Vec<LogicalFunctionRunDB> =
-        named.iter().filter(|l| unfinished(l)).cloned().collect();
+    let mut frontier: Vec<LogicalFunctionRunDB> = named
+        .iter()
+        .filter(|l| !l.status.is_terminal())
+        .cloned()
+        .collect();
     let requested: HashSet<LogicalFunctionRunId> =
         frontier.iter().map(|lfr| lfr.id.clone()).collect();
 
@@ -124,7 +118,7 @@ async fn cancel_closure(
         };
         let mut next: Vec<LogicalFunctionRunDB> = Vec::new();
         for run in siblings {
-            if unfinished(&run) && !reached.contains_key(&run.id) {
+            if !run.status.is_terminal() && !reached.contains_key(&run.id) {
                 let reason = if requested.contains(&run.id) {
                     CancelReason::Requested
                 } else {
@@ -156,7 +150,7 @@ async fn cancel_closure(
                 .fetch_all::<FunctionRunDBWithNames>(&downstream_ids, ())
                 .await?;
             for run in downstream {
-                if unfinished(&run) && !reached.contains_key(&run.id) {
+                if !run.status.is_terminal() && !reached.contains_key(&run.id) {
                     let reason = if functions.contains(&run.function_id) {
                         CancelReason::SameFunction
                     } else {

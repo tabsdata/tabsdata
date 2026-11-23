@@ -71,8 +71,8 @@ where
     }
 
     /// The most recent LFR of `function_id` triggered strictly before
-    /// `before_time`; `<` excludes the in-flight LFR, whose `triggered_on`
-    /// is the caller's argument.
+    /// `before_time` that was not Canceled or Yanked; `<` excludes the
+    /// in-flight LFR, whose `triggered_on` is the caller's argument.
     pub async fn previous_for_function_at(
         self,
         function_id: &FunctionId,
@@ -175,6 +175,13 @@ pub(crate) fn previous_lfr_query(
         .from(LogicalFunctionRunDB::TABLE)
         .and_where(Expr::col(LogicalFunctionRunDBIden::FunctionId).eq(function_id.as_sea_expr()))
         .and_where(Expr::col(LogicalFunctionRunDBIden::TriggeredOn).lt(before_time.as_sea_expr()))
+        .and_where(
+            Expr::col(LogicalFunctionRunDBIden::Status).is_not_in(
+                LogicalFunctionRunStatus::DISCARDED
+                    .iter()
+                    .map(SeaValue::as_sea_expr),
+            ),
+        )
         .order_by(LogicalFunctionRunDBIden::TriggeredOn, Order::Desc)
         .order_by(LogicalFunctionRunDBIden::Id, Order::Desc)
         .limit(1)
@@ -615,7 +622,7 @@ mod tests {
         let sql = previous_lfr_query(&fid, &before).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "id", "collection_id", "execution_id", "transaction_id", "function_id", "function_version_id", "trigger", "triggered_on", "triggered_by_id", "status", "group_id", "project_id", "recoveries" FROM "logical_function_runs" WHERE "function_id" = '00000000000000000000000f00' AND "triggered_on" < '2023-11-14 22:13:20.000000 +00:00' ORDER BY "triggered_on" DESC, "id" DESC LIMIT 1"#
+            r#"SELECT "id", "collection_id", "execution_id", "transaction_id", "function_id", "function_version_id", "trigger", "triggered_on", "triggered_by_id", "status", "group_id", "project_id", "recoveries" FROM "logical_function_runs" WHERE "function_id" = '00000000000000000000000f00' AND "triggered_on" < '2023-11-14 22:13:20.000000 +00:00' AND "status" NOT IN ('Y', 'X') ORDER BY "triggered_on" DESC, "id" DESC LIMIT 1"#
         );
     }
 

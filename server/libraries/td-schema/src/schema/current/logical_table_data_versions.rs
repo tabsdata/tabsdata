@@ -18,7 +18,7 @@ use super::collections::{Collections, LastCollection};
 use super::executions::Executions;
 use super::functions::Functions;
 use super::groups::Groups;
-use super::logical_function_runs::LogicalFunctionRuns;
+use super::logical_function_runs::{LogicalFunctionRuns, RUN_DISCARDED};
 use super::physical_function_runs::PhysicalFunctionRuns;
 use super::physical_table_data_versions::PhysicalTableDataVersions;
 use super::transactions::Transactions;
@@ -340,18 +340,18 @@ impl Entity for Defs {
                         Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::ProducerLogicalFunctionRunId))
                             .equals((LogicalFunctionRuns::Table, LogicalFunctionRuns::Id)),
                     )
-                    // "Y" = LogicalFunctionRunStatus::Yanked, "X" =
-                    // ::Canceled. These are raw codes, not the enum: this
-                    // crate is below td-objects in the dependency graph and
-                    // can't reference it (same reason the physical views use
-                    // literals). A divergent rename is caught by the canary
-                    // test `test_sticky_terminal_codes_pinned` in td-objects.
+                    // `RUN_DISCARDED` holds raw codes, not the enum
+                    // (`LogicalFunctionRunStatus::DISCARDED`): this crate is
+                    // below td-objects in the dependency graph and can't
+                    // reference it (same reason the physical views use
+                    // literals). td-queries' `status_codes` contract test
+                    // holds the two equal.
                     .and_where(
                         Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Status)).is_null().or(Expr::col((
                             LogicalFunctionRuns::Table,
                             LogicalFunctionRuns::Status,
                         ))
-                        .is_not_in(["Y", "X"])),
+                        .is_not_in(RUN_DISCARDED.iter().copied())),
                     )
                     .to_owned(),
             ),

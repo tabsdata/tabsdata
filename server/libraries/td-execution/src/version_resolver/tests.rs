@@ -715,3 +715,118 @@ async fn test_resolve_heads_matches_each_tables_head(db: TdPool) -> Result<(), T
     }
     Ok(())
 }
+
+async fn seed_consumer_run(
+    db: &TdPool,
+    collection: &CollectionDB,
+    consumer: &FunctionDB,
+    at: &LogicalTableDataVersionInsertDB,
+    status: LogicalFunctionRunStatus,
+) {
+    let lfr = LogicalFunctionRunInsertDB {
+        id: LogicalFunctionRunId::new(),
+        collection_id: collection.collection_id,
+        execution_id: at.execution_id.clone(),
+        transaction_id: at.transaction_id.clone(),
+        function_id: consumer.function_id,
+        function_version_id: consumer.base.id.clone(),
+        trigger: Trigger::Dependency,
+        triggered_on: at.triggered_on,
+        triggered_by_id: UserId::admin(),
+        status,
+        group_id: collection.group_id,
+    };
+    db.scoped(collection.project_id)
+        .insert::<LogicalFunctionRunInsertDB>(&lfr)
+        .await
+        .unwrap();
+}
+
+async fn new_after_second_run(
+    db: &TdPool,
+    second_status: LogicalFunctionRunStatus,
+) -> Result<Vec<usize>, TdError> {
+    let (collection, _publisher, table_id, ltdvs) = seed_ftdv_timeline(db, 3).await;
+    let consumer = db
+        .scoped(collection.project_id)
+        .seed()
+        .function(
+            &collection,
+            &FunctionRegister {
+                child_functions: None,
+                name: "c0".try_into()?,
+                description: "d".try_into()?,
+                bundle_id: BundleId::default(),
+                snippet: "s".try_into()?,
+                decorator: Decorator::Publisher,
+                connector: None,
+                connection: None,
+                base_path: None,
+                dependencies: None,
+                triggers: None,
+                tables: vec![TableNameDto::try_from("c0_out")?].into(),
+                table_types: None,
+                parent_tables: None,
+                runtime_values: "rt".try_into()?,
+                reuse_frozen_tables: ReuseFrozen::FALSE,
+                enabled: None,
+                workers: None,
+            },
+        )
+        .await?;
+    seed_consumer_run(
+        db,
+        &collection,
+        &consumer,
+        &ltdvs[0],
+        LogicalFunctionRunStatus::Committed,
+    )
+    .await;
+    seed_consumer_run(db, &collection, &consumer, &ltdvs[1], second_status).await;
+
+    let mut conn =
+        DomainConnection::<Apiserver, InProject, RW>::asserted(db.begin().await.unwrap());
+    let found = VersionResolver::builder()
+        .function_id(&consumer.base.function_id)
+        .table_id(&table_id)
+        .versions(&Versions::New)
+        .triggered_on(&AtTime::now())
+        .build()?
+        .resolve(&mut conn)
+        .await?;
+    Ok(found
+        .iter()
+        .map(|f| {
+            let id = &f.as_ref().unwrap().id;
+            ltdvs.iter().position(|l| &l.id == id).unwrap()
+        })
+        .collect())
+}
+
+#[td_test::test(db)]
+async fn test_resolve_logical_new_after_canceled_run(db: TdPool) -> Result<(), TdError> {
+    let got = new_after_second_run(&db, LogicalFunctionRunStatus::Canceled).await?;
+    assert_eq!(got, vec![1, 2], "R3 must take the cancelled R2's v2 and v3");
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn test_resolve_logical_new_after_in_flight_run(db: TdPool) -> Result<(), TdError> {
+    let got = new_after_second_run(&db, LogicalFunctionRunStatus::Running).await?;
+    assert_eq!(got, vec![2]);
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn test_resolve_logical_new_after_failed_run(db: TdPool) -> Result<(), TdError> {
+    let got = new_after_second_run(&db, LogicalFunctionRunStatus::Failed).await?;
+    assert_eq!(got, vec![2]);
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn test_resolve_logical_new_after_yanked_run(db: TdPool) -> Result<(), TdError> {
+    let got = new_after_second_run(&db, LogicalFunctionRunStatus::Yanked).await?;
+    assert_eq!(got, vec![1, 2], "R3 must take the yanked R2's v2 and v3");
+    Ok(())
+}

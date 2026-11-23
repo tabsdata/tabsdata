@@ -52,8 +52,11 @@ pub const VERSION: usize = 23;
 
 pub use crate::schema::sql::{Children, Instants, Parent, Physical, RollupArm, RollupDef};
 pub use executions::rollup as execution_rollup;
+pub use logical_function_runs::{RUN_DISCARDED, RUN_TERMINALS, RUN_TRANSITIONS};
+pub use physical_function_runs::{ATTEMPT_TRANSITIONS, ATTEMPTS_IN_FLIGHT};
 pub use project_topologies::ProjectTopologies;
 pub use transactions::rollup as transaction_rollup;
+pub use workers::WORKER_TRANSITIONS;
 
 /// FK-safe ordering of every entity in the current schema.
 ///

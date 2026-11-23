@@ -170,12 +170,7 @@ enum Transition {
 /// go through `cancel_runs`.
 fn transition(current: &LogicalFunctionRunDB, target: &LogicalFunctionRunStatus) -> Transition {
     match (&current.status, target) {
-        (
-            LogicalFunctionRunStatus::Committed
-            | LogicalFunctionRunStatus::Canceled
-            | LogicalFunctionRunStatus::Yanked,
-            LogicalFunctionRunStatus::ReScheduled,
-        ) => Transition::Skip,
+        (s, LogicalFunctionRunStatus::ReScheduled) if s.is_terminal() => Transition::Skip,
 
         // Sticky-final terminals (Committed, Canceled). Worker callbacks
         // for an in-flight replay attempt (Running, Done, Error, Failed)
@@ -200,12 +195,7 @@ fn transition(current: &LogicalFunctionRunDB, target: &LogicalFunctionRunStatus)
                 *s,
             ))
         }
-        (
-            s @ (LogicalFunctionRunStatus::Committed
-            | LogicalFunctionRunStatus::Canceled
-            | LogicalFunctionRunStatus::Yanked),
-            _,
-        ) => Transition::Refuse(UpdateStatusRunError::StickyFinalStatus(
+        (s, _) if s.is_terminal() => Transition::Refuse(UpdateStatusRunError::StickyFinalStatus(
             current.id.clone(),
             *s,
         )),
@@ -276,12 +266,7 @@ fn cascade_transition(
     if status == *target {
         return Transition::Skip;
     }
-    if matches!(
-        status,
-        LogicalFunctionRunStatus::Committed
-            | LogicalFunctionRunStatus::Canceled
-            | LogicalFunctionRunStatus::Yanked
-    ) {
+    if status.is_terminal() {
         return Transition::Absorb(UpdateStatusRunError::StickyFinalStatus(
             current.id.clone(),
             status,

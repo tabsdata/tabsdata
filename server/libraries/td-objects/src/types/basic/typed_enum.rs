@@ -201,6 +201,28 @@ impl LogicalFunctionRunStatus {
         LogicalFunctionRunStatus::OnHold,
     ];
 
+    /// A run in one of these never leaves it.
+    pub const TERMINAL: &'static [LogicalFunctionRunStatus] = &[
+        LogicalFunctionRunStatus::Committed,
+        LogicalFunctionRunStatus::Canceled,
+        LogicalFunctionRunStatus::Yanked,
+    ];
+
+    pub fn is_terminal(&self) -> bool {
+        Self::TERMINAL.contains(self)
+    }
+
+    /// Runs that took no effect: their outputs are hidden from every read,
+    /// and the inputs they held go to the function's next run.
+    pub const DISCARDED: &'static [LogicalFunctionRunStatus] = &[
+        LogicalFunctionRunStatus::Yanked,
+        LogicalFunctionRunStatus::Canceled,
+    ];
+
+    pub fn is_discarded(&self) -> bool {
+        Self::DISCARDED.contains(self)
+    }
+
     pub fn is_ended(&self) -> bool {
         Self::ENDED.contains(self)
     }

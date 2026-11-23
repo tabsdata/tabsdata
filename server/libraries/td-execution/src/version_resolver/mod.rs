@@ -18,7 +18,7 @@
 //! | `Single(Initial(k))`  | (k+1)-th oldest LTDV                                                        |
 //! | `Single(Fixed(id))`   | the LTDV identity row for `id` (active view)                                |
 //! | `Range` / `List`      | composed from the single-version cases                                      |
-//! | `New`                 | LTDVs minted after the requesting function's last execution                 |
+//! | `New`                 | LTDVs minted after the requesting function's last not-Canceled/Yanked run   |
 //!
 //! ### Canceled/Yanked-produced LTDVs disappear
 //!
@@ -348,7 +348,9 @@ impl<'a> VersionResolver<'a> {
     }
 
     /// `Versions::New`: all LTDVs minted after the requesting function's
-    /// previous run. Cutoff is the prior LFR for `self.function_id` —
+    /// previous run that was not Canceled or Yanked, so such a run's
+    /// versions go to the next run. Cutoff is the prior LFR for
+    /// `self.function_id` —
     /// LFRs partition on the function actually running, while `executions`
     /// partitions on the plan's trigger function, so only the LFR source
     /// surfaces a downstream consumer's prior runs.

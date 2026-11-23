@@ -49,11 +49,15 @@ pub(super) const RUN_AWAITING: &[&str] = &["D"];
 
 /// A run in one of these never leaves it; a parent all of whose runs are in
 /// the set has ended.
-pub(super) const RUN_TERMINALS: &[&str] = &["C", "X", "Y"];
+pub const RUN_TERMINALS: &[&str] = &["C", "X", "Y"];
+
+/// Runs that took no effect: Yanked and Canceled. Their outputs are hidden
+/// from the active-versions view.
+pub const RUN_DISCARDED: &[&str] = &["Y", "X"];
 
 /// Every status change a run may make. X and Y have no way out, and C only
 /// to Y.
-const RUN_TRANSITIONS: &[(&str, &str)] = &[
+pub const RUN_TRANSITIONS: &[(&str, &str)] = &[
     ("S", "RR"),
     ("S", "H"),
     ("S", "RS"),

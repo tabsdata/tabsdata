@@ -60,10 +60,10 @@ pub enum PhysicalFunctionRuns {
 
 /// A run's attempts in progress: a new attempt opens only once its current
 /// one has left these.
-const ATTEMPTS_IN_FLIGHT: &[&str] = &["RR", "DP", "R"];
+pub const ATTEMPTS_IN_FLIGHT: &[&str] = &["RR", "DP", "R"];
 
 /// Every status change an attempt may make. D and F have no way out.
-const ATTEMPT_TRANSITIONS: &[(&str, &str)] = &[("RR", "DP"), ("RR", "F"), ("DP", "R"), ("DP", "F"), ("R", "D"), ("R", "F")];
+pub const ATTEMPT_TRANSITIONS: &[(&str, &str)] = &[("RR", "DP"), ("RR", "F"), ("DP", "R"), ("DP", "F"), ("R", "D"), ("R", "F")];
 
 pub(super) struct Defs;
 
