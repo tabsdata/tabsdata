@@ -118,7 +118,7 @@ def make_scd1_raw(rows: list[tuple]) -> TableFrame:
 
 
 def user_cols(tf: TableFrame) -> list[str]:
-    return [c for c in tf.columns if not c.startswith("$td.")]
+    return tf.get_columns(with_meta_columns=True)
 
 
 def to_rows(tf: TableFrame) -> list[dict]:

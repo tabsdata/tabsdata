@@ -76,7 +76,7 @@ def make_period_batch(rows: list[tuple], period) -> TableFrame:
 
 def user_cols(tf: TableFrame) -> list[str]:
     """Drop tabsdata system columns ($td.*) so we can assert on user columns."""
-    return [c for c in tf.columns if not c.startswith("$td.")]
+    return tf.get_columns(with_meta_columns=True)
 
 
 def to_rows(tf: TableFrame) -> list[dict]:
@@ -305,8 +305,8 @@ def test_datetime_period_dtype_preserved_in_source_ts():
     new = [make_period_batch([("t1", 1, "p")], period=PERIOD_A)]
     out = call(new)
 
-    period_dtype = out.schema[M_PERIOD]
-    source_ts_dtype = out.schema[M_SOURCE_TS]
+    period_dtype = out.get_schema(with_meta_columns=True)[M_PERIOD]
+    source_ts_dtype = out.get_schema(with_meta_columns=True)[M_SOURCE_TS]
     assert period_dtype == source_ts_dtype, (
         f"`@td.medallion.source_ts` dtype {source_ts_dtype!r} should mirror "
         f"`@td.medallion.period` dtype {period_dtype!r}"
@@ -338,8 +338,8 @@ def test_date_period_dtype_preserved_in_source_ts():
 
     out = call([batch])
 
-    period_dtype = out.schema[M_PERIOD]
-    source_ts_dtype = out.schema[M_SOURCE_TS]
+    period_dtype = out.get_schema(with_meta_columns=True)[M_PERIOD]
+    source_ts_dtype = out.get_schema(with_meta_columns=True)[M_SOURCE_TS]
     assert period_dtype == source_ts_dtype
     assert source_ts_dtype == pl.Date, (
         f"`@td.medallion.source_ts` should be Date when `@td.medallion.period` is Date, "

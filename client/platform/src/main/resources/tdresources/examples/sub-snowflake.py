@@ -39,4 +39,5 @@ def sub_snowflake(changes: TableFramesSpec) -> TableFrameSpec:
     if batch is None:
         return None
     batch = batch.rename({"@td.cdc.meta.op": "op"})
-    return batch.drop([name for name in batch.columns if name.startswith("@td.cdc.")])
+    columns = batch.get_columns(with_meta_columns=True)
+    return batch.drop([name for name in columns if name.startswith("@td.cdc.")])

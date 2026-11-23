@@ -56,3 +56,17 @@ def test_keep_user_and_internal():
 def test_keep_all():
     kept = registry().keep(_names(), with_internal=True, with_connector=True)
     assert kept == _names()
+
+
+def test_keep_without_user():
+    kept = registry().keep(
+        _names(), with_internal=True, with_connector=True, with_user=False
+    )
+    assert kept == [TD_IDENTIFIER_SYSTEM_COLUMN_NAME, CONNECTOR_COLUMN]
+
+
+def test_keep_nothing():
+    kept = registry().keep(
+        _names(), with_internal=False, with_connector=False, with_user=False
+    )
+    assert kept == []

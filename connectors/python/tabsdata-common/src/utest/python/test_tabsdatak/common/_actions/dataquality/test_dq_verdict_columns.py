@@ -534,6 +534,30 @@ def test_a_wildcard_classifier_never_sweeps_in_a_verdict_column():
     }
 
 
+def _orders_with_meta():
+    from tabsdatak.tableframe import TableFrame
+    from tabsdatak.tableframe._engine.column.connector import add_connector_columns
+    from tabsdatak.tableframe.functions import col
+
+    frame = TableFrame.from_polars(orders()._lf).filter(col("order_id") > 1)
+    return frame._clone(add_connector_columns(frame._lf, {"file": "a.csv"}))
+
+
+@pytest.mark.parametrize(
+    "operation", [dq.Enrich(), dq.Filter(dq.AnyFailed())], ids=["enrich", "filter"]
+)
+def test_derived_frames_keep_the_meta_and_internal_columns(operation):
+    frame = _orders_with_meta()
+    engine = engine_with([("is_between", between(["discount_pct"], 15.0))], frame)
+    method = "enrich" if isinstance(operation, dq.Enrich) else "filter"
+    derived = getattr(engine, method)(operation).output.derived_tf
+    source = frame._lf.collect()
+    result = derived._lf.collect()
+    assert result["@td.file"].to_list() == ["a.csv"] * result.height
+    rows = dict(zip(source["order_id"], source["$td.row"]))
+    assert result["$td.row"].to_list() == [rows[o] for o in result["order_id"]]
+
+
 def test_classifiers_all_read_the_table_as_it_was_before_the_action():
     engine = engine_with([("is_between", between(["discount_pct"], 15.0))])
     assert "discount_pct_is_between" in engine.tf().schema.names()

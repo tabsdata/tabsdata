@@ -103,7 +103,7 @@ def build_cdc_bronze(
         new_col_prefix = CDC_DATA_COL_NEW_PREFIX + DOT
         old_col_prefix = CDC_DATA_COL_OLD_PREFIX + DOT
         drop_cols: list[str] = []
-        for c in cdc.columns:
+        for c in cdc.get_columns(with_meta_columns=True):
             if c.startswith(new_col_prefix):
                 rename_map[c] = c[len(new_col_prefix) :]
             elif c.startswith(old_col_prefix):

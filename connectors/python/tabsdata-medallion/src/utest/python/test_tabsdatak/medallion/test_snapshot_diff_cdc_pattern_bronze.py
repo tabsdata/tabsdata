@@ -107,7 +107,7 @@ def empty_new() -> list[TableFrame]:
 
 def user_cols(tf: TableFrame) -> list[str]:
     """Drop tabsdata system columns ($td.*) so we can assert on user columns."""
-    return [c for c in tf.columns if not c.startswith("$td.")]
+    return tf.get_columns(with_meta_columns=True)
 
 
 def to_rows(tf: TableFrame) -> list[dict]:
@@ -285,7 +285,7 @@ def test_incremental_ignores_file_metadata_columns():
     assert len(rows) == 1
     assert rows[0][M_OP] == OP_UPDATE
     assert rows[0]["name"] == "name-1"
-    assert "@td.file.path" not in out.columns
+    assert "@td.file.path" not in out.get_columns(with_meta_columns=True)
 
 
 def test_incremental_no_changes_emits_nothing():

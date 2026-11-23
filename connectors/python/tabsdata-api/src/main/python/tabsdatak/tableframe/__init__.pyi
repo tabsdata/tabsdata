@@ -80,10 +80,10 @@ class TableFrame(EngineFrame):
     # devguide-ref: lazy evaluation
     @property
     def columns(self) -> list[str]:
-        """Names of this `TableFrame`'s columns, in column order.
+        """Names of this `TableFrame`'s user columns, in column order.
 
-        #VERIFY: may expose hidden `$TD.*` system columns; the old API
-        filtered to user columns only.
+        The `@td.*` meta and `$td.*` internal columns are left out; use
+        `get_columns` to include them.
 
         :categories: attributes
 
@@ -95,10 +95,10 @@ class TableFrame(EngineFrame):
 
     @property
     def dtypes(self) -> list[DataType]:
-        """Data type of each column, in column order.
+        """Data type of each user column, in column order.
 
-        #VERIFY: may expose hidden `$TD.*` system columns; the old API
-        filtered to user columns only.
+        The `@td.*` meta and `$td.*` internal columns are left out; use
+        `get_dtypes` to include them.
 
         :categories: attributes
 
@@ -110,10 +110,10 @@ class TableFrame(EngineFrame):
 
     @property
     def schema(self) -> Schema:
-        """Ordered mapping of column name to data type, as a `Schema`.
+        """Ordered mapping of user column name to data type, as a `Schema`.
 
-        #VERIFY: may expose hidden `$TD.*` system columns; the old API
-        filtered to user columns only.
+        The `@td.*` meta and `$td.*` internal columns are left out; use
+        `get_schema` to include them.
 
         :categories: attributes
 
@@ -125,10 +125,10 @@ class TableFrame(EngineFrame):
 
     @property
     def width(self) -> int:
-        """Number of columns in this `TableFrame`.
+        """Number of user columns in this `TableFrame`.
 
-        #VERIFY: may count hidden `$TD.*` system columns; the old API
-        filtered to user columns only.
+        The `@td.*` meta and `$td.*` internal columns are not counted; use
+        `get_width` to count them.
 
         :categories: attributes
 
@@ -1116,23 +1116,150 @@ class TableFrame(EngineFrame):
                 tf._to_dict()  # {"id": [1, 2, 3], "g": ["x", "y", "x"], ...}
         """
 
+    def get_columns(
+        self,
+        *,
+        with_user_columns: bool = True,
+        with_meta_columns: bool = False,
+        with_internal_columns: bool = False,
+    ) -> list[str]:
+        """Names of the selected columns, in column order.
+
+        :categories: attributes
+
+        With no arguments it returns the same as `columns`: the user columns
+        only.
+
+        Args:
+            with_user_columns: Include the columns the data carries.
+            with_meta_columns: Include the `@td.*` meta columns a source
+                attached to the rows (for example, the file a row came from).
+            with_internal_columns: Include the `$td.*` internal columns
+                Tabsdata manages.
+
+        Returns:
+            The selected column names.
+
+        Examples:
+            .. code-block:: python
+
+                tf.get_columns(with_meta_columns=True)  # ["a", "@td.file"]
+        """
+
+    def get_dtypes(
+        self,
+        *,
+        with_user_columns: bool = True,
+        with_meta_columns: bool = False,
+        with_internal_columns: bool = False,
+    ) -> list[DataType]:
+        """Data type of each selected column, in column order.
+
+        :categories: attributes
+
+        With no arguments it returns the same as `dtypes`: the user columns
+        only.
+
+        Args:
+            with_user_columns: Include the columns the data carries.
+            with_meta_columns: Include the `@td.*` meta columns a source
+                attached to the rows.
+            with_internal_columns: Include the `$td.*` internal columns
+                Tabsdata manages.
+
+        Returns:
+            The data types of the selected columns.
+
+        Examples:
+            .. code-block:: python
+
+                tf.get_dtypes(with_meta_columns=True)  # [Int64, String]
+        """
+
+    def get_schema(
+        self,
+        *,
+        with_user_columns: bool = True,
+        with_meta_columns: bool = False,
+        with_internal_columns: bool = False,
+    ) -> Schema:
+        """Ordered mapping of selected column name to data type, as a
+        `Schema`.
+
+        :categories: attributes
+
+        With no arguments it returns the same as `schema`: the user columns
+        only.
+
+        Args:
+            with_user_columns: Include the columns the data carries.
+            with_meta_columns: Include the `@td.*` meta columns a source
+                attached to the rows.
+            with_internal_columns: Include the `$td.*` internal columns
+                Tabsdata manages.
+
+        Returns:
+            The names and data types of the selected columns.
+
+        Examples:
+            .. code-block:: python
+
+                tf.get_schema(with_meta_columns=True)  # {"a": Int64, "@td.file": String}
+        """
+
+    def get_width(
+        self,
+        *,
+        with_user_columns: bool = True,
+        with_meta_columns: bool = False,
+        with_internal_columns: bool = False,
+    ) -> int:
+        """Number of selected columns.
+
+        :categories: attributes
+
+        With no arguments it returns the same as `width`: the user columns
+        only.
+
+        Args:
+            with_user_columns: Count the columns the data carries.
+            with_meta_columns: Count the `@td.*` meta columns a source
+                attached to the rows.
+            with_internal_columns: Count the `$td.*` internal columns
+                Tabsdata manages.
+
+        Returns:
+            The number of selected columns.
+
+        Examples:
+            .. code-block:: python
+
+                tf.get_width(with_meta_columns=True)
+        """
+
     def extract_one(
-        self, with_connector_columns: bool = False, fail_if_empty: bool = False
+        self,
+        with_meta_columns: bool | None = None,
+        fail_if_empty: bool = False,
+        *,
+        with_connector_columns: bool | None = None,
     ) -> dict[str, DataType | None] | None:
         """Return the only row as a column-to-value dictionary.
 
         :categories: conversion
 
-        Internal columns are always dropped; connector columns are kept only
-        when with_connector_columns is set. Fails if the TableFrame has more
-        than one row. Returns None when the TableFrame is empty, unless
-        fail_if_empty is set, in which case it fails.
+        Internal columns are always dropped; meta columns are kept only when
+        with_meta_columns is set. Fails if the TableFrame has more than one
+        row. Returns None when the TableFrame is empty, unless fail_if_empty
+        is set, in which case it fails.
 
         Args:
-            with_connector_columns: Keep the connector columns a source
+            with_meta_columns: Keep the `@td.*` meta columns a source
                 attached to the row instead of dropping them.
             fail_if_empty: Raise instead of returning `None` when there is
                 no row to extract.
+            with_connector_columns: Deprecated alias of `with_meta_columns`;
+                passing both is an error.
 
         Returns:
             The row as `{column: value}`, or `None` when the frame is

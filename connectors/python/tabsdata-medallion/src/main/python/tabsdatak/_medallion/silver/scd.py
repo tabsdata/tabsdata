@@ -336,7 +336,8 @@ def _strip_bronze_metadata(tf: TableFrame) -> TableFrame:
     Returns:
         TableFrame with the bronze metadata columns dropped.
     """
-    cdc_meta_cols = [c for c in tf.columns if c.startswith("@td.cdc")]
+    columns = tf.get_columns(with_meta_columns=True)
+    cdc_meta_cols = [c for c in columns if c.startswith("@td.cdc")]
     # Periodic-snapshot bronze carries no @td.medallion.op, so drop only what's present.
     drop_cols = [
         c
@@ -345,7 +346,7 @@ def _strip_bronze_metadata(tf: TableFrame) -> TableFrame:
             MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
             *cdc_meta_cols,
         )
-        if c in tf.columns
+        if c in columns
     ]
     return tf.drop(drop_cols)
 

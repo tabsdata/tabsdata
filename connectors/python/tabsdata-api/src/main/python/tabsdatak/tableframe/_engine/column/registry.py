@@ -112,8 +112,17 @@ class Registry:
             return ColumnKind.CONNECTOR
         return ColumnKind.INTERNAL
 
-    def keep(self, names, *, with_internal: bool, with_connector: bool) -> list[str]:
-        kept = {ColumnKind.USER}
+    def keep(
+        self,
+        names,
+        *,
+        with_internal: bool,
+        with_connector: bool,
+        with_user: bool = True,
+    ) -> list[str]:
+        kept = set()
+        if with_user:
+            kept.add(ColumnKind.USER)
         if with_internal:
             kept.add(ColumnKind.INTERNAL)
         if with_connector:

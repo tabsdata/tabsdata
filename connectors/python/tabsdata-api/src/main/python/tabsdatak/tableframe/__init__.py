@@ -4,26 +4,26 @@
 from __future__ import annotations
 
 from tabsdatak.tableframe._core.hooks import compute
-from tabsdatak.tableframe._core.translate import register_loader, unwrap, wrap
+from tabsdatak.tableframe._core.translate import register_loader, unwrap
 from tabsdatak.tableframe._engine.frame.frame import EngineFrame
 
 
 class TableFrame(EngineFrame):
     @property
     def columns(self):
-        return wrap(self._lf.collect_schema().names())
+        return self.get_columns()
 
     @property
     def dtypes(self):
-        return wrap(self._lf.collect_schema().dtypes())
+        return self.get_dtypes()
 
     @property
     def schema(self):
-        return wrap(self._lf.collect_schema())
+        return self.get_schema()
 
     @property
     def width(self):
-        return wrap(self._lf.collect_schema().len())
+        return self.get_width()
 
     def __getitem__(self, item):
         u_item = unwrap(item)

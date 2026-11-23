@@ -3,7 +3,8 @@
 
 """Schema of a `TableFrame` -- an ordered mapping of column name to data type.
 
-Obtain one from `TableFrame.schema`. It behaves like an ordered dict
+Obtain one from `TableFrame.schema` (the user columns) or
+`TableFrame.get_schema` (any selection). It behaves like an ordered dict
 (iteration, `in`, indexing by column name) and adds the query helpers below.
 """
 
@@ -36,7 +37,8 @@ class Schema:
 
     :categories: attributes
 
-    Returned by `TableFrame.schema`. Iterates in column order and supports
+    Returned by `TableFrame.schema` (the user columns) and
+    `TableFrame.get_schema` (any selection). Iterates in column order and supports
     mapping access (`schema["col"]`, `"col" in schema`, `len(schema)`)
     plus the query helpers below.
 

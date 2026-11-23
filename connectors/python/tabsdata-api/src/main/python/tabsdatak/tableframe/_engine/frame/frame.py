@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from tabsdatak.tableframe.datatypes import DataType
     from tabsdatak.tableframe.expr import Expr
     from tabsdatak.tableframe.grok import ColumnDefinition
+    from tabsdatak.tableframe.schema import Schema
     from tabsdatak.tableframe.udf import UDF
 
 
@@ -380,17 +381,128 @@ class EngineFrame(BaseFrame):
             .to_dict(as_series=False)
         )
 
+    def get_columns(
+        self,
+        *,
+        with_user_columns: bool = True,
+        with_meta_columns: bool = False,
+        with_internal_columns: bool = False,
+    ) -> list[str]:
+        """Return the names of the selected columns, in column order.
+
+        User columns are selected by default; meta and internal columns only when
+        asked for.
+        """
+        from tabsdatak.tableframe._core.translate import wrap
+
+        schema = self._kept_schema(
+            with_user_columns, with_meta_columns, with_internal_columns
+        )
+        return wrap(schema.names())
+
+    def get_dtypes(
+        self,
+        *,
+        with_user_columns: bool = True,
+        with_meta_columns: bool = False,
+        with_internal_columns: bool = False,
+    ) -> list[DataType]:
+        """Return the data types of the selected columns, in column order.
+
+        User columns are selected by default; meta and internal columns only when
+        asked for.
+        """
+        from tabsdatak.tableframe._core.translate import wrap
+
+        schema = self._kept_schema(
+            with_user_columns, with_meta_columns, with_internal_columns
+        )
+        return wrap(schema.dtypes())
+
+    def get_schema(
+        self,
+        *,
+        with_user_columns: bool = True,
+        with_meta_columns: bool = False,
+        with_internal_columns: bool = False,
+    ) -> Schema:
+        """Return the names and data types of the selected columns, in column
+        order.
+
+        User columns are selected by default; meta and internal columns only when
+        asked for.
+        """
+        from tabsdatak.tableframe._core.translate import wrap
+
+        schema = self._kept_schema(
+            with_user_columns, with_meta_columns, with_internal_columns
+        )
+        return wrap(schema)
+
+    def get_width(
+        self,
+        *,
+        with_user_columns: bool = True,
+        with_meta_columns: bool = False,
+        with_internal_columns: bool = False,
+    ) -> int:
+        """Return the number of selected columns.
+
+        User columns are selected by default; meta and internal columns only when
+        asked for.
+        """
+        from tabsdatak.tableframe._core.translate import wrap
+
+        schema = self._kept_schema(
+            with_user_columns, with_meta_columns, with_internal_columns
+        )
+        return wrap(schema.len())
+
+    def _kept_schema(
+        self, with_user: bool, with_meta: bool, with_internal: bool
+    ) -> pl.Schema:
+        import polars as pl
+
+        from tabsdatak.extensions.tableframe._engine.column.registry import registry
+
+        schema = self._lf.collect_schema()
+        kept = registry().keep(
+            schema.names(),
+            with_internal=with_internal,
+            with_connector=with_meta,
+            with_user=with_user,
+        )
+        return pl.Schema({name: schema[name] for name in kept})
+
     def extract_one(
-        self, with_connector_columns: bool = False, fail_if_empty: bool = False
+        self,
+        with_meta_columns: bool | None = None,
+        fail_if_empty: bool = False,
+        *,
+        with_connector_columns: bool | None = None,
     ) -> dict[str, DataType | None] | None:
         """Return the only row as a column-to-value dictionary.
 
-        Internal columns are always dropped; connector columns are kept only when
-        with_connector_columns is set. Fails if the TableFrame has more than one
-        row. Returns None when the TableFrame is empty, unless fail_if_empty is
-        set, in which case it fails.
+        Internal columns are always dropped; meta columns are kept only when
+        with_meta_columns is set (with_connector_columns is a deprecated alias of
+        it). Fails if the TableFrame has more than one row. Returns None when the
+        TableFrame is empty, unless fail_if_empty is set, in which case it fails.
         """
-        lf = self._select(with_internal=False, with_connector=with_connector_columns)
+        if with_connector_columns is not None:
+            if with_meta_columns is not None:
+                raise ValueError(
+                    "Pass either with_meta_columns or with_connector_columns, not both."
+                )
+            import warnings
+
+            warnings.warn(
+                "The with_connector_columns argument is deprecated; use "
+                "with_meta_columns instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            with_meta_columns = with_connector_columns
+        lf = self._select(with_internal=False, with_connector=bool(with_meta_columns))
         df = lf.limit(2).collect(engine="streaming")
         if df.height == 0:
             return self._on_empty("extract_one", fail_if_empty)

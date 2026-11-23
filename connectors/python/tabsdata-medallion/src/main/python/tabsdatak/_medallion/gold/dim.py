@@ -56,7 +56,7 @@ def _drop_pk(tf: TableFrame) -> TableFrame:
     """
     return (
         tf.drop([MEDALLION_SYSTEM_COLUMN_PK])
-        if MEDALLION_SYSTEM_COLUMN_PK in tf.columns
+        if MEDALLION_SYSTEM_COLUMN_PK in tf.get_columns(with_meta_columns=True)
         else tf
     )
 

@@ -319,6 +319,20 @@ MySQLSrc(queries=["SELECT * FROM city"], src_cfg={"tabsdata.src_metadata.drop": 
 It covers the file, SQL and Salesforce sources. The Kafka and CDC columns are
 written into the staged data itself, so the key does not affect them.
 
+## Reading Metadata Columns in a Function
+
+`tf.columns`, `tf.schema`, `tf.dtypes` and `tf.width` describe the user columns
+only: the `@td.*` metadata columns and the internal `$td.*` columns Tabsdata
+manages are left out. Ask for the metadata columns explicitly:
+
+```python
+tf.columns                                # ["id", "name"]
+tf.get_columns(with_meta_columns=True)    # ["id", "name", "@td.file.path"]
+```
+
+`get_columns`, `get_schema`, `get_dtypes` and `get_width` take the same
+`with_user_columns`, `with_meta_columns` and `with_internal_columns` flags.
+
 ## Triggers
 
 Control when functions execute with `trigger_by`, which takes a trigger object

@@ -1128,22 +1128,25 @@ def _group_by_class(symbols: list[Symbol]) -> "dict[str, list[Symbol]]":
 def _render_tableframe_py(
     symbols: list[Symbol], root: str, hookable: list[str], submodules: list[str]
 ) -> str:
+    # The from_* / empty / to_* construction and materialization API is
+    # handwritten on EngineFrame (not generated); TableFrame inherits it, and the
+    # stub's `class TableFrame(EngineFrame)` link lets tooling resolve it from source.
+    members = [line for symbol in symbols for line in _tableframe_member(symbol, root)]
+    translate = ["register_loader", "unwrap"]
+    if any("wrap(" in line.replace("unwrap(", "") for line in members):
+        translate.append("wrap")
     lines = [
         _py_header(),
         "from __future__ import annotations",
         "",
         f"from {root}._core.hooks import compute",
-        f"from {root}._core.translate import register_loader, unwrap, wrap",
+        f"from {root}._core.translate import {', '.join(translate)}",
         f"from {root}._engine.frame.frame import EngineFrame",
         "",
         "",
         "class TableFrame(EngineFrame):",
+        *members,
     ]
-    # The from_* / empty / to_* construction and materialization API is
-    # handwritten on EngineFrame (not generated); TableFrame inherits it, and the
-    # stub's `class TableFrame(EngineFrame)` link lets tooling resolve it from source.
-    for symbol in symbols:
-        lines += _tableframe_member(symbol, root)
 
     # Lazy registry population. Importing this package must NOT drag in polars
     # (a heavy import); so the registry-filling loop — importing every submodule
@@ -1383,24 +1386,23 @@ _CUSTOM_BODIES = {
 }
 
 
-# LazyFrame properties that polars resolves through the schema, each with a
-# PerformanceWarning; read once through collect_schema() instead.
-_SCHEMA_PROPERTIES = {
-    "columns": "collect_schema().names()",
-    "dtypes": "collect_schema().dtypes()",
-    "schema": "collect_schema()",
-    "width": "collect_schema().len()",
-}
+# LazyFrame properties that describe the columns: each delegates to the
+# EngineFrame get_* method of the same name, which reads the schema once and
+# selects the user columns only.
+_SCHEMA_PROPERTIES = {"columns", "dtypes", "schema", "width"}
 
 
 def _tableframe_member(symbol: Symbol, root: str) -> list[str]:
     name = _member(symbol)
     if symbol.is_property:
-        access = _SCHEMA_PROPERTIES.get(name, name)
+        if name in _SCHEMA_PROPERTIES:
+            value = f"self.get_{name}()"
+        else:
+            value = f"wrap(self._lf.{name})"
         return [
             "    @property",
             f"    def {name}(self):",
-            f"        return wrap(self._lf.{access})",
+            f"        return {value}",
             "",
         ]
     hooked = _HOOKED_BODIES.get(symbol.hook_name)

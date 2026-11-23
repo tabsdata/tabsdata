@@ -1099,7 +1099,9 @@ class DataQualityEngine:
     def __init__(self, tf: td_frame.TableFrame, table: str | None = None):
         self._tf: td_frame.TableFrame = tf
         self._table: str | None = table
-        self._schema: td_typing.Schema = tf.schema
+        self._schema: td_typing.Schema = tf.get_schema(
+            with_meta_columns=True, with_internal_columns=True
+        )
         self._cols: dict[str, ColumnInfo] = {}
         self._tags: dict[str, set[str]] = {}
 

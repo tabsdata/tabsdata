@@ -66,16 +66,34 @@ def test_extract_one_drops_internal_and_connector_columns_by_default():
     assert frame.extract_one() == {"a": 1}
 
 
-def test_extract_one_keeps_connector_columns_when_requested():
-    frame = _reserved_frame({
+def _meta_frame() -> TableFrame:
+    return _reserved_frame({
         "a": [1],
         CONNECTOR_COLUMN: ["/tmp/f.csv"],
         TD_IDENTIFIER_SYSTEM_COLUMN_NAME: ["id"],
     })
-    assert frame.extract_one(with_connector_columns=True) == {
+
+
+def test_extract_one_keeps_meta_columns_when_requested():
+    assert _meta_frame().extract_one(with_meta_columns=True) == {
         "a": 1,
         CONNECTOR_COLUMN: "/tmp/f.csv",
     }
+
+
+def test_extract_one_takes_with_meta_columns_positionally():
+    assert _meta_frame().extract_one(True) == {"a": 1, CONNECTOR_COLUMN: "/tmp/f.csv"}
+
+
+def test_extract_one_with_connector_columns_is_a_deprecated_alias():
+    with pytest.warns(DeprecationWarning, match="use with_meta_columns instead"):
+        row = _meta_frame().extract_one(with_connector_columns=True)
+    assert row == {"a": 1, CONNECTOR_COLUMN: "/tmp/f.csv"}
+
+
+def test_extract_one_refuses_both_meta_and_connector_flags():
+    with pytest.raises(ValueError, match="not both"):
+        _meta_frame().extract_one(with_meta_columns=True, with_connector_columns=True)
 
 
 def test_extract_one_preserves_nulls():

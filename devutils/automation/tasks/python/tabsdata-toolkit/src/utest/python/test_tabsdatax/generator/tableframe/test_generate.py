@@ -217,8 +217,8 @@ def test_tableframe_has_hooks_and_augmenting_ops(main_root):
     # transparent LazyFrame op: routed through compute with empty params
     assert '"filter", (self,), {}, ' in text
     assert "call=lambda lf: lf.filter(*u_args, **u_kwargs)" in text
-    # property reads (wrapped) underlying frame
-    assert "return wrap(self._lf.collect_schema())" in text
+    # schema properties delegate to the EngineFrame get_* method of their name
+    assert "return self.get_schema()" in text
 
 
 def test_drop_and_rename_dispatch_hooks(main_root):
