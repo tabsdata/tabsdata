@@ -10,6 +10,7 @@ import time
 from collections.abc import Generator
 
 import pytest
+from _pytest._io import TerminalWriter
 
 PROGRESS_OPTION = "--tdx-progress"
 PROGRESS_DEST = "tdx_progress"
@@ -103,10 +104,12 @@ def format_seconds(seconds: float) -> str:
 
 
 class ProgressReporter:
+    # Set at pytest_sessionstart, before any hook that uses them.
+    _reporter: pytest.TerminalReporter
+    _writer: TerminalWriter
+
     def __init__(self, config: pytest.Config) -> None:
         self._config = config
-        self._reporter = None
-        self._writer = None
         self._live = False
         self._instafail = bool(config.getoption("instafail", False))
         self._session: pytest.Session | None = None

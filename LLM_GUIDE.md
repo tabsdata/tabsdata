@@ -326,8 +326,8 @@ only: the `@td.*` metadata columns and the internal `$td.*` columns Tabsdata
 manages are left out. Ask for the metadata columns explicitly:
 
 ```python
-tf.columns                                # ["id", "name"]
-tf.get_columns(with_meta_columns=True)    # ["id", "name", "@td.file.path"]
+tf.columns  # ["id", "name"]
+tf.get_columns(with_meta_columns=True)  # ["id", "name", "@td.file.path"]
 ```
 
 `get_columns`, `get_schema`, `get_dtypes` and `get_width` take the same
