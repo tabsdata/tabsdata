@@ -53,9 +53,6 @@ class DruidConnectionExplorer(SqlAlchemyConnectionExplorer):
             "schema": schema or "",
         }
 
-    def engine_kwargs(self, conn: DruidDestConn) -> dict:
-        return conn.conn_cfg or {}
-
     def make_url(self, conn: DruidDestConn) -> engine.URL:
         parsed = urlparse(conn._overlord_url())
         user = password = ""

@@ -74,13 +74,8 @@ class MSSQLServerExplorer(SqlAlchemyConnectionExplorer):
         # (pyodbc reads the connect string verbatim), so user / password must
         # be supplied as ``UID`` / ``PWD`` via connect_args -- mirroring the
         # runtime `build_mssql_engine`. The URI form keeps them in the URL.
-        conn_cfg = conn.conn_cfg or {}
-        uri = conn._uri()
-        if not _is_odbc_connection_string(uri) or conn.credentials is None:
-            return conn_cfg
-        return conn_cfg | {
-            "connect_args": {
-                "UID": conn.credentials.user.value(),
-                "PWD": conn.credentials.password.value(),
-            }
-        }
+        kwargs = super().engine_kwargs(conn)
+        if _is_odbc_connection_string(conn._uri()) and conn.credentials is not None:
+            kwargs["connect_args"].setdefault("UID", conn.credentials.user.value())
+            kwargs["connect_args"].setdefault("PWD", conn.credentials.password.value())
+        return kwargs

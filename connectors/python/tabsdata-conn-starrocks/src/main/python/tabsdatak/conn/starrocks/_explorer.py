@@ -43,9 +43,6 @@ class StarRocksConnectionExplorer(SqlAlchemyConnectionExplorer):
             "mysql",
         })
 
-    def engine_kwargs(self, conn: StarRocksDestConn) -> dict:
-        return conn.conn_cfg or {}
-
     def make_url(self, conn: StarRocksDestConn) -> engine.URL:
         user = password = ""
         if conn.credentials is not None:

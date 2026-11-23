@@ -39,9 +39,6 @@ class MySQLConnectionExplorer(SqlAlchemyConnectionExplorer):
             "sys",
         })
 
-    def engine_kwargs(self, conn: MySQLConn) -> dict:
-        return {"connect_args": dict(conn.conn_cfg or {})}
-
     def make_url(self, conn: MySQLConn) -> engine.URL:
         url = make_url(normalize_mysql_uri(conn._uri()))
         if conn.credentials is not None:

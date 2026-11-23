@@ -132,11 +132,13 @@ class SqlAlchemyConnectionExplorer(Explorer):
     def engine_kwargs(self, conn: Conn) -> dict:
         """Return extra kwargs to pass to :func:`sqlalchemy.create_engine`.
 
-        Default implementation returns ``{}``. Override when a dialect
-        needs auth material that can't be expressed in the URL (e.g.
-        BigQuery's ``credentials_info`` / ``credentials_path``).
+        The connection's ``conn_cfg`` holds driver keywords, so it goes to
+        the driver as ``connect_args``, as the runtime engines pass it.
+        Override to add dialect kwargs (Oracle's ``exclude_tablespaces``)
+        or when ``conn_cfg`` means something else (BigQuery's client
+        keywords).
         """
-        return {}
+        return {"connect_args": dict(getattr(conn, "conn_cfg", None) or {})}
 
     def is_missing_table_error(self, error: DBAPIError) -> bool:
         """Whether `error` says the table being reflected does not exist.

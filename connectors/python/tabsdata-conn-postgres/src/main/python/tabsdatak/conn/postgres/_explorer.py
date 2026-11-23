@@ -38,9 +38,6 @@ class PostgresConnectionExplorer(SqlAlchemyConnectionExplorer):
             "schema": schema or "",
         }
 
-    def engine_kwargs(self, conn: PostgresConn) -> dict:
-        return conn.conn_cfg or {}
-
     def make_url(self, conn: PostgresConn) -> engine.URL:
         # `uri` is a str or a `Secret`; `_uri()` yields the plain str
         # form either way (mirrors the runtime `build_postgres_engine`).

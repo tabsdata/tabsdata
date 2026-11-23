@@ -12,6 +12,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
+
 
 class CtxStub:
     """Duck-typed SrcPluginCtx / DestContext for unit tests.
@@ -36,3 +39,26 @@ class CtxStub:
 
     def set_attr(self, key, val) -> None:
         self._attributes[key] = val
+
+
+class _DriverReached(Exception):
+    pass
+
+
+def driver_keywords(explorer, conn) -> dict:
+    """The keywords ``explorer.check_connect(conn)`` hands the DBAPI driver,
+    caught as the driver is called, so no server is needed."""
+    seen: dict = {}
+
+    def capture(dialect, record, cargs, cparams):
+        seen.update(cparams)
+        raise _DriverReached
+
+    event.listen(Engine, "do_connect", capture)
+    try:
+        explorer.check_connect(conn)
+    except _DriverReached:
+        return seen
+    finally:
+        event.remove(Engine, "do_connect", capture)
+    raise AssertionError("check_connect never reached the driver")

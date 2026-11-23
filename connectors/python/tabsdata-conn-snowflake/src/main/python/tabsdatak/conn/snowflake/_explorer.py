@@ -29,9 +29,6 @@ class SnowflakeConnectionExplorer(SqlAlchemyConnectionExplorer):
     def system_schemas(self) -> frozenset[str]:
         return frozenset({"INFORMATION_SCHEMA"})
 
-    def engine_kwargs(self, conn: SnowflakeDestConn) -> dict:
-        return conn.conn_cfg or {}
-
     def map_entity_fields(self, conn: SnowflakeDestConn, schema: str | None) -> dict:
         """Map the iterated schema name to entity database/schema fields."""
         return {

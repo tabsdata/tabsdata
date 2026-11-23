@@ -68,7 +68,7 @@ class OracleConnectionExplorer(SqlAlchemyConnectionExplorer):
         # tablespaces from reflection by default; clear that so a user schema
         # whose tables happen to live there is still introspected. System
         # *schemas* are excluded separately via `system_schemas`.
-        return {"exclude_tablespaces": ()} | (conn.conn_cfg or {})
+        return super().engine_kwargs(conn) | {"exclude_tablespaces": ()}
 
     def make_url(self, conn: OracleConn) -> engine.URL:
         # `uri` is a str or a `Secret`; `_uri()` yields the plain str
