@@ -333,6 +333,12 @@ tf.get_columns(with_meta_columns=True)    # ["id", "name", "@td.file.path"]
 `get_columns`, `get_schema`, `get_dtypes` and `get_width` take the same
 `with_user_columns`, `with_meta_columns` and `with_internal_columns` flags.
 
+A selection by pattern -- `col("*")`, a regular expression or a data type --
+covers the user and metadata columns but never the internal ones, so
+`tf.with_columns(col("*").cast(String))` leaves them alone. Writing to an
+internal column, by name or through `cast`, fails with `TF6` when the plan is
+built, even on an empty table.
+
 ## Triggers
 
 Control when functions execute with `trigger_by`, which takes a trigger object

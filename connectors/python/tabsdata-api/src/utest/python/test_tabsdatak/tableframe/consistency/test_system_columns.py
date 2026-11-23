@@ -145,6 +145,87 @@ def test_a_rename_cannot_move_a_system_column(mapping):
         frame.rename(mapping)
 
 
+META = {"file": "a.csv"}
+
+
+def _texts(rows: int) -> TableFrame:
+    data = {"v": list(range(rows)), "s": [f"x{row}0" for row in range(rows)]}
+    schema = {"v": pl.Int64, "s": pl.String}
+    return _versioned(pl.DataFrame(data, schema=schema).to_dict(), 0, "V1", META)
+
+
+def _patterns():
+    from tabsdatak.tableframe import datatypes as dt
+    from tabsdatak.tableframe.functions import col
+
+    return {
+        "wildcard": col("*").cast(dt.String),
+        "regex": col("^.*$").cast(dt.String),
+        "dtype": col(dt.String).str.replace_all("0", "Z"),
+    }
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+@pytest.mark.parametrize("rows", [0, 3])
+@pytest.mark.parametrize("pattern", ["wildcard", "regex", "dtype"])
+def test_a_pattern_selection_leaves_the_internal_columns_alone(engine, rows, pattern):
+    frame = _texts(rows)
+    before = _collect(frame, engine)
+    after = _collect(frame.with_columns(_patterns()[pattern]), engine)
+    internal = [name for name in before.columns if name.startswith("$td.")]
+    assert after.select(internal).schema == before.select(internal).schema
+    assert after[VERSION].to_list() == before[VERSION].to_list()
+    if pattern == "dtype":
+        expected = [f"x{row}0".replace("0", "Z") for row in range(rows)]
+        assert after["s"].to_list() == expected
+    else:
+        assert after.schema["v"] == pl.String
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_a_pattern_selection_still_reaches_the_meta_columns(engine):
+    from tabsdatak.tableframe import datatypes as dt
+    from tabsdatak.tableframe.functions import col
+
+    frame = _texts(2).with_columns(col(dt.String).str.to_uppercase())
+    assert _collect(frame, engine)[FILE].to_list() == ["A.CSV", "A.CSV"]
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_an_internal_column_can_still_be_read_by_name(engine):
+    from tabsdatak.tableframe.functions import col
+
+    frame = _texts(2)
+    read = _collect(frame.select(col(VERSION).alias("ver")), engine)
+    assert read["ver"].to_list() == ["V1", "V1"]
+    kept = _collect(frame.with_columns(col(VERSION)), engine)
+    assert kept[VERSION].to_list() == ["V1", "V1"]
+
+
+@pytest.mark.parametrize("rows", [0, 3])
+def test_a_cast_cannot_name_an_internal_column(rows):
+    from tabsdatak.tableframe import datatypes as dt
+
+    frame = _texts(rows)
+    with pytest.raises(Exception, match="TF6"):
+        frame.cast({"$td.src": dt.String})
+    every = frame.get_columns(with_meta_columns=True, with_internal_columns=True)
+    with pytest.raises(Exception, match="TF6"):
+        frame.cast({name: dt.String for name in every if not name.startswith("@td.")})
+
+
+@pytest.mark.parametrize("rows", [0, 3])
+def test_an_expression_cannot_rewrite_an_internal_column(rows):
+    from tabsdatak.tableframe import datatypes as dt
+    from tabsdatak.tableframe.functions import col
+
+    frame = _texts(rows)
+    with pytest.raises(Exception, match="TF6"):
+        frame.with_columns(col("$td.src").cast(dt.String))
+    with pytest.raises(Exception, match="TF6"):
+        frame.with_columns(**{VERSION: col(VERSION).str.to_uppercase()})
+
+
 @pytest.mark.parametrize("engine", ENGINES)
 def test_drop_nulls_counts_the_user_columns_only(engine):
     from tabsdatak.tableframe import functions as td

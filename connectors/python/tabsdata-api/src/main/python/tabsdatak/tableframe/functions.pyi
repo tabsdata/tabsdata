@@ -48,6 +48,11 @@ def col(
     The returned `Expr` is the building block passed to `select`,
     `with_columns`, `filter` and `agg`.
 
+    A selection by pattern -- `"*"`, a regular expression or a data type --
+    covers the user and `@td.*` meta columns, never the `$td.*` internal
+    columns, so a frame-wide expression cannot change them. An internal
+    column named explicitly can be read, but not rewritten.
+
     Args:
         name: A column name, a data type (to select every column of that
             type), or an iterable of either. A name wrapped in `^` and

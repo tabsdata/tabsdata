@@ -244,13 +244,18 @@ def test_lazygroupby_agg(main_root):
     assert "call=lambda *_: self._lgb.agg(*u_args, *system, **u_named)" in text
 
 
-def test_value_class_and_function_still_transparent(main_root):
+def test_value_class_still_transparent(main_root):
     perform(_report(), ROOT, str(main_root))
     expr = (main_root / "pkg" / "wrap" / "expr.py").read_text()
     assert "@register(_PlExpr)" in expr
     assert "return wrap(self._inner.alias(*unwrap(args), **unwrap(kwargs)))" in expr
+
+
+def test_col_hides_the_internal_columns_from_pattern_selections(main_root):
+    perform(_report(), ROOT, str(main_root))
     funcs = (main_root / "pkg" / "wrap" / "functions.py").read_text()
-    assert "return wrap(pl.col(*unwrap(args), **unwrap(kwargs)))" in funcs
+    assert "_engine.column.selection import hide_internal_columns" in funcs
+    assert "return wrap(hide_internal_columns(selection, u_args))" in funcs
 
 
 def test_generates_core_runtime(main_root):

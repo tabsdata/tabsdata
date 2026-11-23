@@ -985,12 +985,30 @@ def _render_functions_py(symbols: list[Symbol], root: str) -> str:
         if name == "concat":
             lines += _concat_function_lines()
             continue
+        if name == "col":
+            lines += _col_function_lines(root)
+            continue
         lines += [
             "",
             f"def {name}(*args, **kwargs):",
             f"    return wrap(pl.{name}(*unwrap(args), **unwrap(kwargs)))",
         ]
     return "\n".join(lines) + "\n"
+
+
+def _col_function_lines(root: str) -> list[str]:
+    # A selection by wildcard, regular expression or data type leaves out the
+    # internal columns, so a frame-wide expression cannot rewrite them; columns
+    # named one by one are kept as named.
+    return [
+        "",
+        "def col(*args, **kwargs):",
+        f"    from {root}._engine.column.selection import hide_internal_columns",
+        "",
+        "    u_args = unwrap(args)",
+        "    selection = pl.col(*u_args, **unwrap(kwargs))",
+        "    return wrap(hide_internal_columns(selection, u_args))",
+    ]
 
 
 _CONCAT_METHODS = (

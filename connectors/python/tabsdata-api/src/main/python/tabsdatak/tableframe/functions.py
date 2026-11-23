@@ -10,7 +10,11 @@ from tabsdatak.tableframe._core.translate import unwrap, wrap
 
 
 def col(*args, **kwargs):
-    return wrap(pl.col(*unwrap(args), **unwrap(kwargs)))
+    from tabsdatak.tableframe._engine.column.selection import hide_internal_columns
+
+    u_args = unwrap(args)
+    selection = pl.col(*u_args, **unwrap(kwargs))
+    return wrap(hide_internal_columns(selection, u_args))
 
 
 _CONCAT_METHODS = (

@@ -46,7 +46,8 @@ def _system(names) -> set[str]:
 def _written_system(positional, named) -> set[str]:
     """System columns a projection would create or overwrite. A plain read of a
     system column (``col("$td.id")``) passes it through unchanged and is allowed;
-    only an expression that produces a $td.* output from something else counts."""
+    any other expression with a $td.* output counts, including one that
+    transforms the column itself (``col("$td.src").cast(...)``)."""
     written: set[str] = set()
     for name, expression in _named_pairs(named):
         if _writes_system(name, expression):
@@ -61,7 +62,20 @@ def _written_system(positional, named) -> set[str]:
 def _writes_system(output_name: str, expression) -> bool:
     if not output_name.startswith(TD_SYSTEM_COLUMN_PREFIX):
         return False
-    return _root_names(expression) != [output_name]
+    return not _reads(output_name, expression)
+
+
+def _reads(name: str, expression) -> bool:
+    if isinstance(expression, str):
+        return expression == name
+    meta = getattr(expression, "meta", None)
+    if meta is None:
+        return False
+    try:
+        bare = meta.is_column_selection(allow_aliasing=True)
+    except Exception:
+        return False
+    return bare and _root_names(expression) == [name]
 
 
 def _named_pairs(named) -> list[tuple[str, object]]:
@@ -110,8 +124,9 @@ def _output_name(value) -> str | None:
     try:
         return meta.output_name()
     except Exception:
-        # A multi-output expression selects existing columns and cannot introduce
-        # a new $td.* name, so it needs no guarding here.
+        # A multi-output expression comes from a selection by pattern, which
+        # never includes the $td.* columns (functions.col leaves them out), so it
+        # needs no guarding here.
         return None
 
 

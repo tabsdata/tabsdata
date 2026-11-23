@@ -48,6 +48,34 @@ def projection(params: dict) -> list:
     ]
 
 
+def hide_internal_columns(selection: pl_.Expr, names: tuple) -> pl_.Expr:
+    """``selection`` without the internal columns when ``names`` pick columns by
+    pattern (a wildcard, a regular expression or a data type), so a frame-wide
+    expression never reaches them. Columns named one by one, internal ones
+    included, are kept as named."""
+    import re
+
+    from tabsdatak.tableframe._engine.constant.column.prefixes import (
+        TD_SYSTEM_COLUMN_PREFIX,
+    )
+
+    if not _by_pattern(names):
+        return selection
+    return selection.exclude(f"^{re.escape(TD_SYSTEM_COLUMN_PREFIX)}.*$")
+
+
+def _by_pattern(names) -> bool:
+    for name in names:
+        if isinstance(name, (list, tuple)):
+            if _by_pattern(name):
+                return True
+        elif not isinstance(name, str):
+            return True
+        elif name == "*" or (name.startswith("^") and name.endswith("$")):
+            return True
+    return False
+
+
 def keeps_rows(expression) -> bool:
     import polars as pl
 

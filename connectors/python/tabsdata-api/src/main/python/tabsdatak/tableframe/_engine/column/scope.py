@@ -49,10 +49,23 @@ def on_user_columns(
 
 def user_cast(schema: pl_.Schema, user: list[str], dtypes) -> dict:
     """``dtypes`` with every by-type target narrowed to the user columns of that
-    type. A target named explicitly is left as it is."""
+    type. A target named explicitly is left as it is, unless it is an internal
+    column, which a cast must not change."""
+    from tabsdatak.tableframe._engine.constant.column.prefixes import (
+        TD_SYSTEM_COLUMN_PREFIX,
+    )
 
     if not isinstance(dtypes, Mapping):
         return {name: dtypes for name in user}
+    internal = sorted(
+        key
+        for key in dtypes
+        if isinstance(key, str) and key.startswith(TD_SYSTEM_COLUMN_PREFIX)
+    )
+    if internal:
+        from tabsdatak.tableframe._engine.event.error import TableFrameErrorCode
+
+        raise TableFrameErrorCode.TF6.exception(op="cast", columns=internal)
     mapping = {}
     for key, target in dtypes.items():
         if isinstance(key, str):
