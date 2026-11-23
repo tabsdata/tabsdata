@@ -4,12 +4,12 @@
 
 name: Release Workflow (Open Source)
 
-concurrency:
-  group: >-
-    ${{ github.workflow }}-
-    ${{ github.event.pull_request.number || github.ref }}-
-    ${{ github.event_name == 'schedule' && 'weekly' || 'build' }}
-  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+#concurrency:
+#  group: >-
+#    ${{ github.workflow }}-
+#    ${{ github.event.pull_request.number || github.ref }}-
+#    ${{ github.event_name == 'schedule' && 'weekly' || 'build' }}
+#  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 defaults:
   run:
