@@ -226,6 +226,67 @@ def test_an_expression_cannot_rewrite_an_internal_column(rows):
         frame.with_columns(**{VERSION: col(VERSION).str.to_uppercase()})
 
 
+def test_no_internal_column_is_a_float_or_a_struct():
+    from test_tabsdatak.tableframe.support.columns import registry
+
+    for name, column in registry().metadata().items():
+        if name.startswith("$td."):
+            assert not column.dtype.is_float(), name
+            assert column.dtype.base_type() is not pl.Struct, name
+
+
+def _carried() -> TableFrame:
+    from tabsdatak.tableframe.functions import col
+
+    data = {
+        "k": [0, 3, 1, 2],
+        "f": [0.0, float("nan"), 1.0, 2.0],
+        "st": [{"x": 0}, {"x": 3}, {"x": 1}, {"x": 2}],
+    }
+    return _versioned(data, 0, "V1", META).filter(col("k") > 0)
+
+
+def _by_key(frame: pl.DataFrame) -> dict:
+    internal = [
+        name for name in frame.columns if name.startswith("$td.") and name != ID
+    ]
+    return {
+        row["k"]: [row[name] for name in internal]
+        for row in frame.iter_rows(named=True)
+    }
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+@pytest.mark.parametrize("op", ["fill_nan", "drop_nans", "unnest", "sort"])
+def test_frame_wide_ops_carry_each_rows_internal_columns(engine, op):
+    frame = _carried()
+    result = {
+        "fill_nan": lambda: frame.fill_nan(0.0),
+        "drop_nans": lambda: frame.drop_nans(),
+        "unnest": lambda: frame.unnest(),
+        "sort": lambda: frame.sort("*"),
+    }[op]()
+    before = _by_key(_collect(frame, engine))
+    after = _by_key(_collect(result, engine))
+    assert after == {key: before[key] for key in after}
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+@pytest.mark.parametrize("pattern", ["*", "^.*$", r"^@td\..*$"])
+def test_a_drop_by_pattern_keeps_the_internal_columns(engine, pattern):
+    frame = _carried()
+    before = _collect(frame, engine)
+    after = _collect(frame.drop(pattern), engine)
+    assert after["$td.row"].to_list() == before["$td.row"].to_list()
+    assert after[VERSION].to_list() == before[VERSION].to_list()
+    assert FILE not in after.columns
+
+
+def test_a_drop_by_name_cannot_remove_an_internal_column():
+    with pytest.raises(Exception, match="TF6"):
+        _carried().drop("$td.row")
+
+
 @pytest.mark.parametrize("engine", ENGINES)
 def test_drop_nulls_counts_the_user_columns_only(engine):
     from tabsdatak.tableframe import functions as td

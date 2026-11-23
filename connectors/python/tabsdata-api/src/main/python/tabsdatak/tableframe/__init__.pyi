@@ -474,6 +474,10 @@ class TableFrame(EngineFrame):
 
         :categories: projection
 
+        A pattern -- `"*"`, a regular expression or a pattern selection --
+        drops the user and `@td.*` meta columns it matches, never the `$td.*`
+        internal columns; naming an internal column fails with `TF6`.
+
         Args:
             columns: Column name(s) or selector(s) to drop, as several
                 positional arguments or a single list.

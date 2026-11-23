@@ -1384,7 +1384,7 @@ _HOOKED_BODIES = {
     "join": lambda name, root: _join_body(),
     "project": lambda name, root: _project_body(name),
     "group_by": lambda name, root: _group_by_body(name, root),
-    "drop": lambda name, root: _drop_body(),
+    "drop": lambda name, root: _drop_body(root),
     "rename": lambda name, root: _rename_body(),
 }
 
@@ -1507,10 +1507,16 @@ def _group_by_body(name: str, root: str) -> list[str]:
     ]
 
 
-def _drop_body() -> list[str]:
+def _drop_body(root: str) -> list[str]:
+    # A name pattern drops the user and meta columns it matches, never the
+    # internal ones, like a pattern selection in col().
     return [
         "    def drop(self, *columns, **kwargs):",
-        "        u_columns = unwrap(columns)",
+        f"        from {root}._engine.column.selection import (",
+        "            hide_internal_patterns,",
+        "        )",
+        "",
+        "        u_columns = hide_internal_patterns(unwrap(columns))",
         "        u_kwargs = unwrap(kwargs)",
         '        return compute("drop", (self,), {"columns": u_columns},',
         "            call=lambda lf: lf.drop(*u_columns, **u_kwargs))",

@@ -335,7 +335,7 @@ tf.get_columns(with_meta_columns=True)    # ["id", "name", "@td.file.path"]
 
 A selection by pattern -- `col("*")`, a regular expression or a data type --
 covers the user and metadata columns but never the internal ones, so
-`tf.with_columns(col("*").cast(String))` leaves them alone. Writing to an
+`tf.with_columns(col("*").cast(String))` and `tf.drop("*")` leave them alone. Writing to an
 internal column, by name or through `cast`, fails with `TF6` when the plan is
 built, even on an empty table.
 

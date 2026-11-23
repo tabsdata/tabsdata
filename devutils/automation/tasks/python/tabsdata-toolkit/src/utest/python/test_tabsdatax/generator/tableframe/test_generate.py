@@ -225,6 +225,7 @@ def test_drop_and_rename_dispatch_hooks(main_root):
     perform(_report(), ROOT, str(main_root))
     init = (main_root / "pkg" / "wrap" / "__init__.py").read_text()
     assert "def drop(self, *columns, **kwargs):" in init
+    assert "u_columns = hide_internal_patterns(unwrap(columns))" in init
     assert '"drop",\n            (self,),\n            {"columns": u_columns},' in init
     assert "call=lambda lf: lf.drop(*u_columns, **u_kwargs)" in init
     assert "def rename(self, mapping, *args, **kwargs):" in init

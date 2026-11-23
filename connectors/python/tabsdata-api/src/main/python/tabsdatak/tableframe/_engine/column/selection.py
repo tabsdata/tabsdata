@@ -64,6 +64,23 @@ def hide_internal_columns(selection: pl_.Expr, names: tuple) -> pl_.Expr:
     return selection.exclude(f"^{re.escape(TD_SYSTEM_COLUMN_PREFIX)}.*$")
 
 
+def hide_internal_patterns(columns: tuple) -> tuple:
+    """``columns`` with every name pattern (a wildcard or a regular expression)
+    turned into a selection without the internal columns, so dropping by pattern
+    never drops them. Columns named one by one are kept as named."""
+    import polars as pl
+
+    narrowed: list = []
+    for column in columns:
+        if isinstance(column, (list, tuple)):
+            narrowed += hide_internal_patterns(column)
+        elif isinstance(column, str) and _by_pattern((column,)):
+            narrowed.append(hide_internal_columns(pl.col(column), (column,)))
+        else:
+            narrowed.append(column)
+    return tuple(narrowed)
+
+
 def _by_pattern(names) -> bool:
     for name in names:
         if isinstance(name, (list, tuple)):

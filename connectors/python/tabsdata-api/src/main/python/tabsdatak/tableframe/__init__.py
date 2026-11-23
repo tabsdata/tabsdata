@@ -145,7 +145,11 @@ class TableFrame(EngineFrame):
         )
 
     def drop(self, *columns, **kwargs):
-        u_columns = unwrap(columns)
+        from tabsdatak.tableframe._engine.column.selection import (
+            hide_internal_patterns,
+        )
+
+        u_columns = hide_internal_patterns(unwrap(columns))
         u_kwargs = unwrap(kwargs)
         return compute(
             "drop",
