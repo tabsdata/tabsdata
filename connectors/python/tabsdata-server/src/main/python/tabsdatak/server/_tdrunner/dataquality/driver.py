@@ -16,7 +16,7 @@ from tabsdatak.tableframe import TableFrame
 @dataclass(frozen=True)
 class DerivedTable:
     name: str
-    frame: TableFrame
+    frame: TableFrame | None
     table_type: TableType
 
 

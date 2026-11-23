@@ -16,6 +16,7 @@ from tabsdatak.dataquality import (
     DataQuality,
     Enrich,
     Fail,
+    Filter,
     IsPositive,
     RowCountThreshold,
     Summary,
@@ -84,13 +85,17 @@ def _enrich_action(table: str = "out") -> DataQuality:
     )
 
 
-def _run(frames: list, actions: list, tables: list[str]) -> list:
+def _run(frames: list, actions: list, tables: list[str], checks=None) -> list:
     processor = DataQualityProcessor.from_actions(
         collection="c", output_tables=tables, actions=actions
     )
     derived: list = []
-    processor.tables_data([], list(frames), derived)
+    processor.tables_data([], list(frames), derived, checks)
     return derived
+
+
+def _with_data(derived: list) -> list[bool]:
+    return [record.derived_tf is not None for record in derived]
 
 
 @pytest.mark.parametrize(
@@ -98,27 +103,41 @@ def _run(frames: list, actions: list, tables: list[str]) -> list:
     [[None], [[]], [[None]], [[None, None]]],
     ids=["none", "empty-list", "list-of-none", "list-of-nones"],
 )
-def test_a_table_with_no_data_derives_nothing(frames):
-    assert _run(frames, [_summary_action()], ["out"]) == []
+def test_a_table_with_no_data_derives_its_tables_without_data(frames):
+    assert _with_data(_run(frames, [_summary_action()], ["out"])) == [False]
 
 
 @pytest.mark.parametrize(
-    "operators",
+    ("operators", "produced"),
     [
-        [Summary()],
-        [Enrich(to_table="out_enriched")],
-        [Enrich(to_table="out_enriched"), Summary(table="out_sum")],
+        ([Summary()], 1),
+        ([Enrich(to_table="out_enriched")], 1),
+        ([Enrich(to_table="out_enriched"), Summary(table="out_sum")], 2),
+        ([Enrich(), Filter(AnyFailed()), Summary()], 1),
     ],
-    ids=["summary", "enrich", "enrich-and-summary"],
+    ids=["summary", "enrich", "enrich-and-summary", "in-place-and-summary"],
 )
-def test_no_data_derives_nothing_whatever_the_producing_operators(operators):
+def test_no_data_derives_one_table_without_data_per_producing_operator(
+    operators, produced
+):
     action = DataQuality(
         table="out", classifiers=[IsPositive(["a"])], operators=operators
     )
-    assert _run([None], [action], ["out"]) == []
+    assert _with_data(_run([None], [action], ["out"])) == [False] * produced
 
 
-def test_a_non_producing_operator_alone_already_tolerates_no_data():
+def test_no_data_has_nothing_to_check():
+    action = DataQuality(
+        table="out",
+        classifiers=[IsPositive(["a"])],
+        operators=[Fail(AnyFailed(), RowCountThreshold(0)), Summary()],
+    )
+    checks: list = []
+    assert _with_data(_run([None], [action], ["out"], checks)) == [False]
+    assert checks == []
+
+
+def test_a_non_producing_operator_alone_derives_nothing_from_no_data():
     action = DataQuality(
         table="out",
         classifiers=[IsPositive(["a"])],
@@ -133,16 +152,25 @@ def test_an_empty_table_does_not_fail_the_table_beside_it():
         [_enrich_action("one"), _enrich_action("two")],
         ["one", "two"],
     )
-    assert [record.derived_tf is not None for record in derived] == [True, True]
+    assert _with_data(derived) == [True, True, False, False]
 
 
-def test_every_table_empty_derives_nothing():
+def test_an_empty_table_keeps_the_tables_after_it_in_their_places():
+    derived = _run(
+        [None, TableFrame.from_dict({"a": [1, -2, 3]})],
+        [_enrich_action("one"), _enrich_action("two")],
+        ["one", "two"],
+    )
+    assert _with_data(derived) == [False, False, True, True]
+
+
+def test_every_table_empty_derives_every_table_without_data():
     derived = _run(
         [None, None],
         [_enrich_action("one"), _enrich_action("two")],
         ["one", "two"],
     )
-    assert derived == []
+    assert _with_data(derived) == [False] * 4
 
 
 def test_a_table_holding_data_among_empty_slots_is_still_processed():

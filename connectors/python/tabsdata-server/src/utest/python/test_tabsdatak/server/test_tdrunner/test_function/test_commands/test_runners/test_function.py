@@ -1333,6 +1333,48 @@ def test_main_evaluates_a_udf_once_per_row_with_data_quality(
     ).row(0) == (3, 2, 1)
 
 
+def test_main_reports_no_data_for_the_tables_checked_on_a_none_output(
+    tmp_path,
+    monkeypatch,
+    http_ok_url,
+):
+    project = copy_project(tmp_path, monkeypatch, "udf_project")
+    module = importlib.import_module("udf_pkg.transformer")
+    bundle = build_test_bundle(tmp_path, project, module.none_quality_transformer)
+    tables = ("t_out", "t_other", "t_out_quality", "t_out_quality_summary")
+    request_path = write_request(tmp_path / "request.yaml", *tables)
+    source = tmp_path / "raw" / "in.parquet"
+    write_sample_parquet(source)
+    inputs_manifest = tmp_path / "inputs.yaml"
+    InputManifest(inputs=(slot_entry("t_in", 0, [str(source)]),)).write(inputs_manifest)
+    outputs_manifest = tmp_path / "outputs.yaml"
+    set_arguments(
+        monkeypatch,
+        request_path,
+        bundle,
+        inputs_manifest,
+        tmp_path / "fn_out",
+        outputs_manifest,
+        tmp_path / "live",
+        responder_url=http_ok_url,
+    )
+
+    try:
+        exit_code = main()
+    finally:
+        forget("udf_pkg")
+
+    assert exit_code == 0, f"main() returned {exit_code}"
+    entries = OutputManifest.load(outputs_manifest).outputs
+    assert {entry.name: entry.stats is not None for entry in entries} == {
+        "t_out": False,
+        "t_other": True,
+        "t_out_quality": False,
+        "t_out_quality_summary": False,
+    }
+    assert [path.stem for path in (tmp_path / "storage").glob("*.t")] == ["t_other"]
+
+
 def test_main_manifest_length_mismatch_returns_bad_manifest(
     tmp_path,
     multi_publisher_bundle,

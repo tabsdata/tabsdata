@@ -20,7 +20,6 @@ from tabsdatak.tableframe.datatypes import Boolean, Int64, String
 from tabsdatak.tableframe.udf import on_batch, on_element
 
 
-
 @on_batch([("doubled", Int64), ("label", String)])
 def doubled(ids, names):
     return [pc.multiply(ids, 2), pc.utf8_upper(names)]
@@ -62,15 +61,22 @@ def quality(max_failed: int) -> DataQuality:
     )
 
 
-@transformer(
-    input_tables=["c1/t_in"], output_tables=["t_out"], on_tables=[quality(1)]
-)
+@transformer(input_tables=["c1/t_in"], output_tables=["t_out"], on_tables=[quality(1)])
 def quality_udf_transformer(in_1: TableFrameSpec) -> TableFrameSpec:
     return in_1.udf("id", counted)
 
 
-@transformer(
-    input_tables=["c1/t_in"], output_tables=["t_out"], on_tables=[quality(0)]
-)
+@transformer(input_tables=["c1/t_in"], output_tables=["t_out"], on_tables=[quality(0)])
 def failing_quality_udf_transformer(in_1: TableFrameSpec) -> TableFrameSpec:
     return in_1.udf("id", counted)
+
+
+@transformer(
+    input_tables=["c1/t_in"],
+    output_tables=["t_out", "t_other"],
+    on_tables=[quality(0)],
+)
+def none_quality_transformer(
+    in_1: TableFrameSpec,
+) -> tuple[TableFrameSpec, TableFrameSpec]:
+    return None, in_1

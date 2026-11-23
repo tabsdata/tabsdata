@@ -652,12 +652,16 @@ class DataQualityProcessor:
                 tableframe, action
             )
 
-            if derived_table_frame is None:
-                continue
-
             table_producing_operators = sum(
                 1 for operator in action.operators if self.producing(operator)
             )
+
+            if derived_table_frame is None:
+                derived_table_frames.extend(
+                    DerivedTableFrame(DerivedTableFrameStatus.HARVESTED, None, None)
+                    for _ in range(table_producing_operators)
+                )
+                continue
 
             table_info_idx = 0
             for operation in action.operators:
