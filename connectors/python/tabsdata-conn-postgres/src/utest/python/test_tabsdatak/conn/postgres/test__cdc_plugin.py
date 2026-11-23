@@ -187,7 +187,6 @@ def test_plugin_run_applies_logging_level_to_connector_logger():
 def test_build_ingester_constructs_with_slot_and_format_version():
     src = _src(
         replication_slot_behavior="create",
-        publication_name="pub_users",
         src_cfg={
             "tabsdata.cdc.poll.max_secs": 7,
             "postgres.cdc.wal2json_format_version": 1,
@@ -209,7 +208,6 @@ def test_build_ingester_constructs_with_slot_and_format_version():
     assert kw["start_from"] == "tail"
     assert kw["replication_slot"] == "tdcdc_slot"
     assert kw["replication_slot_behavior"] == "create"
-    assert kw["publication_name"] == "pub_users"
     assert kw["poll_max_secs"] == 7
     assert kw["wal2json_format_version"] == 1
     assert kw["unchanged_large_text_as_null"] is True

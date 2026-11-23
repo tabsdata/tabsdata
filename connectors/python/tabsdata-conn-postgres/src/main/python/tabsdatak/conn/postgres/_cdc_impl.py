@@ -732,7 +732,6 @@ class Wal2JsonIngester(CdcIngester):
         replication_slot: str,
         replication_slot_behavior: str = DEFAULT_REPLICATION_SLOT_BEHAVIOR,
         poll_max_secs: int = DEFAULT_POLL_MAX_SECS,
-        publication_name: str | None = None,
         wal2json_format_version: int = DEFAULT_WAL2JSON_FORMAT_VERSION,
         unchanged_large_text_as_null: bool = False,
         accepted_gap: tuple[int, int] | None = None,
@@ -748,7 +747,6 @@ class Wal2JsonIngester(CdcIngester):
         self._replication_slot = replication_slot
         self._replication_slot_behavior = replication_slot_behavior
         self._poll_max_secs = poll_max_secs
-        self._publication_name = publication_name
         self._wal2json_format_version = wal2json_format_version
         self._unchanged_large_text_as_null = unchanged_large_text_as_null
         self._mark: LsnOffset | None = None
@@ -980,8 +978,6 @@ class Wal2JsonIngester(CdcIngester):
             "numeric-data-types-as-string": "true",
             "add-tables": self._schema_table_filter(),
         }
-        if self._publication_name:
-            options["publication_names"] = self._publication_name
 
         self._base_offset = self._mark.copy()
         self._attach(options)

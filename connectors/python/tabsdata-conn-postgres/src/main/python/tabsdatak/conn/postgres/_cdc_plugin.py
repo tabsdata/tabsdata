@@ -169,7 +169,6 @@ class PostgresCdcStreamSrcPlugin(
             replication_slot=stream_src.replication_slot,
             replication_slot_behavior=stream_src.replication_slot_behavior,
             poll_max_secs=poll_max_secs,
-            publication_name=stream_src.publication_name,
             wal2json_format_version=int(wal2json_format),
             unchanged_large_text_as_null=unchanged_large_text_as_null,
             accepted_gap=accepted_gap(src_cfg.get(_KEY_CDC_ACCEPT_GAP)),

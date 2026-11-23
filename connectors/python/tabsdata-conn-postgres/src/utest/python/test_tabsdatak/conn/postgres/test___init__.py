@@ -311,7 +311,6 @@ def test_postgres_cdc_stream_src_minimal_construction():
     assert src.flatten_columns is True
     # Slot behavior default.
     assert src.replication_slot_behavior == "reuse"
-    assert src.publication_name is None
 
 
 def test_postgres_cdc_stream_src_accepts_explicit_format_fields():
@@ -360,11 +359,6 @@ def test_postgres_cdc_stream_src_requires_start_from(missing):
     assert ei.value.api_error is PostgresErrorCode.POSTGRES_11
 
 
-def test_postgres_cdc_stream_src_accepts_publication_name():
-    src = _cdc_stream_src(publication_name="pub_users")
-    assert src.publication_name == "pub_users"
-
-
 @pytest.mark.parametrize(
     "key",
     ["bogus.key", "tabsdata.cdc.initial_load.max_window_changes"],
@@ -398,7 +392,6 @@ def test_postgres_cdc_stream_src_json_round_trip():
         start_from=LsnPosition(lsn=12345),
         columns_format="struct",
         flatten_columns=False,
-        publication_name="pub_users",
         replication_slot_behavior="create",
     )
     loaded = PostgresCdcStreamSrc.from_json(src.to_json())

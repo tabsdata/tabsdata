@@ -527,7 +527,7 @@ class PostgresCdcStreamSrcConn(Conn):
     :categories: source
 
     Mirrors `PostgresSrcConn` for the SQLAlchemy / catalog
-    introspection side. The replication slot and publication live on
+    introspection side. The replication slot lives on
     `PostgresCdcStreamSrc` instead, so one connection can front
     multiple sources if each uses a distinct slot. Not a subclass of
     `PostgresSrcConn` -- CDC and batch SQL have different operational
@@ -616,8 +616,6 @@ class PostgresCdcStreamSrc(StreamSrc):
         replication_slot_behavior: `"reuse"` (default, slot must
             exist) or `"create"` (create it, no-op if it exists). It
             also selects how a `"full"` start snapshots -- see `start_from`.
-        publication_name: Optional publication scoping the slot's output
-            (wal2json's `publication_names` option).
         columns_format: Layout for the new (and old) columns payload on
             each change row -- `"columns"` (default), `"struct"` or
             `"map"`.
@@ -645,7 +643,6 @@ class PostgresCdcStreamSrc(StreamSrc):
     replication_slot: str
     start_from: PostgresCdcStartFromSpec
     replication_slot_behavior: ReplicationSlotBehaviorSpec = "reuse"
-    publication_name: str | None = None
     columns_format: CdcColumnsFormatSpec = "columns"
     flatten_columns: bool = True
     src_cfg: CdcSrcCfgSpec | None = None
