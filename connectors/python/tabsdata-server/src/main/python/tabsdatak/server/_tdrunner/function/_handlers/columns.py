@@ -62,7 +62,7 @@ class Zone(Enum):
 
 # The set of columns a frame carries, and their state, when it is written.
 class Shape(Enum):
-    # Frames as functions produce them: user columns plus the system and connector
+    # Frames as functions produce them: user columns plus the system and meta
     # columns the system retains, with the per-column inception policy applied.
     INTERNAL = auto()
     # Frames as functions receive them: data as read, with the column processing
@@ -72,7 +72,7 @@ class Shape(Enum):
     # ones.
     PRIVATE = auto()
     # Frames as external systems see them: generally user columns only, without
-    # system or connector columns.
+    # system or meta columns.
     PUBLIC = auto()
 
 

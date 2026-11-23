@@ -119,7 +119,7 @@ def test_reserved_prefixes_are_rejected_at_registration(name: str):
     "name",
     ["@td.origin.file.name", "@td.dq.discount", "@td.x"],
 )
-def test_the_connector_namespace_is_not_reserved_for_verdict_columns(name: str):
+def test_the_meta_namespace_is_not_reserved_for_verdict_columns(name: str):
     declared = action([between([("discount_pct", name)], 15.0, prefix="")])
     assert len(declared.classifiers) == 1
 
@@ -536,11 +536,11 @@ def test_a_wildcard_classifier_never_sweeps_in_a_verdict_column():
 
 def _orders_with_meta():
     from tabsdatak.tableframe import TableFrame
-    from tabsdatak.tableframe._engine.column.connector import add_connector_columns
+    from tabsdatak.tableframe._engine.column.meta import add_meta_columns
     from tabsdatak.tableframe.functions import col
 
     frame = TableFrame.from_polars(orders()._lf).filter(col("order_id") > 1)
-    return frame._clone(add_connector_columns(frame._lf, {"file": "a.csv"}))
+    return frame._clone(add_meta_columns(frame._lf, {"file": "a.csv"}))
 
 
 @pytest.mark.parametrize(
@@ -742,13 +742,13 @@ def test_a_prefix_in_the_reserved_namespace_is_rejected(prefix: str):
 
 
 @pytest.mark.parametrize("prefix", ["@td.", "@td.dq.", "@td.origin."])
-def test_a_prefix_in_the_connector_namespace_is_allowed(prefix: str):
+def test_a_prefix_in_the_meta_namespace_is_allowed(prefix: str):
     assert verdict_names(between(["discount_pct"], 15.0, prefix=prefix)) == [
         f"{prefix}discount_pct_is_between"
     ]
 
 
-def test_a_doubled_connector_namespace_is_allowed():
+def test_a_doubled_meta_namespace_is_allowed():
     assert verdict_names(
         between([("discount_pct", "@td.dq.a")], 15.0, prefix="@td.dq.")
     ) == ["@td.dq.@td.dq.a"]

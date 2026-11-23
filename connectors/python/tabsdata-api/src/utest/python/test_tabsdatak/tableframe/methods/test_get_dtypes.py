@@ -8,7 +8,7 @@ import polars as pl
 import pytest
 
 from tabsdatak.tableframe import TableFrame
-from tabsdatak.tableframe._engine.column.connector import name_of
+from tabsdatak.tableframe._engine.column.meta import name_of
 from tabsdatak.tableframe._engine.constant.column.names import (
     TD_IDENTIFIER_SYSTEM_COLUMN_NAME,
 )

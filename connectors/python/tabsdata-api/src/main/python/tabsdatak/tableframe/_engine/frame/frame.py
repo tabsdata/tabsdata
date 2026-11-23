@@ -125,13 +125,13 @@ class EngineFrame(BaseFrame):
         tf_registry = registry()
         names = lf.collect_schema().names()
         user = [name for name in names if tf_registry.kind_of(name) is ColumnKind.USER]
-        connector = sorted(
-            name for name in names if tf_registry.kind_of(name) is ColumnKind.CONNECTOR
+        meta = sorted(
+            name for name in names if tf_registry.kind_of(name) is ColumnKind.META
         )
         internal = sorted(
             name for name in names if tf_registry.kind_of(name) is ColumnKind.INTERNAL
         )
-        return lf.select(user + connector + internal)
+        return lf.select(user + meta + internal)
 
     @classmethod
     def _check_required(cls, lf, registry) -> None:
@@ -184,17 +184,13 @@ class EngineFrame(BaseFrame):
     def _strip(self, drop_system_columns, drop_internal_columns=False) -> pl.LazyFrame:
         if not drop_system_columns and not drop_internal_columns:
             return self._lf
-        return self._select(
-            with_internal=False, with_connector=not drop_internal_columns
-        )
+        return self._select(with_internal=False, with_meta=not drop_internal_columns)
 
-    def _select(self, *, with_internal: bool, with_connector: bool) -> pl.LazyFrame:
+    def _select(self, *, with_internal: bool, with_meta: bool) -> pl.LazyFrame:
         from tabsdatak.extensions.tableframe._engine.column.registry import registry
 
         names = self._lf.collect_schema().names()
-        keep = registry().keep(
-            names, with_internal=with_internal, with_connector=with_connector
-        )
+        keep = registry().keep(names, with_internal=with_internal, with_meta=with_meta)
         return self._lf.select(keep)
 
     def _user_columns(self) -> list[str]:
@@ -469,7 +465,7 @@ class EngineFrame(BaseFrame):
         kept = registry().keep(
             schema.names(),
             with_internal=with_internal,
-            with_connector=with_meta,
+            with_meta=with_meta,
             with_user=with_user,
         )
         return pl.Schema({name: schema[name] for name in kept})
@@ -502,7 +498,7 @@ class EngineFrame(BaseFrame):
                 stacklevel=2,
             )
             with_meta_columns = with_connector_columns
-        lf = self._select(with_internal=False, with_connector=bool(with_meta_columns))
+        lf = self._select(with_internal=False, with_meta=bool(with_meta_columns))
         df = lf.limit(2).collect(engine="streaming")
         if df.height == 0:
             return self._on_empty("extract_one", fail_if_empty)

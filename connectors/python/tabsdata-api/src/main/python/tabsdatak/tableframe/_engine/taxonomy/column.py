@@ -33,7 +33,7 @@ class Inception(Enum):
 class SystemColumnCategory(Enum):
     STANDARD = "standard"
     OPTIONAL = "optional"
-    CONNECTOR = "connector"
+    META = "meta"
     VOLATILE = "volatile"
     EXTENDED = "extended"
 
@@ -41,7 +41,7 @@ class SystemColumnCategory(Enum):
 class ColumnKind(Enum):
     USER = "user"
     INTERNAL = "internal"
-    CONNECTOR = "connector"
+    META = "meta"
 
 
 class SysCol(StrEnum):
@@ -49,7 +49,7 @@ class SysCol(StrEnum):
     VERSION_TRANSACTION = TD_TRANSACTION_SYSTEM_COLUMN_NAME
     VERSION_VERSION = TD_VERSION_SYSTEM_COLUMN_NAME
     VERSION_TIMESTAMP = TD_TIMESTAMP_SYSTEM_COLUMN_NAME
-    # The origin-file connector columns are retired: connector columns are now
+    # The origin-file meta columns are retired: meta columns are now
     # injected per input file from source-plugin metadata. Kept for reference:
     #
     # ORIGIN_FILE_PATH = TD_FILE_PATH_SYSTEM_COLUMN_NAME

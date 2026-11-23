@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from tabsdatak.tableframe._engine.constant.column.prefixes import (
-    TD_CONNECTOR_SYSTEM_COLUMN_PREFIX,
+    TD_META_SYSTEM_COLUMN_PREFIX,
     TD_NAMESPACED_SYSTEM_COLUMN_PREFIXES,
     TD_SYSTEM_COLUMN_PREFIX,
     TD_VOLATILE_SYSTEM_COLUMN_PREFIX,
@@ -87,7 +87,7 @@ class Registry:
         return (
             name in self.columns
             or name.startswith(TD_SYSTEM_COLUMN_PREFIX)
-            or name.startswith(TD_CONNECTOR_SYSTEM_COLUMN_PREFIX)
+            or name.startswith(TD_META_SYSTEM_COLUMN_PREFIX)
         )
 
     def category_of(self, name: str) -> SystemColumnCategory | None:
@@ -96,7 +96,7 @@ class Registry:
             return system_column.category
         by_prefix = (
             (TD_VOLATILE_SYSTEM_COLUMN_PREFIX, SystemColumnCategory.VOLATILE),
-            (TD_CONNECTOR_SYSTEM_COLUMN_PREFIX, SystemColumnCategory.CONNECTOR),
+            (TD_META_SYSTEM_COLUMN_PREFIX, SystemColumnCategory.META),
             (TD_SYSTEM_COLUMN_PREFIX, SystemColumnCategory.STANDARD),
         )
         for prefix, category in by_prefix:
@@ -108,8 +108,8 @@ class Registry:
         category = self.category_of(name)
         if category is None:
             return ColumnKind.USER
-        if category is SystemColumnCategory.CONNECTOR:
-            return ColumnKind.CONNECTOR
+        if category is SystemColumnCategory.META:
+            return ColumnKind.META
         return ColumnKind.INTERNAL
 
     def keep(
@@ -117,7 +117,7 @@ class Registry:
         names,
         *,
         with_internal: bool,
-        with_connector: bool,
+        with_meta: bool,
         with_user: bool = True,
     ) -> list[str]:
         kept = set()
@@ -125,8 +125,8 @@ class Registry:
             kept.add(ColumnKind.USER)
         if with_internal:
             kept.add(ColumnKind.INTERNAL)
-        if with_connector:
-            kept.add(ColumnKind.CONNECTOR)
+        if with_meta:
+            kept.add(ColumnKind.META)
         return [name for name in names if self.kind_of(name) in kept]
 
 

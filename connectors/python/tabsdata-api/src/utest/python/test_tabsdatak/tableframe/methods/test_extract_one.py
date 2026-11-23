@@ -8,7 +8,7 @@ import polars as pl
 import pytest
 
 from tabsdatak.tableframe import TableFrame
-from tabsdatak.tableframe._engine.column.connector import name_of
+from tabsdatak.tableframe._engine.column.meta import name_of
 from tabsdatak.tableframe._engine.constant.column.names import (
     TD_IDENTIFIER_SYSTEM_COLUMN_NAME,
 )
@@ -19,7 +19,7 @@ from tabsdatak.tableframe._engine.event.error import (
 
 pytestmark = pytest.mark.tableframe
 
-CONNECTOR_COLUMN = name_of("source")
+META_COLUMN = name_of("source")
 
 
 def _frame(data: dict, schema: dict | None = None) -> TableFrame:
@@ -57,10 +57,10 @@ def test_extract_one_excludes_system_columns():
     assert frame.extract_one() == {"a": 1}
 
 
-def test_extract_one_drops_internal_and_connector_columns_by_default():
+def test_extract_one_drops_internal_and_meta_columns_by_default():
     frame = _reserved_frame({
         "a": [1],
-        CONNECTOR_COLUMN: ["/tmp/f.csv"],
+        META_COLUMN: ["/tmp/f.csv"],
         TD_IDENTIFIER_SYSTEM_COLUMN_NAME: ["id"],
     })
     assert frame.extract_one() == {"a": 1}
@@ -69,7 +69,7 @@ def test_extract_one_drops_internal_and_connector_columns_by_default():
 def _meta_frame() -> TableFrame:
     return _reserved_frame({
         "a": [1],
-        CONNECTOR_COLUMN: ["/tmp/f.csv"],
+        META_COLUMN: ["/tmp/f.csv"],
         TD_IDENTIFIER_SYSTEM_COLUMN_NAME: ["id"],
     })
 
@@ -77,18 +77,18 @@ def _meta_frame() -> TableFrame:
 def test_extract_one_keeps_meta_columns_when_requested():
     assert _meta_frame().extract_one(with_meta_columns=True) == {
         "a": 1,
-        CONNECTOR_COLUMN: "/tmp/f.csv",
+        META_COLUMN: "/tmp/f.csv",
     }
 
 
 def test_extract_one_takes_with_meta_columns_positionally():
-    assert _meta_frame().extract_one(True) == {"a": 1, CONNECTOR_COLUMN: "/tmp/f.csv"}
+    assert _meta_frame().extract_one(True) == {"a": 1, META_COLUMN: "/tmp/f.csv"}
 
 
 def test_extract_one_with_connector_columns_is_a_deprecated_alias():
     with pytest.warns(DeprecationWarning, match="use with_meta_columns instead"):
         row = _meta_frame().extract_one(with_connector_columns=True)
-    assert row == {"a": 1, CONNECTOR_COLUMN: "/tmp/f.csv"}
+    assert row == {"a": 1, META_COLUMN: "/tmp/f.csv"}
 
 
 def test_extract_one_refuses_both_meta_and_connector_flags():

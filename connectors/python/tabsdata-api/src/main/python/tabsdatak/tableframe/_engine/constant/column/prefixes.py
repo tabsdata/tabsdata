@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 TD_SYSTEM_COLUMN_PREFIX = "$td."
-TD_CONNECTOR_SYSTEM_COLUMN_PREFIX = "@td."
+TD_META_SYSTEM_COLUMN_PREFIX = "@td."
 
 TD_VERSION_SYSTEM_COLUMN_PREFIX = "$td.ver."
 TD_OPTIONAL_SYSTEM_COLUMN_PREFIX = "$td.opt."

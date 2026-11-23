@@ -20,14 +20,14 @@ from tabsdatak.server._tdrunner.function._handlers.columns import (
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe._engine.constant.column.prefixes import (
-    TD_CONNECTOR_SYSTEM_COLUMN_PREFIX,
+    TD_META_SYSTEM_COLUMN_PREFIX,
     TD_SYSTEM_COLUMN_PREFIX,
 )
 from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
-FRAMEWORK_PREFIXES = (TD_SYSTEM_COLUMN_PREFIX, TD_CONNECTOR_SYSTEM_COLUMN_PREFIX)
+FRAMEWORK_PREFIXES = (TD_SYSTEM_COLUMN_PREFIX, TD_META_SYSTEM_COLUMN_PREFIX)
 
 
 def frame() -> TableFrame:

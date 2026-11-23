@@ -4,9 +4,9 @@
 
 from __future__ import annotations
 
-from tabsdatak.conn.common.constants import TD_CONNECTOR_COLUMN_PREFIX
+from tabsdatak.conn.common.constants import TD_META_COLUMN_PREFIX
 
-SQL_META_PREFIX: str = TD_CONNECTOR_COLUMN_PREFIX + "sql."
+SQL_META_PREFIX: str = TD_META_COLUMN_PREFIX + "sql."
 """Name-prefix (`"@td.sql."`) shared by the metadata every SQL source
 reports for the parquet files it produces."""
 

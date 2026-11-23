@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from tabsdatak.tableframe import datatypes
 from tabsdatak.tableframe._engine.constant.column.prefixes import (
-    TD_CONNECTOR_SYSTEM_COLUMN_PREFIX,
+    TD_META_SYSTEM_COLUMN_PREFIX,
 )
 from tabsdatak.tableframe._engine.model.column import SystemColumn
 from tabsdatak.tableframe._engine.taxonomy.column import (
@@ -38,15 +38,15 @@ def dtype_of(value: object):
 
 
 def name_of(key: str) -> str:
-    if key.startswith(TD_CONNECTOR_SYSTEM_COLUMN_PREFIX):
+    if key.startswith(TD_META_SYSTEM_COLUMN_PREFIX):
         return key
-    return f"{TD_CONNECTOR_SYSTEM_COLUMN_PREFIX}{key}"
+    return f"{TD_META_SYSTEM_COLUMN_PREFIX}{key}"
 
 
 def system_column(name: str, dtype) -> SystemColumn:
     return SystemColumn(
         name=name,
-        category=SystemColumnCategory.CONNECTOR,
+        category=SystemColumnCategory.META,
         dtype=dtype,
         default=None,
         language=Language.PYTHON,
@@ -76,7 +76,7 @@ def describe(metadata: MetadataSpec_ | None) -> dict[str, SystemColumn]:
     return described
 
 
-def add_connector_columns(
+def add_meta_columns(
     lf: pl_.LazyFrame, metadata: MetadataSpec_ | None
 ) -> pl_.LazyFrame:
     if not metadata:

@@ -4,9 +4,9 @@
 
 from __future__ import annotations
 
-from tabsdatak.conn.common.constants import TD_CONNECTOR_COLUMN_PREFIX
+from tabsdatak.conn.common.constants import TD_META_COLUMN_PREFIX
 
-KAFKA_META_PREFIX: str = TD_CONNECTOR_COLUMN_PREFIX + "kafka."
+KAFKA_META_PREFIX: str = TD_META_COLUMN_PREFIX + "kafka."
 """Name-prefix (`"@td.kafka."`) shared by the metadata the Kafka stream
 source writes into the batches it stages."""
 

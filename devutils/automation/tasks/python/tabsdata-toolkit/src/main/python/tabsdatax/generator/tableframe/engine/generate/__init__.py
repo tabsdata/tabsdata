@@ -1375,7 +1375,7 @@ _HOOKED_BODIES = {
 # sort forces a perf default (signature preserved); unique / __getitem__ are
 # system-column-aware so their user-visible result matches polars; drop_nulls /
 # fill_null / cast reach the user columns only, so they never rewrite the system
-# and connector columns as a side effect.
+# and meta columns as a side effect.
 _CUSTOM_BODIES = {
     "sort": lambda name, root: _sort_body(),
     "unique": lambda name, root: _unique_body(),
@@ -1558,7 +1558,7 @@ def _unique_body() -> list[str]:
 
 
 def _drop_nulls_body() -> list[str]:
-    # With no subset, only USER columns count: a null connector value (a stacked
+    # With no subset, only USER columns count: a null meta value (a stacked
     # frame that lacks the column) must not drop the row.
     return [
         "    def drop_nulls(self, subset=None):",

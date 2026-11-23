@@ -60,17 +60,17 @@ def _join_hook_after(lazyframe, op, views, params):
         assemble_system_columns,
     )
     from tabsdatak.tableframe._engine.constant.column.prefixes import (
-        TD_CONNECTOR_SYSTEM_COLUMN_PREFIX,
+        TD_META_SYSTEM_COLUMN_PREFIX,
     )
 
     lazyframe = assemble_system_columns(lazyframe)
-    # A connector column is single-valued metadata, like the version: where both
+    # A meta column is single-valued metadata, like the version: where both
     # sides carry one the left side's is kept, and the suffixed copy polars
     # makes of the right side's -- a name neither input had -- is dropped.
     known = {column for view in views for column in view.columns}
     twins = [
         column
         for column in lazyframe.collect_schema().names()
-        if column.startswith(TD_CONNECTOR_SYSTEM_COLUMN_PREFIX) and column not in known
+        if column.startswith(TD_META_SYSTEM_COLUMN_PREFIX) and column not in known
     ]
     return lazyframe.drop(twins) if twins else lazyframe

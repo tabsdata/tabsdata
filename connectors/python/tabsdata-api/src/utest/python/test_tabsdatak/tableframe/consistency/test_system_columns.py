@@ -49,12 +49,12 @@ FILE = "@td.file"
 def _versioned(data: dict, idx: int, version: str, meta=None) -> TableFrame:
     from datetime import datetime, timezone
 
-    from tabsdatak.tableframe._engine.column.connector import add_connector_columns
+    from tabsdatak.tableframe._engine.column.meta import add_meta_columns
     from tabsdatak.tableframe._engine.model.frame import DataVersion
 
     lf = pl.LazyFrame(data)
     if meta is not None:
-        lf = add_connector_columns(lf, meta)
+        lf = add_meta_columns(lf, meta)
     stamp = (
         DataVersion
         .builder()
@@ -127,7 +127,7 @@ def test_a_join_keeps_the_left_version_on_every_row(engine):
 
 
 @pytest.mark.parametrize("engine", ENGINES)
-def test_a_join_keeps_the_left_connector_column_only(engine):
+def test_a_join_keeps_the_left_meta_column_only(engine):
     a = _versioned(_rows(), 0, "V1", {"file": "a.csv"})
     b = _versioned({"v": list(range(ROWS))}, 1, "V2", {"file": "b.csv"})
     joined = a.join(b, on="v")

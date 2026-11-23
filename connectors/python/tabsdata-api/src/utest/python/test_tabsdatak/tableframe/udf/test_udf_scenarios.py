@@ -357,7 +357,7 @@ def test_any_number_of_inputs_produces_any_output_type(width, dtype, convert, mo
     assert _rows(frame)["out"] == [convert(total) for total in totals]
 
 
-def test_system_and_connector_columns_can_be_read_and_connector_columns_written():
+def test_system_and_meta_columns_can_be_read_and_meta_columns_written():
     frame = TableFrame.from_dict({"a": [1, 2]})
     noted = frame.udf(
         ["a", "$td.id"],

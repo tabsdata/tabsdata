@@ -29,7 +29,7 @@ pub fn drop_prefixed_columns(lf: LazyFrame, prefixes: &[&str]) -> Result<LazyFra
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constants::{TD_COLUMN_PREFIX, TD_CONNECTOR_COLUMN_PREFIX};
+    use crate::constants::{TD_COLUMN_PREFIX, TD_META_COLUMN_PREFIX};
 
     fn frame() -> LazyFrame {
         df!(
@@ -56,11 +56,8 @@ mod tests {
     fn test_drop_prefixed_columns() {
         assert_eq!(columns(&[]), ["id", "@td.origin.file.path", "$td.id"]);
         assert_eq!(columns(&[TD_COLUMN_PREFIX]), ["id", "@td.origin.file.path"]);
-        assert_eq!(columns(&[TD_CONNECTOR_COLUMN_PREFIX]), ["id", "$td.id"]);
-        assert_eq!(
-            columns(&[TD_CONNECTOR_COLUMN_PREFIX, TD_COLUMN_PREFIX]),
-            ["id"]
-        );
+        assert_eq!(columns(&[TD_META_COLUMN_PREFIX]), ["id", "$td.id"]);
+        assert_eq!(columns(&[TD_META_COLUMN_PREFIX, TD_COLUMN_PREFIX]), ["id"]);
     }
 
     #[test]

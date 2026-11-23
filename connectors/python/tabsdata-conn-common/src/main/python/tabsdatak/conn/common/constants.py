@@ -5,10 +5,10 @@
 from __future__ import annotations
 
 from tabsdatak.tableframe._engine.constant.column.prefixes import (
-    TD_CONNECTOR_SYSTEM_COLUMN_PREFIX,
+    TD_META_SYSTEM_COLUMN_PREFIX,
 )
 
-TD_CONNECTOR_COLUMN_PREFIX: str = TD_CONNECTOR_SYSTEM_COLUMN_PREFIX
+TD_META_COLUMN_PREFIX: str = TD_META_SYSTEM_COLUMN_PREFIX
 """Reserved name-prefix (`"@td."`) for the metadata a connector reports
 alongside the data it reads.
 

@@ -6,7 +6,7 @@
 
 An op that reaches every column of a frame -- fill every null, cast every column
 of a type -- is meant for the data the user wrote, not for the system and
-connector columns riding along, which it would otherwise rewrite as a side
+meta columns riding along, which it would otherwise rewrite as a side
 effect.
 """
 

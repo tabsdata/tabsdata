@@ -19,7 +19,7 @@ TD_USER_TIMESTAMP_SYSTEM_COLUMN_NAME = "$td.opt.tst.usr"
 TD_VALUE_TIMESTAMP_SYSTEM_COLUMN_NAME = "$td.opt.tst.ts"
 TD_FUNCTION_TIMESTAMP_SYSTEM_COLUMN_NAME = "$td.opt.tst.fn"
 
-# The origin-file connector columns are retired: connector columns are now
+# The origin-file meta columns are retired: meta columns are now
 # injected per input file from source-plugin metadata rather than declared as
 # a fixed set. The former names are kept for reference:
 #

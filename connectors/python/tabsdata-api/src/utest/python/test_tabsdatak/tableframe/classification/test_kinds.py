@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from tabsdatak.tableframe._engine.column.connector import name_of
+from tabsdatak.tableframe._engine.column.meta import name_of
 from tabsdatak.tableframe._engine.constant.column.names import (
     TD_IDENTIFIER_SYSTEM_COLUMN_NAME,
 )
@@ -15,7 +15,7 @@ from test_tabsdatak.tableframe.support.columns import registry
 
 pytestmark = pytest.mark.tableframe
 
-CONNECTOR_COLUMN = name_of("source")
+META_COLUMN = name_of("source")
 
 
 def test_user_column_is_user_kind():
@@ -30,43 +30,43 @@ def test_volatile_column_is_internal_kind():
     assert registry().kind_of(str(VolatileColumns.INDEX)) is ColumnKind.INTERNAL
 
 
-def test_connector_column_is_connector_kind():
-    assert registry().kind_of(CONNECTOR_COLUMN) is ColumnKind.CONNECTOR
+def test_meta_column_is_meta_kind():
+    assert registry().kind_of(META_COLUMN) is ColumnKind.META
 
 
 def _names() -> list[str]:
-    return ["a", TD_IDENTIFIER_SYSTEM_COLUMN_NAME, CONNECTOR_COLUMN]
+    return ["a", TD_IDENTIFIER_SYSTEM_COLUMN_NAME, META_COLUMN]
 
 
 def test_keep_user_only():
-    kept = registry().keep(_names(), with_internal=False, with_connector=False)
+    kept = registry().keep(_names(), with_internal=False, with_meta=False)
     assert kept == ["a"]
 
 
-def test_keep_user_and_connector():
-    kept = registry().keep(_names(), with_internal=False, with_connector=True)
-    assert kept == ["a", CONNECTOR_COLUMN]
+def test_keep_user_and_meta():
+    kept = registry().keep(_names(), with_internal=False, with_meta=True)
+    assert kept == ["a", META_COLUMN]
 
 
 def test_keep_user_and_internal():
-    kept = registry().keep(_names(), with_internal=True, with_connector=False)
+    kept = registry().keep(_names(), with_internal=True, with_meta=False)
     assert kept == ["a", TD_IDENTIFIER_SYSTEM_COLUMN_NAME]
 
 
 def test_keep_all():
-    kept = registry().keep(_names(), with_internal=True, with_connector=True)
+    kept = registry().keep(_names(), with_internal=True, with_meta=True)
     assert kept == _names()
 
 
 def test_keep_without_user():
     kept = registry().keep(
-        _names(), with_internal=True, with_connector=True, with_user=False
+        _names(), with_internal=True, with_meta=True, with_user=False
     )
-    assert kept == [TD_IDENTIFIER_SYSTEM_COLUMN_NAME, CONNECTOR_COLUMN]
+    assert kept == [TD_IDENTIFIER_SYSTEM_COLUMN_NAME, META_COLUMN]
 
 
 def test_keep_nothing():
     kept = registry().keep(
-        _names(), with_internal=False, with_connector=False, with_user=False
+        _names(), with_internal=False, with_meta=False, with_user=False
     )
     assert kept == []

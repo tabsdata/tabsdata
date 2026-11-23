@@ -16,22 +16,18 @@ def test_sql_metadata_names():
     assert _constants.SQL_META_INITIAL_VALUES == "@td.sql.initial_values"
 
 
-def test_sql_metadata_names_carry_the_connector_column_prefix():
-    prefix = _conn_constants.TD_CONNECTOR_COLUMN_PREFIX
+def test_sql_metadata_names_carry_the_meta_column_prefix():
+    prefix = _conn_constants.TD_META_COLUMN_PREFIX
     for name in (_constants.SQL_META_QUERY, _constants.SQL_META_INITIAL_VALUES):
         assert name.startswith(prefix)
 
 
-def test_cdc_names_share_the_connector_column_prefix():
-    assert _cdc_constants.CDC_META_OP.startswith(
-        _conn_constants.TD_CONNECTOR_COLUMN_PREFIX
-    )
+def test_cdc_names_share_the_meta_column_prefix():
+    assert _cdc_constants.CDC_META_OP.startswith(_conn_constants.TD_META_COLUMN_PREFIX)
 
 
 _DOT = _cdc_constants.DOT
-_CDC_PREFIX = (
-    f"{_conn_constants.TD_CONNECTOR_COLUMN_PREFIX}{_cdc_constants.TD_CDC_INFIX}"
-)
+_CDC_PREFIX = f"{_conn_constants.TD_META_COLUMN_PREFIX}{_cdc_constants.TD_CDC_INFIX}"
 _META_PREFIX = f"{_CDC_PREFIX}{_DOT}{_cdc_constants.TD_CDC_META_INFIX}"
 _DATA_PREFIX = f"{_CDC_PREFIX}{_DOT}{_cdc_constants.TD_CDC_DATA_INFIX}"
 _DATA_COL_PREFIX = f"{_DATA_PREFIX}{_DOT}{_cdc_constants.TD_CDC_COL_INFIX}"

@@ -25,8 +25,8 @@ from tabsdatak.server._tdrunner.function._commons.manifests.input import InputRe
 from tabsdatak.server._tdrunner.function._handlers.tables import TableFile
 from tabsdatak.spi import FrameMetadata, LazyFrameInput, MetadataSpec
 from tabsdatak.tableframe import TableFrame
-from tabsdatak.tableframe._engine.column.connector import add_connector_columns
 from tabsdatak.tableframe._engine.column.generator import IdxGenerator
+from tabsdatak.tableframe._engine.column.meta import add_meta_columns
 from tabsdatak.tableframe._engine.constant.emptiness import EMPTY_VERSION
 from tabsdatak.tableframe._engine.model.frame import DataVersion
 from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
@@ -173,7 +173,7 @@ class LandedInputs:
         metadata: MetadataSpec | None,
     ) -> pl.LazyFrame:
         return TableFrame._build(
-            add_connector_columns(frame, metadata),
+            add_meta_columns(frame, metadata),
             CreationMode.RAW,
             idx=self.idx(),
             version=self.version,

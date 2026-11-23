@@ -4,9 +4,9 @@
 
 from __future__ import annotations
 
-from tabsdatak.conn.common.constants import TD_CONNECTOR_COLUMN_PREFIX
+from tabsdatak.conn.common.constants import TD_META_COLUMN_PREFIX
 
-SALESFORCE_META_PREFIX: str = TD_CONNECTOR_COLUMN_PREFIX + "salesforce."
+SALESFORCE_META_PREFIX: str = TD_META_COLUMN_PREFIX + "salesforce."
 """Name-prefix (`"@td.salesforce."`) shared by the metadata the Salesforce
 sources report for the files they produce."""
 

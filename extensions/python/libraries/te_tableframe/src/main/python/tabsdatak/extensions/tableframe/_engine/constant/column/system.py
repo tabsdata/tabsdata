@@ -169,16 +169,16 @@ OPTIONAL: tuple[SystemColumn, ...] = (
     ),
 )
 
-# Connector columns are no longer a fixed set. They are injected per input
+# Meta columns are no longer a fixed set. They are injected per input
 # from the metadata a source plugin attaches to each `LazyFrameInput` (or to
 # each legacy `TableFileInput`), so nothing is declared here and the registry
 # resolves them by the `@td.` prefix instead. The former fixed declarations
 # are kept for reference:
 #
-# CONNECTOR: tuple[SystemColumn, ...] = (
+# META: tuple[SystemColumn, ...] = (
 #     SystemColumn(
 #         name=TD_FILE_PATH_SYSTEM_COLUMN_NAME,
-#         category=SystemColumnCategory.CONNECTOR,
+#         category=SystemColumnCategory.META,
 #         dtype=DTYPE_STRING,
 #         default=None,
 #         language=Language.PYTHON,
@@ -190,7 +190,7 @@ OPTIONAL: tuple[SystemColumn, ...] = (
 #     ),
 #     SystemColumn(
 #         name=TD_FILE_LINE_SYSTEM_COLUMN_NAME,
-#         category=SystemColumnCategory.CONNECTOR,
+#         category=SystemColumnCategory.META,
 #         dtype=DTYPE_STRING,
 #         default=None,
 #         language=Language.PYTHON,
@@ -201,4 +201,4 @@ OPTIONAL: tuple[SystemColumn, ...] = (
 #         aggregation=None,
 #     ),
 # )
-CONNECTOR: tuple[SystemColumn, ...] = ()
+META: tuple[SystemColumn, ...] = ()

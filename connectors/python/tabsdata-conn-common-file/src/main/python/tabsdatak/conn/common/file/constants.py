@@ -4,9 +4,9 @@
 
 from __future__ import annotations
 
-from tabsdatak.conn.common.constants import TD_CONNECTOR_COLUMN_PREFIX
+from tabsdatak.conn.common.constants import TD_META_COLUMN_PREFIX
 
-FILE_META_PREFIX: str = TD_CONNECTOR_COLUMN_PREFIX + "file."
+FILE_META_PREFIX: str = TD_META_COLUMN_PREFIX + "file."
 """Name-prefix (`"@td.file."`) shared by the metadata every file source
 reports for the files it imports."""
 

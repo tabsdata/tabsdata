@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 
 from tabsdatak._medallion import constants
-from tabsdatak.conn.common.constants import TD_CONNECTOR_COLUMN_PREFIX
+from tabsdatak.conn.common.constants import TD_META_COLUMN_PREFIX
 from tabsdatak.conn.common.sql.cdc.constants import DOT
 
 pytestmark = pytest.mark.medallion
@@ -27,7 +27,7 @@ TD_DATE_KEY_SYSTEM_COLUMN_SUFFIX = "date_sk"
 TD_ENTITY_KEY_SYSTEM_COLUMN_SUFFIX = "entity_sk"
 TD_VERSION_KEY_SYSTEM_COLUMN_SUFFIX = "version_sk"
 
-_MEDALLION_PREFIX = f"{TD_CONNECTOR_COLUMN_PREFIX}{TD_MEDALLION_SYSTEM_COLUMN_SEGMENT}"
+_MEDALLION_PREFIX = f"{TD_META_COLUMN_PREFIX}{TD_MEDALLION_SYSTEM_COLUMN_SEGMENT}"
 
 PREFIXES = [
     ("MEDALLION_SYSTEM_COLUMN_PREFIX", _MEDALLION_PREFIX),

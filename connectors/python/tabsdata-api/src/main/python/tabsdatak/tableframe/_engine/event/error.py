@@ -92,6 +92,6 @@ class TableFrameErrorCode(ErrorCode):
     )
     TF9 = ErrorDef(
         UnsupportedMetadataError,
-        "The {column} metadata entry has type {type}; connector columns support "
+        "The {column} metadata entry has type {type}; meta columns support "
         "only str, int, float, and bool.",
     )

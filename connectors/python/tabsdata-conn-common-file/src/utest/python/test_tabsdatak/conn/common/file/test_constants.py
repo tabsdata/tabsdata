@@ -12,7 +12,5 @@ def test_file_metadata_name():
     assert _constants.FILE_META_PATH == "@td.file.path"
 
 
-def test_file_metadata_name_carries_the_connector_column_prefix():
-    assert _constants.FILE_META_PATH.startswith(
-        _conn_constants.TD_CONNECTOR_COLUMN_PREFIX
-    )
+def test_file_metadata_name_carries_the_meta_column_prefix():
+    assert _constants.FILE_META_PATH.startswith(_conn_constants.TD_META_COLUMN_PREFIX)
